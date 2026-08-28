@@ -1,0 +1,66 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+)
+
+const apiURL = "https://api.e-hentai.org/api.php"
+
+// PostGalleryMetadata 调用官方 API 获取画廊元数据
+func PostGalleryMetadata(ctx context.Context, client *http.Client, gid int64, token string) (*GalleryMetadata, error) {
+	type request struct {
+		Method    string  `json:"method"`
+		GIdList   [][]any `json:"gidlist"`
+		Namespace int     `json:"namespace"`
+	}
+	type response struct {
+		GMetadata []GalleryMetadata `json:"gmetadata"`
+	}
+
+	reqBody := request{
+		Method:    "gdata",
+		GIdList:   [][]any{{gid, token}},
+		Namespace: 1,
+	}
+
+	b, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrRequestFailed, err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(b))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrRequestFailed, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrRequestFailed, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%w: HTTP %d", ErrNonOKStatus, resp.StatusCode)
+	}
+
+	var result response
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
+	}
+
+	if len(result.GMetadata) == 0 {
+		return nil, ErrNoMetadata
+	}
+
+	meta := &result.GMetadata[0]
+	if meta.Error != "" {
+		return nil, fmt.Errorf("%w: %s", ErrAPIError, meta.Error)
+	}
+
+	return meta, nil
+}

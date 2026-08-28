@@ -26,19 +26,17 @@ func (a *App) handleGetGallery(c *gin.Context) {
 		return
 	}
 
-	galleryURL := makeGalleryURL(id, token)
+	ctx := c.Request.Context()
 
-	html, err := makeRequest(a.Client, galleryURL)
+	// 调用官方 API 获取元数据
+	meta, err := PostGalleryMetadata(ctx, a.Client, id, token)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai request failed: %v", err)})
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
 	}
 
-	gallery, err := ParseGallery(html, id, token)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("gallery parsing failed: %v", err)})
-		return
-	}
+	// 转换为 Gallery 响应
+	gallery := ConvertMetadataToGallery(meta)
 
 	c.JSON(http.StatusOK, gallery)
 }
