@@ -18,6 +18,7 @@ const exhentaiURL = "https://exhentai.org"
 const ehentaiURL = "https://e-hentai.org"
 
 var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+)\+? results?`)
+var foundThousandsReg = regexp.MustCompile(`Found thousands of results`)
 var starsReg = regexp.MustCompile(`background-position:(-?\d+)px (-\d+)px`)
 var coverUrlReg = regexp.MustCompile(`url\(([^)]+)\)`)
 var numReg = regexp.MustCompile(`Showing 1 - (\d+) of ([\d,]+) images?`)
@@ -113,11 +114,9 @@ func scrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 	if keyword != "" {
 		querys.Set("f_search", keyword)
 	}
-	if page > 0 {
-		querys.Set("page", strconv.Itoa(page))
-	}
 	u.RawQuery = querys.Encode()
 
+	// 先获取第一页以解析 total
 	doc, err := httpGetDoc(ctx, client, u.String())
 	if err != nil {
 		return 0, nil, err
@@ -133,69 +132,148 @@ func scrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 	foundResults := doc.Find("body > div.ido > div:nth-child(2) > div.searchtext > p").Text()
 	matches := foundReg.FindStringSubmatch(foundResults)
 	if len(matches) == 0 {
-		return 0, nil, fmt.Errorf("could not parse result count from: %s", foundResults)
+		if foundThousandsReg.MatchString(foundResults) {
+			total = 9999
+		} else {
+			return 0, nil, fmt.Errorf("could not parse result count from: %s", foundResults)
+		}
+	} else {
+		totalStr := strings.ReplaceAll(matches[1], ",", "")
+		total, _ = strconv.Atoi(totalStr)
 	}
-	totalStr := strings.ReplaceAll(matches[1], ",", "")
-	total, _ = strconv.Atoi(totalStr)
 	if total == 0 {
 		return 0, nil, fmt.Errorf("no results")
 	}
 
-	// 解析表格
-	table := doc.Find("body > div.ido > div:nth-child(2) > table > tbody > tr")
-	if table.Length() == 0 {
-		return 0, nil, fmt.Errorf("empty results table")
+	// EHentai 使用游标分页 (next=<gallery_id>)，page 参数无效
+	// 对于 page > 0，需要依次跟随 next 链接
+	for p := 0; p < page; p++ {
+		nextURL := extractNextURL(doc)
+		if nextURL == "" {
+			return total, nil, nil
+		}
+		doc, err = httpGetDoc(ctx, client, nextURL)
+		if err != nil {
+			return 0, nil, err
+		}
 	}
 
-	results = make([]SearchResult, 0, table.Length()-1)
+	results, err = parseSearchResults(doc)
+	return
+}
+
+// extractNextURL 从搜索结果页提取 "Next >" 链接
+func extractNextURL(doc *goquery.Document) string {
+	var nextURL string
+	doc.Find("a").Each(func(i int, s *goquery.Selection) {
+		if s.Text() == "Next >" {
+			nextURL, _ = s.Attr("href")
+		}
+	})
+	return nextURL
+}
+
+// parseSearchResults 从 goquery Document 解析搜索结果
+func parseSearchResults(doc *goquery.Document) ([]SearchResult, error) {
+	table := doc.Find("body > div.ido > div:nth-child(2) > table > tbody > tr")
+	if table.Length() == 0 {
+		return nil, fmt.Errorf("empty results table")
+	}
+
+	results := make([]SearchResult, 0, table.Length()-1)
+	// 检测布局类型：紧凑布局用 gl1c/gl2c/gl3c/gl4c，扩展布局用 gl1e/gl2e
+	firstRow := table.Eq(1)
+	isExtended := firstRow.Find("td.gl1e").Length() > 0
+
 	table.Each(func(i int, s *goquery.Selection) {
 		if i == 0 { // 表头
 			return
 		}
 
-		cat := s.Find("td.gl1c.glcat > div").Text()
+		if isExtended {
+			// 扩展布局 (sk cookie 触发)
+			gl1e := s.Find("td.gl1e")
+			gURL, _ := gl1e.Find("div > a").Attr("href")
 
-		gl2c := s.Find("td.gl2c > div")
-		cover, ok := gl2c.Find("div > img").Attr("data-src")
-		if !ok {
-			cover, _ = gl2c.Find("div > img").Attr("src")
+			gl2e := s.Find("td.gl2e")
+			cat := gl2e.Find("div.gl3e > div.cn").Text()
+			upTime := gl2e.Find("div.gl3e > div:nth-child(2)").Text()
+			stars, _ := gl2e.Find("div.gl3e > div.ir").Attr("style")
+			uploader := gl2e.Find("div.gl3e > div:nth-child(4) > a").Text()
+			pagesStr := gl2e.Find("div.gl3e > div:nth-child(5)").Text()
+			pagesStr = strings.TrimSuffix(pagesStr, " pages")
+			pagesNum, _ := strconv.Atoi(pagesStr)
+
+			glname := gl2e.Find("div.gl4e.glname")
+			title := glname.Find("div.glink").Text()
+			var tags []string
+			glname.Find("table td:nth-child(2) > div").Each(func(i int, s *goquery.Selection) {
+				tags = append(tags, s.AttrOr("title", s.Text()))
+			})
+
+			domain, gId, gToken := parseGalleryURL(gURL)
+			gIdNum, _ := strconv.Atoi(gId)
+
+			results = append(results, SearchResult{
+				Domain:    domain,
+				GalleryID: gIdNum,
+				Token:     gToken,
+				Cat:       cat,
+				Cover:     gl1e.Find("div > a > img").AttrOr("src", ""),
+				Posted:    upTime,
+				Rating:    parseStars(stars),
+				URL:       gURL,
+				Title:     title,
+				Tags:      tags,
+				Uploader:  uploader,
+				Pages:     pagesNum,
+			})
+		} else {
+			// 紧凑布局 (默认)
+			cat := s.Find("td.gl1c.glcat > div").Text()
+
+			gl2c := s.Find("td.gl2c > div")
+			cover, ok := gl2c.Find("div > img").Attr("data-src")
+			if !ok {
+				cover, _ = gl2c.Find("div > img").Attr("src")
+			}
+			upTime := gl2c.Find("div:nth-child(3) > div:nth-child(1)").Text()
+			stars, _ := gl2c.Find("div.ir").Attr("style")
+
+			gl3c := s.Find("td.gl3c.glname > a")
+			gURL, _ := gl3c.Attr("href")
+			title := gl3c.Find("div.glink").Text()
+			var tags []string
+			gl3c.Find("div:nth-child(2) > div").Each(func(i int, s *goquery.Selection) {
+				tags = append(tags, s.AttrOr("title", s.Text()))
+			})
+
+			gl4c := s.Find("td.gl4c.glhide")
+			uploader := gl4c.Find("div:nth-child(1) > a").Text()
+			pagesStr := gl4c.Find("div:nth-child(2)").Text()
+			pagesStr = strings.TrimSuffix(pagesStr, " pages")
+			pagesNum, _ := strconv.Atoi(pagesStr)
+
+			domain, gId, gToken := parseGalleryURL(gURL)
+			gIdNum, _ := strconv.Atoi(gId)
+
+			results = append(results, SearchResult{
+				Domain:    domain,
+				GalleryID: gIdNum,
+				Token:     gToken,
+				Cat:       cat,
+				Cover:     cover,
+				Posted:    upTime,
+				Rating:    parseStars(stars),
+				URL:       gURL,
+				Title:     title,
+				Tags:      tags,
+				Uploader:  uploader,
+				Pages:     pagesNum,
+			})
 		}
-		upTime := gl2c.Find("div:nth-child(3) > div:nth-child(1)").Text()
-		stars, _ := gl2c.Find("div.ir").Attr("style")
-
-		gl3c := s.Find("td.gl3c.glname > a")
-		gURL, _ := gl3c.Attr("href")
-		title := gl3c.Find("div.glink").Text()
-		var tags []string
-		gl3c.Find("div:nth-child(2) > div").Each(func(i int, s *goquery.Selection) {
-			tags = append(tags, s.AttrOr("title", s.Text()))
-		})
-
-		gl4c := s.Find("td.gl4c.glhide")
-		uploader := gl4c.Find("div:nth-child(1) > a").Text()
-		pagesStr := gl4c.Find("div:nth-child(2)").Text()
-		pagesStr = strings.TrimSuffix(pagesStr, " pages")
-		pagesNum, _ := strconv.Atoi(pagesStr)
-
-		domain, gId, gToken := parseGalleryURL(gURL)
-		gIdNum, _ := strconv.Atoi(gId)
-
-		results = append(results, SearchResult{
-			Domain:    domain,
-			GalleryID: gIdNum,
-			Token:     gToken,
-			Cat:       cat,
-			Cover:     cover,
-			Posted:    upTime,
-			Rating:    parseStars(stars),
-			URL:       gURL,
-			Title:     title,
-			Tags:      tags,
-			Uploader:  uploader,
-			Pages:     pagesNum,
-		})
 	})
-	return
+	return results, nil
 }
 
 func parseGalleryURL(u string) (domain, gId, gToken string) {
