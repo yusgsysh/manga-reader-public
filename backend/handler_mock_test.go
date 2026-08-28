@@ -152,11 +152,16 @@ func mockGalleryDetailHTML(gid int, token, title string, pageCount int) string {
 </body></html>`, title, title, pageCount, tagsHTML.String(), pageCount, pageCount, pageLinks.String())
 }
 
-// mockPageHTML returns a gallery page with image URL.
-func mockPageHTML(imgURL string) string {
+// mockPageHTML returns a gallery page with image URL and optional nl fallback.
+func mockPageHTML(imgURL, nlCode string) string {
+	nlAttr := ""
+	if nlCode != "" {
+		nlAttr = fmt.Sprintf(` onclick="return nl('%s')"`, nlCode)
+	}
 	return fmt.Sprintf(`<!DOCTYPE html><html><head></head><body>
 <div id="imgd"><img id="img" src="%s"/></div>
-</body></html>`, imgURL)
+<a href="#" id="loadfail"%s>Reload broken image</a>
+</body></html>`, imgURL, nlAttr)
 }
 
 // mockImageBytes returns fake image data.
@@ -708,18 +713,15 @@ func TestMockPageImage_Success(t *testing.T) {
 	imgData := mockImageBytes()
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/s/") {
-			// Serve page HTML
 			w.Header().Set("Content-Type", "text/html")
-			fmt.Fprint(w, mockPageHTML("https://example.com/image.webp"))
+			fmt.Fprint(w, mockPageHTML("https://example.com/image.webp", ""))
 		} else {
-			// Serve image (any other path)
 			w.Header().Set("Content-Type", "image/webp")
 			w.Write(imgData)
 		}
 	})
 	defer mockServer.Close()
 
-	// Build the page URL using the mock server's address so proxyImage fetches from mock
 	pageURL := mockServer.URL + "/s/abc123/3138775-1"
 
 	r := setupMockRouter()
@@ -738,5 +740,228 @@ func TestMockPageImage_Success(t *testing.T) {
 	}
 	if len(w.Body.Bytes()) != len(imgData) {
 		t.Errorf("body len = %d, want %d", len(w.Body.Bytes()), len(imgData))
+	}
+}
+
+// ==================== nl Retry Tests ====================
+
+func TestBuildNlFallbackURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		pageURL  string
+		onclick  string
+		expected string
+	}{
+		{
+			"with nl code",
+			"https://exhentai.org/s/abc123/3138775-1",
+			`return nl('SZF-483294')`,
+			"https://exhentai.org/s/abc123/3138775-1?nl=SZF-483294",
+		},
+		{
+			"with existing query params",
+			"https://exhentai.org/s/abc123/3138775-1?param=value",
+			`return nl('XYZ-999')`,
+			"https://exhentai.org/s/abc123/3138775-1?param=value&nl=XYZ-999",
+		},
+		{
+			"empty onclick",
+			"https://exhentai.org/s/abc123/3138775-1",
+			"",
+			"",
+		},
+		{
+			"non-matching onclick",
+			"https://exhentai.org/s/abc123/3138775-1",
+			"return somethingElse('test')",
+			"",
+		},
+		{
+			"invalid URL",
+			"://invalid",
+			`return nl('ABC-123')`,
+			"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildNlFallbackURL(tt.pageURL, tt.onclick)
+			if got != tt.expected {
+				t.Errorf("buildNlFallbackURL(%q, %q) = %q, want %q", tt.pageURL, tt.onclick, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestMockPageImage_RetryOnImageDownloadFailure(t *testing.T) {
+	imgData := mockImageBytes()
+	callCount := 0
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/s/") {
+			w.Header().Set("Content-Type", "text/html")
+			// First page request: provide image URL and nl fallback
+			// The fallback page will serve the same HTML but the image URL will work
+			fmt.Fprint(w, mockPageHTML("https://example.com/image.webp", "FALLBACK123"))
+		} else if r.URL.Path == "/image.webp" {
+			callCount++
+			if callCount == 1 {
+				// First image download fails
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			// Second attempt (via fallback) succeeds
+			w.Header().Set("Content-Type", "image/webp")
+			w.Write(imgData)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	defer mockServer.Close()
+
+	pageURL := mockServer.URL + "/s/abc123/3138775-1"
+
+	r := setupMockRouter()
+	app := &App{Client: newMockClient(mockServer.URL)}
+	r.GET("/api/page-image", app.handlePageImage)
+
+	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if len(w.Body.Bytes()) != len(imgData) {
+		t.Errorf("body len = %d, want %d", len(w.Body.Bytes()), len(imgData))
+	}
+	t.Logf("Retry succeeded: callCount=%d", callCount)
+}
+
+func TestMockPageImage_RetryExhausted(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/s/") {
+			w.Header().Set("Content-Type", "text/html")
+			// Always provide a fallback, but image always fails
+			fmt.Fprint(w, mockPageHTML("https://example.com/broken.webp", "RETRY123"))
+		} else {
+			// All image downloads fail
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	})
+	defer mockServer.Close()
+
+	pageURL := mockServer.URL + "/s/abc123/3138775-1"
+
+	r := setupMockRouter()
+	app := &App{Client: newMockClient(mockServer.URL)}
+	r.GET("/api/page-image", app.handlePageImage)
+
+	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Should fail after exhausting retries
+	if w.Code != http.StatusBadGateway {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadGateway)
+	}
+}
+
+func TestMockPageImage_NoFallbackNoRetry(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/s/") {
+			w.Header().Set("Content-Type", "text/html")
+			// No nl fallback
+			fmt.Fprint(w, mockPageHTML("https://example.com/image.webp", ""))
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	})
+	defer mockServer.Close()
+
+	pageURL := mockServer.URL + "/s/abc123/3138775-1"
+
+	r := setupMockRouter()
+	app := &App{Client: newMockClient(mockServer.URL)}
+	r.GET("/api/page-image", app.handlePageImage)
+
+	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Should fail immediately since no fallback
+	if w.Code != http.StatusBadGateway {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadGateway)
+	}
+}
+
+func TestMockPageImage_RetryWithMultipleFailures(t *testing.T) {
+	imgData := mockImageBytes()
+	imageAttempts := 0
+	pageRequests := 0
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/s/") {
+			pageRequests++
+			w.Header().Set("Content-Type", "text/html")
+			// Each page request provides a new fallback
+			nlCode := fmt.Sprintf("RETRY%d", pageRequests)
+			fmt.Fprint(w, mockPageHTML("https://example.com/image.webp", nlCode))
+		} else {
+			imageAttempts++
+			if imageAttempts <= 2 {
+				// First two attempts fail
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			// Third attempt succeeds
+			w.Header().Set("Content-Type", "image/webp")
+			w.Write(imgData)
+		}
+	})
+	defer mockServer.Close()
+
+	pageURL := mockServer.URL + "/s/abc123/3138775-1"
+
+	r := setupMockRouter()
+	app := &App{Client: newMockClient(mockServer.URL)}
+	r.GET("/api/page-image", app.handlePageImage)
+
+	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if len(w.Body.Bytes()) != len(imgData) {
+		t.Errorf("body len = %d, want %d", len(w.Body.Bytes()), len(imgData))
+	}
+	t.Logf("Retry with multiple failures: imageAttempts=%d, pageRequests=%d", imageAttempts, pageRequests)
+}
+
+func TestMockPageImage_RetryCancelledByContext(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/s/") {
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, mockPageHTML("https://example.com/image.webp", "RETRY123"))
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	})
+	defer mockServer.Close()
+
+	pageURL := mockServer.URL + "/s/abc123/3138775-1"
+
+	r := setupMockRouter()
+	app := &App{Client: newMockClient(mockServer.URL)}
+	r.GET("/api/page-image", app.handlePageImage)
+
+	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Even with retries, should eventually fail
+	if w.Code != http.StatusBadGateway {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadGateway)
 	}
 }

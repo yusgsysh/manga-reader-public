@@ -494,28 +494,56 @@ func scrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL s
 	}, nil
 }
 
-func scrapePageImageURL(ctx context.Context, client *http.Client, pageURL string) (imgURL string, err error) {
+var nlReg = regexp.MustCompile(`nl\('(.+?)'\)`)
+
+func scrapePageImageURL(ctx context.Context, client *http.Client, pageURL string) (imgURL string, fallbackURL string, err error) {
 	resp, err := httpGet(ctx, client, pageURL)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	img, ok := doc.Find("#img").Attr("src")
 	if !ok || img == "" {
-		return "", fmt.Errorf("could not find image src")
+		return "", "", fmt.Errorf("could not find image src")
 	}
-	return img, nil
+
+	// <a href="#" id="loadfail" onclick="return nl('SZF-483294')">Reload broken image</a>
+	onclick, _ := doc.Find("#loadfail").Attr("onclick")
+	fallbackURL = buildNlFallbackURL(pageURL, onclick)
+
+	return img, fallbackURL, nil
+}
+
+func buildNlFallbackURL(pageURL, onclick string) string {
+	if onclick == "" {
+		return ""
+	}
+	matches := nlReg.FindStringSubmatch(onclick)
+	if len(matches) == 0 {
+		return ""
+	}
+	u, err := url.Parse(pageURL)
+	if err != nil {
+		return ""
+	}
+	nl := matches[1]
+	if u.RawQuery != "" {
+		u.RawQuery += "&nl=" + nl
+	} else {
+		u.RawQuery = "nl=" + nl
+	}
+	return u.String()
 }
 
 func proxyImage(ctx context.Context, client *http.Client, imgURL string) (data []byte, contentType string, err error) {

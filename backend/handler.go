@@ -202,6 +202,8 @@ func (a *App) handleSearch(c *gin.Context) {
 	})
 }
 
+const maxNlRetries = 2
+
 func (a *App) handlePageImage(c *gin.Context) {
 	pageURL := c.Query("url")
 	if pageURL == "" {
@@ -211,15 +213,25 @@ func (a *App) handlePageImage(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// 获取图片直链
-	imgURL, err := scrapePageImageURL(ctx, a.Client, pageURL)
+	imgURL, fallbackURL, err := scrapePageImageURL(ctx, a.Client, pageURL)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("get image url failed: %v", err)})
 		return
 	}
 
-	// 代理下载图片
 	data, contentType, err := proxyImage(ctx, a.Client, imgURL)
+	if err != nil && fallbackURL != "" {
+		for retry := 0; retry < maxNlRetries; retry++ {
+			imgURL, fallbackURL, err = scrapePageImageURL(ctx, a.Client, fallbackURL)
+			if err != nil {
+				break
+			}
+			data, contentType, err = proxyImage(ctx, a.Client, imgURL)
+			if err == nil {
+				break
+			}
+		}
+	}
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
 		return
