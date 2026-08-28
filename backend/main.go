@@ -20,6 +20,12 @@ func main() {
 	app := &App{Client: client}
 
 	r := gin.Default()
+
 	r.GET("/api/gallery/:id/:token", app.handleGetGallery)
+	r.GET("/api/gallery/:id/:token/details", app.handleGalleryDetails)
+	r.GET("/api/gallery/:id/:token/pages", app.handleGalleryPages)
+	r.GET("/api/search", app.handleSearch)
+	r.GET("/api/page-image", app.handlePageImage)
+
 	log.Fatal(r.Run(":30080"))
 }
