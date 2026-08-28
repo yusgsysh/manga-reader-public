@@ -739,20 +739,20 @@ func TestAPI_GalleryPages_InvalidID(t *testing.T) {
 // ==================== 基准测试 ====================
 
 func BenchmarkParseStars(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		parseStars("background-position:-32px -1px;opacity:1")
 	}
 }
 
 func BenchmarkBuildCategoryFilter(b *testing.B) {
 	cats := []string{"doujinshi", "manga", "artistcg"}
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		buildCategoryFilter(cats)
 	}
 }
 
 func BenchmarkMapCategory(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		MapCategory("Doujinshi")
 	}
 }
@@ -769,7 +769,7 @@ func BenchmarkConvertMetadataToGallery(b *testing.B) {
 		TorrentCount: "3",
 		Tags:         []string{"female:yuri", "language:chinese"},
 	}
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		ConvertMetadataToGallery(meta)
 	}
 }
