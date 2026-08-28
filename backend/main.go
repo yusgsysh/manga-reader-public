@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,5 +28,11 @@ func main() {
 	r.GET("/api/search", app.handleSearch)
 	r.GET("/api/page-image", app.handlePageImage)
 
-	log.Fatal(r.Run(":30080"))
+	port := os.Getenv("EHENTAI_PORT")
+	if port == "" {
+		port = ":8080"
+	} else if port[0] != ':' {
+		port = ":" + port
+	}
+	log.Fatal(r.Run(port))
 }
