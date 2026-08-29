@@ -9,6 +9,8 @@ services:
       MANGA_READER_DB_PATH: /app/data/manga-reader.db
     volumes:
       - backend_data:/app/data
+    extra_hosts:
+      - "storage.09270721.xyz:192.168.1.100"
     restart: unless-stopped
 
   frontend:
