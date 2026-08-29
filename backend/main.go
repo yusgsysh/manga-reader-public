@@ -18,7 +18,18 @@ func main() {
 		log.Fatal(err)
 	}
 
-	app := &App{Client: client}
+	dbPath := os.Getenv("MANGA_READER_DB_PATH")
+	if dbPath == "" {
+		dbPath = "data/manga-reader.db"
+	}
+
+	db, err := NewDB(dbPath)
+	if err != nil {
+		log.Fatalf("database init failed: %v", err)
+	}
+	defer db.Close()
+
+	app := &App{Client: client, DB: db}
 
 	r := gin.Default()
 
@@ -30,6 +41,14 @@ func main() {
 	r.GET("/api/gallerys", app.handleGallerys)
 	r.GET("/api/watched", app.handleWatched)
 	r.GET("/api/popular", app.handlePopular)
+
+	r.GET("/api/bookshelf", app.handleBookshelfList)
+	r.POST("/api/bookshelf/:id/:token", app.handleBookshelfAdd)
+	r.DELETE("/api/bookshelf/:id/:token", app.handleBookshelfRemove)
+	r.GET("/api/bookshelf/:id/:token/status", app.handleBookshelfStatus)
+	r.GET("/api/progress/:id/:token", app.handleGetProgress)
+	r.PUT("/api/progress/:id/:token", app.handleUpdateProgress)
+	r.GET("/api/recently-read", app.handleRecentlyRead)
 
 	minioCfg := LoadMinIOConfig()
 	if minioCfg.IsValid() {

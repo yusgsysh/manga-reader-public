@@ -11,6 +11,7 @@ import (
 
 type App struct {
 	Client *http.Client
+	DB     *DB
 }
 
 func galleryURL(id, token string) string {
