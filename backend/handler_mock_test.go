@@ -940,27 +940,18 @@ func mockGalleryListHTML(count int) string {
 		gid := 3000 + i
 		token := fmt.Sprintf("gal%04d", i)
 		rows.WriteString(fmt.Sprintf(`<tr>
-			<td class="gl1e"><div style="height:245px;width:250px"><a href="https://exhentai.org/g/%d/%s/"><img style="height:245px;width:250px" src="https://example.com/thumb%d.webp" title="Gallery %d"/></a></div></td>
-			<td class="gl2e"><div>
-				<div class="gl3e">
-					<div class="cn ct2" onclick="document.location='https://exhentai.org/doujinshi'">Doujinshi</div>
-					<div>2024-01-01</div>
-					<div class="ir" style="background-position:-32px -1px;opacity:1"></div>
-					<div><a href="https://exhentai.org/uploader/testuser%d">testuser%d</a></div>
-					<div>%d pages</div>
-				</div>
-				<a href="https://exhentai.org/g/%d/%s/"><div class="gl4e glname" style="min-height:253px">
-					<div class="glink">Gallery %d</div>
-					<div><table><tbody><tr><td class="tc">female:</td><td><div class="gt" title="female:yuri">yuri</div></td></tr></tbody></table></div>
-				</div></a>
-			</div></td>
-		</tr>`, gid, token, i, i, i, i, i+10, gid, token, i))
+			<td class="gl1c glcat"><div class="cn ct2">Doujinshi</div></td>
+			<td class="gl2c"><div class="glthumb"><div><img src="https://example.com/thumb%d.webp" /></div><div><div><div class="cn ct2">Doujinshi</div><div id="postedpop_%d">2024-01-01</div></div><div><div class="ir" style="background-position:-32px -1px;opacity:1"></div><div>%d pages</div></div></div></div><div><div id="posted_%d">2024-01-01</div><div class="ir" style="background-position:-32px -1px;opacity:1"></div></div></td>
+			<td class="gl3c glname"><a href="https://exhentai.org/g/%d/%s/"><div class="glink">Gallery %d</div><div><div class="gt" title="female:yuri">yuri</div></div></a></td>
+			<td class="gl4c glhide"><div><a href="https://exhentai.org/uploader/testuser%d">testuser%d</a></div><div>%d pages</div></td>
+		</tr>`, i, gid, i+10, gid, gid, token, i, i, i, i+10))
 	}
 
 	return fmt.Sprintf(`<!DOCTYPE html><html><head></head><body>
-	<div class="itg glte"><table class="itg glte"><tbody>
+	<table class="itg gltc"><tbody>
+		<tr><th></th><th>Published</th><th>Title</th><th class="glhide">Uploader</th></tr>
 		%s
-	</tbody></table></div>
+	</tbody></table>
 	<div class="searchnav"><div><a id="dnext" href="https://exhentai.org/?next=%d">Next &gt;</a></div></div>
 </body></html>`, rows.String(), 3000+count)
 }
