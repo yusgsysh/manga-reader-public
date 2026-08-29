@@ -545,6 +545,9 @@ func scrapeGalleryList(ctx context.Context, client *http.Client, listURL string,
 	}
 
 	results, err = parseGalleryListResults(doc)
+	if err != nil && err.Error() == "empty gallery list" {
+		return []SearchResult{}, nil
+	}
 	return
 }
 

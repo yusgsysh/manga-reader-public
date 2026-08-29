@@ -1083,7 +1083,7 @@ func TestMockGalleryList_Empty(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, `<!DOCTYPE html><html><head></head><body>
-		<div class="itg glte"><table class="itg glte"><tbody></tbody></table></div>
+		<table class="itg gltc"><tbody></tbody></table>
 		</body></html>`)
 	})
 	defer mockServer.Close()
@@ -1096,8 +1096,16 @@ func TestMockGalleryList_Empty(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadGateway {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadGateway)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		Results []interface{} `json:"results"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp.Results) != 0 {
+		t.Errorf("results len = %d, want 0", len(resp.Results))
 	}
 }
 
