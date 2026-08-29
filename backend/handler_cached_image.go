@@ -13,6 +13,18 @@ import (
 
 var cachedImageGroup singleflight.Group
 
+// isBlockedInternalHost reports whether a hostname resolves to a blocked
+// internal/loopback/link-local address, guarding against SSRF.
+func isBlockedInternalHost(host string) bool {
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
+	}
+	return false
+}
+
 type CachedImageApp struct {
 	Client *http.Client
 	Cache  *MinIOCache
@@ -39,14 +51,8 @@ func validatePageURL(rawURL string) error {
 		return fmt.Errorf("invalid url: missing host")
 	}
 
-	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+	if isBlockedInternalHost(host) {
 		return fmt.Errorf("unsupported URL: internal address not allowed")
-	}
-
-	if ip := net.ParseIP(host); ip != nil {
-		if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-			return fmt.Errorf("unsupported URL: internal address not allowed")
-		}
 	}
 
 	allowed := false

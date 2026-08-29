@@ -329,7 +329,112 @@ Cache-Control: public, max-age=31536000, immutable
 
 ---
 
-### 10. Bookshelf List
+### 10. Thumbnail Image
+
+`GET /api/thumbnail`
+
+代理 ExHentai Thumbnail 源站图片，返回原始图片字节。**不依赖 MinIO**。
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| url | string | yes | 缩略图 URL (来自 `cover` / `thumbnail` 字段) |
+
+**Response:**
+
+- 成功: 原始图片数据 (`Content-Type: image/webp`, `image/jpeg`, `image/png`, `image/gif`)
+- 根据源站实际 Content-Type 返回，不强制转换
+- 失败时自动重试最多 2 次
+
+**Headers:**
+
+```
+Cache-Control: public, max-age=3600
+```
+
+**Error Responses:**
+
+```json
+{
+  "error": "invalid thumbnail url"
+}
+```
+
+| Status Code | Description |
+|-------------|-------------|
+| 400 | URL 缺失或 URL 非法 |
+| 502 | ExHentai Thumbnail 获取失败 |
+
+**URL 安全限制:**
+
+- 仅允许 `https://` 协议，拒绝 `http://`
+- 仅允许缩略图域名白名单: `s.exhentai.org`、`ehgt.org`、`ul.e-hentai.org`
+- 阻止 localhost、RFC1918 私网地址、Link-local、云 Metadata Service 等内部地址 (SSRF 防护)
+
+> 该 API 仅做源站代理，不负责 MinIO 持久化缓存。
+
+---
+
+### 11. Cached Thumbnail
+
+`GET /api/cached-thumbnail`
+
+带 MinIO 缓存的 Thumbnail 代理。首次请求从 ExHentai 获取并缓存到 MinIO，后续相同 URL 直接从 MinIO 返回。
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| url | string | yes | 缩略图 URL (来自 `cover` / `thumbnail` 字段) |
+
+**Response:**
+
+- 成功: 原始图片数据 (`Content-Type: image/webp`, `image/jpeg`, `image/png`, `image/gif`)
+- Cache Hit: 直接从 MinIO 返回，不请求 ExHentai
+- Cache Miss: 从 ExHentai 获取，写入 MinIO，返回图片
+- 并发保护: 同一 URL 的并发 miss 只触发一次远程请求 (singleflight)
+
+**Headers:**
+
+```
+Cache-Control: public, max-age=31536000, immutable
+```
+
+**MinIO Cache:**
+
+- Object Prefix: `thumbnail/`
+- Cache Key: `thumbnail/<sha256(完整缩略图 URL)>`
+- 保存 Metadata: `Content-Type`、`Content-Length`、`x-amz-meta-source-url` (原始 URL)
+- Cache Key 基于完整 URL，URL 变化会生成新的 Object Key，不会污染旧缓存
+
+**Error Responses:**
+
+```json
+{
+  "error": "missing url parameter"
+}
+```
+
+| Status Code | Description |
+|-------------|-------------|
+| 400 | Bad request (参数无效、URL 不合法) |
+| 502 | 上游错误 (ExHentai 请求失败) |
+| 503 | Cache 未配置 (MinIO 环境变量缺失) |
+
+**URL 安全限制:**
+
+与 `/api/thumbnail` 相同，仅允许 `https://` 及缩略图域名白名单，阻止内网地址。
+
+**前端使用方式:**
+
+```html
+<img src="/api/cached-thumbnail?url=https%3A%2F%2Fs.exhentai.org%2Fw%2F00%2F999%2F15582-3owak8q3.webp" />
+```
+
+---
+
+### 12. Bookshelf List
 
 `GET /api/bookshelf`
 
@@ -378,7 +483,7 @@ Cache-Control: public, max-age=31536000, immutable
 
 ---
 
-### 11. Add to Bookshelf
+### 13. Add to Bookshelf
 
 `POST /api/bookshelf/:id/:token`
 
@@ -409,7 +514,7 @@ Cache-Control: public, max-age=31536000, immutable
 
 ---
 
-### 12. Remove from Bookshelf
+### 14. Remove from Bookshelf
 
 `DELETE /api/bookshelf/:id/:token`
 
@@ -433,7 +538,7 @@ Cache-Control: public, max-age=31536000, immutable
 
 ---
 
-### 13. Bookshelf Status
+### 15. Bookshelf Status
 
 `GET /api/bookshelf/:id/:token/status`
 
@@ -465,7 +570,7 @@ Cache-Control: public, max-age=31536000, immutable
 
 ---
 
-### 14. Get Reading Progress
+### 16. Get Reading Progress
 
 `GET /api/progress/:id/:token`
 
@@ -496,7 +601,7 @@ Cache-Control: public, max-age=31536000, immutable
 
 ---
 
-### 15. Update Reading Progress
+### 17. Update Reading Progress
 
 `PUT /api/progress/:id/:token`
 
@@ -547,7 +652,7 @@ Cache-Control: public, max-age=31536000, immutable
 
 ---
 
-### 16. Recently Read
+### 18. Recently Read
 
 `GET /api/recently-read`
 

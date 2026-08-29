@@ -68,6 +68,10 @@ func main() {
 	r.PUT("/api/progress/:id/:token", app.handleUpdateProgress)
 	r.GET("/api/recently-read", app.handleRecentlyRead)
 
+	thumbApp := &ThumbnailApp{Client: client}
+	r.GET("/api/thumbnail", thumbApp.handleThumbnail)
+	r.GET("/api/cached-thumbnail", thumbApp.handleCachedThumbnail)
+
 	minioCfg := LoadMinIOConfig()
 	if minioCfg.IsValid() {
 		cache, err := NewMinIOCache(minioCfg)
@@ -76,9 +80,10 @@ func main() {
 		}
 		cachedApp := &CachedImageApp{Client: client, Cache: cache}
 		r.GET("/api/cached-image", cachedApp.handleCachedImage)
-		log.Println("cached-image endpoint enabled")
+		thumbApp.Cache = cache
+		log.Println("cached-image and cached-thumbnail endpoints enabled")
 	} else {
-		log.Println("minio config not set, cached-image endpoint disabled")
+		log.Println("minio config not set, cached-image/cached-thumbnail endpoints will return 503")
 	}
 
 	port := os.Getenv("EHENTAI_PORT")

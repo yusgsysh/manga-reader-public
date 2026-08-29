@@ -166,6 +166,19 @@ func (c *MinIOCache) Put(ctx context.Context, key string, data []byte, contentTy
 	return nil
 }
 
+func (c *MinIOCache) PutWithMeta(ctx context.Context, key string, data []byte, contentType string, meta map[string]string) error {
+	reader := strings.NewReader(string(data))
+	_, err := c.client.PutObject(ctx, c.bucket, key, reader, int64(len(data)), minio.PutObjectOptions{
+		ContentType:  contentType,
+		CacheControl: cacheControlHeader,
+		UserMetadata: meta,
+	})
+	if err != nil {
+		return fmt.Errorf("minio put object: %w", err)
+	}
+	return nil
+}
+
 func (c *MinIOCache) Head(ctx context.Context, key string) (minio.ObjectInfo, error) {
 	return c.client.StatObject(ctx, c.bucket, key, minio.StatObjectOptions{})
 }
