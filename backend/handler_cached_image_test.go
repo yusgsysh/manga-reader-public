@@ -377,7 +377,7 @@ func TestCacheKey_SameURLAlwaysSameKey(t *testing.T) {
 
 	for i, u := range urls {
 		key := CacheKey(u)
-		cache.PutObject(key, []byte(fmt.Sprintf("image-%d", i)), "image/webp")
+		cache.PutObject(key, fmt.Appendf(nil, "image-%d", i), "image/webp")
 	}
 
 	// All three should have overwritten the same key

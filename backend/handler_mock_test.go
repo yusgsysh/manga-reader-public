@@ -41,7 +41,7 @@ func newMockServer(handler http.HandlerFunc) *httptest.Server {
 // ==================== Mock HTML Fixtures ====================
 
 // mockSearchHTML returns an EHentai search results page with compact layout.
-func mockSearchHTML(keyword string, count int) string {
+func mockSearchHTML(count int) string {
 	var rows strings.Builder
 	for i := range count {
 		gid := 1000 + i
@@ -76,7 +76,7 @@ func mockNoHitsHTML() string {
 }
 
 // mockGalleryDetailHTML returns a gallery details page.
-func mockGalleryDetailHTML(gid int, token, title string, pageCount int) string {
+func mockGalleryDetailHTML(gid int, title string, pageCount int) string {
 	var tagsHTML strings.Builder
 	tagsHTML.WriteString(`<tr><td class="taglist">female:</td><td class="taglist"><div title="female:yuri"><a>yuri</a></div><div title="female:ntr"><a>ntr</a></div></td></tr>`)
 	tagsHTML.WriteString(`<tr><td class="taglist">language:</td><td class="taglist"><div title="language:chinese"><a>chinese</a></div></td></tr>`)
@@ -314,7 +314,7 @@ func TestMockSearch_NoResults(t *testing.T) {
 func TestMockSearch_Success(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, mockSearchHTML("yuri", 25))
+		fmt.Fprint(w, mockSearchHTML(25))
 	})
 	defer mockServer.Close()
 
@@ -377,7 +377,7 @@ func TestMockSearch_Success(t *testing.T) {
 func TestMockSearch_ExtendedLayout(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, mockSearchHTML("yuri", 5))
+		fmt.Fprint(w, mockSearchHTML(5))
 	})
 	defer mockServer.Close()
 
@@ -417,7 +417,7 @@ func TestMockSearch_ExtendedLayout(t *testing.T) {
 func TestMockSearch_SiteParam(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, mockSearchHTML("test", 1))
+		fmt.Fprint(w, mockSearchHTML(1))
 	})
 	defer mockServer.Close()
 
@@ -438,7 +438,7 @@ func TestMockSearch_SiteParam(t *testing.T) {
 func TestMockSearch_NegativePageClamped(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, mockSearchHTML("yuri", 5))
+		fmt.Fprint(w, mockSearchHTML(5))
 	})
 	defer mockServer.Close()
 
@@ -501,7 +501,7 @@ func TestMockGalleryDetails_ScrapeFailure(t *testing.T) {
 func TestMockGalleryDetails_Success(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, mockGalleryDetailHTML(3138775, "30b0285f9b", "Test Gallery", 65))
+		fmt.Fprint(w, mockGalleryDetailHTML(3138775, "Test Gallery", 65))
 	})
 	defer mockServer.Close()
 
@@ -575,7 +575,7 @@ func TestMockGalleryPages_EmptyID(t *testing.T) {
 func TestMockGalleryPages_Success(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, mockGalleryDetailHTML(12345, "tok12345", "Pages Test", 3))
+		fmt.Fprint(w, mockGalleryDetailHTML(12345, "Pages Test", 3))
 	})
 	defer mockServer.Close()
 
