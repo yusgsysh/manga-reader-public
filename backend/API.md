@@ -31,10 +31,10 @@ Base URL: `http://localhost:8080`
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| q | string | yes | - | Search keyword |
-| site | string | no | `"exhentai"` | `"exhentai"` or `"ehentai"` |
-| categories | string | no | - | Comma-separated categories, e.g. `"doujinshi,manga"` |
-| page | int | no | `0` | Page number (0-indexed) |
+| q | string | yes | - | Search keyword (空字符串返回全站) |
+| site | string | no | `"exhentai"` | `"exhentai"` 或 `"ehentai"` |
+| categories | string | no | - | 逗号分隔的分类，如 `"doujinshi,manga"` |
+| page | int | no | `0` | 页码 (0-indexed) |
 
 **Response (200):**
 
@@ -184,18 +184,18 @@ Base URL: `http://localhost:8080`
 
 `GET /api/page-image`
 
-Proxies the image from ExHentai. Returns raw image bytes with the original `Content-Type`.
+代理 ExHentai 图片，返回原始图片字节。
 
 **Query Parameters:**
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| url | string | yes | Page URL (from `page_urls` or `pages` array) |
+| url | string | yes | 页面 URL (来自 `page_urls` 或 `pages` 数组) |
 
 **Response:**
 
-- Success: Raw image data (`Content-Type: image/jpeg` or `image/png`)
-- NL fallback: Automatically retries up to 2 times if initial download fails
+- 成功: 原始图片数据 (`Content-Type: image/jpeg` 或 `image/png`)
+- NL 重试: 初次下载失败时自动重试最多 2 次
 
 **Error Response (502):**
 
@@ -215,7 +215,7 @@ Proxies the image from ExHentai. Returns raw image bytes with the original `Cont
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| page | int | no | `0` | Page number (0-indexed) |
+| page | int | no | `0` | 页码 (0-indexed) |
 
 **Response (200):**
 
@@ -248,7 +248,19 @@ Proxies the image from ExHentai. Returns raw image bytes with the original `Cont
 
 `GET /api/watched`
 
-Same response format as `/api/gallerys`.
+获取关注标签的画廊列表。
+
+**Query Parameters:**
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| page | int | no | `0` | 页码 (0-indexed) |
+
+**Response (200):**
+
+与 `/api/gallerys` 格式相同。
+
+> **注意**: 如果未设置关注标签，返回空列表。ExHentai 的 watched 页面不支持翻页，`page > 0` 始终返回空。
 
 ---
 
@@ -256,13 +268,25 @@ Same response format as `/api/gallerys`.
 
 `GET /api/popular`
 
-Same response format as `/api/gallerys`.
+获取热门画廊列表。
+
+**Query Parameters:**
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| page | int | no | `0` | 页码 (0-indexed) |
+
+**Response (200):**
+
+与 `/api/gallerys` 格式相同。
+
+> **注意**: ExHentai 的 popular 页面不支持翻页，只有第一页有数据，`page > 0` 始终返回空。
 
 ---
 
 ## Error Responses
 
-All error responses follow this format:
+所有错误响应格式：
 
 ```json
 {
@@ -272,5 +296,5 @@ All error responses follow this format:
 
 | Status Code | Description |
 |-------------|-------------|
-| 400 | Bad request (invalid parameters) |
-| 502 | Upstream error (ExHentai API or scrape failed) |
+| 400 | Bad request (参数无效) |
+| 502 | Upstream error (ExHentai API 或抓取失败) |
