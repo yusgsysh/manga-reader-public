@@ -13,6 +13,7 @@ import {
   useGalleryDetail,
 } from "../hooks/useGalleryDetail";
 import { ErrorState } from "../components/common/ErrorState";
+import { TagList } from "../components/tag";
 import { thumbnailUrl } from "../lib/image";
 
 function DetailSkeleton() {
@@ -186,16 +187,7 @@ export function GalleryDetailPage() {
       {gallery.tags.length > 0 && (
         <section>
           <h2 className="mb-2 text-sm font-semibold text-kumo-subtle">标签</h2>
-          <div className="flex flex-wrap gap-1.5">
-            {gallery.tags.map((tag) => (
-              <span
-                key={`${tag.namespace}:${tag.name}`}
-                className="inline-block rounded bg-kumo-recessed px-2 py-1 text-xs text-kumo-default"
-              >
-                {tag.namespace ? `${tag.namespace}:${tag.name}` : tag.name}
-              </span>
-            ))}
-          </div>
+          <TagList tags={gallery.tags} />
         </section>
       )}
     </div>

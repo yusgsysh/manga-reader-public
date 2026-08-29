@@ -1,8 +1,10 @@
+import { useEffect } from "react";
 import { RouterProvider } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@cloudflare/kumo";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { ThemeProvider } from "./lib/theme";
+import { tagTranslationService } from "./services/tagTranslation";
 import { router } from "./router";
 
 const queryClient = new QueryClient({
@@ -16,6 +18,10 @@ const queryClient = new QueryClient({
 });
 
 export default function App() {
+  useEffect(() => {
+    tagTranslationService.load();
+  }, []);
+
   return (
     <ErrorBoundary>
       <ThemeProvider>
