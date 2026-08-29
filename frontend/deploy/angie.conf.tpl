@@ -40,12 +40,6 @@ http {
             try_files $uri $uri/ /index.html;
         }
 
-        # 带 hash 的静态资源长缓存
-        location /assets/ {
-            expires 30d;
-            add_header Cache-Control "public, immutable";
-        }
-
         # EhTagTranslation 翻译库同源加载
         location = /db.text.js {
             expires 1d;
