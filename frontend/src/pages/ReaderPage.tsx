@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useNavigate,
   useNavigationType,
@@ -6,7 +6,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { Button, Loader } from "@cloudflare/kumo";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Maximize, Minimize } from "lucide-react";
 import {
   MangaViewer,
   type MangaViewerHandle,
@@ -24,6 +24,7 @@ export function ReaderPage() {
   const navigationType = useNavigationType();
   const { resolvedMode } = useTheme();
   const viewerRef = useRef<MangaViewerHandle>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const id = Number(idParam);
   const restart = searchParams.get("restart") === "1";
 
@@ -36,6 +37,19 @@ export function ReaderPage() {
       backgroundColor: isDark ? "black" : "white",
     });
   }, [isDark]);
+
+  // 监听原生全屏状态，切换图标；Esc 退出时重置 comimi 布局，避免 fixed 覆盖顶栏
+  useEffect(() => {
+    const onChange = () => {
+      const isFs = !!document.fullscreenElement;
+      setIsFullscreen(isFs);
+      if (!isFs) {
+        viewerRef.current?.updateSettings({ layoutMode: "inline" });
+      }
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
   const galleryQuery = useGallery(id, token ?? "");
   const pagesQuery = useGalleryPages(id, token ?? "");
   const progressQuery = useReadingProgress(id, token ?? "");
@@ -143,6 +157,19 @@ export function ReaderPage() {
         <span className="shrink-0 text-xs text-kumo-subtle">
           {currentPage + 1} / {total}
         </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => viewerRef.current?.toggleFullscreen()}
+          aria-label={isFullscreen ? "退出全屏" : "全屏"}
+          title={isFullscreen ? "退出全屏" : "全屏"}
+        >
+          {isFullscreen ? (
+            <Minimize className="size-4" />
+          ) : (
+            <Maximize className="size-4" />
+          )}
+        </Button>
       </div>
 
       {/* Reader */}
