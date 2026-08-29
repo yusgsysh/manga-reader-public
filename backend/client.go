@@ -50,8 +50,8 @@ func LoadCookieConfig() *CookieConfig {
 
 // parseCookieString 解析 cookie 字符串
 func (c *CookieConfig) parseCookieString(s string) {
-	pairs := strings.Split(s, ";")
-	for _, pair := range pairs {
+	pairs := strings.SplitSeq(s, ";")
+	for pair := range pairs {
 		pair = strings.TrimSpace(pair)
 		if pair == "" {
 			continue

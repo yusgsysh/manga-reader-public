@@ -194,11 +194,11 @@ func (a *App) handleSearch(c *gin.Context) {
 	totalPages := (total + pageSize - 1) / pageSize
 
 	c.JSON(http.StatusOK, gin.H{
-		"total":      total,
+		"total":       total,
 		"total_pages": totalPages,
-		"page":       page,
-		"page_size":  len(items),
-		"results":    items,
+		"page":        page,
+		"page_size":   len(items),
+		"results":     items,
 	})
 }
 
@@ -221,7 +221,7 @@ func (a *App) handlePageImage(c *gin.Context) {
 
 	data, contentType, err := proxyImage(ctx, a.Client, imgURL)
 	if err != nil && fallbackURL != "" {
-		for retry := 0; retry < maxNlRetries; retry++ {
+		for range maxNlRetries {
 			imgURL, fallbackURL, err = scrapePageImageURL(ctx, a.Client, fallbackURL)
 			if err != nil {
 				break

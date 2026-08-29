@@ -43,7 +43,7 @@ func newMockServer(handler http.HandlerFunc) *httptest.Server {
 // mockSearchHTML returns an EHentai search results page with compact layout.
 func mockSearchHTML(keyword string, count int) string {
 	var rows strings.Builder
-	for i := 0; i < count; i++ {
+	for i := range count {
 		gid := 1000 + i
 		token := fmt.Sprintf("tok%04d", i)
 		rows.WriteString(fmt.Sprintf(`<tr>
@@ -518,15 +518,15 @@ func TestMockGalleryDetails_Success(t *testing.T) {
 	}
 
 	var details struct {
-		ID        int    `json:"id"`
-		Token     string `json:"token"`
-		Title     string `json:"title"`
-		Cover     string `json:"cover"`
-		Category  string `json:"category"`
-		Uploader  string `json:"uploader"`
-		PageCount int    `json:"page_count"`
-		Rating    float64 `json:"rating"`
-		Tags      []Tag   `json:"tags"`
+		ID        int      `json:"id"`
+		Token     string   `json:"token"`
+		Title     string   `json:"title"`
+		Cover     string   `json:"cover"`
+		Category  string   `json:"category"`
+		Uploader  string   `json:"uploader"`
+		PageCount int      `json:"page_count"`
+		Rating    float64  `json:"rating"`
+		Tags      []Tag    `json:"tags"`
 		PageUrls  []string `json:"page_urls"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &details); err != nil {
@@ -927,7 +927,7 @@ func TestMockPageImage_RetryCancelledByContext(t *testing.T) {
 
 func mockGalleryListHTML(count int) string {
 	var rows strings.Builder
-	for i := 0; i < count; i++ {
+	for i := range count {
 		gid := 3000 + i
 		token := fmt.Sprintf("gal%04d", i)
 		rows.WriteString(fmt.Sprintf(`<tr>
@@ -1092,7 +1092,7 @@ func TestMockGalleryList_Empty(t *testing.T) {
 	}
 
 	var resp struct {
-		Results []interface{} `json:"results"`
+		Results []any `json:"results"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if len(resp.Results) != 0 {

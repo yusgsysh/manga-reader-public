@@ -84,18 +84,18 @@ func parseStars(stars string) float64 {
 }
 
 type SearchResult struct {
-	Domain   string
+	Domain    string
 	GalleryID int
-	Token    string
-	Cat      string
-	Cover    string
-	Posted   string
-	Rating   float64
-	URL      string
-	Title    string
-	Tags     []string
-	Uploader string
-	Pages    int
+	Token     string
+	Cat       string
+	Cover     string
+	Posted    string
+	Rating    float64
+	URL       string
+	Title     string
+	Tags      []string
+	Uploader  string
+	Pages     int
 }
 
 func scrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword string, categories []string, page int) (total int, results []SearchResult, err error) {
@@ -147,7 +147,7 @@ func scrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 
 	// EHentai 使用游标分页 (next=<gallery_id>)，page 参数无效
 	// 对于 page > 0，需要依次跟随 next 链接
-	for p := 0; p < page; p++ {
+	for range page {
 		nextURL := extractNextURL(doc)
 		if nextURL == "" {
 			return total, nil, nil
@@ -562,7 +562,7 @@ func scrapeGalleryList(ctx context.Context, client *http.Client, listURL string,
 		return nil, err
 	}
 
-	for p := 0; p < page; p++ {
+	for range page {
 		nextURL := extractNextURL(doc)
 		if nextURL == "" {
 			return []SearchResult{}, nil
