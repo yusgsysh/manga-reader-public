@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Bookmark,
   BookmarkCheck,
+  Book,
   Star,
   Loader2,
 } from "lucide-react";
@@ -12,6 +13,7 @@ import {
   useBookshelfToggle,
   useGalleryDetail,
 } from "../hooks/useGalleryDetail";
+import { useReadingProgress } from "../hooks/useReaderData";
 import { ErrorState } from "../components/common/ErrorState";
 import { TagList } from "../components/tag";
 import { thumbnailUrl } from "../lib/image";
@@ -45,8 +47,10 @@ export function GalleryDetailPage() {
   } = useGalleryDetail(id, token ?? "");
   const { data: shelfStatus } = useBookshelfStatus(id, token ?? "");
   const { add, remove } = useBookshelfToggle(id, token ?? "");
+  const { data: progress } = useReadingProgress(id, token ?? "");
 
   const inShelf = shelfStatus?.in_bookshelf ?? false;
+  const hasProgress = progress && (progress.current_page > 0 || progress.completed);
 
   if (isLoading) {
     return <DetailSkeleton />;
@@ -163,9 +167,20 @@ export function GalleryDetailPage() {
             )}
           </dl>
 
-          <div className="flex items-center gap-3 pt-1">
+          <div className="flex flex-wrap items-center gap-3 pt-1">
             <Button
-              variant={inShelf ? "secondary" : "primary"}
+              variant="primary"
+              onClick={() => navigate(`/reader/${id}/${token}`)}
+            >
+              <Book className="mr-1 size-4" />
+              {progress?.completed
+                ? "重新阅读"
+                : hasProgress
+                  ? `继续阅读 · 第 ${progress!.current_page + 1} 页`
+                  : "开始阅读"}
+            </Button>
+            <Button
+              variant={inShelf ? "secondary" : "outline"}
               onClick={handleToggle}
               disabled={togglePending}
               aria-label={inShelf ? "从书架移除" : "加入书架"}

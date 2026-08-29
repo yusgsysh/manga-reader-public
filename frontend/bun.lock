@@ -8,6 +8,8 @@
         "@cloudflare/kumo": "^2.12.0",
         "@phosphor-icons/react": "^2.1.10",
         "@tanstack/react-query": "^5.102.8",
+        "@yui540/comimi": "^0.18.0",
+        "@yui540/comimi-react": "^0.2.5",
         "lucide-react": "^1.35.0",
         "react": "^19.2.8",
         "react-dom": "^19.2.8",
@@ -219,6 +221,10 @@
     "@vitest/spy": ["@vitest/spy@4.1.11", "", {}, "sha512-apNa/prQy2qCeywhnixOHPRCgGNhvg7T4Dapfl1GahLp/R+uhBm5cPyFoNVyqsNd2h1nJxL6BqqdIjiABL60YA=="],
 
     "@vitest/utils": ["@vitest/utils@4.1.11", "", { "dependencies": { "@vitest/pretty-format": "4.1.11", "convert-source-map": "^2.0.0", "tinyrainbow": "^3.1.0" } }, "sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ=="],
+
+    "@yui540/comimi": ["@yui540/comimi@0.18.0", "", {}, "sha512-zhBRth/WHZwXsJ1ZcF1qeSan8CgL+0ftRtPfOQsZZmMehk1chMXRrx7qCjGQNvhsh5AVkj9YljXazfMVCD0NfQ=="],
+
+    "@yui540/comimi-react": ["@yui540/comimi-react@0.2.5", "", { "peerDependencies": { "@yui540/comimi": ">=0.6.0", "react": "^18.0.0 || ^19.0.0", "react-dom": "^18.0.0 || ^19.0.0" } }, "sha512-RxhuhKHFmNldAZqcfoZbEospTnw4b7Th1ur0PWdRTmo1b+ggF6B/I63o2H8ryQE4a3YfxzTJQnkT1J4gglrxgw=="],
 
     "assertion-error": ["assertion-error@2.0.1", "", {}, "sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA=="],
 

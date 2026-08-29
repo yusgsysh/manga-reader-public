@@ -6,6 +6,7 @@ import { PopularPage } from "../pages/PopularPage";
 import { SearchPage } from "../pages/SearchPage";
 import { BookshelfPage } from "../pages/BookshelfPage";
 import { GalleryDetailPage } from "../pages/GalleryDetailPage";
+import { ReaderPage } from "../pages/ReaderPage";
 
 export const router = createBrowserRouter([
   {
@@ -19,5 +20,9 @@ export const router = createBrowserRouter([
       { path: "bookshelf", element: <BookshelfPage /> },
       { path: "gallery/:id/:token", element: <GalleryDetailPage /> },
     ],
+  },
+  {
+    path: "/reader/:id/:token",
+    element: <ReaderPage />,
   },
 ]);
