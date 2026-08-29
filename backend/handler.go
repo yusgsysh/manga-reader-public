@@ -213,25 +213,7 @@ func (a *App) handlePageImage(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	imgURL, fallbackURL, err := scrapePageImageURL(ctx, a.Client, pageURL)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("get image url failed: %v", err)})
-		return
-	}
-
-	data, contentType, err := proxyImage(ctx, a.Client, imgURL)
-	if err != nil && fallbackURL != "" {
-		for range maxNlRetries {
-			imgURL, fallbackURL, err = scrapePageImageURL(ctx, a.Client, fallbackURL)
-			if err != nil {
-				break
-			}
-			data, contentType, err = proxyImage(ctx, a.Client, imgURL)
-			if err == nil {
-				break
-			}
-		}
-	}
+	data, contentType, err := fetchPageImage(ctx, a.Client, pageURL)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
 		return

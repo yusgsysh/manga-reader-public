@@ -31,6 +31,19 @@ func main() {
 	r.GET("/api/watched", app.handleWatched)
 	r.GET("/api/popular", app.handlePopular)
 
+	minioCfg := LoadMinIOConfig()
+	if minioCfg.IsValid() {
+		cache, err := NewMinIOCache(minioCfg)
+		if err != nil {
+			log.Fatalf("minio cache init failed: %v", err)
+		}
+		cachedApp := &CachedImageApp{Client: client, Cache: cache}
+		r.GET("/api/cached-image", cachedApp.handleCachedImage)
+		log.Println("cached-image endpoint enabled")
+	} else {
+		log.Println("minio config not set, cached-image endpoint disabled")
+	}
+
 	port := os.Getenv("EHENTAI_PORT")
 	if port == "" {
 		port = ":8080"

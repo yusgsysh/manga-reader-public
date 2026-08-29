@@ -284,6 +284,51 @@ Base URL: `http://localhost:8080`
 
 ---
 
+### 9. Cached Image
+
+`GET /api/cached-image`
+
+带 MinIO 缓存的图片代理。首次请求从 ExHentai 获取图片并缓存到 MinIO，后续相同 URL 直接从 MinIO 返回。
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| url | string | yes | 页面 URL (来自 `page_urls` 或 `pages` 数组) |
+
+**Response:**
+
+- 成功: 原始图片数据 (`Content-Type: image/jpeg`, `image/png`, `image/webp`, `image/gif`)
+- Cache Hit: 直接从 MinIO 返回，不请求 ExHentai
+- Cache Miss: 从 ExHentai 获取，写入 MinIO，返回图片
+- 并发保护: 同一 URL 的并发 miss 只触发一次远程请求 (singleflight)
+
+**Headers:**
+
+```
+Cache-Control: public, max-age=31536000, immutable
+```
+
+**Error Responses:**
+
+```json
+{
+  "error": "missing url parameter"
+}
+```
+
+| Status Code | Description |
+|-------------|-------------|
+| 400 | Bad request (参数无效、URL 不合法) |
+| 502 | 上游错误 (ExHentai 请求失败) |
+| 503 | Cache 未配置 (MinIO 环境变量缺失) |
+
+**URL 安全限制:**
+
+仅允许 `exhentai.org` 和 `e-hentai.org` 域名，阻止 localhost、RFC1918 私网地址、云 Metadata Service 等内部地址。
+
+---
+
 ## Error Responses
 
 所有错误响应格式：

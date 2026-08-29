@@ -573,6 +573,28 @@ func buildNlFallbackURL(pageURL, onclick string) string {
 	return u.String()
 }
 
+func fetchPageImage(ctx context.Context, client *http.Client, pageURL string) (data []byte, contentType string, err error) {
+	imgURL, fallbackURL, err := scrapePageImageURL(ctx, client, pageURL)
+	if err != nil {
+		return nil, "", err
+	}
+
+	data, contentType, err = proxyImage(ctx, client, imgURL)
+	if err != nil && fallbackURL != "" {
+		for range maxNlRetries {
+			imgURL, fallbackURL, err = scrapePageImageURL(ctx, client, fallbackURL)
+			if err != nil {
+				break
+			}
+			data, contentType, err = proxyImage(ctx, client, imgURL)
+			if err == nil {
+				break
+			}
+		}
+	}
+	return data, contentType, err
+}
+
 func proxyImage(ctx context.Context, client *http.Client, imgURL string) (data []byte, contentType string, err error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", imgURL, nil)
 	if err != nil {
