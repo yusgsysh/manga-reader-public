@@ -13,17 +13,16 @@ function getInitialMode(): ThemeMode {
   return "system";
 }
 
+function resolveMode(mode: ThemeMode): "light" | "dark" {
+  if (mode !== "system") return mode;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
 function applyMode(mode: ThemeMode) {
-  const root = document.documentElement;
-  root.setAttribute("data-mode", mode);
-  if (mode === "system") {
-    const prefersDark = window.matchMedia(
-      "(prefers-color-scheme: dark)",
-    ).matches;
-    root.style.colorScheme = prefersDark ? "dark" : "light";
-  } else {
-    root.style.colorScheme = mode;
-  }
+  const resolved = resolveMode(mode);
+  document.documentElement.setAttribute("data-mode", resolved);
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

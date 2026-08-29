@@ -9,16 +9,12 @@
       (function () {
         var mode = localStorage.getItem("manga-reader-theme") || "system";
         var root = document.documentElement;
-        root.setAttribute("data-mode", mode);
         if (mode === "system") {
-          root.style.colorScheme = window.matchMedia(
-            "(prefers-color-scheme: dark)"
-          ).matches
+          mode = window.matchMedia("(prefers-color-scheme: dark)").matches
             ? "dark"
             : "light";
-        } else {
-          root.style.colorScheme = mode;
         }
+        root.setAttribute("data-mode", mode);
       })();
     </script>
   </head>
