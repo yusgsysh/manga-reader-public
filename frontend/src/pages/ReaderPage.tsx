@@ -135,7 +135,7 @@ export function ReaderPage() {
         <MangaViewer
           manga={manga!}
           initialPageIndex={initialPage}
-          locale="ja"
+          locale="zh-CN"
           storage={{ enabled: false }}
           onPageChange={({ pageIndex }) => onPageChange(pageIndex)}
           className="h-full w-full"
