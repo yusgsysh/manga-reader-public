@@ -1,5 +1,6 @@
 import type { ReactManga } from "@yui540/comimi-react";
 import { buildApiUrl } from "../api/client";
+import { thumbnailUrl } from "./image";
 import type { GalleryPage } from "../types/reader";
 
 export function getReaderImageURL(pageURL: string): string {
@@ -11,6 +12,7 @@ export function galleryPagesToManga(
   token: string,
   title: string,
   pages: GalleryPage[],
+  thumbnail?: string,
 ): ReactManga {
   return {
     id: `${id}:${token}`,
@@ -19,6 +21,7 @@ export function galleryPagesToManga(
       id: `${page.index}`,
       type: "image" as const,
       src: getReaderImageURL(page.page_url),
+      thumbnailSrc: thumbnail ? thumbnailUrl(thumbnail) : undefined,
       alt: `${title} - ${page.index + 1}`,
     })),
   };

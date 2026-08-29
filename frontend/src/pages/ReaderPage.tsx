@@ -50,6 +50,7 @@ export function ReaderPage() {
             token ?? "",
             gallery.title,
             pages,
+            gallery.thumbnail,
           )
         : null,
     [gallery, pages, id, token],

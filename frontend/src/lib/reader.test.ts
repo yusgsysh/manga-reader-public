@@ -68,6 +68,7 @@ describe("galleryPagesToManga", () => {
         { page_url: "https://e.org/s/1", index: 0 },
         { page_url: "https://e.org/s/2", index: 1 },
       ],
+      "https://ehgt.org/cover.webp",
     );
     expect(manga.id).toBe("123:token");
     expect(manga.title).toBe("Title");
@@ -79,6 +80,7 @@ describe("galleryPagesToManga", () => {
     const first = manga.pages[0];
     if (first.type === "image") {
       expect(first.src).toContain("/api/cached-image?url=");
+      expect(first.thumbnailSrc).toContain("/api/cached-thumbnail?url=");
     } else {
       throw new Error("expected image page");
     }
