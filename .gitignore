@@ -1,3 +1,4 @@
 backend/manga-reader
 backend/tools/fetchhtml/fetchhtml
 backend/tools/fetchhtml/main.go
+backend/data/*
