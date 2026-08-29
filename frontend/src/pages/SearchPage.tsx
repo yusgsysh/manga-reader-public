@@ -2,12 +2,12 @@ import { useSearchParams } from "react-router";
 import { useSearch } from "../hooks/useSearch";
 import { GalleryGrid } from "../components/gallery/GalleryGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
-import { Pagination } from "../components/common/Pagination";
 import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
 import { Input, Button, Checkbox, Select } from "@cloudflare/kumo";
 import { Search } from "lucide-react";
 import { useState } from "react";
+import { SimplePagination } from "../components/common/SimplePagination";
 
 const CATEGORIES = [
   { value: "doujinshi", label: "Doujinshi" },
@@ -146,10 +146,9 @@ export function SearchPage() {
             共找到 {data.total} 个结果
           </p>
           <GalleryGrid galleries={data.results} />
-          <Pagination
+          <SimplePagination
             page={data.page}
-            pageSize={data.page_size}
-            total={data.total}
+            hasMore={(data.page + 1) * data.page_size < data.total}
             onPageChange={handlePageChange}
           />
         </div>

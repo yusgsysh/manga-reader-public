@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useBookshelf } from "../hooks/useBookshelf";
 import { BookshelfGrid } from "../components/gallery/BookshelfGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
-import { Pagination } from "../components/common/Pagination";
+import { SimplePagination } from "../components/common/SimplePagination";
 import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
 
@@ -36,10 +36,9 @@ export function BookshelfPage() {
   return (
     <div>
       <BookshelfGrid items={data.results} />
-      <Pagination
+      <SimplePagination
         page={data.page}
-        pageSize={data.page_size}
-        total={data.total}
+        hasMore={(data.page + 1) * data.page_size < data.total}
         onPageChange={setPage}
       />
     </div>
