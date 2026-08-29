@@ -18,6 +18,7 @@ type CookieConfig struct {
 	IpbMemberID string
 	IpbPassHash string
 	Igneous     string
+	SK          string
 }
 
 // LoadCookieConfig 从环境变量加载 cookie
@@ -39,6 +40,9 @@ func LoadCookieConfig() *CookieConfig {
 	}
 	if v := os.Getenv("EHENTAI_COOKIE_IGNEOUS"); v != "" {
 		cfg.Igneous = v
+	}
+	if v := os.Getenv("EHENTAI_COOKIE_SK"); v != "" {
+		cfg.SK = v
 	}
 
 	return cfg
@@ -65,6 +69,8 @@ func (c *CookieConfig) parseCookieString(s string) {
 			c.IpbPassHash = value
 		case "igneous":
 			c.Igneous = value
+		case "sk":
+			c.SK = value
 		}
 	}
 }
@@ -92,6 +98,9 @@ func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 	}
 	if cfg.Igneous != "" {
 		cookies = append(cookies, &http.Cookie{Name: "igneous", Value: cfg.Igneous})
+	}
+	if cfg.SK != "" {
+		cookies = append(cookies, &http.Cookie{Name: "sk", Value: cfg.SK})
 	}
 	jar.SetCookies(u, cookies)
 

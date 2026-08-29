@@ -581,7 +581,14 @@ func scrapeGalleryList(ctx context.Context, client *http.Client, listURL string,
 }
 
 func parseGalleryListResults(doc *goquery.Document) ([]SearchResult, error) {
+	// 紧凑布局
 	table := doc.Find("table.itg.gltc > tbody > tr")
+	isThumbnail := false
+	// 缩略图布局
+	if table.Length() == 0 {
+		table = doc.Find("table.itg.gltm > tbody > tr")
+		isThumbnail = true
+	}
 	if table.Length() == 0 {
 		return nil, fmt.Errorf("empty gallery list")
 	}
@@ -589,56 +596,97 @@ func parseGalleryListResults(doc *goquery.Document) ([]SearchResult, error) {
 	results := make([]SearchResult, 0, table.Length())
 
 	table.Each(func(i int, s *goquery.Selection) {
-		gl3c := s.Find("td.gl3c.glname")
-		if gl3c.Length() == 0 {
-			return
-		}
-		a := gl3c.Find("a")
-		gURL, _ := a.Attr("href")
-
-		gl1c := s.Find("td.gl1c")
-		cat := gl1c.Find("div.cn").Text()
-
-		gl2c := s.Find("td.gl2c")
-		stars, _ := gl2c.Find("div.ir").Attr("style")
-
-		upTime := ""
-		pagesNum := 0
-		gl2c.Find("div").Each(func(i int, s *goquery.Selection) {
-			text := s.Text()
-			if len(text) >= 10 && text[4] == '-' && text[7] == '-' {
-				if upTime == "" {
-					upTime = text
-				}
-			}
-		})
-		pagesStr := ""
-		gl2c.Find("div").Each(func(i int, s *goquery.Selection) {
-			text := s.Text()
-			if len(text) > 6 && text[len(text)-6:] == " pages" {
-				pagesStr = text
-			}
-		})
-		pagesStr = strings.TrimSuffix(pagesStr, " pages")
-		pagesNum, _ = strconv.Atoi(pagesStr)
-
-		title := a.Find("div.glink").Text()
+		var gURL, cat, title, cover, upTime, uploader, pagesStr string
 		var tags []string
-		a.Find("div > div.gt").Each(func(i int, s *goquery.Selection) {
-			tags = append(tags, s.AttrOr("title", s.Text()))
-		})
+		var stars string
 
-		gl4c := s.Find("td.gl4c")
-		uploader := gl4c.Find("div:first-child > a").Text()
+		if isThumbnail {
+			gl3m := s.Find("td.gl3m.glname")
+			if gl3m.Length() == 0 {
+				return
+			}
+			a := gl3m.Find("a")
+			gURL, _ = a.Attr("href")
+			title = a.Find("div.glink").Text()
+
+			gl1m := s.Find("td.gl1m")
+			cat = gl1m.Find("div.cs").Text()
+
+			gl2m := s.Find("td.gl2m")
+			stars, _ = gl2m.Find("div.ir").Attr("style")
+
+			gl2m.Find("div").Each(func(i int, s *goquery.Selection) {
+				text := s.Text()
+				if len(text) >= 10 && text[4] == '-' && text[7] == '-' {
+					if upTime == "" {
+						upTime = text
+					}
+				}
+			})
+			gl2m.Find("div").Each(func(i int, s *goquery.Selection) {
+				text := s.Text()
+				if len(text) > 6 && text[len(text)-6:] == " pages" {
+					pagesStr = text
+				}
+			})
+
+			gl5m := s.Find("td.gl5m")
+			uploader = gl5m.Find("div:first-child > a").Text()
+
+			coverImg := gl2m.Find("div.glthumb img")
+			cover = coverImg.AttrOr("data-src", "")
+			if cover == "" {
+				cover = coverImg.AttrOr("src", "")
+			}
+		} else {
+			// 紧凑布局
+			gl3c := s.Find("td.gl3c.glname")
+			if gl3c.Length() == 0 {
+				return
+			}
+			a := gl3c.Find("a")
+			gURL, _ = a.Attr("href")
+			title = a.Find("div.glink").Text()
+			a.Find("div > div.gt").Each(func(i int, s *goquery.Selection) {
+				tags = append(tags, s.AttrOr("title", s.Text()))
+			})
+
+			gl1c := s.Find("td.gl1c")
+			cat = gl1c.Find("div.cn").Text()
+
+			gl2c := s.Find("td.gl2c")
+			stars, _ = gl2c.Find("div.ir").Attr("style")
+
+			gl2c.Find("div").Each(func(i int, s *goquery.Selection) {
+				text := s.Text()
+				if len(text) >= 10 && text[4] == '-' && text[7] == '-' {
+					if upTime == "" {
+						upTime = text
+					}
+				}
+			})
+			gl2c.Find("div").Each(func(i int, s *goquery.Selection) {
+				text := s.Text()
+				if len(text) > 6 && text[len(text)-6:] == " pages" {
+					pagesStr = text
+				}
+			})
+
+			gl4c := s.Find("td.gl4c")
+			uploader = gl4c.Find("div:first-child > a").Text()
+
+			coverImg := gl2c.Find("div.glthumb img")
+			cover = coverImg.AttrOr("data-src", "")
+			if cover == "" {
+				cover = coverImg.AttrOr("src", "")
+			}
+		}
+
+		pagesStr = strings.TrimSuffix(pagesStr, " pages")
+		pagesNum, _ := strconv.Atoi(pagesStr)
 
 		domain, gId, gToken := parseGalleryURL(gURL)
 		gIdNum, _ := strconv.Atoi(gId)
-
-		coverImg := gl2c.Find("div.glthumb img")
-		cover := coverImg.AttrOr("data-src", "")
-		if cover == "" {
-			cover = coverImg.AttrOr("src", "")
-		}
 
 		results = append(results, SearchResult{
 			Domain:    domain,
