@@ -239,3 +239,72 @@ func (a *App) handlePageImage(c *gin.Context) {
 
 	c.Data(http.StatusOK, contentType, data)
 }
+
+func (a *App) handleGalleryList(listURL string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		pageStr := c.DefaultQuery("page", "0")
+		page, _ := strconv.Atoi(pageStr)
+		if page < 0 {
+			page = 0
+		}
+
+		ctx := c.Request.Context()
+
+		results, err := scrapeGalleryList(ctx, a.Client, listURL, page)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery list failed: %v", err)})
+			return
+		}
+
+		type galleryResult struct {
+			ID       int64           `json:"id"`
+			Token    string          `json:"token"`
+			Title    string          `json:"title"`
+			Category GalleryCategory `json:"category"`
+			Cover    string          `json:"cover"`
+			Posted   string          `json:"posted"`
+			Rating   float64         `json:"rating"`
+			URL      string          `json:"url"`
+			Tags     []string        `json:"tags"`
+			Uploader string          `json:"uploader"`
+			Pages    int             `json:"pages"`
+			Domain   string          `json:"domain"`
+		}
+
+		items := make([]galleryResult, len(results))
+		for i, r := range results {
+			items[i] = galleryResult{
+				ID:       int64(r.GalleryID),
+				Token:    r.Token,
+				Title:    r.Title,
+				Category: MapCategory(r.Cat),
+				Cover:    r.Cover,
+				Posted:   r.Posted,
+				Rating:   r.Rating,
+				URL:      r.URL,
+				Tags:     r.Tags,
+				Uploader: r.Uploader,
+				Pages:    r.Pages,
+				Domain:   r.Domain,
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"page":      page,
+			"page_size": len(items),
+			"results":   items,
+		})
+	}
+}
+
+func (a *App) handleGallerys(c *gin.Context) {
+	a.handleGalleryList(exhentaiURL + "/")(c)
+}
+
+func (a *App) handleWatched(c *gin.Context) {
+	a.handleGalleryList(exhentaiURL + "/watched")(c)
+}
+
+func (a *App) handlePopular(c *gin.Context) {
+	a.handleGalleryList(exhentaiURL + "/popular")(c)
+}

@@ -965,3 +965,200 @@ func TestMockPageImage_RetryCancelledByContext(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusBadGateway)
 	}
 }
+
+// ==================== Gallery List Tests ====================
+
+func mockGalleryListHTML(count int) string {
+	var rows strings.Builder
+	for i := 0; i < count; i++ {
+		gid := 3000 + i
+		token := fmt.Sprintf("gal%04d", i)
+		rows.WriteString(fmt.Sprintf(`<tr>
+			<td class="gl1e"><div style="height:245px;width:250px"><a href="https://exhentai.org/g/%d/%s/"><img style="height:245px;width:250px" src="https://example.com/thumb%d.webp" title="Gallery %d"/></a></div></td>
+			<td class="gl2e"><div>
+				<div class="gl3e">
+					<div class="cn ct2" onclick="document.location='https://exhentai.org/doujinshi'">Doujinshi</div>
+					<div>2024-01-01</div>
+					<div class="ir" style="background-position:-32px -1px;opacity:1"></div>
+					<div><a href="https://exhentai.org/uploader/testuser%d">testuser%d</a></div>
+					<div>%d pages</div>
+				</div>
+				<a href="https://exhentai.org/g/%d/%s/"><div class="gl4e glname" style="min-height:253px">
+					<div class="glink">Gallery %d</div>
+					<div><table><tbody><tr><td class="tc">female:</td><td><div class="gt" title="female:yuri">yuri</div></td></tr></tbody></table></div>
+				</div></a>
+			</div></td>
+		</tr>`, gid, token, i, i, i, i, i+10, gid, token, i))
+	}
+
+	return fmt.Sprintf(`<!DOCTYPE html><html><head></head><body>
+	<div class="itg glte"><table class="itg glte"><tbody>
+		%s
+	</tbody></table></div>
+	<div class="searchnav"><div><a id="dnext" href="https://exhentai.org/?next=%d">Next &gt;</a></div></div>
+</body></html>`, rows.String(), 3000+count)
+}
+
+func TestMockGalleryList_Success(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryListHTML(25))
+	})
+	defer mockServer.Close()
+
+	r := setupMockRouter()
+	app := &App{Client: newMockClient(mockServer.URL)}
+	r.GET("/api/gallerys", app.handleGallerys)
+
+	req := httptest.NewRequest("GET", "/api/gallerys", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Page     int `json:"page"`
+		PageSize int `json:"page_size"`
+		Results  []struct {
+			ID       int64           `json:"id"`
+			Token    string          `json:"token"`
+			Title    string          `json:"title"`
+			Category GalleryCategory `json:"category"`
+			Cover    string          `json:"cover"`
+			URL      string          `json:"url"`
+			Tags     []string        `json:"tags"`
+			Uploader string          `json:"uploader"`
+			Pages    int             `json:"pages"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal: %v. body: %s", err, w.Body.String())
+	}
+
+	if resp.Page != 0 {
+		t.Errorf("page = %d, want 0", resp.Page)
+	}
+	if resp.PageSize != 25 {
+		t.Errorf("page_size = %d, want 25", resp.PageSize)
+	}
+	if len(resp.Results) != 25 {
+		t.Fatalf("results len = %d, want 25", len(resp.Results))
+	}
+	for i, r := range resp.Results {
+		if r.ID == 0 || r.Token == "" || r.Title == "" {
+			t.Errorf("results[%d]: missing fields (id=%d, token=%q, title=%q)", i, r.ID, r.Token, r.Title)
+		}
+	}
+}
+
+func TestMockWatched_Success(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryListHTML(10))
+	})
+	defer mockServer.Close()
+
+	r := setupMockRouter()
+	app := &App{Client: newMockClient(mockServer.URL)}
+	r.GET("/api/watched", app.handleWatched)
+
+	req := httptest.NewRequest("GET", "/api/watched", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		PageSize int `json:"page_size"`
+		Results  []struct {
+			ID    int64  `json:"id"`
+			Token string `json:"token"`
+		} `json:"results"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	if resp.PageSize != 10 {
+		t.Errorf("page_size = %d, want 10", resp.PageSize)
+	}
+	if len(resp.Results) != 10 {
+		t.Errorf("results len = %d, want 10", len(resp.Results))
+	}
+}
+
+func TestMockPopular_Success(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryListHTML(15))
+	})
+	defer mockServer.Close()
+
+	r := setupMockRouter()
+	app := &App{Client: newMockClient(mockServer.URL)}
+	r.GET("/api/popular", app.handlePopular)
+
+	req := httptest.NewRequest("GET", "/api/popular", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		PageSize int `json:"page_size"`
+		Results  []struct {
+			ID    int64  `json:"id"`
+			Token string `json:"token"`
+		} `json:"results"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	if resp.PageSize != 15 {
+		t.Errorf("page_size = %d, want 15", resp.PageSize)
+	}
+}
+
+func TestMockGalleryList_Empty(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!DOCTYPE html><html><head></head><body>
+		<div class="itg glte"><table class="itg glte"><tbody></tbody></table></div>
+		</body></html>`)
+	})
+	defer mockServer.Close()
+
+	r := setupMockRouter()
+	app := &App{Client: newMockClient(mockServer.URL)}
+	r.GET("/api/gallerys", app.handleGallerys)
+
+	req := httptest.NewRequest("GET", "/api/gallerys", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadGateway)
+	}
+}
+
+func TestMockGalleryList_ScrapeFailure(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	defer mockServer.Close()
+
+	r := setupMockRouter()
+	app := &App{Client: newMockClient(mockServer.URL)}
+	r.GET("/api/gallerys", app.handleGallerys)
+
+	req := httptest.NewRequest("GET", "/api/gallerys", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadGateway)
+	}
+}

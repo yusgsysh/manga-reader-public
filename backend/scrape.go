@@ -571,3 +571,124 @@ func proxyImage(ctx context.Context, client *http.Client, imgURL string) (data [
 	}
 	return data, contentType, nil
 }
+
+func scrapeGalleryList(ctx context.Context, client *http.Client, listURL string, page int) (results []SearchResult, err error) {
+	u, err := url.Parse(listURL)
+	if err != nil {
+		return nil, err
+	}
+
+	doc, err := httpGetDoc(ctx, client, u.String())
+	if err != nil {
+		return nil, err
+	}
+
+	for p := 0; p < page; p++ {
+		nextURL := extractNextURL(doc)
+		if nextURL == "" {
+			return nil, nil
+		}
+		doc, err = httpGetDoc(ctx, client, nextURL)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	results, err = parseGalleryListResults(doc)
+	return
+}
+
+func parseGalleryListResults(doc *goquery.Document) ([]SearchResult, error) {
+	table := doc.Find("div.itg.glte > table > tbody > tr")
+	if table.Length() == 0 {
+		return nil, fmt.Errorf("empty gallery list")
+	}
+
+	results := make([]SearchResult, 0, table.Length())
+	firstRow := table.Eq(0)
+	isExtended := firstRow.Find("td.gl1e").Length() > 0
+
+	table.Each(func(i int, s *goquery.Selection) {
+		if isExtended {
+			gl1e := s.Find("td.gl1e")
+			gURL, _ := gl1e.Find("div > a").Attr("href")
+
+			gl2e := s.Find("td.gl2e")
+			cat := gl2e.Find("div.gl3e > div.cn").Text()
+			upTime := gl2e.Find("div.gl3e > div:nth-child(2)").Text()
+			stars, _ := gl2e.Find("div.gl3e > div.ir").Attr("style")
+			uploader := gl2e.Find("div.gl3e > div:nth-child(4) > a").Text()
+			pagesStr := gl2e.Find("div.gl3e > div:nth-child(5)").Text()
+			pagesStr = strings.TrimSuffix(pagesStr, " pages")
+			pagesNum, _ := strconv.Atoi(pagesStr)
+
+			glname := gl2e.Find("div.gl4e.glname")
+			title := glname.Find("div.glink").Text()
+			var tags []string
+			glname.Find("table td:nth-child(2) > div").Each(func(i int, s *goquery.Selection) {
+				tags = append(tags, s.AttrOr("title", s.Text()))
+			})
+
+			domain, gId, gToken := parseGalleryURL(gURL)
+			gIdNum, _ := strconv.Atoi(gId)
+
+			results = append(results, SearchResult{
+				Domain:    domain,
+				GalleryID: gIdNum,
+				Token:     gToken,
+				Cat:       cat,
+				Cover:     gl1e.Find("div > a > img").AttrOr("src", ""),
+				Posted:    upTime,
+				Rating:    parseStars(stars),
+				URL:       gURL,
+				Title:     title,
+				Tags:      tags,
+				Uploader:  uploader,
+				Pages:     pagesNum,
+			})
+		} else {
+			cat := s.Find("td.gl1c.glcat > div").Text()
+
+			gl2c := s.Find("td.gl2c > div")
+			cover, ok := gl2c.Find("div > img").Attr("data-src")
+			if !ok {
+				cover, _ = gl2c.Find("div > img").Attr("src")
+			}
+			upTime := gl2c.Find("div:nth-child(3) > div:nth-child(1)").Text()
+			stars, _ := gl2c.Find("div.ir").Attr("style")
+
+			gl3c := s.Find("td.gl3c.glname > a")
+			gURL, _ := gl3c.Attr("href")
+			title := gl3c.Find("div.glink").Text()
+			var tags []string
+			gl3c.Find("div:nth-child(2) > div").Each(func(i int, s *goquery.Selection) {
+				tags = append(tags, s.AttrOr("title", s.Text()))
+			})
+
+			gl4c := s.Find("td.gl4c.glhide")
+			uploader := gl4c.Find("div:nth-child(1) > a").Text()
+			pagesStr := gl4c.Find("div:nth-child(2)").Text()
+			pagesStr = strings.TrimSuffix(pagesStr, " pages")
+			pagesNum, _ := strconv.Atoi(pagesStr)
+
+			domain, gId, gToken := parseGalleryURL(gURL)
+			gIdNum, _ := strconv.Atoi(gId)
+
+			results = append(results, SearchResult{
+				Domain:    domain,
+				GalleryID: gIdNum,
+				Token:     gToken,
+				Cat:       cat,
+				Cover:     cover,
+				Posted:    upTime,
+				Rating:    parseStars(stars),
+				URL:       gURL,
+				Title:     title,
+				Tags:      tags,
+				Uploader:  uploader,
+				Pages:     pagesNum,
+			})
+		}
+	})
+	return results, nil
+}

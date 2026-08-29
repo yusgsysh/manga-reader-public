@@ -27,6 +27,9 @@ func main() {
 	r.GET("/api/gallery/:id/:token/pages", app.handleGalleryPages)
 	r.GET("/api/search", app.handleSearch)
 	r.GET("/api/page-image", app.handlePageImage)
+	r.GET("/api/gallerys", app.handleGallerys)
+	r.GET("/api/watched", app.handleWatched)
+	r.GET("/api/popular", app.handlePopular)
 
 	port := os.Getenv("EHENTAI_PORT")
 	if port == "" {
