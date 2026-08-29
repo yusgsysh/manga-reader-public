@@ -536,7 +536,7 @@ func scrapeGalleryList(ctx context.Context, client *http.Client, listURL string,
 	for p := 0; p < page; p++ {
 		nextURL := extractNextURL(doc)
 		if nextURL == "" {
-			return nil, nil
+			return []SearchResult{}, nil
 		}
 		doc, err = httpGetDoc(ctx, client, nextURL)
 		if err != nil {
