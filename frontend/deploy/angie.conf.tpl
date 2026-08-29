@@ -23,9 +23,8 @@ http {
         levels=1:2
         keys_zone=api_cache:10m
         max_size=512m
-        inactive=30m
+        inactive=2h
         use_temp_path=off;
-
 
     server {
         listen 80;
@@ -33,7 +32,6 @@ http {
 
         root /usr/share/angie/html;
         index index.html;
-
 
         # ========================================================
         # Homepage Gallery List
@@ -53,14 +51,12 @@ http {
 
             proxy_cache api_cache;
             proxy_cache_methods GET HEAD;
-
             proxy_cache_valid 200 5m;
 
             add_header X-Cache-Status $upstream_cache_status always;
 
             proxy_read_timeout 60s;
         }
-
 
         # ========================================================
         # Search
@@ -80,7 +76,6 @@ http {
 
             proxy_cache api_cache;
             proxy_cache_methods GET HEAD;
-
             proxy_cache_valid 200 5m;
 
             add_header X-Cache-Status $upstream_cache_status always;
@@ -88,13 +83,12 @@ http {
             proxy_read_timeout 60s;
         }
 
-
         # ========================================================
         # Popular
         #
         # GET /api/popular?page=0
         #
-        # Cache: 10 minutes
+        # Cache: 5 minutes
         # ========================================================
 
         location = /api/popular {
@@ -107,14 +101,12 @@ http {
 
             proxy_cache api_cache;
             proxy_cache_methods GET HEAD;
-
-            proxy_cache_valid 200 10m;
+            proxy_cache_valid 200 5m;
 
             add_header X-Cache-Status $upstream_cache_status always;
 
             proxy_read_timeout 60s;
         }
-
 
         # ========================================================
         # Watched / Subscription
@@ -134,7 +126,6 @@ http {
 
             proxy_cache api_cache;
             proxy_cache_methods GET HEAD;
-
             proxy_cache_valid 200 5m;
 
             add_header X-Cache-Status $upstream_cache_status always;
@@ -142,13 +133,12 @@ http {
             proxy_read_timeout 60s;
         }
 
-
         # ========================================================
         # Gallery Detail
         #
         # GET /api/gallery/:id/:token
         #
-        # Cache: 30 minutes
+        # Cache: 60 minutes
         # ========================================================
 
         location ~ ^/api/gallery/[0-9]+/[^/]+$ {
@@ -161,21 +151,19 @@ http {
 
             proxy_cache api_cache;
             proxy_cache_methods GET HEAD;
-
-            proxy_cache_valid 200 30m;
+            proxy_cache_valid 200 60m;
 
             add_header X-Cache-Status $upstream_cache_status always;
 
             proxy_read_timeout 60s;
         }
 
-
         # ========================================================
         # Gallery Details (Scraped)
         #
         # GET /api/gallery/:id/:token/details
         #
-        # Cache: 30 minutes
+        # Cache: 60 minutes
         # ========================================================
 
         location ~ ^/api/gallery/[0-9]+/[^/]+/details$ {
@@ -188,21 +176,19 @@ http {
 
             proxy_cache api_cache;
             proxy_cache_methods GET HEAD;
-
-            proxy_cache_valid 200 30m;
+            proxy_cache_valid 200 60m;
 
             add_header X-Cache-Status $upstream_cache_status always;
 
             proxy_read_timeout 60s;
         }
 
-
         # ========================================================
         # Gallery Pages
         #
         # GET /api/gallery/:id/:token/pages
         #
-        # Cache: 30 minutes
+        # Cache: 60 minutes
         # ========================================================
 
         location ~ ^/api/gallery/[0-9]+/[^/]+/pages$ {
@@ -215,14 +201,12 @@ http {
 
             proxy_cache api_cache;
             proxy_cache_methods GET HEAD;
-
-            proxy_cache_valid 200 30m;
+            proxy_cache_valid 200 60m;
 
             add_header X-Cache-Status $upstream_cache_status always;
 
             proxy_read_timeout 60s;
         }
-
 
         # ========================================================
         # Thumbnail
@@ -248,7 +232,6 @@ http {
             proxy_read_timeout 60s;
             proxy_send_timeout 60s;
         }
-
 
         # ========================================================
         # Cached Thumbnail
@@ -276,7 +259,6 @@ http {
             proxy_send_timeout 60s;
         }
 
-
         # ========================================================
         # Cached Image
         #
@@ -303,7 +285,6 @@ http {
             proxy_send_timeout 120s;
         }
 
-
         # ========================================================
         # Page Image
         #
@@ -315,6 +296,11 @@ http {
         location = /api/page-image {
             proxy_pass http://${ANGIE_BACKEND_URL};
 
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
             proxy_no_cache 1;
             proxy_cache_bypass 1;
 
@@ -324,13 +310,13 @@ http {
             proxy_send_timeout 120s;
         }
 
-
         # ========================================================
         # Bookshelf
         #
-        # GET /api/bookshelf
-        # POST /api/bookshelf/:id/:token
+        # GET    /api/bookshelf
+        # POST   /api/bookshelf/:id/:token
         # DELETE /api/bookshelf/:id/:token
+        # GET    /api/bookshelf/:id/:token/status
         #
         # 不缓存
         # ========================================================
@@ -338,12 +324,17 @@ http {
         location /api/bookshelf {
             proxy_pass http://${ANGIE_BACKEND_URL};
 
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
             proxy_no_cache 1;
             proxy_cache_bypass 1;
 
             proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
         }
-
 
         # ========================================================
         # Reading Progress
@@ -357,12 +348,17 @@ http {
         location /api/progress {
             proxy_pass http://${ANGIE_BACKEND_URL};
 
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
             proxy_no_cache 1;
             proxy_cache_bypass 1;
 
             proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
         }
-
 
         # ========================================================
         # Recently Read
@@ -375,17 +371,22 @@ http {
         location = /api/recently-read {
             proxy_pass http://${ANGIE_BACKEND_URL};
 
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
             proxy_no_cache 1;
             proxy_cache_bypass 1;
 
             proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
         }
-
 
         # ========================================================
         # Reading Progress Cleanup
         #
-        # POST /api/reading-progress/cleanup
+        # POST /api/reading-progress/cleanup?days=30
         #
         # 不缓存
         # ========================================================
@@ -393,23 +394,17 @@ http {
         location = /api/reading-progress/cleanup {
             proxy_pass http://${ANGIE_BACKEND_URL};
 
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
             proxy_no_cache 1;
             proxy_cache_bypass 1;
 
             proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
         }
-
-
-        # ========================================================
-        # Bookshelf Status
-        #
-        # GET /api/bookshelf/:id/:token/status
-        #
-        # 不缓存
-        # ========================================================
-
-        # 已被 location /api/bookshelf 覆盖
-
 
         # ========================================================
         # Other API
@@ -436,7 +431,6 @@ http {
             proxy_send_timeout 60s;
         }
 
-
         # ========================================================
         # EhTagTranslation
         # ========================================================
@@ -445,7 +439,6 @@ http {
             expires 1d;
             add_header Cache-Control "public";
         }
-
 
         # ========================================================
         # Health Check
@@ -458,7 +451,6 @@ http {
 
             return 200 "ok";
         }
-
 
         # ========================================================
         # SPA
