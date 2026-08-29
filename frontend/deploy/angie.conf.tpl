@@ -23,7 +23,7 @@ http {
         levels=1:2
         keys_zone=api_cache:10m
         max_size=512m
-        inactive=2h
+        inactive=60m
         use_temp_path=off;
 
     server {
