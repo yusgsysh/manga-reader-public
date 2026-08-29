@@ -5,6 +5,7 @@ import { SubscriptionsPage } from "../pages/SubscriptionsPage";
 import { PopularPage } from "../pages/PopularPage";
 import { SearchPage } from "../pages/SearchPage";
 import { BookshelfPage } from "../pages/BookshelfPage";
+import { GalleryDetailPage } from "../pages/GalleryDetailPage";
 
 export const router = createBrowserRouter([
   {
@@ -16,14 +17,7 @@ export const router = createBrowserRouter([
       { path: "popular", element: <PopularPage /> },
       { path: "search", element: <SearchPage /> },
       { path: "bookshelf", element: <BookshelfPage /> },
-      {
-        path: "gallery/:id/:token",
-        element: (
-          <div className="py-16 text-center text-kumo-subtle">
-            Gallery Detail coming soon
-          </div>
-        ),
-      },
+      { path: "gallery/:id/:token", element: <GalleryDetailPage /> },
     ],
   },
 ]);
