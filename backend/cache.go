@@ -157,10 +157,8 @@ func (c *MinIOCache) Get(ctx context.Context, key string) (data []byte, contentT
 func (c *MinIOCache) Put(ctx context.Context, key string, data []byte, contentType string) error {
 	reader := strings.NewReader(string(data))
 	_, err := c.client.PutObject(ctx, c.bucket, key, reader, int64(len(data)), minio.PutObjectOptions{
-		ContentType: contentType,
-		UserMetadata: map[string]string{
-			"Cache-Control": "public, max-age=31536000, immutable",
-		},
+		ContentType:  contentType,
+		CacheControl: cacheControlHeader,
 	})
 	if err != nil {
 		return fmt.Errorf("minio put object: %w", err)
