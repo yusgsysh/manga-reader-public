@@ -45,6 +45,30 @@ VITE_API_BASE_URL=http://localhost:8080
 bun run build
 ```
 
+## 部署（nginx，方案 A：托管前端 + 反代 /api）
+
+1. 构建生产产物（读取 `.env.production`，`VITE_API_BASE_URL` 为空 → 前端走同源 `/api/*`）：
+
+   ```bash
+   bun run build
+   ```
+
+2. 将 `dist/` 复制到服务器，如 `/var/www/manga-reader/dist`。
+
+3. 使用 `deploy/nginx.conf`（按需改 `server_name`、`root`、后端 `proxy_pass` 地址），启用并重载：
+
+   ```bash
+   sudo cp deploy/nginx.conf /etc/nginx/sites-available/manga-reader
+   sudo ln -s /etc/nginx/sites-available/manga-reader /etc/nginx/sites-enabled/
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+说明：
+
+- 前端所有 `/api/*`（含 `cached-image`/`cached-thumbnail`）由 nginx 转发到后端，无需后端 CORS。
+- SPA 路由靠 `try_files ... /index.html` 回退。
+- `db.text.js`（翻译库）同源加载，更新按钮仍从 GitHub 拉取。
+
 ## 路由
 
 | 路径 | 页面 |
@@ -54,4 +78,6 @@ bun run build
 | `/popular` | 热门 |
 | `/search` | 搜索 |
 | `/bookshelf` | 书架 |
-| `/gallery/:id/:token` | Gallery Detail (预留) |
+| `/recently-read` | 最近阅读 |
+| `/gallery/:id/:token` | Gallery Detail |
+| `/reader/:id/:token` | Reader |
