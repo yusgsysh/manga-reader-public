@@ -40,28 +40,18 @@ func newMockServer(handler http.HandlerFunc) *httptest.Server {
 
 // ==================== Mock HTML Fixtures ====================
 
-// mockSearchHTML returns an EHentai search results page with extended layout.
+// mockSearchHTML returns an EHentai search results page with compact layout.
 func mockSearchHTML(keyword string, count int) string {
 	var rows strings.Builder
 	for i := 0; i < count; i++ {
 		gid := 1000 + i
 		token := fmt.Sprintf("tok%04d", i)
 		rows.WriteString(fmt.Sprintf(`<tr>
-			<td class="gl1e"><div style="height:245px;width:250px"><a href="https://exhentai.org/g/%d/%s/"><img style="height:245px;width:250px" src="https://example.com/thumb%d.webp" title="Test Gallery %d"/></a></div></td>
-			<td class="gl2e"><div>
-				<div class="gl3e">
-					<div class="cn ct2" onclick="document.location='https://exhentai.org/doujinshi'">Doujinshi</div>
-					<div>2024-01-01</div>
-					<div class="ir" style="background-position:-32px -1px;opacity:1"></div>
-					<div><a href="https://exhentai.org/uploader/testuser%d">testuser%d</a></div>
-					<div>%d pages</div>
-				</div>
-				<a href="https://exhentai.org/g/%d/%s/"><div class="gl4e glname" style="min-height:253px">
-					<div class="glink">Test Gallery %d</div>
-					<div><table><tbody><tr><td class="tc">female:</td><td><div class="gt" title="female:yuri">yuri</div></td></tr></tbody></table></div>
-				</div></a>
-			</div></td>
-		</tr>`, gid, token, i, i, i, i, i+10, gid, token, i))
+			<td class="gl1c glcat"><div class="cn ct2">Doujinshi</div></td>
+			<td class="gl2c"><div class="glthumb"><div><img src="https://example.com/thumb%d.webp" /></div><div><div><div class="cn ct2">Doujinshi</div><div>2024-01-01</div></div><div><div class="ir" style="background-position:-32px -1px;opacity:1"></div><div>%d pages</div></div></div></div><div><div>2024-01-01</div><div class="ir" style="background-position:-32px -1px;opacity:1"></div></div></td>
+			<td class="gl3c glname"><a href="https://exhentai.org/g/%d/%s/"><div class="glink">Test Gallery %d</div><div><div class="gt" title="female:yuri">yuri</div></div></a></td>
+			<td class="gl4c glhide"><div><a href="https://exhentai.org/uploader/testuser%d">testuser%d</a></div><div>%d pages</div></td>
+		</tr>`, i, i+10, gid, token, i, i, i, i+10))
 	}
 
 	return fmt.Sprintf(`<!DOCTYPE html><html><head></head><body>
@@ -69,11 +59,12 @@ func mockSearchHTML(keyword string, count int) string {
 	<div></div>
 	<div>
 		<div class="searchtext"><p>Found %d results. %.0f galleries on this page.</p></div>
-		<table><tbody>
+		<table class="itg gltc"><tbody>
+		<tr><th></th><th>Published</th><th>Title</th><th class="glhide">Uploader</th></tr>
 		%s
 	</tbody></table>
-	<a href="">Next &gt;</a>
-</div></body></html>`, count, float64(count), rows.String())
+	<div class="searchnav"><div><a id="dnext" href="https://exhentai.org/?next=%d">Next &gt;</a></div></div>
+</div></body></html>`, count, float64(count), rows.String(), 1000+count)
 }
 
 // mockNoHitsHTML returns a search page with no results.

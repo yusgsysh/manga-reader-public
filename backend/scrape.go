@@ -175,45 +175,74 @@ func extractNextURL(doc *goquery.Document) string {
 
 // parseSearchResults 从 goquery Document 解析搜索结果
 func parseSearchResults(doc *goquery.Document) ([]SearchResult, error) {
-	table := doc.Find("body > div.ido > div:nth-child(2) > table > tbody > tr")
+	table := doc.Find("table.itg.gltc > tbody > tr")
+	if table.Length() == 0 {
+		table = doc.Find("body > div.ido > div:nth-child(2) > table > tbody > tr")
+	}
 	if table.Length() == 0 {
 		return nil, fmt.Errorf("empty results table")
 	}
 
-	results := make([]SearchResult, 0, table.Length()-1)
+	results := make([]SearchResult, 0, table.Length())
 
 	table.Each(func(i int, s *goquery.Selection) {
-		gl1e := s.Find("td.gl1e")
-		if gl1e.Length() == 0 {
+		gl3c := s.Find("td.gl3c.glname")
+		if gl3c.Length() == 0 {
 			return
 		}
-		gURL, _ := gl1e.Find("div > a").Attr("href")
+		a := gl3c.Find("a")
+		gURL, _ := a.Attr("href")
 
-		gl2e := s.Find("td.gl2e")
-		cat := gl2e.Find("div.gl3e > div.cn").Text()
-		upTime := gl2e.Find("div.gl3e > div:nth-child(2)").Text()
-		stars, _ := gl2e.Find("div.gl3e > div.ir").Attr("style")
-		uploader := gl2e.Find("div.gl3e > div:nth-child(4) > a").Text()
-		pagesStr := gl2e.Find("div.gl3e > div:nth-child(5)").Text()
+		gl1c := s.Find("td.gl1c")
+		cat := gl1c.Find("div.cn").Text()
+
+		gl2c := s.Find("td.gl2c")
+		stars, _ := gl2c.Find("div.ir").Attr("style")
+
+		upTime := ""
+		pagesNum := 0
+		gl2c.Find("div").Each(func(i int, s *goquery.Selection) {
+			text := s.Text()
+			if len(text) >= 10 && text[4] == '-' && text[7] == '-' {
+				if upTime == "" {
+					upTime = text
+				}
+			}
+		})
+		pagesStr := ""
+		gl2c.Find("div").Each(func(i int, s *goquery.Selection) {
+			text := s.Text()
+			if len(text) > 6 && text[len(text)-6:] == " pages" {
+				pagesStr = text
+			}
+		})
 		pagesStr = strings.TrimSuffix(pagesStr, " pages")
-		pagesNum, _ := strconv.Atoi(pagesStr)
+		pagesNum, _ = strconv.Atoi(pagesStr)
 
-		glname := gl2e.Find("div.gl4e.glname")
-		title := glname.Find("div.glink").Text()
+		title := a.Find("div.glink").Text()
 		var tags []string
-		glname.Find("table td:nth-child(2) > div").Each(func(i int, s *goquery.Selection) {
+		a.Find("div > div.gt").Each(func(i int, s *goquery.Selection) {
 			tags = append(tags, s.AttrOr("title", s.Text()))
 		})
 
+		gl4c := s.Find("td.gl4c")
+		uploader := gl4c.Find("div:first-child > a").Text()
+
 		domain, gId, gToken := parseGalleryURL(gURL)
 		gIdNum, _ := strconv.Atoi(gId)
+
+		coverImg := gl2c.Find("div.glthumb img")
+		cover := coverImg.AttrOr("data-src", "")
+		if cover == "" {
+			cover = coverImg.AttrOr("src", "")
+		}
 
 		results = append(results, SearchResult{
 			Domain:    domain,
 			GalleryID: gIdNum,
 			Token:     gToken,
 			Cat:       cat,
-			Cover:     gl1e.Find("div > a > img").AttrOr("src", ""),
+			Cover:     cover,
 			Posted:    upTime,
 			Rating:    parseStars(stars),
 			URL:       gURL,
