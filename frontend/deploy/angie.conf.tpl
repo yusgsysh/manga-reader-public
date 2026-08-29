@@ -45,5 +45,12 @@ http {
             expires 1d;
             add_header Cache-Control "public";
         }
+
+        # 容器健康检查
+        location = /healthz {
+            access_log off;
+            default_type text/plain;
+            return 200 "ok";
+        }
     }
 }

@@ -51,6 +51,10 @@ func main() {
 
 	r.Use(CORSMiddleware())
 
+	r.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
 	r.GET("/api/gallery/:id/:token", app.handleGetGallery)
 	r.GET("/api/gallery/:id/:token/details", app.handleGalleryDetails)
 	r.GET("/api/gallery/:id/:token/pages", app.handleGalleryPages)

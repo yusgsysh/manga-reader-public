@@ -54,16 +54,14 @@ manga-reader/
 
    | 服务 | 端口 | 说明 |
    |------|------|------|
-   | frontend | 80 | Angie (nginx) 托管前端并反代 `/api/*` |
-   | backend | 8080 | Gin API |
-   | minio | 9000 / 9001 | 对象存储（控制台 9001） |
+   | frontend | 5173 | Angie (nginx) 托管前端并反代 `/api/*`，后端不对外发布端口 |
+   | backend | 8080（容器内） | Gin API，仅通过 frontend 反代访问 |
 
-3. 打开 `http://localhost` 使用。
+3. 打开 `http://localhost:5173` 使用。
 
 ### 数据持久化
 
 - SQLite：`backend_data:/app/data`（`/app/data/manga-reader.db`）
-- MinIO：`minio_data:/data`
 
 数据位于 Docker 命名卷中，`docker compose down` 不会丢失；如需彻底清除使用 `docker compose down -v`。
 
