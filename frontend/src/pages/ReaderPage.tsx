@@ -1,5 +1,10 @@
 import { useEffect, useMemo } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router";
+import {
+  useNavigate,
+  useNavigationType,
+  useParams,
+  useSearchParams,
+} from "react-router";
 import { Button, Loader } from "@cloudflare/kumo";
 import { ArrowLeft } from "lucide-react";
 import { MangaViewer } from "@yui540/comimi-react";
@@ -12,6 +17,7 @@ export function ReaderPage() {
   const { id: idParam, token } = useParams<{ id: string; token: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const navigationType = useNavigationType();
   const id = Number(idParam);
   const restart = searchParams.get("restart") === "1";
 
@@ -106,7 +112,11 @@ export function ReaderPage() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => navigate(`/gallery/${id}/${token}`)}
+          onClick={() =>
+            navigationType === "PUSH"
+              ? navigate(-1)
+              : navigate(`/gallery/${id}/${token}`)
+          }
           aria-label="返回 Gallery"
         >
           <ArrowLeft className="size-4" />
