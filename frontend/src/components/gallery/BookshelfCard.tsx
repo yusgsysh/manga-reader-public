@@ -1,10 +1,20 @@
 import { Badge } from "@cloudflare/kumo";
-import type { BookshelfItem } from "../../types/gallery";
+import type { BookshelfItem, GalleryCategory } from "../../types/gallery";
 import { useNavigate } from "react-router";
 import { thumbnailUrl } from "../../lib/image";
 
+export interface GalleryReadingCardItem {
+  id: number;
+  token: string;
+  title: string;
+  category: GalleryCategory;
+  thumbnail: string;
+  pages: number;
+  reading?: BookshelfItem["reading"];
+}
+
 interface BookshelfCardProps {
-  item: BookshelfItem;
+  item: GalleryReadingCardItem;
 }
 
 export function BookshelfCard({ item }: BookshelfCardProps) {
@@ -16,31 +26,39 @@ export function BookshelfCard({ item }: BookshelfCardProps) {
       onClick={() => navigate(`/gallery/${item.id}/${item.token}`)}
     >
       <div className="aspect-[3/4] overflow-hidden rounded-lg bg-kumo-recessed">
-        <img
-          src={thumbnailUrl(item.thumbnail)}
-          alt={item.title}
-          loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-            e.currentTarget.nextElementSibling?.classList.remove("hidden");
-          }}
-        />
-        <div className="hidden flex h-full items-center justify-center p-4 text-center text-xs text-kumo-subtle">
+        {item.thumbnail ? (
+          <img
+            src={thumbnailUrl(item.thumbnail)}
+            alt={item.title || `#${item.id}`}
+            loading="lazy"
+            className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+              e.currentTarget.nextElementSibling?.classList.remove("hidden");
+            }}
+          />
+        ) : null}
+        <div
+          className={`hidden flex h-full items-center justify-center p-4 text-center text-xs text-kumo-subtle ${
+            item.thumbnail ? "" : "flex"
+          }`}
+        >
           Image unavailable
         </div>
       </div>
 
       <div className="mt-2 space-y-1">
         <h3 className="line-clamp-2 text-sm font-medium leading-tight">
-          {item.title}
+          {item.title || `#${item.id}`}
         </h3>
 
         <div className="flex items-center gap-2 text-xs text-kumo-subtle">
-          <Badge variant="secondary" className="text-[10px]">
-            {item.category}
-          </Badge>
-          <span>{item.pages}p</span>
+          {item.category && (
+            <Badge variant="secondary" className="text-[10px]">
+              {item.category}
+            </Badge>
+          )}
+          {item.pages > 0 && <span>{item.pages}p</span>}
         </div>
 
         {item.reading && (

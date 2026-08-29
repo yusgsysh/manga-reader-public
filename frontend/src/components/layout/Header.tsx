@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { to: "/popular", label: "热门" },
   { to: "/search", label: "搜索" },
   { to: "/bookshelf", label: "书架" },
+  { to: "/recently-read", label: "最近阅读" },
 ];
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
