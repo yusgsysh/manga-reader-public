@@ -1,8 +1,9 @@
 import { Link, useLocation } from "react-router";
 import { useState } from "react";
-import { Button, DropdownMenu } from "@cloudflare/kumo";
-import { Menu, Moon, Sun, Monitor, X } from "lucide-react";
+import { Button, DropdownMenu, useKumoToastManager } from "@cloudflare/kumo";
+import { Loader2, Menu, Moon, RefreshCw, Sun, Monitor, X } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
+import { useTagTranslation } from "../../hooks/useTagTranslation";
 import type { ThemeMode } from "../../lib/theme";
 
 const NAV_ITEMS = [
@@ -53,6 +54,9 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-1">
+          {/* Tag translation database update */}
+          <TagDbUpdateButton />
+
           {/* Theme toggle */}
           <DropdownMenu>
             <DropdownMenu.Trigger
@@ -130,4 +134,53 @@ export function Header() {
 function ThemeIcon({ mode }: { mode: ThemeMode }) {
   const Icon = THEME_OPTIONS.find((o) => o.mode === mode)?.icon ?? Monitor;
   return <Icon className="size-4" />;
+}
+
+function TagDbUpdateButton() {
+  const { info, updateStatus, update } = useTagTranslation();
+  const toast = useKumoToastManager();
+  const updating = updateStatus === "loading";
+
+  const handleUpdate = async () => {
+    if (updating) return;
+    try {
+      const result = await update();
+      toast.add({
+        title: result.changed
+          ? "标签翻译数据库已更新"
+          : "翻译数据库已是最新",
+        description: info?.sha ? `版本 ${info.sha.slice(0, 7)}` : undefined,
+        variant: result.changed ? "success" : "info",
+      });
+    } catch (error) {
+      toast.add({
+        title: "更新标签翻译数据库失败",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "error",
+      });
+    }
+  };
+
+  const versionText = info?.sha
+    ? `翻译数据库 ${info.version ?? ""} · ${info.sha.slice(0, 7)}\n更新于 ${new Date(
+        info.loadedAt,
+      ).toLocaleString()}`
+    : "标签翻译数据库未加载";
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={handleUpdate}
+      disabled={updating}
+      aria-label="更新标签翻译数据库"
+      title={versionText}
+    >
+      {updating ? (
+        <Loader2 className="size-4 animate-spin" />
+      ) : (
+        <RefreshCw className="size-4" />
+      )}
+    </Button>
+  );
 }

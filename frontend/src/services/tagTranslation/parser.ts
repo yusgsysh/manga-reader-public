@@ -13,6 +13,7 @@ interface RawDbNamespace {
 
 interface RawDbRoot {
   version?: string | number;
+  head?: { sha?: string };
   data?: RawDbNamespace[];
 }
 
@@ -60,5 +61,6 @@ export function parseDb(data: unknown): TranslationIndex {
     translationMap,
     namespaceMap,
     version: root.version?.toString(),
+    sha: root.head?.sha,
   };
 }

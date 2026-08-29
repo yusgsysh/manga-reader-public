@@ -1,5 +1,5 @@
 import type { Tag } from "../../types/gallery";
-import { loadDbHtmlJs } from "./loader";
+import { loadDb, updateDb } from "./loader";
 import { getTagKey, parseDb } from "./parser";
 import type {
   TagTranslationDatabaseInfo,
@@ -11,6 +11,7 @@ class TagTranslationService {
   private translationMap = new Map<string, TagTranslationEntry>();
   private namespaceMap = new Map<string, string>();
   private status: TranslationStatus = "idle";
+  private updateStatus: TranslationStatus = "idle";
   private errorMessage: string | null = null;
   private loadPromise: Promise<void> | null = null;
   private listeners = new Set<() => void>();
@@ -24,6 +25,8 @@ class TagTranslationService {
   };
 
   getStatus = (): TranslationStatus => this.status;
+
+  getUpdateStatus = (): TranslationStatus => this.updateStatus;
 
   getErrorMessage = (): string | null => this.errorMessage;
 
@@ -50,7 +53,7 @@ class TagTranslationService {
   }
 
   private async doLoad(): Promise<void> {
-    const raw = await loadDbHtmlJs();
+    const raw = await loadDb();
     this.applyIndex(parseDb(raw));
     this.status = "ready";
     this.notify();
@@ -60,10 +63,36 @@ class TagTranslationService {
     this.applyIndex(parseDb(data));
   }
 
+  async update(): Promise<{ changed: boolean }> {
+    const previousSha = this.info?.sha;
+    this.updateStatus = "loading";
+    this.notify();
+    try {
+      const raw = await updateDb();
+      this.applyIndex(parseDb(raw));
+      if (this.status !== "ready") {
+        this.status = "ready";
+      }
+      this.updateStatus = "ready";
+      this.notify();
+      return { changed: this.info?.sha !== previousSha };
+    } catch (error) {
+      this.updateStatus = "error";
+      this.errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.notify();
+      throw error;
+    }
+  }
+
   private applyIndex(index: ReturnType<typeof parseDb>) {
     this.translationMap = index.translationMap;
     this.namespaceMap = index.namespaceMap;
-    this.info = { version: index.version, loadedAt: Date.now() };
+    this.info = {
+      version: index.version,
+      sha: index.sha,
+      loadedAt: Date.now(),
+    };
   }
 
   lookup(tag: Tag): TagTranslationEntry | undefined {

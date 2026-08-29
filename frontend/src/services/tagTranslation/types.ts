@@ -9,6 +9,7 @@ export interface TagTranslationEntry {
 
 export interface TagTranslationDatabaseInfo {
   version?: string;
+  sha?: string;
   loadedAt: number;
 }
 
@@ -16,4 +17,5 @@ export interface TranslationIndex {
   translationMap: Map<string, TagTranslationEntry>;
   namespaceMap: Map<string, string>;
   version?: string;
+  sha?: string;
 }

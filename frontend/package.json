@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "db:update": "bash scripts/update-tag-db.sh"
   },
   "dependencies": {
     "@cloudflare/kumo": "^2.12.0",

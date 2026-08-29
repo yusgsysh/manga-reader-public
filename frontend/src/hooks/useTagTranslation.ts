@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import type { Tag } from "../types/gallery";
 import { tagTranslationService } from "../services/tagTranslation";
+import type { TagTranslationDatabaseInfo } from "../services/tagTranslation";
 
 export function useTagTranslation() {
   const status = useSyncExternalStore(
     tagTranslationService.subscribe,
     tagTranslationService.getStatus,
+  );
+  const updateStatus = useSyncExternalStore(
+    tagTranslationService.subscribe,
+    tagTranslationService.getUpdateStatus,
+  );
+  const info = useSyncExternalStore(
+    tagTranslationService.subscribe,
+    tagTranslationService.getInfo,
   );
 
   useEffect(() => {
@@ -27,11 +36,19 @@ export function useTagTranslation() {
     [],
   );
 
+  const update = useCallback(
+    () => tagTranslationService.update(),
+    [],
+  );
+
   return {
     status,
+    updateStatus,
+    info: info as TagTranslationDatabaseInfo | null,
     ready: status === "ready",
     translateTag,
     translateNamespace,
     hasTranslation,
+    update,
   };
 }

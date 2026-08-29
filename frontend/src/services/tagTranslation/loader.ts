@@ -1,5 +1,10 @@
-const DB_SCRIPT_URL =
-  import.meta.env.VITE_TAG_TRANSLATION_DB_URL ||
+import { readCachedDb, writeCachedDb } from "./database";
+
+const LOCAL_DB_URL =
+  import.meta.env.VITE_TAG_TRANSLATION_DB_URL || "/db.text.js";
+
+export const REMOTE_DB_URL =
+  import.meta.env.VITE_TAG_TRANSLATION_REMOTE_URL ||
   "https://github.com/EhTagTranslation/Database/releases/latest/download/db.text.js";
 
 const CALLBACK_NAME = "load_ehtagtranslation_db_text";
@@ -8,7 +13,7 @@ interface GlobalWithCallback {
   [CALLBACK_NAME]?: (data: unknown) => void;
 }
 
-export function loadDbHtmlJs(): Promise<unknown> {
+function loadViaJsonp(url: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let settled = false;
     const globalObj = window as unknown as GlobalWithCallback;
@@ -30,14 +35,26 @@ export function loadDbHtmlJs(): Promise<unknown> {
     };
 
     const script = document.createElement("script");
-    script.src = DB_SCRIPT_URL;
+    script.src = url;
     script.async = true;
     script.onerror = () => {
       if (settled) return;
       settled = true;
       cleanup();
-      reject(new Error("Failed to load EhTagTranslation database script"));
+      reject(new Error("Failed to load tag translation database script"));
     };
     document.head.appendChild(script);
   });
+}
+
+export async function loadDb(): Promise<unknown> {
+  const cached = await readCachedDb();
+  if (cached !== undefined) return cached;
+  return loadViaJsonp(LOCAL_DB_URL);
+}
+
+export async function updateDb(): Promise<unknown> {
+  const data = await loadViaJsonp(REMOTE_DB_URL);
+  await writeCachedDb(data);
+  return data;
 }
