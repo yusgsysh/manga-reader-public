@@ -1,0 +1,9 @@
+.git
+.gitignore
+data/
+manga-reader
+tools/fetchhtml/fetchhtml
+EHentai-go/*
+*.db
+*.db-wal
+*.db-shm
