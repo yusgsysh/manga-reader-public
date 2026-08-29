@@ -10,27 +10,14 @@ export function TagBadge({ tag, showNamespace = true }: TagBadgeProps) {
   const { translateTag, translateNamespace, hasTranslation } =
     useTagTranslation();
 
-  const translated = translateTag(tag);
-  const isTranslated = hasTranslation(tag);
-
-  if (!isTranslated) {
-    return (
-      <span className="inline-flex items-center rounded bg-kumo-recessed px-2 py-0.5 text-xs text-kumo-subtle opacity-60">
-        {translated}
-      </span>
-    );
-  }
-
-  const namespaceLabel = showNamespace
-    ? translateNamespace(tag.namespace)
-    : "";
+  const displayName = hasTranslation(tag) ? translateTag(tag) : tag.name;
+  const namespaceLabel =
+    showNamespace && tag.namespace ? translateNamespace(tag.namespace) : "";
 
   return (
-    <span className="inline-flex items-center gap-1 rounded bg-kumo-recessed px-2 py-0.5 text-xs text-kumo-default">
-      {namespaceLabel && (
-        <span className="text-kumo-inactive">[{namespaceLabel}]</span>
-      )}
-      <span>{translated}</span>
+    <span className="inline-flex items-center gap-1 rounded bg-kumo-recessed px-2 py-0.5 text-xs font-bold text-kumo-subtle">
+      {namespaceLabel && <span>[{namespaceLabel}]</span>}
+      <span>{displayName}</span>
     </span>
   );
 }
