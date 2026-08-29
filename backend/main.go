@@ -67,6 +67,7 @@ func main() {
 	r.GET("/api/progress/:id/:token", app.handleGetProgress)
 	r.PUT("/api/progress/:id/:token", app.handleUpdateProgress)
 	r.GET("/api/recently-read", app.handleRecentlyRead)
+	r.POST("/api/reading-progress/cleanup", app.handleReadingProgressCleanup)
 
 	thumbApp := &ThumbnailApp{Client: client}
 	r.GET("/api/thumbnail", thumbApp.handleThumbnail)

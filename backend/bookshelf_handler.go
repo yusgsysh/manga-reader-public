@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -207,4 +208,35 @@ func (a *App) handleRecentlyRead(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, RecentlyReadResponse{Results: items})
+}
+
+// handleReadingProgressCleanup 主动清理过期阅读记录。days=0 表示删除全部。
+func (a *App) handleReadingProgressCleanup(c *gin.Context) {
+	daysStr := c.DefaultQuery("days", "30")
+
+	days, err := strconv.Atoi(daysStr)
+	if err != nil || days < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "days must be a non-negative integer"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	repo := NewReadingProgressRepository(a.DB.conn)
+
+	var deleted int64
+	if days == 0 {
+		deleted, err = repo.DeleteAll(ctx)
+	} else {
+		cutoff := time.Now().UTC().AddDate(0, 0, -days)
+		deleted, err = repo.DeleteBefore(ctx, cutoff)
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to cleanup reading progress"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"days":    days,
+		"deleted": deleted,
+	})
 }

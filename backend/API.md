@@ -691,6 +691,63 @@ Cache-Control: public, max-age=31536000, immutable
 
 ---
 
+### 19. Cleanup Reading Progress
+
+`POST /api/reading-progress/cleanup`
+
+主动清理阅读记录。只有调用本 API 才会删除阅读记录，其他 API（如 `/api/recently-read`）不会触发自动清理。
+
+**Query Parameters:**
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| days | int | no | `30` | 清理 N 天以前的阅读记录；`0` 表示删除全部 |
+
+**示例:**
+
+```http
+POST /api/reading-progress/cleanup
+```
+
+默认清理 30 天以前。
+
+```http
+POST /api/reading-progress/cleanup?days=7
+```
+
+清理 7 天以前。
+
+```http
+POST /api/reading-progress/cleanup?days=0
+```
+
+删除全部阅读记录。
+
+**Response (200):**
+
+```json
+{
+  "days": 30,
+  "deleted": 12
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| days | int | 本次实际使用的清理天数 |
+| deleted | int | 实际删除的阅读记录数量 |
+
+**Error Responses:**
+
+| Status Code | Description |
+|-------------|-------------|
+| 400 | `days` 不是非负整数（如 `days=-1` 或 `days=abc`） |
+| 500 | 数据库错误 |
+
+> 只删除 `reading_progress`，不影响 Bookshelf / Gallery / MinIO 缓存。
+
+---
+
 ## Error Responses
 
 所有错误响应格式：

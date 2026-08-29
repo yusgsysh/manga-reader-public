@@ -203,6 +203,33 @@ func (r *ReadingProgressRepository) Upsert(ctx context.Context, galleryID int64,
 	return r.Get(ctx, galleryID, token)
 }
 
+func (r *ReadingProgressRepository) DeleteBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM reading_progress WHERE updated_at < ?`,
+		cutoff,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("delete reading progress before cutoff: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("reading progress deleted rows: %w", err)
+	}
+	return n, nil
+}
+
+func (r *ReadingProgressRepository) DeleteAll(ctx context.Context) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `DELETE FROM reading_progress`)
+	if err != nil {
+		return 0, fmt.Errorf("delete all reading progress: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("reading progress deleted rows: %w", err)
+	}
+	return n, nil
+}
+
 func (r *ReadingProgressRepository) ListRecentlyRead(ctx context.Context, limit int) ([]RecentlyReadItem, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT
