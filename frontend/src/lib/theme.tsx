@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ThemeContext } from "../hooks/useTheme";
+import { ThemeContext, type ResolvedTheme } from "../hooks/useTheme";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -13,38 +13,35 @@ function getInitialMode(): ThemeMode {
   return "system";
 }
 
-function resolveMode(mode: ThemeMode): "light" | "dark" {
-  if (mode !== "system") return mode;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
-}
-
-function applyMode(mode: ThemeMode) {
-  const resolved = resolveMode(mode);
-  document.documentElement.setAttribute("data-mode", resolved);
-}
-
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>(getInitialMode);
+  const [systemPrefersDark, setSystemPrefersDark] = useState(
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
+
+  const resolvedMode: ResolvedTheme =
+    mode === "system" ? (systemPrefersDark ? "dark" : "light") : mode;
 
   useEffect(() => {
-    applyMode(mode);
-    localStorage.setItem(STORAGE_KEY, mode);
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    const listener = (e: MediaQueryListEvent) => setSystemPrefersDark(e.matches);
+    mql.addEventListener("change", listener);
+    return () => mql.removeEventListener("change", listener);
+  }, []);
 
-    if (mode === "system") {
-      const mql = window.matchMedia("(prefers-color-scheme: dark)");
-      const listener = () => applyMode("system");
-      mql.addEventListener("change", listener);
-      return () => mql.removeEventListener("change", listener);
-    }
-  }, [mode]);
+  useEffect(() => {
+    document.documentElement.setAttribute("data-mode", resolvedMode);
+    localStorage.setItem(STORAGE_KEY, mode);
+  }, [mode, resolvedMode]);
 
   const setMode = useCallback((next: ThemeMode) => {
     setModeState(next);
   }, []);
 
-  const value = useMemo(() => ({ mode, setMode }), [mode, setMode]);
+  const value = useMemo(
+    () => ({ mode, resolvedMode, setMode }),
+    [mode, resolvedMode, setMode],
+  );
 
   return (
     <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>

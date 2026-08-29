@@ -1,8 +1,11 @@
 import { createContext, useContext } from "react";
 import type { ThemeMode } from "../lib/theme";
 
+export type ResolvedTheme = "light" | "dark";
+
 export interface ThemeContextValue {
   mode: ThemeMode;
+  resolvedMode: ResolvedTheme;
   setMode: (mode: ThemeMode) => void;
 }
 

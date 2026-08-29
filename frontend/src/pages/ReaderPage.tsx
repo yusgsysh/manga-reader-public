@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   useNavigate,
   useNavigationType,
@@ -7,9 +7,13 @@ import {
 } from "react-router";
 import { Button, Loader } from "@cloudflare/kumo";
 import { ArrowLeft } from "lucide-react";
-import { MangaViewer } from "@yui540/comimi-react";
+import {
+  MangaViewer,
+  type MangaViewerHandle,
+} from "@yui540/comimi-react";
 import { useGallery, useGalleryPages, useReadingProgress } from "../hooks/useReaderData";
 import { useReadingProgressSync } from "../hooks/useReadingProgressSync";
+import { useTheme } from "../hooks/useTheme";
 import { clampPageIndex, galleryPagesToManga } from "../lib/reader";
 import { ErrorState } from "../components/common/ErrorState";
 
@@ -18,9 +22,20 @@ export function ReaderPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const navigationType = useNavigationType();
+  const { resolvedMode } = useTheme();
+  const viewerRef = useRef<MangaViewerHandle>(null);
   const id = Number(idParam);
   const restart = searchParams.get("restart") === "1";
 
+  const isDark = resolvedMode === "dark";
+
+  // 深色模式跟随页面主题（含 system 变化时实时同步）
+  useEffect(() => {
+    viewerRef.current?.updateSettings({
+      theme: isDark ? "dark" : "light",
+      backgroundColor: isDark ? "black" : "white",
+    });
+  }, [isDark]);
   const galleryQuery = useGallery(id, token ?? "");
   const pagesQuery = useGalleryPages(id, token ?? "");
   const progressQuery = useReadingProgress(id, token ?? "");
@@ -133,10 +148,15 @@ export function ReaderPage() {
       {/* Reader */}
       <div className="min-h-0 flex-1">
         <MangaViewer
+          ref={viewerRef}
           manga={manga!}
           initialPageIndex={initialPage}
           locale="zh-CN"
           storage={{ enabled: false }}
+          settings={{
+            theme: isDark ? "dark" : "light",
+            backgroundColor: isDark ? "black" : "white",
+          }}
           onPageChange={({ pageIndex }) => onPageChange(pageIndex)}
           className="h-full w-full"
         />
