@@ -1,7 +1,8 @@
 import { useMemo } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchRecentlyRead } from "../api/recentlyRead";
 import { fetchGallery } from "../api/gallery";
+import { cleanupReadingProgress } from "../api/progress";
 import type { Gallery } from "../types/reader";
 import type { RecentlyReadItem } from "../types/recentlyRead";
 
@@ -54,4 +55,15 @@ export function useRecentlyRead() {
   }, [listQuery.data, items, missing, galleryQueries]);
 
   return { ...listQuery, data };
+}
+
+export function useCleanupReadingProgress() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (days: number) => cleanupReadingProgress(days),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recently-read"] });
+      queryClient.invalidateQueries({ queryKey: ["bookshelf"] });
+    },
+  });
 }

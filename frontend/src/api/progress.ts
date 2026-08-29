@@ -1,4 +1,4 @@
-import { apiGet, apiPut } from "./client";
+import { apiGet, apiPost, apiPut } from "./client";
 import type {
   ReadingProgress,
   UpdateReadingProgressRequest,
@@ -17,4 +17,18 @@ export function updateReadingProgress(
   body: UpdateReadingProgressRequest,
 ): Promise<ReadingProgress> {
   return apiPut<ReadingProgress>(`/api/progress/${id}/${token}`, body);
+}
+
+export interface CleanupReadingProgressResponse {
+  days: number;
+  deleted: number;
+}
+
+export function cleanupReadingProgress(
+  days = 30,
+): Promise<CleanupReadingProgressResponse> {
+  return apiPost<CleanupReadingProgressResponse>(
+    "/api/reading-progress/cleanup",
+    { days },
+  );
 }

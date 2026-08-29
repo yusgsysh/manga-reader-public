@@ -52,8 +52,11 @@ export function apiGet<T>(
   return request<T>(buildApiUrl(path, params));
 }
 
-export function apiPost<T>(path: string): Promise<T> {
-  return request<T>(buildApiUrl(path), { method: "POST" });
+export function apiPost<T>(
+  path: string,
+  params?: Record<string, string | number | undefined>,
+): Promise<T> {
+  return request<T>(buildApiUrl(path, params), { method: "POST" });
 }
 
 export function apiPut<T>(path: string, body?: unknown): Promise<T> {
