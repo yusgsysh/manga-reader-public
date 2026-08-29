@@ -1,6 +1,7 @@
 import { Badge } from "@cloudflare/kumo";
 import type { BookshelfItem } from "../../types/gallery";
 import { useNavigate } from "react-router";
+import { thumbnailUrl } from "../../lib/image";
 
 interface BookshelfCardProps {
   item: BookshelfItem;
@@ -16,7 +17,7 @@ export function BookshelfCard({ item }: BookshelfCardProps) {
     >
       <div className="aspect-[3/4] overflow-hidden rounded-lg bg-kumo-recessed">
         <img
-          src={item.thumbnail}
+          src={thumbnailUrl(item.thumbnail)}
           alt={item.title}
           loading="lazy"
           className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"

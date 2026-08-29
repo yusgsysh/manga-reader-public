@@ -10,7 +10,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-function buildUrl(
+export function buildApiUrl(
   path: string,
   params?: Record<string, string | number | undefined>,
 ): string {
@@ -31,7 +31,7 @@ async function request<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(buildUrl(path), init);
+  const res = await fetch(buildApiUrl(path), init);
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {
@@ -49,13 +49,13 @@ export function apiGet<T>(
   path: string,
   params?: Record<string, string | number | undefined>,
 ): Promise<T> {
-  return request<T>(buildUrl(path, params));
+  return request<T>(buildApiUrl(path, params));
 }
 
 export function apiPost<T>(path: string): Promise<T> {
-  return request<T>(buildUrl(path), { method: "POST" });
+  return request<T>(buildApiUrl(path), { method: "POST" });
 }
 
 export function apiDelete<T>(path: string): Promise<T> {
-  return request<T>(buildUrl(path), { method: "DELETE" });
+  return request<T>(buildApiUrl(path), { method: "DELETE" });
 }

@@ -2,6 +2,7 @@ import { Badge } from "@cloudflare/kumo";
 import type { GalleryListItem } from "../../types/gallery";
 import { GalleryTags } from "./GalleryTags";
 import { useNavigate } from "react-router";
+import { thumbnailUrl } from "../../lib/image";
 
 interface GalleryCardProps {
   gallery: GalleryListItem;
@@ -17,7 +18,7 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
     >
       <div className="aspect-[3/4] overflow-hidden rounded-lg bg-kumo-recessed">
         <img
-          src={gallery.cover}
+          src={thumbnailUrl(gallery.cover)}
           alt={gallery.title}
           loading="lazy"
           className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"

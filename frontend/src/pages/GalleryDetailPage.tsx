@@ -13,6 +13,7 @@ import {
   useGalleryDetail,
 } from "../hooks/useGalleryDetail";
 import { ErrorState } from "../components/common/ErrorState";
+import { thumbnailUrl } from "../lib/image";
 
 function DetailSkeleton() {
   return (
@@ -86,7 +87,7 @@ export function GalleryDetailPage() {
         <div className="w-full shrink-0 md:w-64">
           <div className="aspect-[3/4] overflow-hidden rounded-lg bg-kumo-recessed">
             <img
-              src={gallery.cover}
+              src={thumbnailUrl(gallery.cover)}
               alt={gallery.title}
               className="h-full w-full object-cover"
               onError={(e) => {
