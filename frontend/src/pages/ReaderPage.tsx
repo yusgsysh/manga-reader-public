@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { Button, Loader } from "@cloudflare/kumo";
 import { ArrowLeft } from "lucide-react";
 import { MangaViewer } from "@yui540/comimi-react";
@@ -10,8 +10,10 @@ import { ErrorState } from "../components/common/ErrorState";
 
 export function ReaderPage() {
   const { id: idParam, token } = useParams<{ id: string; token: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const id = Number(idParam);
+  const restart = searchParams.get("restart") === "1";
 
   const galleryQuery = useGallery(id, token ?? "");
   const pagesQuery = useGalleryPages(id, token ?? "");
@@ -23,8 +25,9 @@ export function ReaderPage() {
 
   const initialPage = useMemo(() => {
     if (total <= 0) return 0;
+    if (restart) return 0;
     return clampPageIndex(progressQuery.data?.current_page ?? 0, total);
-  }, [total, progressQuery.data?.current_page]);
+  }, [total, restart, progressQuery.data?.current_page]);
 
   const { currentPage, onPageChange } = useReadingProgressSync(
     id,

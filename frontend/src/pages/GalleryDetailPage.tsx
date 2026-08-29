@@ -170,7 +170,13 @@ export function GalleryDetailPage() {
           <div className="flex flex-wrap items-center gap-3 pt-1">
             <Button
               variant="primary"
-              onClick={() => navigate(`/reader/${id}/${token}`)}
+              onClick={() =>
+                navigate(
+                  progress?.completed
+                    ? `/reader/${id}/${token}?restart=1`
+                    : `/reader/${id}/${token}`,
+                )
+              }
             >
               <Book className="mr-1 size-4" />
               {progress?.completed
