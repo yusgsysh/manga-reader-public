@@ -1,10 +1,11 @@
-package main
+package exhentai
 
 import (
 	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -12,16 +13,21 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+
+	"manga-reader/internal/model"
 )
 
-const exhentaiURL = "https://exhentai.org"
-const ehentaiURL = "https://e-hentai.org"
+const (
+	ExhentaiURL = "https://exhentai.org"
+	EhentaiURL  = "https://e-hentai.org"
+)
 
 var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+)\+? results?`)
 var foundThousandsReg = regexp.MustCompile(`Found thousands of results`)
 var starsReg = regexp.MustCompile(`background-position:(-?\d+)px (-\d+)px`)
 var coverUrlReg = regexp.MustCompile(`url\(([^)]+)\)`)
 var numReg = regexp.MustCompile(`Showing 1 - (\d+) of ([\d,]+) images?`)
+var nlReg = regexp.MustCompile(`nl\('(.+?)'\)`)
 
 func httpGet(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -29,7 +35,7 @@ func httpGet(ctx context.Context, client *http.Client, url string) (*http.Respon
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36")
-	req.Header.Set("Referer", exhentaiURL+"/")
+	req.Header.Set("Referer", ExhentaiURL+"/")
 	return client.Do(req)
 }
 
@@ -64,7 +70,7 @@ func ipBannedCheck(doc *goquery.Document) bool {
 	return strings.Contains(doc.Find("body").Text(), "This IP address has been temporarily banned")
 }
 
-func parseStars(stars string) float64 {
+func ParseStars(stars string) float64 {
 	matches := starsReg.FindStringSubmatch(stars)
 	if len(matches) == 0 {
 		return 0
@@ -83,22 +89,7 @@ func parseStars(stars string) float64 {
 	return rating
 }
 
-type SearchResult struct {
-	Domain    string
-	GalleryID int
-	Token     string
-	Cat       string
-	Cover     string
-	Posted    string
-	Rating    float64
-	URL       string
-	Title     string
-	Tags      []string
-	Uploader  string
-	Pages     int
-}
-
-func scrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword string, categories []string, page int) (total int, results []SearchResult, err error) {
+func ScrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword string, categories []string, page int) (total int, results []model.SearchResult, err error) {
 	u, err := url.Parse(siteURL)
 	if err != nil {
 		return 0, nil, err
@@ -106,7 +97,7 @@ func scrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 
 	querys := url.Values{}
 	if len(categories) > 0 {
-		catVal := buildCategoryFilter(categories)
+		catVal := BuildCategoryFilter(categories)
 		if catVal != "" {
 			querys.Set("f_cats", catVal)
 		}
@@ -116,19 +107,16 @@ func scrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 	}
 	u.RawQuery = querys.Encode()
 
-	// 先获取第一页以解析 total
 	doc, err := httpGetDoc(ctx, client, u.String())
 	if err != nil {
 		return 0, nil, err
 	}
 
-	// 检查无结果
 	noHits := doc.Find("body > div.ido > div:nth-child(2) > p").Text()
 	if noHits != "" {
 		return 0, nil, fmt.Errorf("no hits found: %s", noHits)
 	}
 
-	// 解析结果总数
 	foundResults := doc.Find("body > div.ido > div:nth-child(2) > div.searchtext > p").Text()
 	matches := foundReg.FindStringSubmatch(foundResults)
 	if len(matches) == 0 {
@@ -145,8 +133,6 @@ func scrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 		return 0, nil, fmt.Errorf("no results")
 	}
 
-	// EHentai 使用游标分页 (next=<gallery_id>)，page 参数无效
-	// 对于 page > 0，需要依次跟随 next 链接
 	for range page {
 		nextURL := extractNextURL(doc)
 		if nextURL == "" {
@@ -162,7 +148,6 @@ func scrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 	return
 }
 
-// extractNextURL 从搜索结果页提取 "Next >" 链接
 func extractNextURL(doc *goquery.Document) string {
 	var nextURL string
 	doc.Find("a").Each(func(i int, s *goquery.Selection) {
@@ -173,12 +158,9 @@ func extractNextURL(doc *goquery.Document) string {
 	return nextURL
 }
 
-// parseSearchResults 从 goquery Document 解析搜索结果
-func parseSearchResults(doc *goquery.Document) ([]SearchResult, error) {
-	// 紧凑布局
+func parseSearchResults(doc *goquery.Document) ([]model.SearchResult, error) {
 	table := doc.Find("table.itg.gltc > tbody > tr")
 	isThumbnail := false
-	// 缩略图布局
 	if table.Length() == 0 {
 		table = doc.Find("table.itg.gltm > tbody > tr")
 		isThumbnail = true
@@ -190,7 +172,7 @@ func parseSearchResults(doc *goquery.Document) ([]SearchResult, error) {
 		return nil, fmt.Errorf("empty results table")
 	}
 
-	results := make([]SearchResult, 0, table.Length())
+	results := make([]model.SearchResult, 0, table.Length())
 
 	table.Each(func(i int, s *goquery.Selection) {
 		var gURL, cat, title, cover, upTime, uploader, pagesStr string
@@ -236,7 +218,6 @@ func parseSearchResults(doc *goquery.Document) ([]SearchResult, error) {
 				cover = coverImg.AttrOr("src", "")
 			}
 		} else {
-			// 紧凑布局
 			gl3c := s.Find("td.gl3c.glname")
 			if gl3c.Length() == 0 {
 				return
@@ -282,17 +263,17 @@ func parseSearchResults(doc *goquery.Document) ([]SearchResult, error) {
 		pagesStr = strings.TrimSuffix(pagesStr, " pages")
 		pagesNum, _ := strconv.Atoi(pagesStr)
 
-		domain, gId, gToken := parseGalleryURL(gURL)
+		domain, gId, gToken := ParseGalleryURL(gURL)
 		gIdNum, _ := strconv.Atoi(gId)
 
-		results = append(results, SearchResult{
+		results = append(results, model.SearchResult{
 			Domain:    domain,
 			GalleryID: gIdNum,
 			Token:     gToken,
 			Cat:       cat,
 			Cover:     cover,
 			Posted:    upTime,
-			Rating:    parseStars(stars),
+			Rating:    ParseStars(stars),
 			URL:       gURL,
 			Title:     title,
 			Tags:      tags,
@@ -303,7 +284,7 @@ func parseSearchResults(doc *goquery.Document) ([]SearchResult, error) {
 	return results, nil
 }
 
-func parseGalleryURL(u string) (domain, gId, gToken string) {
+func ParseGalleryURL(u string) (domain, gId, gToken string) {
 	u = strings.TrimSuffix(u, "/")
 	splits := strings.Split(u, "/")
 	for i, s := range splits {
@@ -314,9 +295,7 @@ func parseGalleryURL(u string) (domain, gId, gToken string) {
 	return "", "", ""
 }
 
-// buildCategoryFilter 将分类名列表转换为 f_cats 值
-// 参考 EHentai-go 的 Category.Format(): 1023 ^ (selected categories bitmask)
-func buildCategoryFilter(categories []string) string {
+func BuildCategoryFilter(categories []string) string {
 	var cat uint
 	for _, c := range categories {
 		switch strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(c), "-", ""), "_", "")) {
@@ -348,41 +327,12 @@ func buildCategoryFilter(categories []string) string {
 	return strconv.FormatUint(uint64(1023^cat), 10)
 }
 
-type GalleryDetail struct {
-	Domain      string
-	GalleryID   int
-	Token       string
-	Cover       string
-	Title       string
-	TitleJpn    string
-	Cat         string
-	Uploader    string
-	Posted      string
-	Parent      int
-	Visible     string
-	Language    string
-	Translated  string
-	FileSize    string
-	Length      int
-	Favorited   int
-	RatingCount int
-	Rating      float64
-	Tags        []TagItem
-	PageUrls    []string
-}
-
-type TagItem struct {
-	Namespace string
-	Name      string
-}
-
-func scrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL string) (GalleryDetail, error) {
+func ScrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL string) (model.GalleryDetail, error) {
 	doc, err := httpGetDoc(ctx, client, galleryURL)
 	if err != nil {
-		return GalleryDetail{}, err
+		return model.GalleryDetail{}, err
 	}
 
-	// cover
 	var cover string
 	doc.Find("#gd1 > div").Each(func(i int, sel *goquery.Selection) {
 		style, exists := sel.Attr("style")
@@ -423,7 +373,7 @@ func scrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL s
 	ratingStr = strings.TrimSpace(ratingStr)
 	rating, _ := strconv.ParseFloat(ratingStr, 64)
 
-	var tags []TagItem
+	var tags []model.TagItem
 	taglist := doc.Find("#taglist > table > tbody")
 	taglist.Find("tr").Each(func(i int, s *goquery.Selection) {
 		namespace := s.Find("td:nth-child(1)").Text()
@@ -434,12 +384,11 @@ func scrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL s
 		s.Find("td:nth-child(2) > div").Each(func(i int, s *goquery.Selection) {
 			tag := s.Find("a").Text()
 			if tag != "" {
-				tags = append(tags, TagItem{Namespace: namespace, Name: tag})
+				tags = append(tags, model.TagItem{Namespace: namespace, Name: tag})
 			}
 		})
 	})
 
-	// 解析页数
 	numImages := doc.Find(".gpc").Text()
 	matches := numReg.FindStringSubmatch(numImages)
 	var total int
@@ -448,7 +397,6 @@ func scrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL s
 		total, _ = strconv.Atoi(matches[2])
 	}
 
-	// 收集页链接 (第一页)
 	var pageUrls []string
 	doc.Find("#gdt > a").Each(func(i int, s *goquery.Selection) {
 		href, _ := s.Attr("href")
@@ -457,7 +405,6 @@ func scrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL s
 		}
 	})
 
-	// 多页画廊需要翻页获取更多页链接
 	if total > len(pageUrls) && len(pageUrls) > 0 {
 		end := len(pageUrls)
 		pages := total / end
@@ -489,7 +436,7 @@ func scrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL s
 
 	gIdStr := ""
 	gTokenStr := ""
-	d, gId, gToken := parseGalleryURL(galleryURL)
+	d, gId, gToken := ParseGalleryURL(galleryURL)
 	if d != "" {
 		domain = d
 		gIdStr = gId
@@ -497,7 +444,7 @@ func scrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL s
 	}
 	gIdNum, _ := strconv.Atoi(gIdStr)
 
-	return GalleryDetail{
+	return model.GalleryDetail{
 		Domain:      domain,
 		GalleryID:   gIdNum,
 		Token:       gTokenStr,
@@ -521,9 +468,7 @@ func scrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL s
 	}, nil
 }
 
-var nlReg = regexp.MustCompile(`nl\('(.+?)'\)`)
-
-func scrapePageImageURL(ctx context.Context, client *http.Client, pageURL string) (imgURL string, fallbackURL string, err error) {
+func ScrapePageImageURL(ctx context.Context, client *http.Client, pageURL string) (imgURL string, fallbackURL string, err error) {
 	resp, err := httpGet(ctx, client, pageURL)
 	if err != nil {
 		return "", "", err
@@ -545,14 +490,13 @@ func scrapePageImageURL(ctx context.Context, client *http.Client, pageURL string
 		return "", "", fmt.Errorf("could not find image src")
 	}
 
-	// <a href="#" id="loadfail" onclick="return nl('SZF-483294')">Reload broken image</a>
 	onclick, _ := doc.Find("#loadfail").Attr("onclick")
-	fallbackURL = buildNlFallbackURL(pageURL, onclick)
+	fallbackURL = BuildNlFallbackURL(pageURL, onclick)
 
 	return img, fallbackURL, nil
 }
 
-func buildNlFallbackURL(pageURL, onclick string) string {
+func BuildNlFallbackURL(pageURL, onclick string) string {
 	if onclick == "" {
 		return ""
 	}
@@ -573,20 +517,22 @@ func buildNlFallbackURL(pageURL, onclick string) string {
 	return u.String()
 }
 
-func fetchPageImage(ctx context.Context, client *http.Client, pageURL string) (data []byte, contentType string, err error) {
-	imgURL, fallbackURL, err := scrapePageImageURL(ctx, client, pageURL)
+const MaxNlRetries = 2
+
+func FetchPageImage(ctx context.Context, client *http.Client, pageURL string) (data []byte, contentType string, err error) {
+	imgURL, fallbackURL, err := ScrapePageImageURL(ctx, client, pageURL)
 	if err != nil {
 		return nil, "", err
 	}
 
-	data, contentType, err = proxyImage(ctx, client, imgURL)
+	data, contentType, err = ProxyImage(ctx, client, imgURL)
 	if err != nil && fallbackURL != "" {
-		for range maxNlRetries {
-			imgURL, fallbackURL, err = scrapePageImageURL(ctx, client, fallbackURL)
+		for range MaxNlRetries {
+			imgURL, fallbackURL, err = ScrapePageImageURL(ctx, client, fallbackURL)
 			if err != nil {
 				break
 			}
-			data, contentType, err = proxyImage(ctx, client, imgURL)
+			data, contentType, err = ProxyImage(ctx, client, imgURL)
 			if err == nil {
 				break
 			}
@@ -595,13 +541,13 @@ func fetchPageImage(ctx context.Context, client *http.Client, pageURL string) (d
 	return data, contentType, err
 }
 
-func proxyImage(ctx context.Context, client *http.Client, imgURL string) (data []byte, contentType string, err error) {
+func ProxyImage(ctx context.Context, client *http.Client, imgURL string) (data []byte, contentType string, err error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", imgURL, nil)
 	if err != nil {
 		return nil, "", err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36")
-	req.Header.Set("Referer", exhentaiURL+"/")
+	req.Header.Set("Referer", ExhentaiURL+"/")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -621,7 +567,7 @@ func proxyImage(ctx context.Context, client *http.Client, imgURL string) (data [
 	return data, contentType, nil
 }
 
-func scrapeGalleryList(ctx context.Context, client *http.Client, listURL string, page int) (results []SearchResult, err error) {
+func ScrapeGalleryList(ctx context.Context, client *http.Client, listURL string, page int) (results []model.SearchResult, err error) {
 	u, err := url.Parse(listURL)
 	if err != nil {
 		return nil, err
@@ -635,7 +581,7 @@ func scrapeGalleryList(ctx context.Context, client *http.Client, listURL string,
 	for range page {
 		nextURL := extractNextURL(doc)
 		if nextURL == "" {
-			return []SearchResult{}, nil
+			return []model.SearchResult{}, nil
 		}
 		doc, err = httpGetDoc(ctx, client, nextURL)
 		if err != nil {
@@ -645,16 +591,14 @@ func scrapeGalleryList(ctx context.Context, client *http.Client, listURL string,
 
 	results, err = parseGalleryListResults(doc)
 	if err != nil && err.Error() == "empty gallery list" {
-		return []SearchResult{}, nil
+		return []model.SearchResult{}, nil
 	}
 	return
 }
 
-func parseGalleryListResults(doc *goquery.Document) ([]SearchResult, error) {
-	// 紧凑布局
+func parseGalleryListResults(doc *goquery.Document) ([]model.SearchResult, error) {
 	table := doc.Find("table.itg.gltc > tbody > tr")
 	isThumbnail := false
-	// 缩略图布局
 	if table.Length() == 0 {
 		table = doc.Find("table.itg.gltm > tbody > tr")
 		isThumbnail = true
@@ -663,7 +607,7 @@ func parseGalleryListResults(doc *goquery.Document) ([]SearchResult, error) {
 		return nil, fmt.Errorf("empty gallery list")
 	}
 
-	results := make([]SearchResult, 0, table.Length())
+	results := make([]model.SearchResult, 0, table.Length())
 
 	table.Each(func(i int, s *goquery.Selection) {
 		var gURL, cat, title, cover, upTime, uploader, pagesStr string
@@ -709,7 +653,6 @@ func parseGalleryListResults(doc *goquery.Document) ([]SearchResult, error) {
 				cover = coverImg.AttrOr("src", "")
 			}
 		} else {
-			// 紧凑布局
 			gl3c := s.Find("td.gl3c.glname")
 			if gl3c.Length() == 0 {
 				return
@@ -755,17 +698,17 @@ func parseGalleryListResults(doc *goquery.Document) ([]SearchResult, error) {
 		pagesStr = strings.TrimSuffix(pagesStr, " pages")
 		pagesNum, _ := strconv.Atoi(pagesStr)
 
-		domain, gId, gToken := parseGalleryURL(gURL)
+		domain, gId, gToken := ParseGalleryURL(gURL)
 		gIdNum, _ := strconv.Atoi(gId)
 
-		results = append(results, SearchResult{
+		results = append(results, model.SearchResult{
 			Domain:    domain,
 			GalleryID: gIdNum,
 			Token:     gToken,
 			Cat:       cat,
 			Cover:     cover,
 			Posted:    upTime,
-			Rating:    parseStars(stars),
+			Rating:    ParseStars(stars),
 			URL:       gURL,
 			Title:     title,
 			Tags:      tags,
@@ -774,4 +717,101 @@ func parseGalleryListResults(doc *goquery.Document) ([]SearchResult, error) {
 		})
 	})
 	return results, nil
+}
+
+func GalleryURL(id, token string) string {
+	return ExhentaiURL + "/g/" + id + "/" + token + "/"
+}
+
+func ValidateThumbnailURL(rawURL string) error {
+	return validateThumbnailURL(rawURL)
+}
+
+func ValidatePageURL(rawURL string) error {
+	return validatePageURL(rawURL)
+}
+
+func IsBlockedInternalHost(host string) bool {
+	return isBlockedInternalHost(host)
+}
+
+var allowedThumbnailHosts = map[string]struct{}{
+	"s.exhentai.org":  {},
+	"ehgt.org":        {},
+	"ul.e-hentai.org": {},
+}
+
+func validateThumbnailURL(rawURL string) error {
+	if rawURL == "" {
+		return fmt.Errorf("missing url parameter")
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid url")
+	}
+
+	if u.Scheme != "https" {
+		return fmt.Errorf("unsupported URL scheme: %s", u.Scheme)
+	}
+
+	host := u.Hostname()
+	if host == "" {
+		return fmt.Errorf("invalid url: missing host")
+	}
+
+	if isBlockedInternalHost(host) {
+		return fmt.Errorf("unsupported URL: internal address not allowed")
+	}
+
+	if _, ok := allowedThumbnailHosts[host]; !ok {
+		return fmt.Errorf("unsupported URL: domain not allowed")
+	}
+
+	return nil
+}
+
+func validatePageURL(rawURL string) error {
+	if rawURL == "" {
+		return fmt.Errorf("missing url parameter")
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid url")
+	}
+
+	if u.Scheme != "https" && u.Scheme != "http" {
+		return fmt.Errorf("unsupported URL scheme: %s", u.Scheme)
+	}
+
+	host := u.Hostname()
+	if host == "" {
+		return fmt.Errorf("invalid url: missing host")
+	}
+
+	if isBlockedInternalHost(host) {
+		return fmt.Errorf("unsupported URL: internal address not allowed")
+	}
+
+	allowed := false
+	if host == "exhentai.org" || host == "e-hentai.org" {
+		allowed = true
+	}
+
+	if !allowed {
+		return fmt.Errorf("unsupported URL: domain not allowed")
+	}
+
+	return nil
+}
+
+func isBlockedInternalHost(host string) bool {
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
+	}
+	return false
 }

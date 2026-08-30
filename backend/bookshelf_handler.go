@@ -7,6 +7,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"manga-reader/internal/database"
+	"manga-reader/internal/exhentai"
+	"manga-reader/internal/model"
 )
 
 func (a *App) handleBookshelfList(c *gin.Context) {
@@ -16,15 +20,14 @@ func (a *App) handleBookshelfList(c *gin.Context) {
 		page = 0
 	}
 
-	repo := NewBookshelfRepository(a.DB.conn)
+	repo := database.NewBookshelfRepository(a.DB.conn)
 	resp, err := repo.List(c.Request.Context(), page, 25)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list bookshelf failed: %v", err)})
 		return
 	}
 
-	// 填充阅读进度
-	progressRepo := NewReadingProgressRepository(a.DB.conn)
+	progressRepo := database.NewReadingProgressRepository(a.DB.conn)
 	for i := range resp.Results {
 		progress, err := progressRepo.Get(c.Request.Context(), resp.Results[i].ID, resp.Results[i].Token)
 		if err == nil && progress != nil && progress.UpdatedAt != nil {
@@ -51,27 +54,25 @@ func (a *App) handleBookshelfAdd(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// 检查是否已在书架
-	bookshelfRepo := NewBookshelfRepository(a.DB.conn)
+	bookshelfRepo := database.NewBookshelfRepository(a.DB.conn)
 	exists, _, err := bookshelfRepo.Exists(ctx, id, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("check bookshelf failed: %v", err)})
 		return
 	}
 	if exists {
-		c.JSON(http.StatusOK, BookshelfMutationResponse{Success: true, InBookshelf: true})
+		c.JSON(http.StatusOK, model.BookshelfMutationResponse{Success: true, InBookshelf: true})
 		return
 	}
 
-	// 从 ExHentai 获取 Gallery 信息
-	meta, err := PostGalleryMetadata(ctx, a.Client, id, token)
+	meta, err := exhentai.PostGalleryMetadata(ctx, a.Client, id, token)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
 	}
 
-	gallery := ConvertMetadataToGallery(meta)
-	bookshelf := GalleryToBookshelf(gallery)
+	gallery := model.ConvertMetadataToGallery(meta)
+	bookshelf := model.GalleryToBookshelf(gallery)
 	if bookshelf == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "convert gallery to bookshelf failed"})
 		return
@@ -82,7 +83,7 @@ func (a *App) handleBookshelfAdd(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, BookshelfMutationResponse{Success: true, InBookshelf: true})
+	c.JSON(http.StatusOK, model.BookshelfMutationResponse{Success: true, InBookshelf: true})
 }
 
 func (a *App) handleBookshelfRemove(c *gin.Context) {
@@ -99,13 +100,13 @@ func (a *App) handleBookshelfRemove(c *gin.Context) {
 		return
 	}
 
-	repo := NewBookshelfRepository(a.DB.conn)
+	repo := database.NewBookshelfRepository(a.DB.conn)
 	if err := repo.Remove(c.Request.Context(), id, token); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("remove bookshelf failed: %v", err)})
 		return
 	}
 
-	c.JSON(http.StatusOK, BookshelfMutationResponse{Success: true, InBookshelf: false})
+	c.JSON(http.StatusOK, model.BookshelfMutationResponse{Success: true, InBookshelf: false})
 }
 
 func (a *App) handleBookshelfStatus(c *gin.Context) {
@@ -122,14 +123,14 @@ func (a *App) handleBookshelfStatus(c *gin.Context) {
 		return
 	}
 
-	repo := NewBookshelfRepository(a.DB.conn)
+	repo := database.NewBookshelfRepository(a.DB.conn)
 	exists, addedAt, err := repo.Exists(c.Request.Context(), id, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("check bookshelf failed: %v", err)})
 		return
 	}
 
-	c.JSON(http.StatusOK, BookshelfStatus{
+	c.JSON(http.StatusOK, model.BookshelfStatus{
 		InBookshelf: exists,
 		AddedAt:     addedAt,
 	})
@@ -149,7 +150,7 @@ func (a *App) handleGetProgress(c *gin.Context) {
 		return
 	}
 
-	repo := NewReadingProgressRepository(a.DB.conn)
+	repo := database.NewReadingProgressRepository(a.DB.conn)
 	progress, err := repo.Get(c.Request.Context(), id, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("get progress failed: %v", err)})
@@ -173,7 +174,7 @@ func (a *App) handleUpdateProgress(c *gin.Context) {
 		return
 	}
 
-	var req UpdateReadingProgressRequest
+	var req model.UpdateReadingProgressRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
@@ -189,7 +190,7 @@ func (a *App) handleUpdateProgress(c *gin.Context) {
 		return
 	}
 
-	repo := NewReadingProgressRepository(a.DB.conn)
+	repo := database.NewReadingProgressRepository(a.DB.conn)
 	progress, err := repo.Upsert(c.Request.Context(), id, token, &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("update progress failed: %v", err)})
@@ -200,17 +201,16 @@ func (a *App) handleUpdateProgress(c *gin.Context) {
 }
 
 func (a *App) handleRecentlyRead(c *gin.Context) {
-	repo := NewReadingProgressRepository(a.DB.conn)
+	repo := database.NewReadingProgressRepository(a.DB.conn)
 	items, err := repo.ListRecentlyRead(c.Request.Context(), 25)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list recently read failed: %v", err)})
 		return
 	}
 
-	c.JSON(http.StatusOK, RecentlyReadResponse{Results: items})
+	c.JSON(http.StatusOK, model.RecentlyReadResponse{Results: items})
 }
 
-// handleReadingProgressCleanup 主动清理过期阅读记录。days=0 表示删除全部。
 func (a *App) handleReadingProgressCleanup(c *gin.Context) {
 	daysStr := c.DefaultQuery("days", "30")
 
@@ -221,7 +221,7 @@ func (a *App) handleReadingProgressCleanup(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	repo := NewReadingProgressRepository(a.DB.conn)
+	repo := database.NewReadingProgressRepository(a.DB.conn)
 
 	var deleted int64
 	if days == 0 {

@@ -1,8 +1,8 @@
-package main
+package model
 
 import "time"
 
-// Bookshelf 是数据库中的书架记录
+// Bookshelf is a bookshelf record in the database.
 type Bookshelf struct {
 	GalleryID int64           `json:"gallery_id"`
 	Token     string          `json:"token"`
@@ -16,19 +16,19 @@ type Bookshelf struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// ReadingProgress 是数据库中的阅读进度记录
+// ReadingProgress is a reading progress record in the database.
 type ReadingProgress struct {
-	GalleryID   int64      `json:"gallery_id"`
-	Token       string     `json:"token"`
-	CurrentPage int        `json:"current_page"`
-	Progress    float64    `json:"progress"`
-	Completed   bool       `json:"completed"`
+	GalleryID   int64   `json:"gallery_id"`
+	Token       string  `json:"token"`
+	CurrentPage int     `json:"current_page"`
+	Progress    float64 `json:"progress"`
+	Completed   bool    `json:"completed"`
 
 	StartedAt *time.Time `json:"started_at,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 }
 
-// BookshelfItem 是书架列表中的单个项目
+// BookshelfItem is a single item in the bookshelf list response.
 type BookshelfItem struct {
 	ID        int64           `json:"id"`
 	Token     string          `json:"token"`
@@ -43,7 +43,7 @@ type BookshelfItem struct {
 	Reading   *ReadingProgress `json:"reading,omitempty"`
 }
 
-// BookshelfListResponse 是书架列表的分页响应
+// BookshelfListResponse is the paginated bookshelf list response.
 type BookshelfListResponse struct {
 	Page       int             `json:"page"`
 	PageSize   int             `json:"page_size"`
@@ -52,26 +52,26 @@ type BookshelfListResponse struct {
 	Results    []BookshelfItem `json:"results"`
 }
 
-// BookshelfStatus 是收藏状态查询的响应
+// BookshelfStatus is the response for bookshelf status queries.
 type BookshelfStatus struct {
 	InBookshelf bool       `json:"in_bookshelf"`
 	AddedAt     *time.Time `json:"added_at,omitempty"`
 }
 
-// BookshelfMutationResponse 是收藏/取消收藏的响应
+// BookshelfMutationResponse is the response for add/remove bookshelf operations.
 type BookshelfMutationResponse struct {
 	Success     bool `json:"success"`
 	InBookshelf bool `json:"in_bookshelf"`
 }
 
-// UpdateReadingProgressRequest 是更新阅读进度的请求体
+// UpdateReadingProgressRequest is the request body for updating reading progress.
 type UpdateReadingProgressRequest struct {
 	CurrentPage int     `json:"current_page"`
 	Progress    float64 `json:"progress"`
 	Completed   bool    `json:"completed"`
 }
 
-// RecentlyReadItem 是最近阅读列表中的单个项目
+// RecentlyReadItem is a single item in the recently read list.
 type RecentlyReadItem struct {
 	ID        int64           `json:"id"`
 	Token     string          `json:"token"`
@@ -84,12 +84,12 @@ type RecentlyReadItem struct {
 	Reading ReadingProgress `json:"reading"`
 }
 
-// RecentlyReadResponse 是最近阅读的响应
+// RecentlyReadResponse is the response for the recently read endpoint.
 type RecentlyReadResponse struct {
 	Results []RecentlyReadItem `json:"results"`
 }
 
-// GalleryToBookshelf 将 Gallery 转换为 Bookshelf 快照
+// GalleryToBookshelf converts a Gallery to a Bookshelf snapshot.
 func GalleryToBookshelf(g *Gallery) *Bookshelf {
 	if g == nil {
 		return nil
@@ -106,7 +106,7 @@ func GalleryToBookshelf(g *Gallery) *Bookshelf {
 	}
 }
 
-// BookshelfToItem 将 Bookshelf 转换为 API 响应中的 BookshelfItem
+// BookshelfToItem converts a Bookshelf to a BookshelfItem for API responses.
 func BookshelfToItem(b *Bookshelf, progress *ReadingProgress) BookshelfItem {
 	item := BookshelfItem{
 		ID:        b.GalleryID,

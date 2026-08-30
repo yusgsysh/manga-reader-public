@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 
 	"github.com/gin-gonic/gin"
 	"github.com/minio/minio-go/v7"
+	"golang.org/x/sync/singleflight"
+
+	"manga-reader/internal/cache"
+	"manga-reader/internal/exhentai"
 )
 
 const (
@@ -19,74 +22,29 @@ const (
 	thumbnailCacheControl = "public, max-age=3600"
 )
 
-// ImageCache abstracts the cache operations used by thumbnail handlers so that
-// tests can inject an in-memory implementation.
 type ImageCache interface {
 	Head(ctx context.Context, key string) (minio.ObjectInfo, error)
 	Get(ctx context.Context, key string) (data []byte, contentType string, err error)
-	PutWithMeta(ctx context.Context, key string, data []byte, contentType string, meta map[string]string) error
+	PutWithMeta(ctx context.Context, key string, data []byte, contentType string, meta map[string]string, cacheControl string) error
 }
 
-// ThumbnailApp serves ExHentai gallery thumbnail images.
 type ThumbnailApp struct {
 	Client *http.Client
 	Cache  ImageCache
 }
 
-var allowedThumbnailHosts = map[string]struct{}{
-	"s.exhentai.org":  {},
-	"ehgt.org":        {},
-	"ul.e-hentai.org": {},
-}
-
-// ThumbnailCacheKey derives the MinIO object key for a thumbnail from its full
-// source URL: thumbnail/<sha256(url)>.
 func ThumbnailCacheKey(rawURL string) string {
 	sum := sha256.Sum256([]byte(rawURL))
 	return thumbnailCachePrefix + hex.EncodeToString(sum[:])
 }
 
-// validateThumbnailURL ensures the URL is an https URL pointing at an allowed
-// ExHentai thumbnail host, rejecting internal addresses to prevent SSRF.
-func validateThumbnailURL(rawURL string) error {
-	if rawURL == "" {
-		return fmt.Errorf("missing url parameter")
-	}
-
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return fmt.Errorf("invalid url")
-	}
-
-	if u.Scheme != "https" {
-		return fmt.Errorf("unsupported URL scheme: %s", u.Scheme)
-	}
-
-	host := u.Hostname()
-	if host == "" {
-		return fmt.Errorf("invalid url: missing host")
-	}
-
-	if isBlockedInternalHost(host) {
-		return fmt.Errorf("unsupported URL: internal address not allowed")
-	}
-
-	if _, ok := allowedThumbnailHosts[host]; !ok {
-		return fmt.Errorf("unsupported URL: domain not allowed")
-	}
-
-	return nil
-}
-
-// fetchThumbnail downloads a thumbnail through the configured ExHentai client,
-// retrying up to maxThumbnailRetries times on failure.
 func fetchThumbnail(ctx context.Context, client *http.Client, thumbnailURL string) (data []byte, contentType string, err error) {
-	data, contentType, err = proxyImage(ctx, client, thumbnailURL)
+	data, contentType, err = exhentai.ProxyImage(ctx, client, thumbnailURL)
 	if err == nil {
 		return data, contentType, nil
 	}
 	for range maxThumbnailRetries {
-		data, contentType, err = proxyImage(ctx, client, thumbnailURL)
+		data, contentType, err = exhentai.ProxyImage(ctx, client, thumbnailURL)
 		if err == nil {
 			return data, contentType, nil
 		}
@@ -94,7 +52,6 @@ func fetchThumbnail(ctx context.Context, client *http.Client, thumbnailURL strin
 	return nil, "", err
 }
 
-// handleThumbnail proxies a thumbnail directly from the ExHentai origin.
 func (a *ThumbnailApp) handleThumbnail(c *gin.Context) {
 	rawURL := c.Query("url")
 	if rawURL == "" {
@@ -102,7 +59,7 @@ func (a *ThumbnailApp) handleThumbnail(c *gin.Context) {
 		return
 	}
 
-	if err := validateThumbnailURL(rawURL); err != nil {
+	if err := exhentai.ValidateThumbnailURL(rawURL); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -118,9 +75,6 @@ func (a *ThumbnailApp) handleThumbnail(c *gin.Context) {
 	c.Data(http.StatusOK, contentType, data)
 }
 
-// handleCachedThumbnail serves a thumbnail from MinIO, fetching from ExHentai
-// on a cache miss. Concurrent misses for the same URL are coalesced via
-// singleflight.
 func (a *ThumbnailApp) handleCachedThumbnail(c *gin.Context) {
 	rawURL := c.Query("url")
 	if rawURL == "" {
@@ -128,7 +82,7 @@ func (a *ThumbnailApp) handleCachedThumbnail(c *gin.Context) {
 		return
 	}
 
-	if err := validateThumbnailURL(rawURL); err != nil {
+	if err := exhentai.ValidateThumbnailURL(rawURL); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -141,7 +95,6 @@ func (a *ThumbnailApp) handleCachedThumbnail(c *gin.Context) {
 		return
 	}
 
-	// Try cache hit
 	if _, err := a.Cache.Head(ctx, key); err == nil {
 		data, contentType, err := a.Cache.Get(ctx, key)
 		if err != nil {
@@ -159,11 +112,9 @@ func (a *ThumbnailApp) handleCachedThumbnail(c *gin.Context) {
 		return
 	}
 
-	// Cache miss — use singleflight to coalesce concurrent requests
 	log.Printf("cached-thumbnail miss key=%s", key[:16])
 
 	v, sfErr, _ := cachedImageGroup.Do(key, func() (interface{}, error) {
-		// Double-check cache after acquiring singleflight lock
 		if _, headErr := a.Cache.Head(ctx, key); headErr == nil {
 			data, contentType, getErr := a.Cache.Get(ctx, key)
 			if getErr != nil {
@@ -179,7 +130,7 @@ func (a *ThumbnailApp) handleCachedThumbnail(c *gin.Context) {
 
 		if putErr := a.Cache.PutWithMeta(ctx, key, data, contentType, map[string]string{
 			"source-url": rawURL,
-		}); putErr != nil {
+		}, cacheControlHeader); putErr != nil {
 			log.Printf("cached-thumbnail store failed key=%s err=%v", key[:16], putErr)
 		} else {
 			log.Printf("cached-thumbnail stored key=%s", key[:16])
@@ -197,4 +148,10 @@ func (a *ThumbnailApp) handleCachedThumbnail(c *gin.Context) {
 	result := v.(*imageResult)
 	c.Header("Cache-Control", cacheControlHeader)
 	c.Data(http.StatusOK, result.contentType, result.data)
+}
+
+var cachedImageGroup singleflight.Group
+
+func isNotFound(err error) bool {
+	return cache.IsNotFound(err)
 }

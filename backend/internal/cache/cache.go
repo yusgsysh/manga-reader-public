@@ -1,4 +1,4 @@
-package main
+package cache
 
 import (
 	"context"
@@ -13,15 +13,12 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"golang.org/x/sync/singleflight"
 )
 
 const (
-	imageCachePrefix = "images/"
-	cacheKeyLength   = sha256.Size * 2 // hex-encoded SHA-256
+	ImageCachePrefix = "images/"
+	CacheKeyLength   = sha256.Size * 2
 )
-
-var imageCacheGroup singleflight.Group
 
 type MinIOCache struct {
 	client     *minio.Client
@@ -121,10 +118,10 @@ func (c *MinIOCache) ensureBucket(ctx context.Context) error {
 
 func CacheKey(url string) string {
 	sum := sha256.Sum256([]byte(url))
-	return imageCachePrefix + hex.EncodeToString(sum[:])
+	return ImageCachePrefix + hex.EncodeToString(sum[:])
 }
 
-func isNotFound(err error) bool {
+func IsNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -154,11 +151,11 @@ func (c *MinIOCache) Get(ctx context.Context, key string) (data []byte, contentT
 	return data, stat.ContentType, nil
 }
 
-func (c *MinIOCache) Put(ctx context.Context, key string, data []byte, contentType string) error {
+func (c *MinIOCache) Put(ctx context.Context, key string, data []byte, contentType string, cacheControl string) error {
 	reader := strings.NewReader(string(data))
 	_, err := c.client.PutObject(ctx, c.bucket, key, reader, int64(len(data)), minio.PutObjectOptions{
 		ContentType:  contentType,
-		CacheControl: cacheControlHeader,
+		CacheControl: cacheControl,
 	})
 	if err != nil {
 		return fmt.Errorf("minio put object: %w", err)
@@ -166,11 +163,11 @@ func (c *MinIOCache) Put(ctx context.Context, key string, data []byte, contentTy
 	return nil
 }
 
-func (c *MinIOCache) PutWithMeta(ctx context.Context, key string, data []byte, contentType string, meta map[string]string) error {
+func (c *MinIOCache) PutWithMeta(ctx context.Context, key string, data []byte, contentType string, meta map[string]string, cacheControl string) error {
 	reader := strings.NewReader(string(data))
 	_, err := c.client.PutObject(ctx, c.bucket, key, reader, int64(len(data)), minio.PutObjectOptions{
 		ContentType:  contentType,
-		CacheControl: cacheControlHeader,
+		CacheControl: cacheControl,
 		UserMetadata: meta,
 	})
 	if err != nil {

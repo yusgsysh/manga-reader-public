@@ -1,4 +1,4 @@
-package main
+package model
 
 import (
 	"strconv"
@@ -6,31 +6,31 @@ import (
 	"time"
 )
 
-// GalleryMetadata 来自官方 API 的元数据
+// GalleryMetadata from the official ExHentai API.
 type GalleryMetadata struct {
-	GID          int       `json:"gid"`
-	Token        string    `json:"token"`
-	ArchiverKey  string    `json:"archiver_key"`
-	Title        string    `json:"title"`
-	TitleJpn     string    `json:"title_jpn"`
-	Category     string    `json:"category"`
-	Thumb        string    `json:"thumb"`
-	Uploader     string    `json:"uploader"`
-	Posted       string    `json:"posted"`       // unix timestamp string
-	FileCount    string    `json:"filecount"`
-	FileSize     int       `json:"filesize"`
-	Expunged     bool      `json:"expunged"`
-	Rating       string    `json:"rating"`
-	TorrentCount string    `json:"torrentcount"`
-	Tags         []string  `json:"tags"`          // ["namespace:tag", ...]
-	ParentGId    string    `json:"parent_gid"`
-	ParentKey    string    `json:"parent_key"`
-	FirstGId     string    `json:"first_gid"`
-	FirstKey     string    `json:"first_key"`
-	Error        string    `json:"error,omitempty"`
+	GID          int      `json:"gid"`
+	Token        string   `json:"token"`
+	ArchiverKey  string   `json:"archiver_key"`
+	Title        string   `json:"title"`
+	TitleJpn     string   `json:"title_jpn"`
+	Category     string   `json:"category"`
+	Thumb        string   `json:"thumb"`
+	Uploader     string   `json:"uploader"`
+	Posted       string   `json:"posted"`
+	FileCount    string   `json:"filecount"`
+	FileSize     int      `json:"filesize"`
+	Expunged     bool     `json:"expunged"`
+	Rating       string   `json:"rating"`
+	TorrentCount string   `json:"torrentcount"`
+	Tags         []string `json:"tags"`
+	ParentGId    string   `json:"parent_gid"`
+	ParentKey    string   `json:"parent_key"`
+	FirstGId     string   `json:"first_gid"`
+	FirstKey     string   `json:"first_key"`
+	Error        string   `json:"error,omitempty"`
 }
 
-// Gallery API 响应结构
+// Gallery is the API response structure.
 type Gallery struct {
 	ID          int64           `json:"id"`
 	Token       string          `json:"token"`
@@ -96,7 +96,6 @@ type Tag struct {
 	Name      string `json:"name"`
 }
 
-// ParseTags 将 "namespace:tag" 字符串数组转换为 Tag 数组
 func ParseTags(rawTags []string) []Tag {
 	tags := make([]Tag, 0, len(rawTags))
 	for _, raw := range rawTags {
@@ -116,7 +115,6 @@ func ParseTags(rawTags []string) []Tag {
 	return tags
 }
 
-// ConvertMetadataToGallery 将 API 元数据转换为 Gallery 响应
 func ConvertMetadataToGallery(meta *GalleryMetadata) *Gallery {
 	g := &Gallery{
 		ID:        int64(meta.GID),
@@ -130,17 +128,14 @@ func ConvertMetadataToGallery(meta *GalleryMetadata) *Gallery {
 		Expunged:  meta.Expunged,
 	}
 
-	// 解析 rating
 	if v, err := strconv.ParseFloat(meta.Rating, 64); err == nil {
 		g.Rating = v
 	}
 
-	// 解析 filecount 作为 pagecount
 	if v, err := strconv.Atoi(meta.FileCount); err == nil {
 		g.PageCount = v
 	}
 
-	// 解析 posted 时间戳
 	if meta.Posted != "" {
 		if ts, err := strconv.ParseInt(meta.Posted, 10, 64); err == nil {
 			t := time.Unix(ts, 0)
@@ -149,4 +144,49 @@ func ConvertMetadataToGallery(meta *GalleryMetadata) *Gallery {
 	}
 
 	return g
+}
+
+// SearchResult represents a parsed search result from HTML scraping.
+type SearchResult struct {
+	Domain    string
+	GalleryID int
+	Token     string
+	Cat       string
+	Cover     string
+	Posted    string
+	Rating    float64
+	URL       string
+	Title     string
+	Tags      []string
+	Uploader  string
+	Pages     int
+}
+
+// GalleryDetail represents parsed gallery detail page data.
+type GalleryDetail struct {
+	Domain      string
+	GalleryID   int
+	Token       string
+	Cover       string
+	Title       string
+	TitleJpn    string
+	Cat         string
+	Uploader    string
+	Posted      string
+	Parent      int
+	Visible     string
+	Language    string
+	Translated  string
+	FileSize    string
+	Length      int
+	Favorited   int
+	RatingCount int
+	Rating      float64
+	Tags        []TagItem
+	PageUrls    []string
+}
+
+type TagItem struct {
+	Namespace string
+	Name      string
 }

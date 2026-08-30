@@ -1,4 +1,4 @@
-package main
+package exhentai
 
 import (
 	"bytes"
@@ -6,19 +6,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"manga-reader/internal/model"
 )
 
 const apiURL = "https://api.e-hentai.org/api.php"
 
-// PostGalleryMetadata 调用官方 API 获取画廊元数据
-func PostGalleryMetadata(ctx context.Context, client *http.Client, gid int64, token string) (*GalleryMetadata, error) {
+// PostGalleryMetadata calls the official API to get gallery metadata.
+func PostGalleryMetadata(ctx context.Context, client *http.Client, gid int64, token string) (*model.GalleryMetadata, error) {
 	type request struct {
 		Method    string  `json:"method"`
 		GIdList   [][]any `json:"gidlist"`
 		Namespace int     `json:"namespace"`
 	}
 	type response struct {
-		GMetadata []GalleryMetadata `json:"gmetadata"`
+		GMetadata []model.GalleryMetadata `json:"gmetadata"`
 	}
 
 	reqBody := request{

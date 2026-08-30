@@ -1,10 +1,12 @@
-package main
+package database
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
 	"time"
+
+	"manga-reader/internal/model"
 )
 
 type BookshelfRepository struct {
@@ -15,7 +17,7 @@ func NewBookshelfRepository(db *sql.DB) *BookshelfRepository {
 	return &BookshelfRepository{db: db}
 }
 
-func (r *BookshelfRepository) Add(ctx context.Context, b *Bookshelf) error {
+func (r *BookshelfRepository) Add(ctx context.Context, b *model.Bookshelf) error {
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx,
 		`INSERT OR IGNORE INTO bookshelf (gallery_id, token, title, title_jpn, category, thumbnail, page_count, added_at, updated_at)
@@ -54,8 +56,8 @@ func (r *BookshelfRepository) Exists(ctx context.Context, galleryID int64, token
 	return true, &addedAt, nil
 }
 
-func (r *BookshelfRepository) Get(ctx context.Context, galleryID int64, token string) (*Bookshelf, error) {
-	b := &Bookshelf{}
+func (r *BookshelfRepository) Get(ctx context.Context, galleryID int64, token string) (*model.Bookshelf, error) {
+	b := &model.Bookshelf{}
 	var category string
 	err := r.db.QueryRowContext(ctx,
 		`SELECT gallery_id, token, title, title_jpn, category, thumbnail, page_count, added_at, updated_at
@@ -68,7 +70,7 @@ func (r *BookshelfRepository) Get(ctx context.Context, galleryID int64, token st
 	if err != nil {
 		return nil, fmt.Errorf("get bookshelf: %w", err)
 	}
-	b.Category = GalleryCategory(category)
+	b.Category = model.GalleryCategory(category)
 	return b, nil
 }
 
@@ -80,7 +82,7 @@ func (r *BookshelfRepository) Count(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-func (r *BookshelfRepository) List(ctx context.Context, page, pageSize int) (*BookshelfListResponse, error) {
+func (r *BookshelfRepository) List(ctx context.Context, page, pageSize int) (*model.BookshelfListResponse, error) {
 	var total int
 	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM bookshelf`).Scan(&total); err != nil {
 		return nil, fmt.Errorf("count bookshelf: %w", err)
@@ -99,22 +101,22 @@ func (r *BookshelfRepository) List(ctx context.Context, page, pageSize int) (*Bo
 	}
 	defer rows.Close()
 
-	items := make([]BookshelfItem, 0)
+	items := make([]model.BookshelfItem, 0)
 	for rows.Next() {
-		var b Bookshelf
+		var b model.Bookshelf
 		var category string
 		if err := rows.Scan(&b.GalleryID, &b.Token, &b.Title, &b.TitleJPN, &category, &b.Thumbnail, &b.PageCount, &b.AddedAt, &b.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan bookshelf: %w", err)
 		}
-		b.Category = GalleryCategory(category)
-		item := BookshelfToItem(&b, nil)
+		b.Category = model.GalleryCategory(category)
+		item := model.BookshelfToItem(&b, nil)
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate bookshelf: %w", err)
 	}
 
-	return &BookshelfListResponse{
+	return &model.BookshelfListResponse{
 		Page:       page,
 		PageSize:   len(items),
 		Total:      total,
@@ -131,8 +133,8 @@ func NewReadingProgressRepository(db *sql.DB) *ReadingProgressRepository {
 	return &ReadingProgressRepository{db: db}
 }
 
-func (r *ReadingProgressRepository) Get(ctx context.Context, galleryID int64, token string) (*ReadingProgress, error) {
-	p := &ReadingProgress{}
+func (r *ReadingProgressRepository) Get(ctx context.Context, galleryID int64, token string) (*model.ReadingProgress, error) {
+	p := &model.ReadingProgress{}
 	var completed int
 	var startedAt, updatedAt sql.NullTime
 	err := r.db.QueryRowContext(ctx,
@@ -141,7 +143,7 @@ func (r *ReadingProgressRepository) Get(ctx context.Context, galleryID int64, to
 		galleryID, token,
 	).Scan(&p.GalleryID, &p.Token, &p.CurrentPage, &p.Progress, &completed, &startedAt, &updatedAt)
 	if err == sql.ErrNoRows {
-		return &ReadingProgress{
+		return &model.ReadingProgress{
 			GalleryID: galleryID,
 			Token:     token,
 		}, nil
@@ -159,7 +161,7 @@ func (r *ReadingProgressRepository) Get(ctx context.Context, galleryID int64, to
 	return p, nil
 }
 
-func (r *ReadingProgressRepository) Upsert(ctx context.Context, galleryID int64, token string, req *UpdateReadingProgressRequest) (*ReadingProgress, error) {
+func (r *ReadingProgressRepository) Upsert(ctx context.Context, galleryID int64, token string, req *model.UpdateReadingProgressRequest) (*model.ReadingProgress, error) {
 	if req.Completed {
 		req.Progress = 1
 	}
@@ -230,7 +232,7 @@ func (r *ReadingProgressRepository) DeleteAll(ctx context.Context) (int64, error
 	return n, nil
 }
 
-func (r *ReadingProgressRepository) ListRecentlyRead(ctx context.Context, limit int) ([]RecentlyReadItem, error) {
+func (r *ReadingProgressRepository) ListRecentlyRead(ctx context.Context, limit int) ([]model.RecentlyReadItem, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT
 			COALESCE(b.gallery_id, rp.gallery_id) AS gallery_id,
@@ -256,9 +258,9 @@ func (r *ReadingProgressRepository) ListRecentlyRead(ctx context.Context, limit 
 	}
 	defer rows.Close()
 
-	items := make([]RecentlyReadItem, 0)
+	items := make([]model.RecentlyReadItem, 0)
 	for rows.Next() {
-		var item RecentlyReadItem
+		var item model.RecentlyReadItem
 		var category string
 		var completed int
 		var startedAt, updatedAt sql.NullTime
@@ -268,7 +270,7 @@ func (r *ReadingProgressRepository) ListRecentlyRead(ctx context.Context, limit 
 		); err != nil {
 			return nil, fmt.Errorf("scan recently read: %w", err)
 		}
-		item.Category = GalleryCategory(category)
+		item.Category = model.GalleryCategory(category)
 		item.Reading.GalleryID = item.ID
 		item.Reading.Token = item.Token
 		item.Reading.Completed = completed == 1

@@ -9,6 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"manga-reader/internal/exhentai"
+	"manga-reader/internal/model"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -256,7 +259,7 @@ func TestMockGetGallery_Success(t *testing.T) {
 		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var gallery Gallery
+	var gallery model.Gallery
 	if err := json.Unmarshal(w.Body.Bytes(), &gallery); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -272,8 +275,8 @@ func TestMockGetGallery_Success(t *testing.T) {
 	if gallery.TitleJPN != "テスト" {
 		t.Errorf("TitleJPN = %q, want %q", gallery.TitleJPN, "テスト")
 	}
-	if gallery.Category != CategoryManga {
-		t.Errorf("Category = %q, want %q", gallery.Category, CategoryManga)
+	if gallery.Category != model.CategoryManga {
+		t.Errorf("Category = %q, want %q", gallery.Category, model.CategoryManga)
 	}
 	if gallery.PageCount != 65 {
 		t.Errorf("PageCount = %d, want 65", gallery.PageCount)
@@ -336,16 +339,16 @@ func TestMockSearch_Success(t *testing.T) {
 		Page       int `json:"page"`
 		PageSize   int `json:"page_size"`
 		Results    []struct {
-			ID       int64           `json:"id"`
-			Token    string          `json:"token"`
-			Title    string          `json:"title"`
-			Category GalleryCategory `json:"category"`
-			Cover    string          `json:"cover"`
-			URL      string          `json:"url"`
-			Tags     []string        `json:"tags"`
-			Uploader string          `json:"uploader"`
-			Pages    int             `json:"pages"`
-			Domain   string          `json:"domain"`
+			ID       int64                 `json:"id"`
+			Token    string                `json:"token"`
+			Title    string                `json:"title"`
+			Category model.GalleryCategory `json:"category"`
+			Cover    string                `json:"cover"`
+			URL      string                `json:"url"`
+			Tags     []string              `json:"tags"`
+			Uploader string                `json:"uploader"`
+			Pages    int                   `json:"pages"`
+			Domain   string                `json:"domain"`
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -395,11 +398,11 @@ func TestMockSearch_ExtendedLayout(t *testing.T) {
 
 	var resp struct {
 		Results []struct {
-			ID       int64           `json:"id"`
-			Token    string          `json:"token"`
-			Title    string          `json:"title"`
-			Category GalleryCategory `json:"category"`
-			Pages    int             `json:"pages"`
+			ID       int64                 `json:"id"`
+			Token    string                `json:"token"`
+			Title    string                `json:"title"`
+			Category model.GalleryCategory `json:"category"`
+			Pages    int                   `json:"pages"`
 		} `json:"results"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &resp)
@@ -518,16 +521,16 @@ func TestMockGalleryDetails_Success(t *testing.T) {
 	}
 
 	var details struct {
-		ID        int      `json:"id"`
-		Token     string   `json:"token"`
-		Title     string   `json:"title"`
-		Cover     string   `json:"cover"`
-		Category  string   `json:"category"`
-		Uploader  string   `json:"uploader"`
-		PageCount int      `json:"page_count"`
-		Rating    float64  `json:"rating"`
-		Tags      []Tag    `json:"tags"`
-		PageUrls  []string `json:"page_urls"`
+		ID        int         `json:"id"`
+		Token     string      `json:"token"`
+		Title     string      `json:"title"`
+		Cover     string      `json:"cover"`
+		Category  string      `json:"category"`
+		Uploader  string      `json:"uploader"`
+		PageCount int         `json:"page_count"`
+		Rating    float64     `json:"rating"`
+		Tags      []model.Tag `json:"tags"`
+		PageUrls  []string    `json:"page_urls"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &details); err != nil {
 		t.Fatalf("failed to unmarshal: %v. body: %s", err, w.Body.String())
@@ -743,9 +746,9 @@ func TestBuildNlFallbackURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := buildNlFallbackURL(tt.pageURL, tt.onclick)
+			got := exhentai.BuildNlFallbackURL(tt.pageURL, tt.onclick)
 			if got != tt.expected {
-				t.Errorf("buildNlFallbackURL(%q, %q) = %q, want %q", tt.pageURL, tt.onclick, got, tt.expected)
+				t.Errorf("BuildNlFallbackURL(%q, %q) = %q, want %q", tt.pageURL, tt.onclick, got, tt.expected)
 			}
 		})
 	}
@@ -970,15 +973,15 @@ func TestMockGalleryList_Success(t *testing.T) {
 		Page     int `json:"page"`
 		PageSize int `json:"page_size"`
 		Results  []struct {
-			ID       int64           `json:"id"`
-			Token    string          `json:"token"`
-			Title    string          `json:"title"`
-			Category GalleryCategory `json:"category"`
-			Cover    string          `json:"cover"`
-			URL      string          `json:"url"`
-			Tags     []string        `json:"tags"`
-			Uploader string          `json:"uploader"`
-			Pages    int             `json:"pages"`
+			ID       int64                 `json:"id"`
+			Token    string                `json:"token"`
+			Title    string                `json:"title"`
+			Category model.GalleryCategory `json:"category"`
+			Cover    string                `json:"cover"`
+			URL      string                `json:"url"`
+			Tags     []string              `json:"tags"`
+			Uploader string                `json:"uploader"`
+			Pages    int                   `json:"pages"`
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {

@@ -7,15 +7,14 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"manga-reader/internal/exhentai"
+	"manga-reader/internal/model"
 )
 
 type App struct {
 	Client *http.Client
 	DB     *DB
-}
-
-func galleryURL(id, token string) string {
-	return exhentaiURL + "/g/" + id + "/" + token + "/"
 }
 
 func (a *App) handleGetGallery(c *gin.Context) {
@@ -34,13 +33,13 @@ func (a *App) handleGetGallery(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	meta, err := PostGalleryMetadata(ctx, a.Client, id, token)
+	meta, err := exhentai.PostGalleryMetadata(ctx, a.Client, id, token)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
 	}
 
-	gallery := ConvertMetadataToGallery(meta)
+	gallery := model.ConvertMetadataToGallery(meta)
 	c.JSON(http.StatusOK, gallery)
 }
 
@@ -52,18 +51,18 @@ func (a *App) handleGalleryDetails(c *gin.Context) {
 		return
 	}
 
-	u := galleryURL(id, token)
+	u := exhentai.GalleryURL(id, token)
 	ctx := c.Request.Context()
 
-	details, err := scrapeGalleryDetails(ctx, a.Client, u)
+	details, err := exhentai.ScrapeGalleryDetails(ctx, a.Client, u)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
 		return
 	}
 
-	tags := make([]Tag, len(details.Tags))
+	tags := make([]model.Tag, len(details.Tags))
 	for i, t := range details.Tags {
-		tags[i] = Tag{Namespace: t.Namespace, Name: t.Name}
+		tags[i] = model.Tag{Namespace: t.Namespace, Name: t.Name}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -73,7 +72,7 @@ func (a *App) handleGalleryDetails(c *gin.Context) {
 		"title":        details.Title,
 		"title_jpn":    details.TitleJpn,
 		"cover":        details.Cover,
-		"category":     MapCategory(details.Cat),
+		"category":     model.MapCategory(details.Cat),
 		"uploader":     details.Uploader,
 		"posted":       details.Posted,
 		"parent":       details.Parent,
@@ -98,10 +97,10 @@ func (a *App) handleGalleryPages(c *gin.Context) {
 		return
 	}
 
-	u := galleryURL(id, token)
+	u := exhentai.GalleryURL(id, token)
 	ctx := c.Request.Context()
 
-	details, err := scrapeGalleryDetails(ctx, a.Client, u)
+	details, err := exhentai.ScrapeGalleryDetails(ctx, a.Client, u)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
 		return
@@ -142,9 +141,9 @@ func (a *App) handleSearch(c *gin.Context) {
 
 	var siteURL string
 	if site == "ehentai" {
-		siteURL = ehentaiURL
+		siteURL = exhentai.EhentaiURL
 	} else {
-		siteURL = exhentaiURL
+		siteURL = exhentai.ExhentaiURL
 	}
 
 	var categories []string
@@ -152,25 +151,25 @@ func (a *App) handleSearch(c *gin.Context) {
 		categories = strings.Split(categoryStr, ",")
 	}
 
-	total, results, err := scrapeSearch(ctx, a.Client, siteURL, keyword, categories, page)
+	total, results, err := exhentai.ScrapeSearch(ctx, a.Client, siteURL, keyword, categories, page)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("search failed: %v", err)})
 		return
 	}
 
 	type searchResult struct {
-		ID       int64           `json:"id"`
-		Token    string          `json:"token"`
-		Title    string          `json:"title"`
-		Category GalleryCategory `json:"category"`
-		Cover    string          `json:"cover"`
-		Posted   string          `json:"posted"`
-		Rating   float64         `json:"rating"`
-		URL      string          `json:"url"`
-		Tags     []string        `json:"tags"`
-		Uploader string          `json:"uploader"`
-		Pages    int             `json:"pages"`
-		Domain   string          `json:"domain"`
+		ID       int64                 `json:"id"`
+		Token    string                `json:"token"`
+		Title    string                `json:"title"`
+		Category model.GalleryCategory `json:"category"`
+		Cover    string                `json:"cover"`
+		Posted   string                `json:"posted"`
+		Rating   float64               `json:"rating"`
+		URL      string                `json:"url"`
+		Tags     []string              `json:"tags"`
+		Uploader string                `json:"uploader"`
+		Pages    int                   `json:"pages"`
+		Domain   string                `json:"domain"`
 	}
 
 	items := make([]searchResult, len(results))
@@ -179,7 +178,7 @@ func (a *App) handleSearch(c *gin.Context) {
 			ID:       int64(r.GalleryID),
 			Token:    r.Token,
 			Title:    r.Title,
-			Category: MapCategory(r.Cat),
+			Category: model.MapCategory(r.Cat),
 			Cover:    r.Cover,
 			Posted:   r.Posted,
 			Rating:   r.Rating,
@@ -203,8 +202,6 @@ func (a *App) handleSearch(c *gin.Context) {
 	})
 }
 
-const maxNlRetries = 2
-
 func (a *App) handlePageImage(c *gin.Context) {
 	pageURL := c.Query("url")
 	if pageURL == "" {
@@ -214,7 +211,7 @@ func (a *App) handlePageImage(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	data, contentType, err := fetchPageImage(ctx, a.Client, pageURL)
+	data, contentType, err := exhentai.FetchPageImage(ctx, a.Client, pageURL)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
 		return
@@ -233,25 +230,25 @@ func (a *App) handleGalleryList(listURL string) gin.HandlerFunc {
 
 		ctx := c.Request.Context()
 
-		results, err := scrapeGalleryList(ctx, a.Client, listURL, page)
+		results, err := exhentai.ScrapeGalleryList(ctx, a.Client, listURL, page)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery list failed: %v", err)})
 			return
 		}
 
 		type galleryResult struct {
-			ID       int64           `json:"id"`
-			Token    string          `json:"token"`
-			Title    string          `json:"title"`
-			Category GalleryCategory `json:"category"`
-			Cover    string          `json:"cover"`
-			Posted   string          `json:"posted"`
-			Rating   float64         `json:"rating"`
-			URL      string          `json:"url"`
-			Tags     []string        `json:"tags"`
-			Uploader string          `json:"uploader"`
-			Pages    int             `json:"pages"`
-			Domain   string          `json:"domain"`
+			ID       int64                 `json:"id"`
+			Token    string                `json:"token"`
+			Title    string                `json:"title"`
+			Category model.GalleryCategory `json:"category"`
+			Cover    string                `json:"cover"`
+			Posted   string                `json:"posted"`
+			Rating   float64               `json:"rating"`
+			URL      string                `json:"url"`
+			Tags     []string              `json:"tags"`
+			Uploader string                `json:"uploader"`
+			Pages    int                   `json:"pages"`
+			Domain   string                `json:"domain"`
 		}
 
 		items := make([]galleryResult, len(results))
@@ -260,7 +257,7 @@ func (a *App) handleGalleryList(listURL string) gin.HandlerFunc {
 				ID:       int64(r.GalleryID),
 				Token:    r.Token,
 				Title:    r.Title,
-				Category: MapCategory(r.Cat),
+				Category: model.MapCategory(r.Cat),
 				Cover:    r.Cover,
 				Posted:   r.Posted,
 				Rating:   r.Rating,
@@ -281,13 +278,13 @@ func (a *App) handleGalleryList(listURL string) gin.HandlerFunc {
 }
 
 func (a *App) handleGallerys(c *gin.Context) {
-	a.handleGalleryList(exhentaiURL + "/")(c)
+	a.handleGalleryList(exhentai.ExhentaiURL + "/")(c)
 }
 
 func (a *App) handleWatched(c *gin.Context) {
-	a.handleGalleryList(exhentaiURL + "/watched")(c)
+	a.handleGalleryList(exhentai.ExhentaiURL + "/watched")(c)
 }
 
 func (a *App) handlePopular(c *gin.Context) {
-	a.handleGalleryList(exhentaiURL + "/popular")(c)
+	a.handleGalleryList(exhentai.ExhentaiURL + "/popular")(c)
 }

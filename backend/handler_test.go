@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"manga-reader/internal/exhentai"
+	"manga-reader/internal/model"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -28,17 +31,17 @@ func setupRouter() *gin.Engine {
 }
 
 func newTestApp() *App {
-	cfg := LoadCookieConfig()
+	cfg := exhentai.LoadCookieConfig()
 	if !cfg.IsValid() {
 		return nil
 	}
-	client, _ := CreateHTTPClient(cfg)
+	client, _ := exhentai.CreateHTTPClient(cfg)
 	return &App{Client: client}
 }
 
 func skipIfNoCookies(t *testing.T) {
 	t.Helper()
-	cfg := LoadCookieConfig()
+	cfg := exhentai.LoadCookieConfig()
 	if !cfg.IsValid() {
 		t.Skip("EHENTAI_COOKIE not set, skipping integration test")
 	}
@@ -69,9 +72,9 @@ func TestParseStars(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseStars(tt.input)
+			got := exhentai.ParseStars(tt.input)
 			if got != tt.expect {
-				t.Errorf("parseStars(%q) = %f, want %f", tt.input, got, tt.expect)
+				t.Errorf("ParseStars(%q) = %f, want %f", tt.input, got, tt.expect)
 			}
 		})
 	}
@@ -93,9 +96,9 @@ func TestBuildCategoryFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := buildCategoryFilter(tt.input)
+			got := exhentai.BuildCategoryFilter(tt.input)
 			if got != tt.expect {
-				t.Errorf("buildCategoryFilter(%v) = %q, want %q", tt.input, got, tt.expect)
+				t.Errorf("BuildCategoryFilter(%v) = %q, want %q", tt.input, got, tt.expect)
 			}
 		})
 	}
@@ -133,9 +136,9 @@ func TestParseGalleryURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			domain, gId, gToken := parseGalleryURL(tt.input)
+			domain, gId, gToken := exhentai.ParseGalleryURL(tt.input)
 			if domain != tt.expectDomain || gId != tt.expectGId || gToken != tt.expectGToken {
-				t.Errorf("parseGalleryURL(%q) = (%q, %q, %q), want (%q, %q, %q)",
+				t.Errorf("ParseGalleryURL(%q) = (%q, %q, %q), want (%q, %q, %q)",
 					tt.input, domain, gId, gToken, tt.expectDomain, tt.expectGId, tt.expectGToken)
 			}
 		})
@@ -145,28 +148,28 @@ func TestParseGalleryURL(t *testing.T) {
 func TestMapCategory(t *testing.T) {
 	tests := []struct {
 		input  string
-		expect GalleryCategory
+		expect model.GalleryCategory
 	}{
-		{"doujinshi", CategoryDoujinshi},
-		{"Doujinshi", CategoryDoujinshi},
-		{"manga", CategoryManga},
-		{"Manga", CategoryManga},
-		{"artist cg", CategoryArtistCG},
-		{"Artist CG", CategoryArtistCG},
-		{"game cg", CategoryGameCG},
-		{"western", CategoryWestern},
-		{"image set", CategoryImageSet},
-		{"cosplay", CategoryCosplay},
-		{"asian porn", CategoryAsianPorn},
-		{"non-h", CategoryNonH},
-		{"miscellaneous", CategoryMisc},
-		{"unknown", CategoryOther},
-		{"", CategoryOther},
+		{"doujinshi", model.CategoryDoujinshi},
+		{"Doujinshi", model.CategoryDoujinshi},
+		{"manga", model.CategoryManga},
+		{"Manga", model.CategoryManga},
+		{"artist cg", model.CategoryArtistCG},
+		{"Artist CG", model.CategoryArtistCG},
+		{"game cg", model.CategoryGameCG},
+		{"western", model.CategoryWestern},
+		{"image set", model.CategoryImageSet},
+		{"cosplay", model.CategoryCosplay},
+		{"asian porn", model.CategoryAsianPorn},
+		{"non-h", model.CategoryNonH},
+		{"miscellaneous", model.CategoryMisc},
+		{"unknown", model.CategoryOther},
+		{"", model.CategoryOther},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got := MapCategory(tt.input)
+			got := model.MapCategory(tt.input)
 			if got != tt.expect {
 				t.Errorf("MapCategory(%q) = %q, want %q", tt.input, got, tt.expect)
 			}
@@ -178,12 +181,12 @@ func TestParseTags(t *testing.T) {
 	tests := []struct {
 		name   string
 		input  []string
-		expect []Tag
+		expect []model.Tag
 	}{
 		{
 			"namespace:tag format",
 			[]string{"female:yuri", "male:solemale"},
-			[]Tag{
+			[]model.Tag{
 				{Namespace: "female", Name: "yuri"},
 				{Namespace: "male", Name: "solemale"},
 			},
@@ -191,14 +194,14 @@ func TestParseTags(t *testing.T) {
 		{
 			"no namespace",
 			[]string{"uncensored"},
-			[]Tag{
+			[]model.Tag{
 				{Namespace: "", Name: "uncensored"},
 			},
 		},
 		{
 			"mixed",
 			[]string{"female:yuri", "uncensored", "language:chinese"},
-			[]Tag{
+			[]model.Tag{
 				{Namespace: "female", Name: "yuri"},
 				{Namespace: "", Name: "uncensored"},
 				{Namespace: "language", Name: "chinese"},
@@ -207,7 +210,7 @@ func TestParseTags(t *testing.T) {
 		{
 			"empty",
 			[]string{},
-			[]Tag{},
+			[]model.Tag{},
 		},
 		{
 			"nil",
@@ -218,7 +221,7 @@ func TestParseTags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ParseTags(tt.input)
+			got := model.ParseTags(tt.input)
 			if len(got) != len(tt.expect) {
 				t.Fatalf("ParseTags(%v) returned %d tags, want %d", tt.input, len(got), len(tt.expect))
 			}
@@ -233,7 +236,7 @@ func TestParseTags(t *testing.T) {
 
 func TestConvertMetadataToGallery(t *testing.T) {
 	posted := "1609459200" // 2021-01-01 00:00:00 UTC
-	meta := &GalleryMetadata{
+	meta := &model.GalleryMetadata{
 		GID:          testGalleryID,
 		Token:        testGalleryToken,
 		Title:        "Test Gallery",
@@ -250,7 +253,7 @@ func TestConvertMetadataToGallery(t *testing.T) {
 		Tags:         []string{"female:yuri", "language:chinese"},
 	}
 
-	gallery := ConvertMetadataToGallery(meta)
+	gallery := model.ConvertMetadataToGallery(meta)
 
 	if gallery.ID != testGalleryID {
 		t.Errorf("ID = %d, want %d", gallery.ID, testGalleryID)
@@ -264,8 +267,8 @@ func TestConvertMetadataToGallery(t *testing.T) {
 	if gallery.TitleJPN != "テストギャラリー" {
 		t.Errorf("TitleJPN = %q, want %q", gallery.TitleJPN, "テストギャラリー")
 	}
-	if gallery.Category != CategoryManga {
-		t.Errorf("Category = %q, want %q", gallery.Category, CategoryManga)
+	if gallery.Category != model.CategoryManga {
+		t.Errorf("Category = %q, want %q", gallery.Category, model.CategoryManga)
 	}
 	if gallery.PageCount != 65 {
 		t.Errorf("PageCount = %d, want 65", gallery.PageCount)
@@ -288,7 +291,7 @@ func TestConvertMetadataToGallery(t *testing.T) {
 }
 
 func TestConvertMetadataToGallery_InvalidRating(t *testing.T) {
-	meta := &GalleryMetadata{
+	meta := &model.GalleryMetadata{
 		GID:          123,
 		Token:        "abc",
 		Title:        "Test",
@@ -298,7 +301,7 @@ func TestConvertMetadataToGallery_InvalidRating(t *testing.T) {
 		FileSize:     0,
 		TorrentCount: "0",
 	}
-	gallery := ConvertMetadataToGallery(meta)
+	gallery := model.ConvertMetadataToGallery(meta)
 	if gallery.Rating != 0 {
 		t.Errorf("Rating should default to 0 for invalid input, got %f", gallery.Rating)
 	}
@@ -332,7 +335,7 @@ func TestAPI_GetGallery(t *testing.T) {
 		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var gallery Gallery
+	var gallery model.Gallery
 	if err := json.Unmarshal(w.Body.Bytes(), &gallery); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
@@ -536,19 +539,19 @@ func TestAPI_GalleryDetails(t *testing.T) {
 	}
 
 	var details struct {
-		ID        int    `json:"id"`
-		Token     string `json:"token"`
-		Title     string `json:"title"`
-		TitleJpn  string `json:"title_jpn"`
-		Cover     string `json:"cover"`
-		Category  string `json:"category"`
-		Uploader  string `json:"uploader"`
-		Language  string `json:"language"`
-		PageCount int    `json:"page_count"`
-		Rating    float64 `json:"rating"`
-		Favorited int     `json:"favorited"`
-		Tags      []Tag   `json:"tags"`
-		PageUrls  []string `json:"page_urls"`
+		ID        int         `json:"id"`
+		Token     string      `json:"token"`
+		Title     string      `json:"title"`
+		TitleJpn  string      `json:"title_jpn"`
+		Cover     string      `json:"cover"`
+		Category  string      `json:"category"`
+		Uploader  string      `json:"uploader"`
+		Language  string      `json:"language"`
+		PageCount int         `json:"page_count"`
+		Rating    float64     `json:"rating"`
+		Favorited int         `json:"favorited"`
+		Tags      []model.Tag `json:"tags"`
+		PageUrls  []string    `json:"page_urls"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &details); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
@@ -864,7 +867,7 @@ func TestAPI_SearchSingleCategory(t *testing.T) {
 	var resp struct {
 		Total   int `json:"total"`
 		Results []struct {
-			Category GalleryCategory `json:"category"`
+			Category model.GalleryCategory `json:"category"`
 		} `json:"results"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &resp)
@@ -873,8 +876,8 @@ func TestAPI_SearchSingleCategory(t *testing.T) {
 		t.Errorf("total = %d, want > 0", resp.Total)
 	}
 	for i, r := range resp.Results {
-		if r.Category != CategoryDoujinshi {
-			t.Errorf("results[%d].category = %q, want %q", i, r.Category, CategoryDoujinshi)
+		if r.Category != model.CategoryDoujinshi {
+			t.Errorf("results[%d].category = %q, want %q", i, r.Category, model.CategoryDoujinshi)
 		}
 	}
 	t.Logf("Search 'love' (doujinshi only): total=%d", resp.Total)
@@ -900,20 +903,20 @@ func TestAPI_GalleryDetailsFullStructure(t *testing.T) {
 	}
 
 	var details struct {
-		ID         int      `json:"id"`
-		Token      string   `json:"token"`
-		Title      string   `json:"title"`
-		TitleJpn   string   `json:"title_jpn"`
-		Cover      string   `json:"cover"`
-		Category   string   `json:"category"`
-		Uploader   string   `json:"uploader"`
-		Language   string   `json:"language"`
-		PageCount  int      `json:"page_count"`
-		Rating     float64  `json:"rating"`
-		Favorited  int      `json:"favorited"`
-		Tags       []Tag    `json:"tags"`
-		PageUrls   []string `json:"page_urls"`
-		Translated bool     `json:"translated"`
+		ID         int         `json:"id"`
+		Token      string      `json:"token"`
+		Title      string      `json:"title"`
+		TitleJpn   string      `json:"title_jpn"`
+		Cover      string      `json:"cover"`
+		Category   string      `json:"category"`
+		Uploader   string      `json:"uploader"`
+		Language   string      `json:"language"`
+		PageCount  int         `json:"page_count"`
+		Rating     float64     `json:"rating"`
+		Favorited  int         `json:"favorited"`
+		Tags       []model.Tag `json:"tags"`
+		PageUrls   []string    `json:"page_urls"`
+		Translated bool        `json:"translated"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &details); err != nil {
 		t.Fatalf("failed to unmarshal: %v. body: %s", err, w.Body.String())
@@ -974,7 +977,7 @@ func TestAPI_GalleryDetailsTags(t *testing.T) {
 	}
 
 	var details struct {
-		Tags []Tag `json:"tags"`
+		Tags []model.Tag `json:"tags"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &details)
 
@@ -1166,10 +1169,10 @@ func TestAPI_CrossEndpointConsistency(t *testing.T) {
 
 	var searchResp struct {
 		Results []struct {
-			ID       int64           `json:"id"`
-			Token    string          `json:"token"`
-			Title    string          `json:"title"`
-			Category GalleryCategory `json:"category"`
+			ID       int64                 `json:"id"`
+			Token    string                `json:"token"`
+			Title    string                `json:"title"`
+			Category model.GalleryCategory `json:"category"`
 		} `json:"results"`
 	}
 	json.Unmarshal(searchW.Body.Bytes(), &searchResp)
@@ -1190,10 +1193,10 @@ func TestAPI_CrossEndpointConsistency(t *testing.T) {
 	}
 
 	var details struct {
-		ID       int64           `json:"id"`
-		Token    string          `json:"token"`
-		Title    string          `json:"title"`
-		Category GalleryCategory `json:"category"`
+		ID       int64                 `json:"id"`
+		Token    string                `json:"token"`
+		Title    string                `json:"title"`
+		Category model.GalleryCategory `json:"category"`
 	}
 	json.Unmarshal(detailW.Body.Bytes(), &details)
 
@@ -1210,25 +1213,25 @@ func TestAPI_CrossEndpointConsistency(t *testing.T) {
 
 func BenchmarkParseStars(b *testing.B) {
 	for b.Loop() {
-		parseStars("background-position:-32px -1px;opacity:1")
+		exhentai.ParseStars("background-position:-32px -1px;opacity:1")
 	}
 }
 
 func BenchmarkBuildCategoryFilter(b *testing.B) {
 	cats := []string{"doujinshi", "manga", "artistcg"}
 	for b.Loop() {
-		buildCategoryFilter(cats)
+		exhentai.BuildCategoryFilter(cats)
 	}
 }
 
 func BenchmarkMapCategory(b *testing.B) {
 	for b.Loop() {
-		MapCategory("Doujinshi")
+		model.MapCategory("Doujinshi")
 	}
 }
 
 func BenchmarkConvertMetadataToGallery(b *testing.B) {
-	meta := &GalleryMetadata{
+	meta := &model.GalleryMetadata{
 		GID:          testGalleryID,
 		Token:        testGalleryToken,
 		Title:        "Benchmark Gallery",
@@ -1240,6 +1243,6 @@ func BenchmarkConvertMetadataToGallery(b *testing.B) {
 		Tags:         []string{"female:yuri", "language:chinese"},
 	}
 	for b.Loop() {
-		ConvertMetadataToGallery(meta)
+		model.ConvertMetadataToGallery(meta)
 	}
 }

@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"manga-reader/internal/database"
+	"manga-reader/internal/model"
 )
 
 // insertProgressWithTimestamp 直接插入带自定义 updated_at 的阅读记录，用于测试清理边界。
@@ -201,7 +204,7 @@ func TestHandleRecentlyRead_NoAutoCleanup(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp RecentlyReadResponse
+	var resp model.RecentlyReadResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal recently-read: %v", err)
 	}
@@ -219,7 +222,7 @@ func TestHandleRecentlyRead_NoAutoCleanup(t *testing.T) {
 
 func TestHandleReadingProgressCleanup_PreservesBookshelf(t *testing.T) {
 	conn := newTestDB(t)
-	bookshelfRepo := NewBookshelfRepository(conn)
+	bookshelfRepo := database.NewBookshelfRepository(conn)
 	b := newTestBookshelf()
 	if err := bookshelfRepo.Add(t.Context(), b); err != nil {
 		t.Fatalf("add bookshelf: %v", err)
@@ -236,7 +239,7 @@ func TestHandleReadingProgressCleanup_PreservesBookshelf(t *testing.T) {
 	}
 
 	// Reading progress 已删除
-	progressRepo := NewReadingProgressRepository(conn)
+	progressRepo := database.NewReadingProgressRepository(conn)
 	p, err := progressRepo.Get(t.Context(), b.GalleryID, b.Token)
 	if err != nil {
 		t.Fatalf("get progress: %v", err)

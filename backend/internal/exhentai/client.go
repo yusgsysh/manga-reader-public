@@ -1,4 +1,4 @@
-package main
+package exhentai
 
 import (
 	"context"
@@ -11,9 +11,9 @@ import (
 	"strings"
 )
 
-const exhentaiBase = "https://exhentai.org"
+const ExhentaiBase = "https://exhentai.org"
 
-// CookieConfig 存储 cookie 配置
+// CookieConfig stores cookie configuration.
 type CookieConfig struct {
 	IpbMemberID string
 	IpbPassHash string
@@ -21,17 +21,14 @@ type CookieConfig struct {
 	SK          string
 }
 
-// LoadCookieConfig 从环境变量加载 cookie
+// LoadCookieConfig loads cookie configuration from environment variables.
 func LoadCookieConfig() *CookieConfig {
 	cfg := &CookieConfig{}
 
-	// 支持两种环境变量格式
-	// 方式一：完整 cookie 字符串 (如: "ipb_member_id=xxx; ipb_pass_hash=xxx")
 	if cookieStr := os.Getenv("EHENTAI_COOKIE"); cookieStr != "" {
 		cfg.parseCookieString(cookieStr)
 	}
 
-	// 方式二：单独环境变量
 	if v := os.Getenv("EHENTAI_COOKIE_IPB_MEMBER_ID"); v != "" {
 		cfg.IpbMemberID = v
 	}
@@ -48,7 +45,6 @@ func LoadCookieConfig() *CookieConfig {
 	return cfg
 }
 
-// parseCookieString 解析 cookie 字符串
 func (c *CookieConfig) parseCookieString(s string) {
 	pairs := strings.SplitSeq(s, ";")
 	for pair := range pairs {
@@ -75,12 +71,12 @@ func (c *CookieConfig) parseCookieString(s string) {
 	}
 }
 
-// IsValid 检查必需的 cookie 是否存在
+// IsValid checks whether the required cookies are present.
 func (c *CookieConfig) IsValid() bool {
 	return c.IpbMemberID != "" && c.IpbPassHash != ""
 }
 
-// CreateHTTPClient 创建带 cookie 的 HTTP 客户端
+// CreateHTTPClient creates an HTTP client with ExHentai cookies.
 func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 	if !cfg.IsValid() {
 		return nil, fmt.Errorf("missing required cookies: ipb_member_id and ipb_pass_hash")
@@ -91,7 +87,7 @@ func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 		return nil, err
 	}
 
-	u, _ := url.Parse(exhentaiBase)
+	u, _ := url.Parse(ExhentaiBase)
 	cookies := []*http.Cookie{
 		{Name: "ipb_member_id", Value: cfg.IpbMemberID},
 		{Name: "ipb_pass_hash", Value: cfg.IpbPassHash},
@@ -107,14 +103,14 @@ func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 	return &http.Client{Jar: jar}, nil
 }
 
-// MakeRequest 发送 HTTP 请求
+// MakeRequest sends an HTTP GET request with ExHentai headers.
 func MakeRequest(ctx context.Context, client *http.Client, reqURL string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36")
-	req.Header.Set("Referer", exhentaiBase+"/")
+	req.Header.Set("Referer", ExhentaiBase+"/")
 
 	resp, err := client.Do(req)
 	if err != nil {

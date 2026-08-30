@@ -14,22 +14,25 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+
+	"manga-reader/internal/cache"
+	"manga-reader/internal/exhentai"
 )
 
 // ==================== Cache Key Tests ====================
 
 func TestCacheKey_SameURL(t *testing.T) {
 	u := "https://exhentai.org/s/51d1aa689c/4153369-29"
-	key1 := CacheKey(u)
-	key2 := CacheKey(u)
+	key1 := cache.CacheKey(u)
+	key2 := cache.CacheKey(u)
 	if key1 != key2 {
 		t.Errorf("same URL should produce same key: %q != %q", key1, key2)
 	}
 }
 
 func TestCacheKey_DifferentURL(t *testing.T) {
-	key1 := CacheKey("https://exhentai.org/s/aaa/111-1")
-	key2 := CacheKey("https://exhentai.org/s/bbb/222-2")
+	key1 := cache.CacheKey("https://exhentai.org/s/aaa/111-1")
+	key2 := cache.CacheKey("https://exhentai.org/s/bbb/222-2")
 	if key1 == key2 {
 		t.Error("different URLs should produce different keys")
 	}
@@ -37,15 +40,15 @@ func TestCacheKey_DifferentURL(t *testing.T) {
 
 func TestCacheKey_Format(t *testing.T) {
 	u := "https://exhentai.org/s/51d1aa689c/4153369-29"
-	key := CacheKey(u)
+	key := cache.CacheKey(u)
 
-	if !strings.HasPrefix(key, imageCachePrefix) {
-		t.Errorf("key should start with %q, got %q", imageCachePrefix, key)
+	if !strings.HasPrefix(key, cache.ImageCachePrefix) {
+		t.Errorf("key should start with %q, got %q", cache.ImageCachePrefix, key)
 	}
 
-	hexPart := strings.TrimPrefix(key, imageCachePrefix)
-	if len(hexPart) != cacheKeyLength {
-		t.Errorf("hex part length = %d, want %d", len(hexPart), cacheKeyLength)
+	hexPart := strings.TrimPrefix(key, cache.ImageCachePrefix)
+	if len(hexPart) != cache.CacheKeyLength {
+		t.Errorf("hex part length = %d, want %d", len(hexPart), cache.CacheKeyLength)
 	}
 
 	if _, err := hex.DecodeString(hexPart); err != nil {
@@ -55,10 +58,10 @@ func TestCacheKey_Format(t *testing.T) {
 
 func TestCacheKey_MatchesSHA256(t *testing.T) {
 	u := "https://exhentai.org/s/51d1aa689c/4153369-29"
-	key := CacheKey(u)
+	key := cache.CacheKey(u)
 
 	sum := sha256.Sum256([]byte(u))
-	expected := imageCachePrefix + hex.EncodeToString(sum[:])
+	expected := cache.ImageCachePrefix + hex.EncodeToString(sum[:])
 
 	if key != expected {
 		t.Errorf("key = %q, want %q", key, expected)
@@ -76,7 +79,7 @@ func TestCacheKey_DifferentPartsProduceDifferentKeys(t *testing.T) {
 
 	seen := make(map[string]string)
 	for _, u := range urls {
-		key := CacheKey(u)
+		key := cache.CacheKey(u)
 		if prev, ok := seen[key]; ok {
 			t.Errorf("URL %q and %q produced same key %q", u, prev, key)
 		}
@@ -99,7 +102,7 @@ func TestValidatePageURL_Valid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := validatePageURL(tt.url); err != nil {
+			if err := exhentai.ValidatePageURL(tt.url); err != nil {
 				t.Errorf("validatePageURL(%q) = %v, want nil", tt.url, err)
 			}
 		})
@@ -132,7 +135,7 @@ func TestValidatePageURL_Invalid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := validatePageURL(tt.url); err == nil {
+			if err := exhentai.ValidatePageURL(tt.url); err == nil {
 				t.Errorf("validatePageURL(%q) = nil, want error", tt.url)
 			}
 		})
@@ -183,7 +186,7 @@ func TestIsNotFound(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := isNotFound(tt.err); got != tt.expect {
+			if got := cache.IsNotFound(tt.err); got != tt.expect {
 				t.Errorf("isNotFound(%v) = %v, want %v", tt.err, got, tt.expect)
 			}
 		})
@@ -318,7 +321,7 @@ func TestSingleflight_CoalescesRequests(t *testing.T) {
 			defer wg.Done()
 			<-start
 			client := newMockClient(mockServer.URL)
-			_, _, err := fetchPageImage(context.Background(), client, pageURL)
+			_, _, err := exhentai.FetchPageImage(context.Background(), client, pageURL)
 			if err != nil {
 				errCount.Add(1)
 			}
@@ -338,23 +341,23 @@ func TestSingleflight_CoalescesRequests(t *testing.T) {
 // ==================== Cache Key Integration Test ====================
 
 func TestCacheKey_IntegrationWithMockMinIO(t *testing.T) {
-	cache := newMockMinIOCache()
+	mockCache := newMockMinIOCache()
 
 	pageURL := "https://exhentai.org/s/51d1aa689c/4153369-29"
-	key := CacheKey(pageURL)
+	key := cache.CacheKey(pageURL)
 
 	// Simulate cache miss
-	_, err := cache.StatObject(key)
+	_, err := mockCache.StatObject(key)
 	if err == nil {
 		t.Error("expected cache miss, got hit")
 	}
 
 	// Simulate storing
 	imgData := mockImageBytes()
-	cache.PutObject(key, imgData, "image/png")
+	mockCache.PutObject(key, imgData, "image/png")
 
 	// Simulate cache hit
-	entry, err := cache.StatObject(key)
+	entry, err := mockCache.StatObject(key)
 	if err != nil {
 		t.Fatalf("expected cache hit, got error: %v", err)
 	}
@@ -367,7 +370,7 @@ func TestCacheKey_IntegrationWithMockMinIO(t *testing.T) {
 }
 
 func TestCacheKey_SameURLAlwaysSameKey(t *testing.T) {
-	cache := newMockMinIOCache()
+	mockCache := newMockMinIOCache()
 
 	urls := []string{
 		"https://exhentai.org/s/51d1aa689c/4153369-29",
@@ -376,13 +379,13 @@ func TestCacheKey_SameURLAlwaysSameKey(t *testing.T) {
 	}
 
 	for i, u := range urls {
-		key := CacheKey(u)
-		cache.PutObject(key, fmt.Appendf(nil, "image-%d", i), "image/webp")
+		key := cache.CacheKey(u)
+		mockCache.PutObject(key, fmt.Appendf(nil, "image-%d", i), "image/webp")
 	}
 
 	// All three should have overwritten the same key
-	if len(cache.objects) != 1 {
-		t.Errorf("expected 1 object, got %d", len(cache.objects))
+	if len(mockCache.objects) != 1 {
+		t.Errorf("expected 1 object, got %d", len(mockCache.objects))
 	}
 }
 
@@ -391,15 +394,15 @@ func TestCacheKey_SameURLAlwaysSameKey(t *testing.T) {
 func TestMinIOConfig_IsValid(t *testing.T) {
 	tests := []struct {
 		name   string
-		config MinIOConfig
+		config cache.MinIOConfig
 		valid  bool
 	}{
-		{"complete", MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", SecretKey: "secret", Bucket: "bucket"}, true},
-		{"missing endpoint", MinIOConfig{AccessKey: "key", SecretKey: "secret", Bucket: "bucket"}, false},
-		{"missing access key", MinIOConfig{Endpoint: "minio:9000", SecretKey: "secret", Bucket: "bucket"}, false},
-		{"missing secret key", MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", Bucket: "bucket"}, false},
-		{"missing bucket", MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", SecretKey: "secret"}, false},
-		{"all empty", MinIOConfig{}, false},
+		{"complete", cache.MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", SecretKey: "secret", Bucket: "bucket"}, true},
+		{"missing endpoint", cache.MinIOConfig{AccessKey: "key", SecretKey: "secret", Bucket: "bucket"}, false},
+		{"missing access key", cache.MinIOConfig{Endpoint: "minio:9000", SecretKey: "secret", Bucket: "bucket"}, false},
+		{"missing secret key", cache.MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", Bucket: "bucket"}, false},
+		{"missing bucket", cache.MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", SecretKey: "secret"}, false},
+		{"all empty", cache.MinIOConfig{}, false},
 	}
 
 	for _, tt := range tests {
@@ -430,7 +433,7 @@ func TestValidatePageURL_DomainBoundary(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validatePageURL(tt.url)
+			err := exhentai.ValidatePageURL(tt.url)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validatePageURL(%q) error = %v, wantErr = %v", tt.url, err, tt.wantErr)
 			}

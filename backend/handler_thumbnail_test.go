@@ -14,6 +14,9 @@ import (
 	"testing"
 
 	"github.com/minio/minio-go/v7"
+
+	"manga-reader/internal/cache"
+	"manga-reader/internal/exhentai"
 )
 
 const testThumbURL = "https://s.exhentai.org/w/00/999/15582-3owak8q3.webp"
@@ -44,8 +47,8 @@ func TestThumbnailCacheKey_Format(t *testing.T) {
 	}
 
 	hexPart := strings.TrimPrefix(key, thumbnailCachePrefix)
-	if len(hexPart) != cacheKeyLength {
-		t.Errorf("hex part length = %d, want %d", len(hexPart), cacheKeyLength)
+	if len(hexPart) != cache.CacheKeyLength {
+		t.Errorf("hex part length = %d, want %d", len(hexPart), cache.CacheKeyLength)
 	}
 
 	if _, err := hex.DecodeString(hexPart); err != nil {
@@ -92,7 +95,7 @@ func TestValidateThumbnailURL_Valid(t *testing.T) {
 	}
 
 	for _, u := range valid {
-		if err := validateThumbnailURL(u); err != nil {
+		if err := exhentai.ValidateThumbnailURL(u); err != nil {
 			t.Errorf("validateThumbnailURL(%q) = %v, want nil", u, err)
 		}
 	}
@@ -124,7 +127,7 @@ func TestValidateThumbnailURL_Invalid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := validateThumbnailURL(tt.url); err == nil {
+			if err := exhentai.ValidateThumbnailURL(tt.url); err == nil {
 				t.Errorf("validateThumbnailURL(%q) = nil, want error", tt.url)
 			}
 		})
@@ -266,7 +269,7 @@ func (m *mockImageCache) Get(_ context.Context, key string) ([]byte, string, err
 	return e.data, e.contentType, nil
 }
 
-func (m *mockImageCache) PutWithMeta(_ context.Context, key string, data []byte, contentType string, meta map[string]string) error {
+func (m *mockImageCache) PutWithMeta(_ context.Context, key string, data []byte, contentType string, meta map[string]string, cacheControl string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.objects[key] = mockCacheEntry{data: data, contentType: contentType, exists: true}
@@ -476,5 +479,3 @@ func TestFetchThumbnail_RetriesExhausted(t *testing.T) {
 		t.Error("expected error after exhausting retries")
 	}
 }
-
-

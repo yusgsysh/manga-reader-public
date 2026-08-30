@@ -10,6 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"manga-reader/internal/database"
+	"manga-reader/internal/model"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -31,25 +34,25 @@ func newTestDB(t *testing.T) *sql.DB {
 	return conn
 }
 
-func newTestBookshelf() *Bookshelf {
-	return &Bookshelf{
+func newTestBookshelf() *model.Bookshelf {
+	return &model.Bookshelf{
 		GalleryID: 123456,
 		Token:     "abcdef1234",
 		Title:     "Test Gallery",
 		TitleJPN:  "テストギャラリー",
-		Category:  CategoryDoujinshi,
+		Category:  model.CategoryDoujinshi,
 		Thumbnail: "https://example.com/thumb.webp",
 		PageCount: 24,
 	}
 }
 
-func newTestBookshelf2() *Bookshelf {
-	return &Bookshelf{
+func newTestBookshelf2() *model.Bookshelf {
+	return &model.Bookshelf{
 		GalleryID: 789012,
 		Token:     "xyz78901234",
 		Title:     "Test Gallery 2",
 		TitleJPN:  "テストギャラリー2",
-		Category:  CategoryManga,
+		Category:  model.CategoryManga,
 		Thumbnail: "https://example.com/thumb2.webp",
 		PageCount: 30,
 	}
@@ -66,7 +69,7 @@ func setupTestRouter() *gin.Engine {
 
 func TestBookshelfRepository_Add(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewBookshelfRepository(conn)
+	repo := database.NewBookshelfRepository(conn)
 	b := newTestBookshelf()
 
 	if err := repo.Add(t.Context(), b); err != nil {
@@ -87,7 +90,7 @@ func TestBookshelfRepository_Add(t *testing.T) {
 
 func TestBookshelfRepository_Add_Idempotent(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewBookshelfRepository(conn)
+	repo := database.NewBookshelfRepository(conn)
 	b := newTestBookshelf()
 
 	if err := repo.Add(t.Context(), b); err != nil {
@@ -108,7 +111,7 @@ func TestBookshelfRepository_Add_Idempotent(t *testing.T) {
 
 func TestBookshelfRepository_Remove(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewBookshelfRepository(conn)
+	repo := database.NewBookshelfRepository(conn)
 	b := newTestBookshelf()
 
 	if err := repo.Add(t.Context(), b); err != nil {
@@ -129,7 +132,7 @@ func TestBookshelfRepository_Remove(t *testing.T) {
 
 func TestBookshelfRepository_Remove_NotExists(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewBookshelfRepository(conn)
+	repo := database.NewBookshelfRepository(conn)
 
 	// Removing non-existent should not error
 	if err := repo.Remove(t.Context(), 999999, "nonexistent"); err != nil {
@@ -139,7 +142,7 @@ func TestBookshelfRepository_Remove_NotExists(t *testing.T) {
 
 func TestBookshelfRepository_Exists(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewBookshelfRepository(conn)
+	repo := database.NewBookshelfRepository(conn)
 	b := newTestBookshelf()
 
 	exists, _, err := repo.Exists(t.Context(), b.GalleryID, b.Token)
@@ -168,7 +171,7 @@ func TestBookshelfRepository_Exists(t *testing.T) {
 
 func TestBookshelfRepository_Get(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewBookshelfRepository(conn)
+	repo := database.NewBookshelfRepository(conn)
 	b := newTestBookshelf()
 
 	if err := repo.Add(t.Context(), b); err != nil {
@@ -201,7 +204,7 @@ func TestBookshelfRepository_Get(t *testing.T) {
 
 func TestBookshelfRepository_Get_NotExists(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewBookshelfRepository(conn)
+	repo := database.NewBookshelfRepository(conn)
 
 	got, err := repo.Get(t.Context(), 999999, "nonexistent")
 	if err != nil {
@@ -214,7 +217,7 @@ func TestBookshelfRepository_Get_NotExists(t *testing.T) {
 
 func TestBookshelfRepository_List(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewBookshelfRepository(conn)
+	repo := database.NewBookshelfRepository(conn)
 
 	// Empty list
 	resp, err := repo.List(t.Context(), 0, 25)
@@ -262,14 +265,14 @@ func TestBookshelfRepository_List(t *testing.T) {
 
 func TestBookshelfRepository_List_Pagination(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewBookshelfRepository(conn)
+	repo := database.NewBookshelfRepository(conn)
 
 	for i := range 5 {
-		b := &Bookshelf{
+		b := &model.Bookshelf{
 			GalleryID: int64(1000 + i),
 			Token:     fmt.Sprintf("tok%d", i),
 			Title:     fmt.Sprintf("Gallery %d", i),
-			Category:  CategoryDoujinshi,
+			Category:  model.CategoryDoujinshi,
 			PageCount: 10 + i,
 		}
 		if err := repo.Add(t.Context(), b); err != nil {
@@ -316,7 +319,7 @@ func TestBookshelfRepository_List_Pagination(t *testing.T) {
 
 func TestBookshelfRepository_Count(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewBookshelfRepository(conn)
+	repo := database.NewBookshelfRepository(conn)
 
 	count, err := repo.Count(t.Context())
 	if err != nil {
@@ -343,7 +346,7 @@ func TestBookshelfRepository_Count(t *testing.T) {
 
 func TestReadingProgressRepository_Get_NotExists(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewReadingProgressRepository(conn)
+	repo := database.NewReadingProgressRepository(conn)
 
 	p, err := repo.Get(t.Context(), 123456, "abcdef")
 	if err != nil {
@@ -374,9 +377,9 @@ func TestReadingProgressRepository_Get_NotExists(t *testing.T) {
 
 func TestReadingProgressRepository_Upsert_Insert(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewReadingProgressRepository(conn)
+	repo := database.NewReadingProgressRepository(conn)
 
-	req := &UpdateReadingProgressRequest{
+	req := &model.UpdateReadingProgressRequest{
 		CurrentPage: 5,
 		Progress:    0.208,
 		Completed:   false,
@@ -405,10 +408,10 @@ func TestReadingProgressRepository_Upsert_Insert(t *testing.T) {
 
 func TestReadingProgressRepository_Upsert_Update(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewReadingProgressRepository(conn)
+	repo := database.NewReadingProgressRepository(conn)
 
 	// First insert
-	req1 := &UpdateReadingProgressRequest{
+	req1 := &model.UpdateReadingProgressRequest{
 		CurrentPage: 5,
 		Progress:    0.208,
 		Completed:   false,
@@ -422,7 +425,7 @@ func TestReadingProgressRepository_Upsert_Update(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Update
-	req2 := &UpdateReadingProgressRequest{
+	req2 := &model.UpdateReadingProgressRequest{
 		CurrentPage: 10,
 		Progress:    0.416,
 		Completed:   false,
@@ -449,9 +452,9 @@ func TestReadingProgressRepository_Upsert_Update(t *testing.T) {
 
 func TestReadingProgressRepository_Upsert_Completed(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewReadingProgressRepository(conn)
+	repo := database.NewReadingProgressRepository(conn)
 
-	req := &UpdateReadingProgressRequest{
+	req := &model.UpdateReadingProgressRequest{
 		CurrentPage: 24,
 		Progress:    0.5,
 		Completed:   true,
@@ -471,7 +474,7 @@ func TestReadingProgressRepository_Upsert_Completed(t *testing.T) {
 
 func TestReadingProgressRepository_ListRecentlyRead(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewReadingProgressRepository(conn)
+	repo := database.NewReadingProgressRepository(conn)
 
 	// Empty
 	items, err := repo.ListRecentlyRead(t.Context(), 25)
@@ -483,7 +486,7 @@ func TestReadingProgressRepository_ListRecentlyRead(t *testing.T) {
 	}
 
 	// Insert progress for two galleries
-	req1 := &UpdateReadingProgressRequest{CurrentPage: 5, Progress: 0.2}
+	req1 := &model.UpdateReadingProgressRequest{CurrentPage: 5, Progress: 0.2}
 	_, err = repo.Upsert(t.Context(), 111111, "aaa", req1)
 	if err != nil {
 		t.Fatalf("Upsert 1: %v", err)
@@ -491,7 +494,7 @@ func TestReadingProgressRepository_ListRecentlyRead(t *testing.T) {
 
 	time.Sleep(10 * time.Millisecond)
 
-	req2 := &UpdateReadingProgressRequest{CurrentPage: 10, Progress: 0.4}
+	req2 := &model.UpdateReadingProgressRequest{CurrentPage: 10, Progress: 0.4}
 	_, err = repo.Upsert(t.Context(), 222222, "bbb", req2)
 	if err != nil {
 		t.Fatalf("Upsert 2: %v", err)
@@ -515,8 +518,8 @@ func TestReadingProgressRepository_ListRecentlyRead(t *testing.T) {
 
 func TestReadingProgressRepository_ListRecentlyRead_WithBookshelf(t *testing.T) {
 	conn := newTestDB(t)
-	progressRepo := NewReadingProgressRepository(conn)
-	bookshelfRepo := NewBookshelfRepository(conn)
+	progressRepo := database.NewReadingProgressRepository(conn)
+	bookshelfRepo := database.NewBookshelfRepository(conn)
 
 	// Add to bookshelf
 	b := newTestBookshelf()
@@ -525,7 +528,7 @@ func TestReadingProgressRepository_ListRecentlyRead_WithBookshelf(t *testing.T) 
 	}
 
 	// Add reading progress
-	req := &UpdateReadingProgressRequest{CurrentPage: 10, Progress: 0.416}
+	req := &model.UpdateReadingProgressRequest{CurrentPage: 10, Progress: 0.416}
 	_, err := progressRepo.Upsert(t.Context(), b.GalleryID, b.Token, req)
 	if err != nil {
 		t.Fatalf("Upsert: %v", err)
@@ -548,8 +551,8 @@ func TestReadingProgressRepository_ListRecentlyRead_WithBookshelf(t *testing.T) 
 
 func TestReadingProgress_PersistsAfterBookshelfRemove(t *testing.T) {
 	conn := newTestDB(t)
-	bookshelfRepo := NewBookshelfRepository(conn)
-	progressRepo := NewReadingProgressRepository(conn)
+	bookshelfRepo := database.NewBookshelfRepository(conn)
+	progressRepo := database.NewReadingProgressRepository(conn)
 
 	// Add to bookshelf
 	b := newTestBookshelf()
@@ -558,7 +561,7 @@ func TestReadingProgress_PersistsAfterBookshelfRemove(t *testing.T) {
 	}
 
 	// Add reading progress
-	req := &UpdateReadingProgressRequest{CurrentPage: 10, Progress: 0.416}
+	req := &model.UpdateReadingProgressRequest{CurrentPage: 10, Progress: 0.416}
 	_, err := progressRepo.Upsert(t.Context(), b.GalleryID, b.Token, req)
 	if err != nil {
 		t.Fatalf("Upsert: %v", err)
@@ -598,19 +601,19 @@ func TestReadingProgress_PersistsAfterBookshelfRemove(t *testing.T) {
 // ==================== Converter Tests ====================
 
 func TestGalleryToBookshelf(t *testing.T) {
-	g := &Gallery{
+	g := &model.Gallery{
 		ID:        123,
 		Token:     "tok123",
 		Title:     "My Gallery",
 		TitleJPN:  "私のギャラリー",
-		Category:  CategoryManga,
+		Category:  model.CategoryManga,
 		Thumbnail: "https://example.com/thumb.webp",
 		PageCount: 42,
 		Rating:    4.5,
-		Tags:      []Tag{{Namespace: "female", Name: "yuri"}},
+		Tags:      []model.Tag{{Namespace: "female", Name: "yuri"}},
 	}
 
-	b := GalleryToBookshelf(g)
+	b := model.GalleryToBookshelf(g)
 	if b == nil {
 		t.Fatal("expected non-nil")
 	}
@@ -631,7 +634,7 @@ func TestGalleryToBookshelf(t *testing.T) {
 	// (Bookshelf doesn't have those fields)
 
 	// nil gallery
-	if GalleryToBookshelf(nil) != nil {
+	if model.GalleryToBookshelf(nil) != nil {
 		t.Error("expected nil for nil gallery")
 	}
 }
@@ -641,7 +644,7 @@ func TestBookshelfToItem(t *testing.T) {
 	b.AddedAt = time.Date(2026, 8, 29, 10, 0, 0, 0, time.UTC)
 	b.UpdatedAt = time.Date(2026, 8, 29, 10, 0, 0, 0, time.UTC)
 
-	item := BookshelfToItem(b, nil)
+	item := model.BookshelfToItem(b, nil)
 	if item.ID != b.GalleryID {
 		t.Errorf("ID = %d, want %d", item.ID, b.GalleryID)
 	}
@@ -653,8 +656,8 @@ func TestBookshelfToItem(t *testing.T) {
 	}
 
 	// With progress
-	p := &ReadingProgress{CurrentPage: 5, Progress: 0.2}
-	item = BookshelfToItem(b, p)
+	p := &model.ReadingProgress{CurrentPage: 5, Progress: 0.2}
+	item = model.BookshelfToItem(b, p)
 	if item.Reading == nil {
 		t.Fatal("Reading should be non-nil when progress provided")
 	}
@@ -707,16 +710,16 @@ func TestHandleBookshelfAdd_Success(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"gmetadata": []map[string]any{
 				{
-					"gid":     123456,
-					"token":   "abcdef1234",
-					"title":   "Test Gallery",
+					"gid":       123456,
+					"token":     "abcdef1234",
+					"title":     "Test Gallery",
 					"title_jpn": "テスト",
-					"category": "Doujinshi",
-					"thumb":   "https://example.com/thumb.webp",
+					"category":  "Doujinshi",
+					"thumb":     "https://example.com/thumb.webp",
 					"filecount": "24",
-					"rating":  "4.50",
-					"posted":  "1700000000",
-					"tags":    []string{"female:yuri"},
+					"rating":    "4.50",
+					"posted":    "1700000000",
+					"tags":      []string{"female:yuri"},
 				},
 			},
 		})
@@ -737,7 +740,7 @@ func TestHandleBookshelfAdd_Success(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp BookshelfMutationResponse
+	var resp model.BookshelfMutationResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -757,16 +760,16 @@ func TestHandleBookshelfAdd_Idempotent(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"gmetadata": []map[string]any{
 				{
-					"gid":     123456,
-					"token":   "abcdef1234",
-					"title":   "Test Gallery",
+					"gid":       123456,
+					"token":     "abcdef1234",
+					"title":     "Test Gallery",
 					"title_jpn": "テスト",
-					"category": "Doujinshi",
-					"thumb":   "https://example.com/thumb.webp",
+					"category":  "Doujinshi",
+					"thumb":     "https://example.com/thumb.webp",
 					"filecount": "24",
-					"rating":  "4.50",
-					"posted":  "1700000000",
-					"tags":    []string{},
+					"rating":    "4.50",
+					"posted":    "1700000000",
+					"tags":      []string{},
 				},
 			},
 		})
@@ -795,7 +798,7 @@ func TestHandleBookshelfAdd_Idempotent(t *testing.T) {
 		t.Errorf("second add: status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	repo := NewBookshelfRepository(conn)
+	repo := database.NewBookshelfRepository(conn)
 	count, _ := repo.Count(t.Context())
 	if count != 1 {
 		t.Errorf("Count = %d, want 1 (no duplicate)", count)
@@ -804,7 +807,7 @@ func TestHandleBookshelfAdd_Idempotent(t *testing.T) {
 
 func TestHandleBookshelfRemove_Success(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewBookshelfRepository(conn)
+	repo := database.NewBookshelfRepository(conn)
 	repo.Add(t.Context(), newTestBookshelf())
 
 	r := setupTestRouter()
@@ -820,7 +823,7 @@ func TestHandleBookshelfRemove_Success(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp BookshelfMutationResponse
+	var resp model.BookshelfMutationResponse
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if !resp.Success {
 		t.Error("Success should be true")
@@ -848,7 +851,7 @@ func TestHandleBookshelfRemove_InvalidID(t *testing.T) {
 
 func TestHandleBookshelfStatus_InBookshelf(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewBookshelfRepository(conn)
+	repo := database.NewBookshelfRepository(conn)
 	repo.Add(t.Context(), newTestBookshelf())
 
 	r := setupTestRouter()
@@ -864,7 +867,7 @@ func TestHandleBookshelfStatus_InBookshelf(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp BookshelfStatus
+	var resp model.BookshelfStatus
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if !resp.InBookshelf {
 		t.Error("InBookshelf should be true")
@@ -889,7 +892,7 @@ func TestHandleBookshelfStatus_NotInBookshelf(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp BookshelfStatus
+	var resp model.BookshelfStatus
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp.InBookshelf {
 		t.Error("InBookshelf should be false")
@@ -914,7 +917,7 @@ func TestHandleBookshelfList_Empty(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp BookshelfListResponse
+	var resp model.BookshelfListResponse
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp.Total != 0 {
 		t.Errorf("Total = %d, want 0", resp.Total)
@@ -926,7 +929,7 @@ func TestHandleBookshelfList_Empty(t *testing.T) {
 
 func TestHandleBookshelfList_WithItems(t *testing.T) {
 	conn := newTestDB(t)
-	repo := NewBookshelfRepository(conn)
+	repo := database.NewBookshelfRepository(conn)
 	repo.Add(t.Context(), newTestBookshelf())
 	repo.Add(t.Context(), newTestBookshelf2())
 
@@ -943,7 +946,7 @@ func TestHandleBookshelfList_WithItems(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp BookshelfListResponse
+	var resp model.BookshelfListResponse
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp.Total != 2 {
 		t.Errorf("Total = %d, want 2", resp.Total)
@@ -972,7 +975,7 @@ func TestHandleGetProgress_NotExists(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp ReadingProgress
+	var resp model.ReadingProgress
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp.GalleryID != 123456 {
 		t.Errorf("GalleryID = %d, want 123456", resp.GalleryID)
@@ -984,8 +987,8 @@ func TestHandleGetProgress_NotExists(t *testing.T) {
 
 func TestHandleGetProgress_Exists(t *testing.T) {
 	conn := newTestDB(t)
-	progressRepo := NewReadingProgressRepository(conn)
-	req := &UpdateReadingProgressRequest{CurrentPage: 10, Progress: 0.416}
+	progressRepo := database.NewReadingProgressRepository(conn)
+	req := &model.UpdateReadingProgressRequest{CurrentPage: 10, Progress: 0.416}
 	progressRepo.Upsert(t.Context(), 123456, "abcdef", req)
 
 	r := setupTestRouter()
@@ -1001,7 +1004,7 @@ func TestHandleGetProgress_Exists(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp ReadingProgress
+	var resp model.ReadingProgress
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp.CurrentPage != 10 {
 		t.Errorf("CurrentPage = %d, want 10", resp.CurrentPage)
@@ -1018,7 +1021,7 @@ func TestHandleUpdateProgress_First(t *testing.T) {
 
 	r.PUT("/api/progress/:id/:token", app.handleUpdateProgress)
 
-	body, _ := json.Marshal(UpdateReadingProgressRequest{
+	body, _ := json.Marshal(model.UpdateReadingProgressRequest{
 		CurrentPage: 5,
 		Progress:    0.208,
 		Completed:   false,
@@ -1032,7 +1035,7 @@ func TestHandleUpdateProgress_First(t *testing.T) {
 		t.Errorf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp ReadingProgress
+	var resp model.ReadingProgress
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp.CurrentPage != 5 {
 		t.Errorf("CurrentPage = %d, want 5", resp.CurrentPage)
@@ -1050,25 +1053,25 @@ func TestHandleUpdateProgress_Update(t *testing.T) {
 	r.PUT("/api/progress/:id/:token", app.handleUpdateProgress)
 
 	// First update
-	body, _ := json.Marshal(UpdateReadingProgressRequest{CurrentPage: 5, Progress: 0.2})
+	body, _ := json.Marshal(model.UpdateReadingProgressRequest{CurrentPage: 5, Progress: 0.2})
 	req := httptest.NewRequest("PUT", "/api/progress/123456/abcdef", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var first ReadingProgress
+	var first model.ReadingProgress
 	json.Unmarshal(w.Body.Bytes(), &first)
 
 	time.Sleep(10 * time.Millisecond)
 
 	// Second update
-	body, _ = json.Marshal(UpdateReadingProgressRequest{CurrentPage: 10, Progress: 0.4})
+	body, _ = json.Marshal(model.UpdateReadingProgressRequest{CurrentPage: 10, Progress: 0.4})
 	req = httptest.NewRequest("PUT", "/api/progress/123456/abcdef", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	var second ReadingProgress
+	var second model.ReadingProgress
 	json.Unmarshal(w.Body.Bytes(), &second)
 
 	if second.CurrentPage != 10 {
@@ -1086,7 +1089,7 @@ func TestHandleUpdateProgress_Completed(t *testing.T) {
 
 	r.PUT("/api/progress/:id/:token", app.handleUpdateProgress)
 
-	body, _ := json.Marshal(UpdateReadingProgressRequest{
+	body, _ := json.Marshal(model.UpdateReadingProgressRequest{
 		CurrentPage: 24,
 		Progress:    0.5,
 		Completed:   true,
@@ -1100,7 +1103,7 @@ func TestHandleUpdateProgress_Completed(t *testing.T) {
 		t.Errorf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp ReadingProgress
+	var resp model.ReadingProgress
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if !resp.Completed {
 		t.Error("Completed should be true")
@@ -1117,7 +1120,7 @@ func TestHandleUpdateProgress_InvalidProgress(t *testing.T) {
 
 	r.PUT("/api/progress/:id/:token", app.handleUpdateProgress)
 
-	body, _ := json.Marshal(UpdateReadingProgressRequest{
+	body, _ := json.Marshal(model.UpdateReadingProgressRequest{
 		CurrentPage: 5,
 		Progress:    1.5,
 	})
@@ -1138,7 +1141,7 @@ func TestHandleUpdateProgress_NegativeProgress(t *testing.T) {
 
 	r.PUT("/api/progress/:id/:token", app.handleUpdateProgress)
 
-	body, _ := json.Marshal(UpdateReadingProgressRequest{
+	body, _ := json.Marshal(model.UpdateReadingProgressRequest{
 		CurrentPage: 5,
 		Progress:    -0.1,
 	})
@@ -1159,7 +1162,7 @@ func TestHandleUpdateProgress_NegativePage(t *testing.T) {
 
 	r.PUT("/api/progress/:id/:token", app.handleUpdateProgress)
 
-	body, _ := json.Marshal(UpdateReadingProgressRequest{
+	body, _ := json.Marshal(model.UpdateReadingProgressRequest{
 		CurrentPage: -1,
 		Progress:    0.5,
 	})
@@ -1188,7 +1191,7 @@ func TestHandleRecentlyRead_Empty(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp RecentlyReadResponse
+	var resp model.RecentlyReadResponse
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if len(resp.Results) != 0 {
 		t.Errorf("Results length = %d, want 0", len(resp.Results))
@@ -1197,18 +1200,18 @@ func TestHandleRecentlyRead_Empty(t *testing.T) {
 
 func TestHandleRecentlyRead_WithRecords(t *testing.T) {
 	conn := newTestDB(t)
-	progressRepo := NewReadingProgressRepository(conn)
-	bookshelfRepo := NewBookshelfRepository(conn)
+	progressRepo := database.NewReadingProgressRepository(conn)
+	bookshelfRepo := database.NewBookshelfRepository(conn)
 
 	// Add bookshelf + progress for gallery 1
 	b1 := newTestBookshelf()
 	bookshelfRepo.Add(t.Context(), b1)
-	progressRepo.Upsert(t.Context(), b1.GalleryID, b1.Token, &UpdateReadingProgressRequest{CurrentPage: 5, Progress: 0.2})
+	progressRepo.Upsert(t.Context(), b1.GalleryID, b1.Token, &model.UpdateReadingProgressRequest{CurrentPage: 5, Progress: 0.2})
 
 	time.Sleep(10 * time.Millisecond)
 
 	// Add progress only for gallery 2 (no bookshelf)
-	progressRepo.Upsert(t.Context(), 222222, "bbb", &UpdateReadingProgressRequest{CurrentPage: 10, Progress: 0.4})
+	progressRepo.Upsert(t.Context(), 222222, "bbb", &model.UpdateReadingProgressRequest{CurrentPage: 10, Progress: 0.4})
 
 	r := setupTestRouter()
 	app := &App{DB: &DB{conn: conn}}
@@ -1223,7 +1226,7 @@ func TestHandleRecentlyRead_WithRecords(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp RecentlyReadResponse
+	var resp model.RecentlyReadResponse
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if len(resp.Results) != 2 {
 		t.Fatalf("Results length = %d, want 2", len(resp.Results))
@@ -1240,12 +1243,12 @@ func TestHandleRecentlyRead_WithRecords(t *testing.T) {
 
 func TestHandleRecentlyRead_AfterBookshelfRemove(t *testing.T) {
 	conn := newTestDB(t)
-	progressRepo := NewReadingProgressRepository(conn)
-	bookshelfRepo := NewBookshelfRepository(conn)
+	progressRepo := database.NewReadingProgressRepository(conn)
+	bookshelfRepo := database.NewBookshelfRepository(conn)
 
 	b := newTestBookshelf()
 	bookshelfRepo.Add(t.Context(), b)
-	progressRepo.Upsert(t.Context(), b.GalleryID, b.Token, &UpdateReadingProgressRequest{CurrentPage: 5, Progress: 0.2})
+	progressRepo.Upsert(t.Context(), b.GalleryID, b.Token, &model.UpdateReadingProgressRequest{CurrentPage: 5, Progress: 0.2})
 
 	// Remove from bookshelf
 	bookshelfRepo.Remove(t.Context(), b.GalleryID, b.Token)
@@ -1263,7 +1266,7 @@ func TestHandleRecentlyRead_AfterBookshelfRemove(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp RecentlyReadResponse
+	var resp model.RecentlyReadResponse
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if len(resp.Results) != 1 {
 		t.Fatalf("Results length = %d, want 1 (reading persists after bookshelf removal)", len(resp.Results))
