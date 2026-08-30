@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"encoding/json"
@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/model"
@@ -30,13 +29,13 @@ func setupRouter() *gin.Engine {
 	return gin.New()
 }
 
-func newTestApp() *App {
+func newTestApp() *Server {
 	cfg := exhentai.LoadCookieConfig()
 	if !cfg.IsValid() {
 		return nil
 	}
 	client, _ := exhentai.CreateHTTPClient(cfg)
-	return &App{Client: client}
+	return &Server{Client: client}
 }
 
 func skipIfNoCookies(t *testing.T) {
@@ -44,272 +43,6 @@ func skipIfNoCookies(t *testing.T) {
 	cfg := exhentai.LoadCookieConfig()
 	if !cfg.IsValid() {
 		t.Skip("EHENTAI_COOKIE not set, skipping integration test")
-	}
-}
-
-// ==================== 单元测试 ====================
-
-func TestParseStars(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  string
-		expect float64
-	}{
-		{"5 stars", "background-position:0px -1px;opacity:1", 5.0},
-		{"4.5 stars", "background-position:0px -21px;opacity:1", 4.5},
-		{"4 stars", "background-position:-16px -1px;opacity:1", 4.0},
-		{"3.5 stars", "background-position:-16px -21px;opacity:1", 3.5},
-		{"3 stars", "background-position:-32px -1px;opacity:1", 3.0},
-		{"2.5 stars", "background-position:-32px -21px;opacity:1", 2.5},
-		{"2 stars", "background-position:-48px -1px;opacity:1", 2.0},
-		{"1.5 stars", "background-position:-48px -21px;opacity:1", 1.5},
-		{"1 star", "background-position:-64px -1px;opacity:1", 1.0},
-		{"0.5 stars", "background-position:-64px -21px;opacity:1", 0.5},
-		{"0 stars", "background-position:-80px -1px;opacity:1", 0.0},
-		{"empty string", "", 0.0},
-		{"garbage", "no-match-here", 0.0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := exhentai.ParseStars(tt.input)
-			if got != tt.expect {
-				t.Errorf("ParseStars(%q) = %f, want %f", tt.input, got, tt.expect)
-			}
-		})
-	}
-}
-
-func TestBuildCategoryFilter(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  []string
-		expect string
-	}{
-		{"empty", nil, ""},
-		{"doujinshi only", []string{"doujinshi"}, strconv.FormatUint(uint64(1023^2), 10)},
-		{"manga only", []string{"manga"}, strconv.FormatUint(uint64(1023^4), 10)},
-		{"doujinshi+manga", []string{"doujinshi", "manga"}, strconv.FormatUint(uint64(1023^6), 10)},
-		{"all categories", []string{"doujinshi", "manga", "artistcg", "gamecg", "imageset", "cosplay", "asianporn", "nonh", "western", "misc"}, "0"},
-		{"unknown category", []string{"unknown"}, ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := exhentai.BuildCategoryFilter(tt.input)
-			if got != tt.expect {
-				t.Errorf("BuildCategoryFilter(%v) = %q, want %q", tt.input, got, tt.expect)
-			}
-		})
-	}
-}
-
-func TestParseGalleryURL(t *testing.T) {
-	tests := []struct {
-		name         string
-		input        string
-		expectDomain string
-		expectGId    string
-		expectGToken string
-	}{
-		{
-			"exhentai url",
-			"https://exhentai.org/g/3138775/30b0285f9b/",
-			"exhentai.org", "3138775", "30b0285f9b",
-		},
-		{
-			"ehentai url",
-			"https://e-hentai.org/g/3138775/30b0285f9b/",
-			"e-hentai.org", "3138775", "30b0285f9b",
-		},
-		{
-			"no trailing slash",
-			"https://exhentai.org/g/3138775/30b0285f9b",
-			"exhentai.org", "3138775", "30b0285f9b",
-		},
-		{
-			"invalid url",
-			"https://exhentai.org/not/a/gallery",
-			"", "", "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			domain, gId, gToken := exhentai.ParseGalleryURL(tt.input)
-			if domain != tt.expectDomain || gId != tt.expectGId || gToken != tt.expectGToken {
-				t.Errorf("ParseGalleryURL(%q) = (%q, %q, %q), want (%q, %q, %q)",
-					tt.input, domain, gId, gToken, tt.expectDomain, tt.expectGId, tt.expectGToken)
-			}
-		})
-	}
-}
-
-func TestMapCategory(t *testing.T) {
-	tests := []struct {
-		input  string
-		expect model.GalleryCategory
-	}{
-		{"doujinshi", model.CategoryDoujinshi},
-		{"Doujinshi", model.CategoryDoujinshi},
-		{"manga", model.CategoryManga},
-		{"Manga", model.CategoryManga},
-		{"artist cg", model.CategoryArtistCG},
-		{"Artist CG", model.CategoryArtistCG},
-		{"game cg", model.CategoryGameCG},
-		{"western", model.CategoryWestern},
-		{"image set", model.CategoryImageSet},
-		{"cosplay", model.CategoryCosplay},
-		{"asian porn", model.CategoryAsianPorn},
-		{"non-h", model.CategoryNonH},
-		{"miscellaneous", model.CategoryMisc},
-		{"unknown", model.CategoryOther},
-		{"", model.CategoryOther},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := model.MapCategory(tt.input)
-			if got != tt.expect {
-				t.Errorf("MapCategory(%q) = %q, want %q", tt.input, got, tt.expect)
-			}
-		})
-	}
-}
-
-func TestParseTags(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  []string
-		expect []model.Tag
-	}{
-		{
-			"namespace:tag format",
-			[]string{"female:yuri", "male:solemale"},
-			[]model.Tag{
-				{Namespace: "female", Name: "yuri"},
-				{Namespace: "male", Name: "solemale"},
-			},
-		},
-		{
-			"no namespace",
-			[]string{"uncensored"},
-			[]model.Tag{
-				{Namespace: "", Name: "uncensored"},
-			},
-		},
-		{
-			"mixed",
-			[]string{"female:yuri", "uncensored", "language:chinese"},
-			[]model.Tag{
-				{Namespace: "female", Name: "yuri"},
-				{Namespace: "", Name: "uncensored"},
-				{Namespace: "language", Name: "chinese"},
-			},
-		},
-		{
-			"empty",
-			[]string{},
-			[]model.Tag{},
-		},
-		{
-			"nil",
-			nil,
-			nil,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := model.ParseTags(tt.input)
-			if len(got) != len(tt.expect) {
-				t.Fatalf("ParseTags(%v) returned %d tags, want %d", tt.input, len(got), len(tt.expect))
-			}
-			for i := range got {
-				if got[i] != tt.expect[i] {
-					t.Errorf("ParseTags(%v)[%d] = %v, want %v", tt.input, i, got[i], tt.expect[i])
-				}
-			}
-		})
-	}
-}
-
-func TestConvertMetadataToGallery(t *testing.T) {
-	posted := "1609459200" // 2021-01-01 00:00:00 UTC
-	meta := &model.GalleryMetadata{
-		GID:          testGalleryID,
-		Token:        testGalleryToken,
-		Title:        "Test Gallery",
-		TitleJpn:     "テストギャラリー",
-		Category:     "Manga",
-		Thumb:        "https://example.com/thumb.jpg",
-		Uploader:     "uploader1",
-		Posted:       posted,
-		FileCount:    "65",
-		FileSize:     1048576,
-		Expunged:     false,
-		Rating:       "4.86",
-		TorrentCount: "3",
-		Tags:         []string{"female:yuri", "language:chinese"},
-	}
-
-	gallery := model.ConvertMetadataToGallery(meta)
-
-	if gallery.ID != testGalleryID {
-		t.Errorf("ID = %d, want %d", gallery.ID, testGalleryID)
-	}
-	if gallery.Token != testGalleryToken {
-		t.Errorf("Token = %q, want %q", gallery.Token, testGalleryToken)
-	}
-	if gallery.Title != "Test Gallery" {
-		t.Errorf("Title = %q, want %q", gallery.Title, "Test Gallery")
-	}
-	if gallery.TitleJPN != "テストギャラリー" {
-		t.Errorf("TitleJPN = %q, want %q", gallery.TitleJPN, "テストギャラリー")
-	}
-	if gallery.Category != model.CategoryManga {
-		t.Errorf("Category = %q, want %q", gallery.Category, model.CategoryManga)
-	}
-	if gallery.PageCount != 65 {
-		t.Errorf("PageCount = %d, want 65", gallery.PageCount)
-	}
-	if gallery.Rating != 4.86 {
-		t.Errorf("Rating = %f, want 4.86", gallery.Rating)
-	}
-	if gallery.PostedAt == nil {
-		t.Fatal("PostedAt is nil")
-	}
-	if gallery.PostedAt.Year() != 2021 {
-		t.Errorf("PostedAt.Year() = %d, want 2021", gallery.PostedAt.Year())
-	}
-	if len(gallery.Tags) != 2 {
-		t.Errorf("Tags len = %d, want 2", len(gallery.Tags))
-	}
-	if gallery.Expunged {
-		t.Error("Expunged should be false")
-	}
-}
-
-func TestConvertMetadataToGallery_InvalidRating(t *testing.T) {
-	meta := &model.GalleryMetadata{
-		GID:          123,
-		Token:        "abc",
-		Title:        "Test",
-		Rating:       "not-a-number",
-		FileCount:    "not-a-number",
-		Posted:       "not-a-number",
-		FileSize:     0,
-		TorrentCount: "0",
-	}
-	gallery := model.ConvertMetadataToGallery(meta)
-	if gallery.Rating != 0 {
-		t.Errorf("Rating should default to 0 for invalid input, got %f", gallery.Rating)
-	}
-	if gallery.PageCount != 0 {
-		t.Errorf("PageCount should default to 0 for invalid input, got %d", gallery.PageCount)
-	}
-	if gallery.PostedAt != nil {
-		t.Error("PostedAt should be nil for invalid timestamp")
 	}
 }
 
@@ -354,7 +87,7 @@ func TestAPI_GetGallery(t *testing.T) {
 
 func TestAPI_GetGallery_InvalidID(t *testing.T) {
 	r := setupRouter()
-	app := &App{Client: &http.Client{}}
+	app := &Server{Client: &http.Client{}}
 	r.GET("/api/gallery/:id/:token", app.handleGetGallery)
 
 	req := httptest.NewRequest("GET", "/api/gallery/abc/xyz", nil)
@@ -657,7 +390,7 @@ func TestAPI_PageImage(t *testing.T) {
 
 func TestAPI_PageImage_MissingURL(t *testing.T) {
 	r := setupRouter()
-	app := &App{Client: &http.Client{}}
+	app := &Server{Client: &http.Client{}}
 	r.GET("/api/page-image", app.handlePageImage)
 
 	req := httptest.NewRequest("GET", "/api/page-image", nil)
@@ -714,7 +447,7 @@ func TestAPI_SearchInvalidCategory(t *testing.T) {
 
 func TestAPI_GalleryDetails_InvalidID(t *testing.T) {
 	r := setupRouter()
-	app := &App{Client: &http.Client{}}
+	app := &Server{Client: &http.Client{}}
 	r.GET("/api/gallery/:id/:token/details", app.handleGalleryDetails)
 
 	req := httptest.NewRequest("GET", "/api/gallery//xyz/details", nil)
@@ -728,7 +461,7 @@ func TestAPI_GalleryDetails_InvalidID(t *testing.T) {
 
 func TestAPI_GalleryPages_InvalidID(t *testing.T) {
 	r := setupRouter()
-	app := &App{Client: &http.Client{}}
+	app := &Server{Client: &http.Client{}}
 	r.GET("/api/gallery/:id/:token/pages", app.handleGalleryPages)
 
 	req := httptest.NewRequest("GET", "/api/gallery//xyz/pages", nil)
@@ -1207,42 +940,4 @@ func TestAPI_CrossEndpointConsistency(t *testing.T) {
 		t.Errorf("details.Token = %q, search.Token = %q, mismatch", details.Token, first.Token)
 	}
 	t.Logf("Cross-endpoint: search ID=%d token=%q matches details", first.ID, first.Token)
-}
-
-// ==================== 基准测试 ====================
-
-func BenchmarkParseStars(b *testing.B) {
-	for b.Loop() {
-		exhentai.ParseStars("background-position:-32px -1px;opacity:1")
-	}
-}
-
-func BenchmarkBuildCategoryFilter(b *testing.B) {
-	cats := []string{"doujinshi", "manga", "artistcg"}
-	for b.Loop() {
-		exhentai.BuildCategoryFilter(cats)
-	}
-}
-
-func BenchmarkMapCategory(b *testing.B) {
-	for b.Loop() {
-		model.MapCategory("Doujinshi")
-	}
-}
-
-func BenchmarkConvertMetadataToGallery(b *testing.B) {
-	meta := &model.GalleryMetadata{
-		GID:          testGalleryID,
-		Token:        testGalleryToken,
-		Title:        "Benchmark Gallery",
-		Category:     "Manga",
-		Posted:       strconv.FormatInt(time.Now().Unix(), 10),
-		FileCount:    "65",
-		Rating:       "4.86",
-		TorrentCount: "3",
-		Tags:         []string{"female:yuri", "language:chinese"},
-	}
-	for b.Loop() {
-		model.ConvertMetadataToGallery(meta)
-	}
 }

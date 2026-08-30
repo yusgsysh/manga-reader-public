@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"database/sql"
@@ -8,9 +8,57 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"manga-reader/internal/database"
 	"manga-reader/internal/model"
 )
+
+func setupTestRouter() *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.RedirectTrailingSlash = false
+	return r
+}
+
+func newTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	conn, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open test db: %v", err)
+	}
+	if _, err := conn.Exec("PRAGMA foreign_keys=ON"); err != nil {
+		t.Fatalf("enable foreign keys: %v", err)
+	}
+	if err := database.RunMigrations(conn); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	return conn
+}
+
+func newTestBookshelf() *model.Bookshelf {
+	return &model.Bookshelf{
+		GalleryID: 123456,
+		Token:     "abcdef1234",
+		Title:     "Test Gallery",
+		TitleJPN:  "テストギャラリー",
+		Category:  model.CategoryDoujinshi,
+		Thumbnail: "https://example.com/thumb.webp",
+		PageCount: 24,
+	}
+}
+
+func newTestBookshelf2() *model.Bookshelf {
+	return &model.Bookshelf{
+		GalleryID: 789012,
+		Token:     "xyz78901234",
+		Title:     "Test Gallery 2",
+		TitleJPN:  "テストギャラリー2",
+		Category:  model.CategoryManga,
+		Thumbnail: "https://example.com/thumb2.webp",
+		PageCount: 30,
+	}
+}
 
 // insertProgressWithTimestamp 直接插入带自定义 updated_at 的阅读记录，用于测试清理边界。
 func insertProgressWithTimestamp(t *testing.T, conn *sql.DB, galleryID int64, token string, updatedAt time.Time) {
@@ -42,8 +90,8 @@ type cleanupResponse struct {
 func performCleanup(t *testing.T, conn *sql.DB, query string) (int, cleanupResponse) {
 	t.Helper()
 	r := setupTestRouter()
-	app := &App{DB: &DB{conn: conn}}
-	r.POST("/api/reading-progress/cleanup", app.handleReadingProgressCleanup)
+	server := &Server{DB: &database.DB{Conn: conn}}
+	server.RegisterRoutes(r)
 
 	req := httptest.NewRequest("POST", "/api/reading-progress/cleanup"+query, nil)
 	w := httptest.NewRecorder()
@@ -193,8 +241,8 @@ func TestHandleRecentlyRead_NoAutoCleanup(t *testing.T) {
 	insertProgressWithTimestamp(t, conn, 111111, "old", time.Now().UTC().AddDate(0, 0, -31))
 
 	r := setupTestRouter()
-	app := &App{DB: &DB{conn: conn}}
-	r.GET("/api/recently-read", app.handleRecentlyRead)
+	server := &Server{DB: &database.DB{Conn: conn}}
+	server.RegisterRoutes(r)
 
 	req := httptest.NewRequest("GET", "/api/recently-read", nil)
 	w := httptest.NewRecorder()

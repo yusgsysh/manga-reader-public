@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"context"
@@ -137,8 +137,8 @@ func TestValidateThumbnailURL_Invalid(t *testing.T) {
 // ==================== Source Proxy Handler Tests ====================
 
 func TestThumbnail_MissingURL(t *testing.T) {
-	r := setupMockRouter()
-	app := &ThumbnailApp{Client: &http.Client{}}
+	r := setupRouter()
+	app := &Server{Client: &http.Client{}}
 	r.GET("/api/thumbnail", app.handleThumbnail)
 
 	req := httptest.NewRequest("GET", "/api/thumbnail", nil)
@@ -158,8 +158,8 @@ func TestThumbnail_MissingURL(t *testing.T) {
 }
 
 func TestThumbnail_InvalidURL(t *testing.T) {
-	r := setupMockRouter()
-	app := &ThumbnailApp{Client: &http.Client{}}
+	r := setupRouter()
+	app := &Server{Client: &http.Client{}}
 	r.GET("/api/thumbnail", app.handleThumbnail)
 
 	tests := []string{
@@ -195,8 +195,8 @@ func TestThumbnail_Success(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &ThumbnailApp{Client: newMockClient(mockServer.URL)}
+	r := setupRouter()
+	app := &Server{Client: newMockClient(mockServer.URL)}
 	r.GET("/api/thumbnail", app.handleThumbnail)
 
 	req := httptest.NewRequest("GET", "/api/thumbnail?url="+url.QueryEscape(testThumbURL), nil)
@@ -226,8 +226,8 @@ func TestThumbnail_SourceFailure(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &ThumbnailApp{Client: newMockClient(mockServer.URL)}
+	r := setupRouter()
+	app := &Server{Client: newMockClient(mockServer.URL)}
 	r.GET("/api/thumbnail", app.handleThumbnail)
 
 	req := httptest.NewRequest("GET", "/api/thumbnail?url="+url.QueryEscape(testThumbURL), nil)
@@ -269,6 +269,10 @@ func (m *mockImageCache) Get(_ context.Context, key string) ([]byte, string, err
 	return e.data, e.contentType, nil
 }
 
+func (m *mockImageCache) Put(ctx context.Context, key string, data []byte, contentType string, cacheControl string) error {
+	return m.PutWithMeta(ctx, key, data, contentType, nil, cacheControl)
+}
+
 func (m *mockImageCache) PutWithMeta(_ context.Context, key string, data []byte, contentType string, meta map[string]string, cacheControl string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -279,8 +283,8 @@ func (m *mockImageCache) PutWithMeta(_ context.Context, key string, data []byte,
 // ==================== Cached Thumbnail Handler Tests ====================
 
 func TestCachedThumbnail_MissingURL(t *testing.T) {
-	r := setupMockRouter()
-	app := &ThumbnailApp{Client: &http.Client{}}
+	r := setupRouter()
+	app := &Server{Client: &http.Client{}}
 	r.GET("/api/cached-thumbnail", app.handleCachedThumbnail)
 
 	req := httptest.NewRequest("GET", "/api/cached-thumbnail", nil)
@@ -293,8 +297,8 @@ func TestCachedThumbnail_MissingURL(t *testing.T) {
 }
 
 func TestCachedThumbnail_InvalidURL(t *testing.T) {
-	r := setupMockRouter()
-	app := &ThumbnailApp{Client: &http.Client{}}
+	r := setupRouter()
+	app := &Server{Client: &http.Client{}}
 	r.GET("/api/cached-thumbnail", app.handleCachedThumbnail)
 
 	tests := []string{
@@ -317,8 +321,8 @@ func TestCachedThumbnail_InvalidURL(t *testing.T) {
 }
 
 func TestCachedThumbnail_MissingMinIO(t *testing.T) {
-	r := setupMockRouter()
-	app := &ThumbnailApp{Client: &http.Client{}}
+	r := setupRouter()
+	app := &Server{Client: &http.Client{}}
 	r.GET("/api/cached-thumbnail", app.handleCachedThumbnail)
 
 	req := httptest.NewRequest("GET", "/api/cached-thumbnail?url="+url.QueryEscape(testThumbURL), nil)
@@ -341,8 +345,8 @@ func TestCachedThumbnail_MissThenHit(t *testing.T) {
 	defer mockServer.Close()
 
 	cache := newMockImageCache()
-	r := setupMockRouter()
-	app := &ThumbnailApp{Client: newMockClient(mockServer.URL), Cache: cache}
+	r := setupRouter()
+	app := &Server{Client: newMockClient(mockServer.URL), Cache: cache}
 	r.GET("/api/cached-thumbnail", app.handleCachedThumbnail)
 
 	escaped := url.QueryEscape(testThumbURL)
@@ -399,8 +403,8 @@ func TestCachedThumbnail_ConcurrentMissSingleFetch(t *testing.T) {
 	defer mockServer.Close()
 
 	cache := newMockImageCache()
-	r := setupMockRouter()
-	app := &ThumbnailApp{Client: newMockClient(mockServer.URL), Cache: cache}
+	r := setupRouter()
+	app := &Server{Client: newMockClient(mockServer.URL), Cache: cache}
 	r.GET("/api/cached-thumbnail", app.handleCachedThumbnail)
 
 	escaped := url.QueryEscape(testThumbURL)

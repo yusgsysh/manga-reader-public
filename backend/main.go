@@ -8,7 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"manga-reader/internal/cache"
+	"manga-reader/internal/database"
 	"manga-reader/internal/exhentai"
+	"manga-reader/internal/handler"
 )
 
 func CORSMiddleware() gin.HandlerFunc {
@@ -42,43 +44,16 @@ func main() {
 		dbPath = "data/manga-reader.db"
 	}
 
-	db, err := NewDB(dbPath)
+	db, err := database.NewDB(dbPath)
 	if err != nil {
 		log.Fatalf("database init failed: %v", err)
 	}
 	defer db.Close()
 
-	app := &App{Client: client, DB: db}
-
-	r := gin.Default()
-
-	r.Use(CORSMiddleware())
-
-	r.GET("/healthz", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
-
-	r.GET("/api/gallery/:id/:token", app.handleGetGallery)
-	r.GET("/api/gallery/:id/:token/details", app.handleGalleryDetails)
-	r.GET("/api/gallery/:id/:token/pages", app.handleGalleryPages)
-	r.GET("/api/search", app.handleSearch)
-	r.GET("/api/page-image", app.handlePageImage)
-	r.GET("/api/gallerys", app.handleGallerys)
-	r.GET("/api/watched", app.handleWatched)
-	r.GET("/api/popular", app.handlePopular)
-
-	r.GET("/api/bookshelf", app.handleBookshelfList)
-	r.POST("/api/bookshelf/:id/:token", app.handleBookshelfAdd)
-	r.DELETE("/api/bookshelf/:id/:token", app.handleBookshelfRemove)
-	r.GET("/api/bookshelf/:id/:token/status", app.handleBookshelfStatus)
-	r.GET("/api/progress/:id/:token", app.handleGetProgress)
-	r.PUT("/api/progress/:id/:token", app.handleUpdateProgress)
-	r.GET("/api/recently-read", app.handleRecentlyRead)
-	r.POST("/api/reading-progress/cleanup", app.handleReadingProgressCleanup)
-
-	thumbApp := &ThumbnailApp{Client: client}
-	r.GET("/api/thumbnail", thumbApp.handleThumbnail)
-	r.GET("/api/cached-thumbnail", thumbApp.handleCachedThumbnail)
+	cfg := handler.Config{
+		Client: client,
+		DB:     db,
+	}
 
 	minioCfg := cache.LoadMinIOConfig()
 	if minioCfg.IsValid() {
@@ -86,13 +61,22 @@ func main() {
 		if err != nil {
 			log.Fatalf("minio cache init failed: %v", err)
 		}
-		cachedApp := &CachedImageApp{Client: client, Cache: minioCache}
-		r.GET("/api/cached-image", cachedApp.handleCachedImage)
-		thumbApp.Cache = minioCache
+		cfg.Cache = minioCache
 		log.Println("cached-image and cached-thumbnail endpoints enabled")
 	} else {
 		log.Println("minio config not set, cached-image/cached-thumbnail endpoints will return 503")
 	}
+
+	srv := handler.New(cfg)
+
+	r := gin.Default()
+	r.Use(CORSMiddleware())
+
+	r.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	srv.RegisterRoutes(r)
 
 	port := os.Getenv("EHENTAI_PORT")
 	if port == "" {

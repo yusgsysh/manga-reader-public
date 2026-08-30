@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"fmt"
@@ -13,21 +13,21 @@ import (
 	"manga-reader/internal/model"
 )
 
-func (a *App) handleBookshelfList(c *gin.Context) {
+func (s *Server) handleBookshelfList(c *gin.Context) {
 	pageStr := c.DefaultQuery("page", "0")
 	page, _ := strconv.Atoi(pageStr)
 	if page < 0 {
 		page = 0
 	}
 
-	repo := database.NewBookshelfRepository(a.DB.conn)
+	repo := database.NewBookshelfRepository(s.DB.Conn)
 	resp, err := repo.List(c.Request.Context(), page, 25)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list bookshelf failed: %v", err)})
 		return
 	}
 
-	progressRepo := database.NewReadingProgressRepository(a.DB.conn)
+	progressRepo := database.NewReadingProgressRepository(s.DB.Conn)
 	for i := range resp.Results {
 		progress, err := progressRepo.Get(c.Request.Context(), resp.Results[i].ID, resp.Results[i].Token)
 		if err == nil && progress != nil && progress.UpdatedAt != nil {
@@ -38,7 +38,7 @@ func (a *App) handleBookshelfList(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-func (a *App) handleBookshelfAdd(c *gin.Context) {
+func (s *Server) handleBookshelfAdd(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -54,7 +54,7 @@ func (a *App) handleBookshelfAdd(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	bookshelfRepo := database.NewBookshelfRepository(a.DB.conn)
+	bookshelfRepo := database.NewBookshelfRepository(s.DB.Conn)
 	exists, _, err := bookshelfRepo.Exists(ctx, id, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("check bookshelf failed: %v", err)})
@@ -65,7 +65,7 @@ func (a *App) handleBookshelfAdd(c *gin.Context) {
 		return
 	}
 
-	meta, err := exhentai.PostGalleryMetadata(ctx, a.Client, id, token)
+	meta, err := exhentai.PostGalleryMetadata(ctx, s.Client, id, token)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
@@ -86,7 +86,7 @@ func (a *App) handleBookshelfAdd(c *gin.Context) {
 	c.JSON(http.StatusOK, model.BookshelfMutationResponse{Success: true, InBookshelf: true})
 }
 
-func (a *App) handleBookshelfRemove(c *gin.Context) {
+func (s *Server) handleBookshelfRemove(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -100,7 +100,7 @@ func (a *App) handleBookshelfRemove(c *gin.Context) {
 		return
 	}
 
-	repo := database.NewBookshelfRepository(a.DB.conn)
+	repo := database.NewBookshelfRepository(s.DB.Conn)
 	if err := repo.Remove(c.Request.Context(), id, token); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("remove bookshelf failed: %v", err)})
 		return
@@ -109,7 +109,7 @@ func (a *App) handleBookshelfRemove(c *gin.Context) {
 	c.JSON(http.StatusOK, model.BookshelfMutationResponse{Success: true, InBookshelf: false})
 }
 
-func (a *App) handleBookshelfStatus(c *gin.Context) {
+func (s *Server) handleBookshelfStatus(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -123,7 +123,7 @@ func (a *App) handleBookshelfStatus(c *gin.Context) {
 		return
 	}
 
-	repo := database.NewBookshelfRepository(a.DB.conn)
+	repo := database.NewBookshelfRepository(s.DB.Conn)
 	exists, addedAt, err := repo.Exists(c.Request.Context(), id, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("check bookshelf failed: %v", err)})
@@ -136,7 +136,7 @@ func (a *App) handleBookshelfStatus(c *gin.Context) {
 	})
 }
 
-func (a *App) handleGetProgress(c *gin.Context) {
+func (s *Server) handleGetProgress(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -150,7 +150,7 @@ func (a *App) handleGetProgress(c *gin.Context) {
 		return
 	}
 
-	repo := database.NewReadingProgressRepository(a.DB.conn)
+	repo := database.NewReadingProgressRepository(s.DB.Conn)
 	progress, err := repo.Get(c.Request.Context(), id, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("get progress failed: %v", err)})
@@ -160,7 +160,7 @@ func (a *App) handleGetProgress(c *gin.Context) {
 	c.JSON(http.StatusOK, progress)
 }
 
-func (a *App) handleUpdateProgress(c *gin.Context) {
+func (s *Server) handleUpdateProgress(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -190,7 +190,7 @@ func (a *App) handleUpdateProgress(c *gin.Context) {
 		return
 	}
 
-	repo := database.NewReadingProgressRepository(a.DB.conn)
+	repo := database.NewReadingProgressRepository(s.DB.Conn)
 	progress, err := repo.Upsert(c.Request.Context(), id, token, &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("update progress failed: %v", err)})
@@ -200,8 +200,8 @@ func (a *App) handleUpdateProgress(c *gin.Context) {
 	c.JSON(http.StatusOK, progress)
 }
 
-func (a *App) handleRecentlyRead(c *gin.Context) {
-	repo := database.NewReadingProgressRepository(a.DB.conn)
+func (s *Server) handleRecentlyRead(c *gin.Context) {
+	repo := database.NewReadingProgressRepository(s.DB.Conn)
 	items, err := repo.ListRecentlyRead(c.Request.Context(), 25)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list recently read failed: %v", err)})
@@ -211,7 +211,7 @@ func (a *App) handleRecentlyRead(c *gin.Context) {
 	c.JSON(http.StatusOK, model.RecentlyReadResponse{Results: items})
 }
 
-func (a *App) handleReadingProgressCleanup(c *gin.Context) {
+func (s *Server) handleReadingProgressCleanup(c *gin.Context) {
 	daysStr := c.DefaultQuery("days", "30")
 
 	days, err := strconv.Atoi(daysStr)
@@ -221,7 +221,7 @@ func (a *App) handleReadingProgressCleanup(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	repo := database.NewReadingProgressRepository(a.DB.conn)
+	repo := database.NewReadingProgressRepository(s.DB.Conn)
 
 	var deleted int64
 	if days == 0 {

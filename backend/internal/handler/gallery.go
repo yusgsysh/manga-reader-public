@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"fmt"
@@ -12,12 +12,7 @@ import (
 	"manga-reader/internal/model"
 )
 
-type App struct {
-	Client *http.Client
-	DB     *DB
-}
-
-func (a *App) handleGetGallery(c *gin.Context) {
+func (s *Server) handleGetGallery(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -33,7 +28,7 @@ func (a *App) handleGetGallery(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	meta, err := exhentai.PostGalleryMetadata(ctx, a.Client, id, token)
+	meta, err := exhentai.PostGalleryMetadata(ctx, s.Client, id, token)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
@@ -43,7 +38,7 @@ func (a *App) handleGetGallery(c *gin.Context) {
 	c.JSON(http.StatusOK, gallery)
 }
 
-func (a *App) handleGalleryDetails(c *gin.Context) {
+func (s *Server) handleGalleryDetails(c *gin.Context) {
 	id := c.Param("id")
 	token := c.Param("token")
 	if id == "" || token == "" {
@@ -54,7 +49,7 @@ func (a *App) handleGalleryDetails(c *gin.Context) {
 	u := exhentai.GalleryURL(id, token)
 	ctx := c.Request.Context()
 
-	details, err := exhentai.ScrapeGalleryDetails(ctx, a.Client, u)
+	details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
 		return
@@ -89,7 +84,7 @@ func (a *App) handleGalleryDetails(c *gin.Context) {
 	})
 }
 
-func (a *App) handleGalleryPages(c *gin.Context) {
+func (s *Server) handleGalleryPages(c *gin.Context) {
 	id := c.Param("id")
 	token := c.Param("token")
 	if id == "" || token == "" {
@@ -100,7 +95,7 @@ func (a *App) handleGalleryPages(c *gin.Context) {
 	u := exhentai.GalleryURL(id, token)
 	ctx := c.Request.Context()
 
-	details, err := exhentai.ScrapeGalleryDetails(ctx, a.Client, u)
+	details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
 		return
@@ -127,7 +122,7 @@ func (a *App) handleGalleryPages(c *gin.Context) {
 	})
 }
 
-func (a *App) handleSearch(c *gin.Context) {
+func (s *Server) handleSearch(c *gin.Context) {
 	keyword := c.Query("q")
 	categoryStr := c.Query("categories")
 	site := c.DefaultQuery("site", "exhentai")
@@ -151,7 +146,7 @@ func (a *App) handleSearch(c *gin.Context) {
 		categories = strings.Split(categoryStr, ",")
 	}
 
-	total, results, err := exhentai.ScrapeSearch(ctx, a.Client, siteURL, keyword, categories, page)
+	total, results, err := exhentai.ScrapeSearch(ctx, s.Client, siteURL, keyword, categories, page)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("search failed: %v", err)})
 		return
@@ -202,7 +197,7 @@ func (a *App) handleSearch(c *gin.Context) {
 	})
 }
 
-func (a *App) handlePageImage(c *gin.Context) {
+func (s *Server) handlePageImage(c *gin.Context) {
 	pageURL := c.Query("url")
 	if pageURL == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing url parameter"})
@@ -211,7 +206,7 @@ func (a *App) handlePageImage(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	data, contentType, err := exhentai.FetchPageImage(ctx, a.Client, pageURL)
+	data, contentType, err := exhentai.FetchPageImage(ctx, s.Client, pageURL)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
 		return
@@ -220,7 +215,7 @@ func (a *App) handlePageImage(c *gin.Context) {
 	c.Data(http.StatusOK, contentType, data)
 }
 
-func (a *App) handleGalleryList(listURL string) gin.HandlerFunc {
+func (s *Server) handleGalleryList(listURL string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		pageStr := c.DefaultQuery("page", "0")
 		page, _ := strconv.Atoi(pageStr)
@@ -230,7 +225,7 @@ func (a *App) handleGalleryList(listURL string) gin.HandlerFunc {
 
 		ctx := c.Request.Context()
 
-		results, err := exhentai.ScrapeGalleryList(ctx, a.Client, listURL, page)
+		results, err := exhentai.ScrapeGalleryList(ctx, s.Client, listURL, page)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery list failed: %v", err)})
 			return
@@ -277,14 +272,14 @@ func (a *App) handleGalleryList(listURL string) gin.HandlerFunc {
 	}
 }
 
-func (a *App) handleGallerys(c *gin.Context) {
-	a.handleGalleryList(exhentai.ExhentaiURL + "/")(c)
+func (s *Server) handleGallerys(c *gin.Context) {
+	s.handleGalleryList(exhentai.ExhentaiURL + "/")(c)
 }
 
-func (a *App) handleWatched(c *gin.Context) {
-	a.handleGalleryList(exhentai.ExhentaiURL + "/watched")(c)
+func (s *Server) handleWatched(c *gin.Context) {
+	s.handleGalleryList(exhentai.ExhentaiURL + "/watched")(c)
 }
 
-func (a *App) handlePopular(c *gin.Context) {
-	a.handleGalleryList(exhentai.ExhentaiURL + "/popular")(c)
+func (s *Server) handlePopular(c *gin.Context) {
+	s.handleGalleryList(exhentai.ExhentaiURL + "/popular")(c)
 }

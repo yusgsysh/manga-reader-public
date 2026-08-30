@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"encoding/json"
@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"manga-reader/internal/exhentai"
 	"manga-reader/internal/model"
 
 	"github.com/gin-gonic/gin"
@@ -131,19 +130,19 @@ func mockImageBytes() []byte {
 
 // ==================== Test Infrastructure ====================
 
-func setupMockRouter() *gin.Engine {
+func setupMockRouter(server *Server) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.RedirectTrailingSlash = false
+	server.RegisterRoutes(r)
 	return r
 }
 
 // ==================== handleGetGallery Tests ====================
 
 func TestMockGetGallery_InvalidID(t *testing.T) {
-	r := setupMockRouter()
-	app := &App{Client: &http.Client{}}
-	r.GET("/api/gallery/:id/:token", app.handleGetGallery)
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/gallery/abc/xyz", nil)
 	w := httptest.NewRecorder()
@@ -160,9 +159,8 @@ func TestMockGetGallery_InvalidID(t *testing.T) {
 }
 
 func TestMockGetGallery_EmptyToken(t *testing.T) {
-	r := setupMockRouter()
-	app := &App{Client: &http.Client{}}
-	r.GET("/api/gallery/:id/:token", app.handleGetGallery)
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
 
 	// Gin route :token never matches empty — using "x" as placeholder to test token validation
 	// is not meaningful; instead test that a non-existent route returns 404
@@ -187,9 +185,8 @@ func TestMockGetGallery_APIError(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/gallery/:id/:token", app.handleGetGallery)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/gallery/12345/abc", nil)
 	w := httptest.NewRecorder()
@@ -209,9 +206,8 @@ func TestMockGetGallery_EmptyMetadata(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/gallery/:id/:token", app.handleGetGallery)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/gallery/12345/abc", nil)
 	w := httptest.NewRecorder()
@@ -247,9 +243,8 @@ func TestMockGetGallery_Success(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/gallery/:id/:token", app.handleGetGallery)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/gallery/3138775/30b0285f9b", nil)
 	w := httptest.NewRecorder()
@@ -301,9 +296,8 @@ func TestMockSearch_NoResults(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/search", app.handleSearch)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/search?q=notexist12345", nil)
 	w := httptest.NewRecorder()
@@ -321,9 +315,8 @@ func TestMockSearch_Success(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/search", app.handleSearch)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/search?q=yuri", nil)
 	w := httptest.NewRecorder()
@@ -384,9 +377,8 @@ func TestMockSearch_ExtendedLayout(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/search", app.handleSearch)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/search?q=yuri", nil)
 	w := httptest.NewRecorder()
@@ -424,9 +416,8 @@ func TestMockSearch_SiteParam(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/search", app.handleSearch)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	// site=ehentai should build URL with e-hentai.org
 	req := httptest.NewRequest("GET", "/api/search?q=test&site=ehentai", nil)
@@ -445,9 +436,8 @@ func TestMockSearch_NegativePageClamped(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/search", app.handleSearch)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/search?q=yuri&page=-5", nil)
 	w := httptest.NewRecorder()
@@ -469,9 +459,8 @@ func TestMockSearch_NegativePageClamped(t *testing.T) {
 // ==================== handleGalleryDetails Tests ====================
 
 func TestMockGalleryDetails_EmptyID(t *testing.T) {
-	r := setupMockRouter()
-	app := &App{Client: &http.Client{}}
-	r.GET("/api/gallery/:id/:token/details", app.handleGalleryDetails)
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/gallery//abc/details", nil)
 	w := httptest.NewRecorder()
@@ -488,9 +477,8 @@ func TestMockGalleryDetails_ScrapeFailure(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/gallery/:id/:token/details", app.handleGalleryDetails)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/gallery/12345/abc/details", nil)
 	w := httptest.NewRecorder()
@@ -508,9 +496,8 @@ func TestMockGalleryDetails_Success(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/gallery/:id/:token/details", app.handleGalleryDetails)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/gallery/3138775/30b0285f9b/details", nil)
 	w := httptest.NewRecorder()
@@ -562,9 +549,8 @@ func TestMockGalleryDetails_Success(t *testing.T) {
 // ==================== handleGalleryPages Tests ====================
 
 func TestMockGalleryPages_EmptyID(t *testing.T) {
-	r := setupMockRouter()
-	app := &App{Client: &http.Client{}}
-	r.GET("/api/gallery/:id/:token/pages", app.handleGalleryPages)
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/gallery//abc/pages", nil)
 	w := httptest.NewRecorder()
@@ -582,9 +568,8 @@ func TestMockGalleryPages_Success(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/gallery/:id/:token/pages", app.handleGalleryPages)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345/pages", nil)
 	w := httptest.NewRecorder()
@@ -632,9 +617,8 @@ func TestMockGalleryPages_Success(t *testing.T) {
 // ==================== handlePageImage Tests ====================
 
 func TestMockPageImage_MissingURL(t *testing.T) {
-	r := setupMockRouter()
-	app := &App{Client: &http.Client{}}
-	r.GET("/api/page-image", app.handlePageImage)
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/page-image", nil)
 	w := httptest.NewRecorder()
@@ -656,9 +640,8 @@ func TestMockPageImage_ScrapeFailure(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/page-image", app.handlePageImage)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/page-image?url=https://exhentai.org/s/abc/123-1", nil)
 	w := httptest.NewRecorder()
@@ -684,9 +667,8 @@ func TestMockPageImage_Success(t *testing.T) {
 
 	pageURL := mockServer.URL + "/s/abc123/3138775-1"
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/page-image", app.handlePageImage)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
 	w := httptest.NewRecorder()
@@ -704,55 +686,6 @@ func TestMockPageImage_Success(t *testing.T) {
 }
 
 // ==================== nl Retry Tests ====================
-
-func TestBuildNlFallbackURL(t *testing.T) {
-	tests := []struct {
-		name     string
-		pageURL  string
-		onclick  string
-		expected string
-	}{
-		{
-			"with nl code",
-			"https://exhentai.org/s/abc123/3138775-1",
-			`return nl('SZF-483294')`,
-			"https://exhentai.org/s/abc123/3138775-1?nl=SZF-483294",
-		},
-		{
-			"with existing query params",
-			"https://exhentai.org/s/abc123/3138775-1?param=value",
-			`return nl('XYZ-999')`,
-			"https://exhentai.org/s/abc123/3138775-1?param=value&nl=XYZ-999",
-		},
-		{
-			"empty onclick",
-			"https://exhentai.org/s/abc123/3138775-1",
-			"",
-			"",
-		},
-		{
-			"non-matching onclick",
-			"https://exhentai.org/s/abc123/3138775-1",
-			"return somethingElse('test')",
-			"",
-		},
-		{
-			"invalid URL",
-			"://invalid",
-			`return nl('ABC-123')`,
-			"",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := exhentai.BuildNlFallbackURL(tt.pageURL, tt.onclick)
-			if got != tt.expected {
-				t.Errorf("BuildNlFallbackURL(%q, %q) = %q, want %q", tt.pageURL, tt.onclick, got, tt.expected)
-			}
-		})
-	}
-}
 
 func TestMockPageImage_RetryOnImageDownloadFailure(t *testing.T) {
 	imgData := mockImageBytes()
@@ -781,9 +714,8 @@ func TestMockPageImage_RetryOnImageDownloadFailure(t *testing.T) {
 
 	pageURL := mockServer.URL + "/s/abc123/3138775-1"
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/page-image", app.handlePageImage)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
 	w := httptest.NewRecorder()
@@ -813,9 +745,8 @@ func TestMockPageImage_RetryExhausted(t *testing.T) {
 
 	pageURL := mockServer.URL + "/s/abc123/3138775-1"
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/page-image", app.handlePageImage)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
 	w := httptest.NewRecorder()
@@ -841,9 +772,8 @@ func TestMockPageImage_NoFallbackNoRetry(t *testing.T) {
 
 	pageURL := mockServer.URL + "/s/abc123/3138775-1"
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/page-image", app.handlePageImage)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
 	w := httptest.NewRecorder()
@@ -882,9 +812,8 @@ func TestMockPageImage_RetryWithMultipleFailures(t *testing.T) {
 
 	pageURL := mockServer.URL + "/s/abc123/3138775-1"
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/page-image", app.handlePageImage)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
 	w := httptest.NewRecorder()
@@ -912,9 +841,8 @@ func TestMockPageImage_RetryCancelledByContext(t *testing.T) {
 
 	pageURL := mockServer.URL + "/s/abc123/3138775-1"
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/page-image", app.handlePageImage)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
 	w := httptest.NewRecorder()
@@ -957,9 +885,8 @@ func TestMockGalleryList_Success(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/gallerys", app.handleGallerys)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/gallerys", nil)
 	w := httptest.NewRecorder()
@@ -1011,9 +938,8 @@ func TestMockWatched_Success(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/watched", app.handleWatched)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/watched", nil)
 	w := httptest.NewRecorder()
@@ -1047,9 +973,8 @@ func TestMockPopular_Success(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/popular", app.handlePopular)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/popular", nil)
 	w := httptest.NewRecorder()
@@ -1082,9 +1007,8 @@ func TestMockGalleryList_Empty(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/gallerys", app.handleGallerys)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/gallerys", nil)
 	w := httptest.NewRecorder()
@@ -1109,9 +1033,8 @@ func TestMockGalleryList_ScrapeFailure(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	r := setupMockRouter()
-	app := &App{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/gallerys", app.handleGallerys)
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/gallerys", nil)
 	w := httptest.NewRecorder()

@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"context"
@@ -198,7 +198,7 @@ func TestIsNotFound(t *testing.T) {
 func TestCachedImage_MissingURL(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	app := &CachedImageApp{Client: &http.Client{}}
+	app := &Server{Client: &http.Client{}}
 	r.GET("/api/cached-image", app.handleCachedImage)
 
 	req := httptest.NewRequest("GET", "/api/cached-image", nil)
@@ -213,7 +213,7 @@ func TestCachedImage_MissingURL(t *testing.T) {
 func TestCachedImage_InvalidURL(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	app := &CachedImageApp{Client: &http.Client{}}
+	app := &Server{Client: &http.Client{}}
 	r.GET("/api/cached-image", app.handleCachedImage)
 
 	tests := []struct {
@@ -243,7 +243,7 @@ func TestCachedImage_InvalidURL(t *testing.T) {
 func TestCachedImage_MissingMinIO(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	app := &CachedImageApp{Client: &http.Client{}}
+	app := &Server{Client: &http.Client{}}
 	r.GET("/api/cached-image", app.handleCachedImage)
 
 	pageURL := "https://exhentai.org/s/abc/123-1"
