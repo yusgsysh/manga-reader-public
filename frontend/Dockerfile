@@ -23,6 +23,7 @@ WORKDIR /app
 # 依赖层（利用 Docker 层缓存）
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
+RUN bun run db:update
 
 # 源码
 COPY . .
