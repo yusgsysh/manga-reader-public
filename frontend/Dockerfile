@@ -41,7 +41,7 @@ RUN apk add --no-cache gettext-envsubst
 COPY deploy/angie.conf.tpl /etc/angie/angie.conf.tpl
 COPY deploy/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY --from=build /app/dist /usr/share/angie/html
-COPY --form=build /app/public /usr/share/angie/html
+COPY --from=build /app/public /usr/share/angie/html
 RUN chown -R angie:angie /usr/share/angie/html \
     && chmod +x /usr/local/bin/docker-entrypoint.sh
 
