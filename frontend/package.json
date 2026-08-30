@@ -9,7 +9,7 @@
     "lint": "oxlint",
     "test": "vitest run",
     "preview": "vite preview",
-    "db:update": "bash scripts/update-tag-db.sh"
+    "db:update": "node scripts/update-tag-db.mjs"
   },
   "dependencies": {
     "@cloudflare/kumo": "^2.12.0",

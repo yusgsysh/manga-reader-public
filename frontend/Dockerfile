@@ -23,10 +23,10 @@ WORKDIR /app
 # 依赖层（利用 Docker 层缓存）
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
-RUN bun run db:update
 
 # 源码
 COPY . .
+RUN bun run db:update
 
 # 生产构建：留空 → 同源路径（与本地 .env 直连地址无关，保证镜像总是同源构建）
 ENV VITE_API_BASE_URL=""
@@ -41,7 +41,6 @@ RUN apk add --no-cache gettext-envsubst
 COPY deploy/angie.conf.tpl /etc/angie/angie.conf.tpl
 COPY deploy/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY --from=build /app/dist /usr/share/angie/html
-COPY --from=build /app/public /usr/share/angie/html
 RUN chown -R angie:angie /usr/share/angie/html \
     && chmod +x /usr/local/bin/docker-entrypoint.sh
 
