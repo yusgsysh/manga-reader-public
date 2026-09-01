@@ -132,6 +132,94 @@ func (s *Server) handleSearch(c *gin.Context) {
 		page = 0
 	}
 
+	minPages, err := parseOptionalInt(c, "min_pages")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid min_pages"})
+		return
+	}
+	maxPages, err := parseOptionalInt(c, "max_pages")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid max_pages"})
+		return
+	}
+	if minPages != nil && *minPages < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "min_pages must be >= 0"})
+		return
+	}
+	if maxPages != nil && *maxPages < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "max_pages must be >= 0"})
+		return
+	}
+	if minPages != nil && maxPages != nil && *minPages > *maxPages {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "min_pages must be <= max_pages"})
+		return
+	}
+
+	minRating, err := parseOptionalInt(c, "min_rating")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid min_rating"})
+		return
+	}
+	if minRating != nil {
+		switch *minRating {
+		case 2, 3, 4, 5:
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "min_rating must be 2, 3, 4, or 5"})
+			return
+		}
+	}
+
+	hasTorrent, err := parseOptionalBool(c, "has_torrent")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid has_torrent"})
+		return
+	}
+	includeExpunged, err := parseOptionalBool(c, "include_expunged")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid include_expunged"})
+		return
+	}
+	searchName, err := parseOptionalBool(c, "search_name")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid search_name"})
+		return
+	}
+	searchTags, err := parseOptionalBool(c, "search_tags")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid search_tags"})
+		return
+	}
+	searchDescription, err := parseOptionalBool(c, "search_description")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid search_description"})
+		return
+	}
+	includeLowPowerTags, err := parseOptionalBool(c, "include_low_power_tags")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid include_low_power_tags"})
+		return
+	}
+	includeDownvotedTags, err := parseOptionalBool(c, "include_downvoted_tags")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid include_downvoted_tags"})
+		return
+	}
+	disableLanguageFilter, err := parseOptionalBool(c, "disable_language_filter")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid disable_language_filter"})
+		return
+	}
+	disableUploaderFilter, err := parseOptionalBool(c, "disable_uploader_filter")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid disable_uploader_filter"})
+		return
+	}
+	disableTagFilter, err := parseOptionalBool(c, "disable_tag_filter")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid disable_tag_filter"})
+		return
+	}
+
 	ctx := c.Request.Context()
 
 	var siteURL string
@@ -146,7 +234,23 @@ func (s *Server) handleSearch(c *gin.Context) {
 		categories = strings.Split(categoryStr, ",")
 	}
 
-	total, results, err := exhentai.ScrapeSearch(ctx, s.Client, siteURL, keyword, categories, page)
+	opts := &exhentai.SearchOptions{
+		MinPages:             minPages,
+		MaxPages:             maxPages,
+		MinRating:            minRating,
+		HasTorrent:           hasTorrent,
+		IncludeExpunged:      includeExpunged,
+		SearchName:           searchName,
+		SearchTags:           searchTags,
+		SearchDescription:    searchDescription,
+		IncludeLowPowerTags:  includeLowPowerTags,
+		IncludeDownvotedTags: includeDownvotedTags,
+		DisableLanguageFilter: disableLanguageFilter,
+		DisableUploaderFilter: disableUploaderFilter,
+		DisableTagFilter:      disableTagFilter,
+	}
+
+	total, results, err := exhentai.ScrapeSearch(ctx, s.Client, siteURL, keyword, categories, page, opts)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("search failed: %v", err)})
 		return
@@ -282,4 +386,31 @@ func (s *Server) handleWatched(c *gin.Context) {
 
 func (s *Server) handlePopular(c *gin.Context) {
 	s.handleGalleryList(exhentai.ExhentaiURL + "/popular")(c)
+}
+
+func parseOptionalInt(c *gin.Context, key string) (*int, error) {
+	v := c.Query(key)
+	if v == "" {
+		return nil, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return nil, err
+	}
+	return &n, nil
+}
+
+func parseOptionalBool(c *gin.Context, key string) (bool, error) {
+	v := c.Query(key)
+	if v == "" {
+		return false, nil
+	}
+	switch strings.ToLower(v) {
+	case "true", "1":
+		return true, nil
+	case "false", "0":
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid boolean value: %s", v)
+	}
 }

@@ -456,7 +456,203 @@ func TestMockSearch_NegativePageClamped(t *testing.T) {
 	}
 }
 
-// ==================== handleGalleryDetails Tests ====================
+// ==================== Advanced Search Parameter Tests ====================
+
+func TestMockSearch_InvalidMinPages(t *testing.T) {
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/search?q=test&min_pages=-1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestMockSearch_InvalidMaxPages(t *testing.T) {
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/search?q=test&max_pages=-5", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestMockSearch_MinPagesGreaterThanMax(t *testing.T) {
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/search?q=test&min_pages=200&max_pages=10", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestMockSearch_InvalidMinRating(t *testing.T) {
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/search?q=test&min_rating=1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+
+	req = httptest.NewRequest("GET", "/api/search?q=test&min_rating=6", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestMockSearch_InvalidHasTorrent(t *testing.T) {
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/search?q=test&has_torrent=abc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestMockSearch_InvalidBooleanParams(t *testing.T) {
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
+
+	params := []string{
+		"include_expunged", "search_name", "search_tags", "search_description",
+		"include_low_power_tags", "include_downvoted_tags",
+		"disable_language_filter", "disable_uploader_filter", "disable_tag_filter",
+	}
+	for _, p := range params {
+		req := httptest.NewRequest("GET", "/api/search?q=test&"+p+"=badvalue", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want %d. body: %s", p, w.Code, http.StatusBadRequest, w.Body.String())
+		}
+	}
+}
+
+func TestMockSearch_InvalidNonNumericParams(t *testing.T) {
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/search?q=test&min_pages=abc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("min_pages=abc: status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	req = httptest.NewRequest("GET", "/api/search?q=test&max_pages=xyz", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("max_pages=xyz: status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	req = httptest.NewRequest("GET", "/api/search?q=test&min_rating=abc", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("min_rating=abc: status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestMockSearch_AdvancedSearchParamsPassThrough(t *testing.T) {
+	var requestedURL string
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		requestedURL = r.URL.String()
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockSearchHTML(1))
+	})
+	defer mockServer.Close()
+
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/search?q=test&has_torrent=true&min_pages=10&max_pages=200&min_rating=4", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	parsedURL, _ := url.Parse(requestedURL)
+	q := parsedURL.Query()
+
+	if q.Get("advsearch") != "1" {
+		t.Errorf("advsearch = %q, want %q", q.Get("advsearch"), "1")
+	}
+	if q.Get("f_search") != "test" {
+		t.Errorf("f_search = %q, want %q", q.Get("f_search"), "test")
+	}
+	if q.Get("f_sto") != "on" {
+		t.Errorf("f_sto = %q, want %q", q.Get("f_sto"), "on")
+	}
+	if q.Get("f_spf") != "10" {
+		t.Errorf("f_spf = %q, want %q", q.Get("f_spf"), "10")
+	}
+	if q.Get("f_spt") != "200" {
+		t.Errorf("f_spt = %q, want %q", q.Get("f_spt"), "200")
+	}
+	if q.Get("f_sr") != "on" {
+		t.Errorf("f_sr = %q, want %q", q.Get("f_sr"), "on")
+	}
+	if q.Get("f_srdd") != "4" {
+		t.Errorf("f_srdd = %q, want %q", q.Get("f_srdd"), "4")
+	}
+}
+
+func TestMockSearch_NoAdvancedWhenEmptyOpts(t *testing.T) {
+	var requestedURL string
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		requestedURL = r.URL.String()
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockSearchHTML(1))
+	})
+	defer mockServer.Close()
+
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/search?q=test", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	parsedURL, _ := url.Parse(requestedURL)
+	q := parsedURL.Query()
+
+	if q.Get("advsearch") != "" {
+		t.Errorf("advsearch should not be set for basic search, got %q", q.Get("advsearch"))
+	}
+}
 
 func TestMockGalleryDetails_EmptyID(t *testing.T) {
 	server := &Server{Client: &http.Client{}}

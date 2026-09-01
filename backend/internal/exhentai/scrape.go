@@ -89,23 +89,113 @@ func ParseStars(stars string) float64 {
 	return rating
 }
 
-func ScrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword string, categories []string, page int) (total int, results []model.SearchResult, err error) {
+type SearchOptions struct {
+	MinPages *int
+	MaxPages *int
+	MinRating *int
+
+	HasTorrent     bool
+	IncludeExpunged bool
+
+	SearchName        bool
+	SearchTags        bool
+	SearchDescription bool
+
+	IncludeLowPowerTags  bool
+	IncludeDownvotedTags bool
+
+	DisableLanguageFilter bool
+	DisableUploaderFilter bool
+	DisableTagFilter      bool
+}
+
+func BuildSearchQuery(keyword string, categories []string, opts *SearchOptions) url.Values {
+	q := url.Values{}
+
+	if len(categories) > 0 {
+		catVal := BuildCategoryFilter(categories)
+		if catVal != "" {
+			q.Set("f_cats", catVal)
+		}
+	}
+	if keyword != "" {
+		q.Set("f_search", keyword)
+	}
+
+	if opts == nil {
+		return q
+	}
+
+	advanced := false
+
+	if opts.MinPages != nil {
+		q.Set("f_spf", strconv.Itoa(*opts.MinPages))
+		advanced = true
+	}
+	if opts.MaxPages != nil {
+		q.Set("f_spt", strconv.Itoa(*opts.MaxPages))
+		advanced = true
+	}
+	if opts.MinRating != nil {
+		q.Set("f_sr", "on")
+		q.Set("f_srdd", strconv.Itoa(*opts.MinRating))
+		advanced = true
+	}
+	if opts.HasTorrent {
+		q.Set("f_sto", "on")
+		advanced = true
+	}
+	if opts.IncludeExpunged {
+		q.Set("f_sh", "on")
+		advanced = true
+	}
+	if opts.SearchName {
+		q.Set("f_sname", "on")
+		advanced = true
+	}
+	if opts.SearchTags {
+		q.Set("f_stags", "on")
+		advanced = true
+	}
+	if opts.SearchDescription {
+		q.Set("f_sdesc", "on")
+		advanced = true
+	}
+	if opts.IncludeLowPowerTags {
+		q.Set("f_sdt1", "on")
+		advanced = true
+	}
+	if opts.IncludeDownvotedTags {
+		q.Set("f_sdt2", "on")
+		advanced = true
+	}
+	if opts.DisableLanguageFilter {
+		q.Set("f_sfl", "on")
+		advanced = true
+	}
+	if opts.DisableUploaderFilter {
+		q.Set("f_sfu", "on")
+		advanced = true
+	}
+	if opts.DisableTagFilter {
+		q.Set("f_sft", "on")
+		advanced = true
+	}
+
+	if advanced {
+		q.Set("advsearch", "1")
+	}
+
+	return q
+}
+
+func ScrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword string, categories []string, page int, opts *SearchOptions) (total int, results []model.SearchResult, err error) {
 	u, err := url.Parse(siteURL)
 	if err != nil {
 		return 0, nil, err
 	}
 
-	querys := url.Values{}
-	if len(categories) > 0 {
-		catVal := BuildCategoryFilter(categories)
-		if catVal != "" {
-			querys.Set("f_cats", catVal)
-		}
-	}
-	if keyword != "" {
-		querys.Set("f_search", keyword)
-	}
-	u.RawQuery = querys.Encode()
+	u.RawQuery = BuildSearchQuery(keyword, categories, opts).Encode()
 
 	doc, err := httpGetDoc(ctx, client, u.String())
 	if err != nil {

@@ -121,3 +121,204 @@ func BenchmarkBuildCategoryFilter(b *testing.B) {
 		BuildCategoryFilter(cats)
 	}
 }
+
+func intPtr(v int) *int { return &v }
+
+func TestBuildSearchQuery(t *testing.T) {
+	tests := []struct {
+		name     string
+		keyword  string
+		cats     []string
+		opts     *SearchOptions
+		expected map[string]string
+	}{
+		{
+			name:    "basic keyword only",
+			keyword: "yuri",
+			opts:    nil,
+			expected: map[string]string{
+				"f_search": "yuri",
+			},
+		},
+		{
+			name:    "keyword with categories",
+			keyword: "test",
+			cats:    []string{"doujinshi"},
+			opts:    nil,
+			expected: map[string]string{
+				"f_search": "test",
+				"f_cats":   strconv.FormatUint(uint64(1023^2), 10),
+			},
+		},
+		{
+			name:    "page range",
+			keyword: "test",
+			opts: &SearchOptions{
+				MinPages: intPtr(10),
+				MaxPages: intPtr(200),
+			},
+			expected: map[string]string{
+				"f_search": "test",
+				"advsearch": "1",
+				"f_spf":    "10",
+				"f_spt":    "200",
+			},
+		},
+		{
+			name:    "min rating",
+			keyword: "test",
+			opts: &SearchOptions{
+				MinRating: intPtr(4),
+			},
+			expected: map[string]string{
+				"f_search": "test",
+				"advsearch": "1",
+				"f_sr":     "on",
+				"f_srdd":   "4",
+			},
+		},
+		{
+			name:    "has torrent",
+			keyword: "test",
+			opts: &SearchOptions{
+				HasTorrent: true,
+			},
+			expected: map[string]string{
+				"f_search": "test",
+				"advsearch": "1",
+				"f_sto":    "on",
+			},
+		},
+		{
+			name:    "include expunged",
+			keyword: "test",
+			opts: &SearchOptions{
+				IncludeExpunged: true,
+			},
+			expected: map[string]string{
+				"f_search": "test",
+				"advsearch": "1",
+				"f_sh":     "on",
+			},
+		},
+		{
+			name:    "search targets",
+			keyword: "test",
+			opts: &SearchOptions{
+				SearchName:        true,
+				SearchTags:        true,
+				SearchDescription: true,
+			},
+			expected: map[string]string{
+				"f_search": "test",
+				"advsearch": "1",
+				"f_sname":  "on",
+				"f_stags":  "on",
+				"f_sdesc":  "on",
+			},
+		},
+		{
+			name:    "low power and downvoted tags",
+			keyword: "test",
+			opts: &SearchOptions{
+				IncludeLowPowerTags:  true,
+				IncludeDownvotedTags: true,
+			},
+			expected: map[string]string{
+				"f_search": "test",
+				"advsearch": "1",
+				"f_sdt1":   "on",
+				"f_sdt2":   "on",
+			},
+		},
+		{
+			name:    "disable filters",
+			keyword: "test",
+			opts: &SearchOptions{
+				DisableLanguageFilter: true,
+				DisableUploaderFilter: true,
+				DisableTagFilter:      true,
+			},
+			expected: map[string]string{
+				"f_search": "test",
+				"advsearch": "1",
+				"f_sfl":    "on",
+				"f_sfu":    "on",
+				"f_sft":    "on",
+			},
+		},
+		{
+			name:    "combined advanced search",
+			keyword: "o:3d$",
+			opts: &SearchOptions{
+				MinPages:  intPtr(10),
+				MaxPages:  intPtr(200),
+				MinRating: intPtr(4),
+				HasTorrent: true,
+			},
+			expected: map[string]string{
+				"f_search": "o:3d$",
+				"advsearch": "1",
+				"f_spf":    "10",
+				"f_spt":    "200",
+				"f_sr":     "on",
+				"f_srdd":   "4",
+				"f_sto":    "on",
+			},
+		},
+		{
+			name:    "empty opts no advanced",
+			keyword: "test",
+			opts:    &SearchOptions{},
+			expected: map[string]string{
+				"f_search": "test",
+			},
+		},
+		{
+			name:    "only min_pages",
+			keyword: "test",
+			opts: &SearchOptions{
+				MinPages: intPtr(5),
+			},
+			expected: map[string]string{
+				"f_search": "test",
+				"advsearch": "1",
+				"f_spf":    "5",
+			},
+		},
+		{
+			name:    "only max_pages",
+			keyword: "test",
+			opts: &SearchOptions{
+				MaxPages: intPtr(100),
+			},
+			expected: map[string]string{
+				"f_search": "test",
+				"advsearch": "1",
+				"f_spt":    "100",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := BuildSearchQuery(tt.keyword, tt.cats, tt.opts)
+
+			for key, wantVal := range tt.expected {
+				gotVal := got.Get(key)
+				if gotVal != wantVal {
+					t.Errorf("BuildSearchQuery()[%q] = %q, want %q", key, gotVal, wantVal)
+				}
+			}
+
+			if len(got) != len(tt.expected) {
+				t.Errorf("BuildSearchQuery() returned %d params, expected %d", len(got), len(tt.expected))
+				for k := range got {
+					if _, ok := tt.expected[k]; !ok {
+						t.Errorf("  unexpected param: %q=%q", k, got.Get(k))
+					}
+				}
+			}
+		})
+	}
+}
