@@ -1240,3 +1240,167 @@ func TestMockGalleryList_ScrapeFailure(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusBadGateway)
 	}
 }
+
+// ==================== Watched/Gallerys Advanced Search Tests ====================
+
+func TestMockWatched_AdvancedSearchParams(t *testing.T) {
+	var requestedURL string
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		requestedURL = r.URL.String()
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryListHTML(1))
+	})
+	defer mockServer.Close()
+
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/watched?has_torrent=true&min_rating=4", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	parsedURL, _ := url.Parse(requestedURL)
+	q := parsedURL.Query()
+
+	if q.Get("advsearch") != "1" {
+		t.Errorf("advsearch = %q, want %q", q.Get("advsearch"), "1")
+	}
+	if q.Get("f_sto") != "on" {
+		t.Errorf("f_sto = %q, want %q", q.Get("f_sto"), "on")
+	}
+	if q.Get("f_sr") != "on" {
+		t.Errorf("f_sr = %q, want %q", q.Get("f_sr"), "on")
+	}
+	if q.Get("f_srdd") != "4" {
+		t.Errorf("f_srdd = %q, want %q", q.Get("f_srdd"), "4")
+	}
+}
+
+func TestMockWatched_PageRange(t *testing.T) {
+	var requestedURL string
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		requestedURL = r.URL.String()
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryListHTML(1))
+	})
+	defer mockServer.Close()
+
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/watched?min_pages=10&max_pages=200", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	parsedURL, _ := url.Parse(requestedURL)
+	q := parsedURL.Query()
+
+	if q.Get("advsearch") != "1" {
+		t.Errorf("advsearch = %q, want %q", q.Get("advsearch"), "1")
+	}
+	if q.Get("f_spf") != "10" {
+		t.Errorf("f_spf = %q, want %q", q.Get("f_spf"), "10")
+	}
+	if q.Get("f_spt") != "200" {
+		t.Errorf("f_spt = %q, want %q", q.Get("f_spt"), "200")
+	}
+}
+
+func TestMockWatched_InvalidParams(t *testing.T) {
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/watched?min_pages=-1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("min_pages=-1: status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	req = httptest.NewRequest("GET", "/api/watched?min_rating=6", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("min_rating=6: status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	req = httptest.NewRequest("GET", "/api/watched?has_torrent=invalid", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("has_torrent=invalid: status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestMockGallerys_AdvancedSearchParams(t *testing.T) {
+	var requestedURL string
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		requestedURL = r.URL.String()
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryListHTML(1))
+	})
+	defer mockServer.Close()
+
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallerys?include_expunged=true&search_name=true", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	parsedURL, _ := url.Parse(requestedURL)
+	q := parsedURL.Query()
+
+	if q.Get("advsearch") != "1" {
+		t.Errorf("advsearch = %q, want %q", q.Get("advsearch"), "1")
+	}
+	if q.Get("f_sh") != "on" {
+		t.Errorf("f_sh = %q, want %q", q.Get("f_sh"), "on")
+	}
+	if q.Get("f_sname") != "on" {
+		t.Errorf("f_sname = %q, want %q", q.Get("f_sname"), "on")
+	}
+}
+
+func TestMockWatched_NoAdvancedWhenEmptyOpts(t *testing.T) {
+	var requestedURL string
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		requestedURL = r.URL.String()
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryListHTML(1))
+	})
+	defer mockServer.Close()
+
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/watched", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	parsedURL, _ := url.Parse(requestedURL)
+	q := parsedURL.Query()
+
+	if q.Get("advsearch") != "" {
+		t.Errorf("advsearch should not be set for basic watched, got %q", q.Get("advsearch"))
+	}
+}

@@ -657,10 +657,21 @@ func ProxyImage(ctx context.Context, client *http.Client, imgURL string) (data [
 	return data, contentType, nil
 }
 
-func ScrapeGalleryList(ctx context.Context, client *http.Client, listURL string, page int) (results []model.SearchResult, err error) {
+func ScrapeGalleryList(ctx context.Context, client *http.Client, listURL string, page int, opts *SearchOptions) (results []model.SearchResult, err error) {
 	u, err := url.Parse(listURL)
 	if err != nil {
 		return nil, err
+	}
+
+	if opts != nil {
+		existing := u.Query()
+		newParams := BuildSearchQuery("", nil, opts)
+		for k, vs := range newParams {
+			for _, v := range vs {
+				existing.Set(k, v)
+			}
+		}
+		u.RawQuery = existing.Encode()
 	}
 
 	doc, err := httpGetDoc(ctx, client, u.String())
