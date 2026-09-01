@@ -270,6 +270,19 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | page | int | no | `0` | 页码 (0-indexed) |
+| min_pages | int | no | - | 最小页数 (>= 0) |
+| max_pages | int | no | - | 最大页数 (>= 0) |
+| min_rating | int | no | - | 最低评分: `2`, `3`, `4`, `5` |
+| has_torrent | bool | no | `false` | 仅显示有种子的画廊 |
+| include_expunged | bool | no | `false` | 包含已删除的画廊 |
+| search_name | bool | no | `false` | 在标题中搜索 |
+| search_tags | bool | no | `false` | 在标签中搜索 |
+| search_description | bool | no | `false` | 在描述中搜索 |
+| include_low_power_tags | bool | no | `false` | 包含低权重标签 |
+| include_downvoted_tags | bool | no | `false` | 包含被降权的标签 |
+| disable_language_filter | bool | no | `false` | 禁用语言自定义过滤器 |
+| disable_uploader_filter | bool | no | `false` | 禁用上传者自定义过滤器 |
+| disable_tag_filter | bool | no | `false` | 禁用标签自定义过滤器 |
 
 **Response (200):**
 
@@ -309,6 +322,19 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | page | int | no | `0` | 页码 (0-indexed) |
+| min_pages | int | no | - | 最小页数 (>= 0) |
+| max_pages | int | no | - | 最大页数 (>= 0) |
+| min_rating | int | no | - | 最低评分: `2`, `3`, `4`, `5` |
+| has_torrent | bool | no | `false` | 仅显示有种子的画廊 |
+| include_expunged | bool | no | `false` | 包含已删除的画廊 |
+| search_name | bool | no | `false` | 在标题中搜索 |
+| search_tags | bool | no | `false` | 在标签中搜索 |
+| search_description | bool | no | `false` | 在描述中搜索 |
+| include_low_power_tags | bool | no | `false` | 包含低权重标签 |
+| include_downvoted_tags | bool | no | `false` | 包含被降权的标签 |
+| disable_language_filter | bool | no | `false` | 禁用语言自定义过滤器 |
+| disable_uploader_filter | bool | no | `false` | 禁用上传者自定义过滤器 |
+| disable_tag_filter | bool | no | `false` | 禁用标签自定义过滤器 |
 
 **Response (200):**
 
