@@ -251,9 +251,14 @@ func extractNextURL(doc *goquery.Document) string {
 func parseSearchResults(doc *goquery.Document) ([]model.SearchResult, error) {
 	table := doc.Find("table.itg.gltc > tbody > tr")
 	isThumbnail := false
+	isExtended := false
 	if table.Length() == 0 {
 		table = doc.Find("table.itg.gltm > tbody > tr")
 		isThumbnail = true
+	}
+	if table.Length() == 0 {
+		table = doc.Find("table.itg.glte > tbody > tr")
+		isExtended = true
 	}
 	if table.Length() == 0 {
 		table = doc.Find("body > div.ido > div:nth-child(2) > table > tbody > tr")
@@ -269,7 +274,67 @@ func parseSearchResults(doc *goquery.Document) ([]model.SearchResult, error) {
 		var tags []string
 		var stars string
 
-		if isThumbnail {
+		if isExtended {
+			gl1e := s.Find("td.gl1e")
+			if gl1e.Length() == 0 {
+				return
+			}
+			gl2e := s.Find("td.gl2e")
+			if gl2e.Length() == 0 {
+				return
+			}
+
+			gl3e := gl2e.Find("div.gl3e")
+			cat = gl3e.Find("div.cn").Text()
+
+			gl3e.Find("div").Each(func(i int, s *goquery.Selection) {
+				text := s.Text()
+				if len(text) >= 10 && text[4] == '-' && text[7] == '-' {
+					if upTime == "" {
+						upTime = text
+					}
+				}
+			})
+			stars, _ = gl3e.Find("div.ir").Attr("style")
+
+			gl3e.Find("div").Each(func(i int, s *goquery.Selection) {
+				text := s.Text()
+				if len(text) > 6 && text[len(text)-6:] == " pages" {
+					pagesStr = text
+				}
+			})
+
+			gl3e.Find("div > a").Each(func(i int, a *goquery.Selection) {
+				href, _ := a.Attr("href")
+				if strings.Contains(href, "/uploader/") && uploader == "" {
+					uploader = a.Text()
+				}
+			})
+
+			coverImg := gl1e.Find("img")
+			cover = coverImg.AttrOr("src", "")
+
+			gl2e.Find("a").Each(func(i int, a *goquery.Selection) {
+				href, _ := a.Attr("href")
+				if strings.Contains(href, "/g/") && gURL == "" {
+					gURL = href
+				}
+			})
+
+			gl4e := gl2e.Find("div.gl4e.glname")
+			title = gl4e.Find("div.glink").Text()
+			gl4e.Find("table tr").Each(func(i int, s *goquery.Selection) {
+				s.Find("div").Each(func(i int, s *goquery.Selection) {
+					tag := s.AttrOr("title", "")
+					if tag == "" {
+						tag = s.Text()
+					}
+					if tag != "" {
+						tags = append(tags, tag)
+					}
+				})
+			})
+		} else if isThumbnail {
 			gl3m := s.Find("td.gl3m.glname")
 			if gl3m.Length() == 0 {
 				return
@@ -700,9 +765,14 @@ func ScrapeGalleryList(ctx context.Context, client *http.Client, listURL string,
 func parseGalleryListResults(doc *goquery.Document) ([]model.SearchResult, error) {
 	table := doc.Find("table.itg.gltc > tbody > tr")
 	isThumbnail := false
+	isExtended := false
 	if table.Length() == 0 {
 		table = doc.Find("table.itg.gltm > tbody > tr")
 		isThumbnail = true
+	}
+	if table.Length() == 0 {
+		table = doc.Find("table.itg.glte > tbody > tr")
+		isExtended = true
 	}
 	if table.Length() == 0 {
 		return nil, fmt.Errorf("empty gallery list")
@@ -715,7 +785,67 @@ func parseGalleryListResults(doc *goquery.Document) ([]model.SearchResult, error
 		var tags []string
 		var stars string
 
-		if isThumbnail {
+		if isExtended {
+			gl1e := s.Find("td.gl1e")
+			if gl1e.Length() == 0 {
+				return
+			}
+			gl2e := s.Find("td.gl2e")
+			if gl2e.Length() == 0 {
+				return
+			}
+
+			gl3e := gl2e.Find("div.gl3e")
+			cat = gl3e.Find("div.cn").Text()
+
+			gl3e.Find("div").Each(func(i int, s *goquery.Selection) {
+				text := s.Text()
+				if len(text) >= 10 && text[4] == '-' && text[7] == '-' {
+					if upTime == "" {
+						upTime = text
+					}
+				}
+			})
+			stars, _ = gl3e.Find("div.ir").Attr("style")
+
+			gl3e.Find("div").Each(func(i int, s *goquery.Selection) {
+				text := s.Text()
+				if len(text) > 6 && text[len(text)-6:] == " pages" {
+					pagesStr = text
+				}
+			})
+
+			gl3e.Find("div > a").Each(func(i int, a *goquery.Selection) {
+				href, _ := a.Attr("href")
+				if strings.Contains(href, "/uploader/") && uploader == "" {
+					uploader = a.Text()
+				}
+			})
+
+			coverImg := gl1e.Find("img")
+			cover = coverImg.AttrOr("src", "")
+
+			gl2e.Find("a").Each(func(i int, a *goquery.Selection) {
+				href, _ := a.Attr("href")
+				if strings.Contains(href, "/g/") && gURL == "" {
+					gURL = href
+				}
+			})
+
+			gl4e := gl2e.Find("div.gl4e.glname")
+			title = gl4e.Find("div.glink").Text()
+			gl4e.Find("table tr").Each(func(i int, s *goquery.Selection) {
+				s.Find("div").Each(func(i int, s *goquery.Selection) {
+					tag := s.AttrOr("title", "")
+					if tag == "" {
+						tag = s.Text()
+					}
+					if tag != "" {
+						tags = append(tags, tag)
+					}
+				})
+			})
+		} else if isThumbnail {
 			gl3m := s.Find("td.gl3m.glname")
 			if gl3m.Length() == 0 {
 				return
