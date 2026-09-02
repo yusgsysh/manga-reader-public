@@ -380,7 +380,7 @@ func parseSearchResults(doc *goquery.Document) ([]model.SearchResult, error) {
 			a := gl3c.Find("a")
 			gURL, _ = a.Attr("href")
 			title = a.Find("div.glink").Text()
-			a.Find("div > div.gt").Each(func(i int, s *goquery.Selection) {
+			a.Find("div.gt").Each(func(i int, s *goquery.Selection) {
 				tags = append(tags, s.AttrOr("title", s.Text()))
 			})
 
@@ -891,7 +891,7 @@ func parseGalleryListResults(doc *goquery.Document) ([]model.SearchResult, error
 			a := gl3c.Find("a")
 			gURL, _ = a.Attr("href")
 			title = a.Find("div.glink").Text()
-			a.Find("div > div.gt").Each(func(i int, s *goquery.Selection) {
+			a.Find("div.gt").Each(func(i int, s *goquery.Selection) {
 				tags = append(tags, s.AttrOr("title", s.Text()))
 			})
 
