@@ -59,7 +59,7 @@ function buildTagQuery(tags: string[]): string {
   return tags.map((tag) => `tag:${tag.trim()}`).join(" ");
 }
 
-function countActiveFilters(options: AdvancedSearchOptions): number {
+function countActiveFilters(options: AdvancedSearchOptions, tags: string[], pendingTags: string[]): number {
   let count = 0;
   if (options.min_pages !== undefined) count++;
   if (options.max_pages !== undefined) count++;
@@ -74,21 +74,26 @@ function countActiveFilters(options: AdvancedSearchOptions): number {
   if (options.disable_language_filter) count++;
   if (options.disable_uploader_filter) count++;
   if (options.disable_tag_filter) count++;
+  count += tags.length;
+  count += pendingTags.length;
   return count;
 }
 
 export function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const q = searchParams.get("q") ?? "";
-  const site = searchParams.get("site") ?? "exhentai";
-  const categories = searchParams.get("categories") ?? "";
+  const siteParam = searchParams.get("site") ?? "exhentai";
+  const categoriesParam = searchParams.get("categories") ?? "";
   const page = Number(searchParams.get("page") ?? "0");
-  const advancedOptions = parseAdvancedParams(searchParams);
-  const tags = parseTags(searchParams);
+  const appliedAdvancedOptions = parseAdvancedParams(searchParams);
+  const appliedTags = parseTags(searchParams);
 
   const [inputValue, setInputValue] = useState(q);
-  const [tagInput, setTagInput] = useState("");
+  const [site, setSite] = useState(siteParam);
+  const [categories, setCategories] = useState(categoriesParam);
+  const [pendingAdvancedOptions, setPendingAdvancedOptions] = useState<AdvancedSearchOptions>(appliedAdvancedOptions);
   const [pendingTags, setPendingTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -99,27 +104,27 @@ export function SearchPage() {
   const { searchTags, ready: tagDbReady } = useTagTranslation();
   const [suggestions, setSuggestions] = useState<Array<{ namespace: string; tag: string; translation: string }>>([]);
 
-  const tagQuery = buildTagQuery(tags);
+  const tagQuery = buildTagQuery(appliedTags);
   const fullQuery = [q, tagQuery].filter(Boolean).join(" ");
 
   const { data, isLoading, error, refetch } = useSearch({
     q: fullQuery || undefined,
-    site,
-    categories,
+    site: siteParam,
+    categories: categoriesParam,
     page,
-    ...advancedOptions,
+    ...appliedAdvancedOptions,
   });
 
-  const updateParams = (updates: Record<string, string | null>) => {
-    const params = new URLSearchParams(searchParams);
-    for (const [key, value] of Object.entries(updates)) {
-      if (value === null) {
-        params.delete(key);
+  const updateAdvancedFilter = (key: keyof AdvancedSearchOptions, value: string | boolean | number | undefined) => {
+    setPendingAdvancedOptions((prev) => {
+      const next = { ...prev };
+      if (value === undefined || value === false || value === "") {
+        delete next[key];
       } else {
-        params.set(key, value);
+        (next as Record<string, unknown>)[key] = value;
       }
-    }
-    setSearchParams(params);
+      return next;
+    });
   };
 
   const handleSearch = () => {
@@ -127,9 +132,14 @@ export function SearchPage() {
     if (inputValue.trim()) params.set("q", inputValue.trim());
     params.set("site", site);
     if (categories) params.set("categories", categories);
-    const allTags = [...tags, ...pendingTags];
-    if (allTags.length > 0) params.set("tags", allTags.join(","));
+    const allTags = [...appliedTags, ...pendingTags];
+    if (allTags.length > 0) params.set("tags", [...new Set(allTags)].join(","));
     params.set("page", "0");
+    for (const [key, value] of Object.entries(pendingAdvancedOptions)) {
+      if (value !== undefined && value !== false && value !== "") {
+        params.set(key, String(value));
+      }
+    }
     setSearchParams(params);
     setPendingTags([]);
   };
@@ -139,34 +149,25 @@ export function SearchPage() {
   };
 
   const handlePageChange = (newPage: number) => {
-    updateParams({ page: String(newPage) });
-  };
-
-  const handleSiteChange = (value: string | null) => {
-    updateParams({ site: value ?? "exhentai", page: "0" });
+    const params = new URLSearchParams(searchParams);
+    params.set("page", String(newPage));
+    setSearchParams(params);
   };
 
   const toggleCategory = (cat: string) => {
-    const current = categories ? categories.split(",") : [];
-    const next = current.includes(cat)
-      ? current.filter((c) => c !== cat)
-      : [...current, cat];
-    updateParams({ categories: next.length > 0 ? next.join(",") : null, page: "0" });
-  };
-
-  const updateAdvancedFilter = (key: keyof AdvancedSearchOptions, value: string | boolean | number | undefined) => {
-    const updates: Record<string, string | null> = { page: "0" };
-    if (value === undefined || value === false || value === "") {
-      updates[key] = null;
-    } else {
-      updates[key] = String(value);
-    }
-    updateParams(updates);
+    setCategories((prev) => {
+      const current = prev ? prev.split(",") : [];
+      const next = current.includes(cat)
+        ? current.filter((c) => c !== cat)
+        : [...current, cat];
+      return next.length > 0 ? next.join(",") : "";
+    });
   };
 
   const addPendingTag = (tagValue?: string) => {
     const tag = tagValue ?? tagInput.trim();
-    if (!tag || pendingTags.includes(tag)) return;
+    if (!tag) return;
+    if (pendingTags.includes(tag) || appliedTags.includes(tag)) return;
     setPendingTags([...pendingTags, tag]);
     setTagInput("");
     setShowSuggestions(false);
@@ -178,8 +179,15 @@ export function SearchPage() {
   };
 
   const removeAppliedTag = (tagToRemove: string) => {
-    const newTags = tags.filter((t) => t !== tagToRemove);
-    updateParams({ tags: newTags.length > 0 ? newTags.join(",") : null, page: "0" });
+    const newTags = appliedTags.filter((t) => t !== tagToRemove);
+    const params = new URLSearchParams(searchParams);
+    if (newTags.length > 0) {
+      params.set("tags", newTags.join(","));
+    } else {
+      params.delete("tags");
+    }
+    params.set("page", "0");
+    setSearchParams(params);
   };
 
   const handleTagKeyDown = (e: React.KeyboardEvent) => {
@@ -202,7 +210,7 @@ export function SearchPage() {
       setSelectedIndex(-1);
 
       if (tagDbReady && value.trim().length > 0) {
-        const results = searchTags(value.trim(), 8);
+        const results = searchTags(value.trim(), 6);
         setSuggestions(results);
         setShowSuggestions(results.length > 0);
       } else {
@@ -229,18 +237,13 @@ export function SearchPage() {
   }, []);
 
   const resetAdvancedFilters = () => {
-    const params = new URLSearchParams();
-    if (q) params.set("q", q);
-    params.set("site", site);
-    if (categories) params.set("categories", categories);
-    params.set("page", "0");
-    setSearchParams(params);
+    setPendingAdvancedOptions({});
     setPendingTags([]);
     setTagInput("");
     setShowSuggestions(false);
   };
 
-  const activeFilterCount = countActiveFilters(advancedOptions) + tags.length + pendingTags.length;
+  const activeFilterCount = countActiveFilters(pendingAdvancedOptions, appliedTags, pendingTags);
 
   return (
     <div className="space-y-4">
@@ -262,31 +265,33 @@ export function SearchPage() {
 
       {/* Filters */}
       <div className="flex flex-col gap-4">
-        <div className="w-40">
-          <Select
-            value={site}
-            onValueChange={handleSiteChange}
-            aria-label="Site"
-            items={[
-              { label: "ExHentai", value: "exhentai" },
-              { label: "E-Hentai", value: "ehentai" },
-            ]}
-          />
-        </div>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="w-40">
+            <Select
+              value={site}
+              onValueChange={(v) => setSite(v ?? "exhentai")}
+              aria-label="Site"
+              items={[
+                { label: "ExHentai", value: "exhentai" },
+                { label: "E-Hentai", value: "ehentai" },
+              ]}
+            />
+          </div>
 
-        <div className="flex flex-wrap gap-3">
-          {CATEGORIES.map((cat) => (
-            <label
-              key={cat.value}
-              className="flex items-center gap-1.5 text-xs"
-            >
-              <Checkbox
-                checked={categories.split(",").includes(cat.value)}
-                onCheckedChange={() => toggleCategory(cat.value)}
-              />
-              {cat.label}
-            </label>
-          ))}
+          <div className="flex flex-wrap gap-3">
+            {CATEGORIES.map((cat) => (
+              <label
+                key={cat.value}
+                className="flex items-center gap-1.5 text-xs"
+              >
+                <Checkbox
+                  checked={categories.split(",").includes(cat.value)}
+                  onCheckedChange={() => toggleCategory(cat.value)}
+                />
+                {cat.label}
+              </label>
+            ))}
+          </div>
         </div>
 
         {/* Advanced Search Toggle */}
@@ -329,7 +334,7 @@ export function SearchPage() {
                 {showSuggestions && suggestions.length > 0 && (
                   <div
                     ref={suggestionsRef}
-                    className="absolute z-10 top-full left-0 right-0 mt-1 bg-kumo-elevated border border-kumo-border rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                    className="absolute z-10 top-full left-0 right-0 mt-1 bg-kumo-elevated border border-kumo-border rounded-lg shadow-lg max-h-48 overflow-y-auto"
                     role="listbox"
                   >
                     {suggestions.map((s, index) => (
@@ -338,16 +343,16 @@ export function SearchPage() {
                         type="button"
                         role="option"
                         aria-selected={index === selectedIndex}
-                        className={`w-full px-3 py-2 text-left text-sm hover:bg-kumo-subtle flex items-center justify-between ${
+                        className={`w-full px-2 py-1.5 text-left text-xs hover:bg-kumo-subtle flex items-center justify-between ${
                           index === selectedIndex ? "bg-kumo-subtle" : ""
                         }`}
                         onClick={() => addPendingTag(`${s.namespace}:${s.tag}`)}
                         onMouseEnter={() => setSelectedIndex(index)}
                       >
-                        <span className="font-mono text-xs text-kumo-subtle">
+                        <span className="font-mono text-[11px] text-kumo-subtle">
                           {s.namespace}:{s.tag}
                         </span>
-                        <span className="text-sm">{s.translation}</span>
+                        <span className="text-[11px]">{s.translation}</span>
                       </button>
                     ))}
                   </div>
@@ -355,14 +360,14 @@ export function SearchPage() {
               </div>
 
               {/* Applied tags */}
-              {tags.length > 0 && (
+              {appliedTags.length > 0 && (
                 <div className="space-y-1">
                   <p className="text-xs text-kumo-subtle">已应用的标签：</p>
-                  <div className="flex flex-wrap gap-2">
-                    {tags.map((tag) => (
+                  <div className="flex flex-wrap gap-1.5">
+                    {appliedTags.map((tag) => (
                       <span
                         key={tag}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-kumo-accent/10 text-kumo-accent rounded-md"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] bg-kumo-accent/10 text-kumo-accent rounded-md"
                       >
                         {tag}
                         <button
@@ -383,11 +388,11 @@ export function SearchPage() {
               {pendingTags.length > 0 && (
                 <div className="space-y-1">
                   <p className="text-xs text-kumo-subtle">待添加的标签（点击搜索后生效）：</p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     {pendingTags.map((tag) => (
                       <span
                         key={tag}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-kumo-subtle rounded-md"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] bg-kumo-subtle rounded-md"
                       >
                         {tag}
                         <button
@@ -418,7 +423,7 @@ export function SearchPage() {
                     type="number"
                     placeholder="最小页数"
                     aria-label="最小页数"
-                    value={advancedOptions.min_pages ?? ""}
+                    value={pendingAdvancedOptions.min_pages ?? ""}
                     onChange={(e) => {
                       const value = e.target.value ? Number(e.target.value) : undefined;
                       updateAdvancedFilter("min_pages", value);
@@ -431,7 +436,7 @@ export function SearchPage() {
                     type="number"
                     placeholder="最大页数"
                     aria-label="最大页数"
-                    value={advancedOptions.max_pages ?? ""}
+                    value={pendingAdvancedOptions.max_pages ?? ""}
                     onChange={(e) => {
                       const value = e.target.value ? Number(e.target.value) : undefined;
                       updateAdvancedFilter("max_pages", value);
@@ -446,7 +451,7 @@ export function SearchPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">最低评分</label>
                 <Select
-                  value={advancedOptions.min_rating?.toString() ?? ""}
+                  value={pendingAdvancedOptions.min_rating?.toString() ?? ""}
                   onValueChange={(value) => {
                     updateAdvancedFilter("min_rating", value ? Number(value) : undefined);
                   }}
@@ -463,14 +468,14 @@ export function SearchPage() {
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
-                      checked={advancedOptions.has_torrent ?? false}
+                      checked={pendingAdvancedOptions.has_torrent ?? false}
                       onCheckedChange={(checked) => updateAdvancedFilter("has_torrent", checked)}
                     />
                     有种子
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
-                      checked={advancedOptions.include_expunged ?? false}
+                      checked={pendingAdvancedOptions.include_expunged ?? false}
                       onCheckedChange={(checked) => updateAdvancedFilter("include_expunged", checked)}
                     />
                     包含已删除的 Gallery
@@ -483,21 +488,21 @@ export function SearchPage() {
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
-                      checked={advancedOptions.search_tags ?? false}
+                      checked={pendingAdvancedOptions.search_tags ?? false}
                       onCheckedChange={(checked) => updateAdvancedFilter("search_tags", checked)}
                     />
                     搜索标签
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
-                      checked={advancedOptions.search_name ?? false}
+                      checked={pendingAdvancedOptions.search_name ?? false}
                       onCheckedChange={(checked) => updateAdvancedFilter("search_name", checked)}
                     />
                     搜索标题
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
-                      checked={advancedOptions.search_description ?? false}
+                      checked={pendingAdvancedOptions.search_description ?? false}
                       onCheckedChange={(checked) => updateAdvancedFilter("search_description", checked)}
                     />
                     搜索描述
@@ -512,14 +517,14 @@ export function SearchPage() {
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
-                      checked={advancedOptions.include_low_power_tags ?? false}
+                      checked={pendingAdvancedOptions.include_low_power_tags ?? false}
                       onCheckedChange={(checked) => updateAdvancedFilter("include_low_power_tags", checked)}
                     />
                     包含低权重标签
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
-                      checked={advancedOptions.include_downvoted_tags ?? false}
+                      checked={pendingAdvancedOptions.include_downvoted_tags ?? false}
                       onCheckedChange={(checked) => updateAdvancedFilter("include_downvoted_tags", checked)}
                     />
                     包含被降权的标签
@@ -532,21 +537,21 @@ export function SearchPage() {
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
-                      checked={advancedOptions.disable_language_filter ?? false}
+                      checked={pendingAdvancedOptions.disable_language_filter ?? false}
                       onCheckedChange={(checked) => updateAdvancedFilter("disable_language_filter", checked)}
                     />
                     禁用语言过滤
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
-                      checked={advancedOptions.disable_uploader_filter ?? false}
+                      checked={pendingAdvancedOptions.disable_uploader_filter ?? false}
                       onCheckedChange={(checked) => updateAdvancedFilter("disable_uploader_filter", checked)}
                     />
                     禁用上传者过滤
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
-                      checked={advancedOptions.disable_tag_filter ?? false}
+                      checked={pendingAdvancedOptions.disable_tag_filter ?? false}
                       onCheckedChange={(checked) => updateAdvancedFilter("disable_tag_filter", checked)}
                     />
                     禁用标签过滤
