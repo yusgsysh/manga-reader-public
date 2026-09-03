@@ -1,16 +1,52 @@
 import { apiGet } from "./client";
 import type {
+  AdvancedSearchOptions,
   GalleryDetail,
   GalleryListResponse,
 } from "../types/gallery";
 import type { Gallery, GalleryPagesResponse } from "../types/reader";
 
-export function fetchGallerys(page: number): Promise<GalleryListResponse> {
-  return apiGet<GalleryListResponse>("/api/gallerys", { page });
+function boolToStr(v?: boolean): string | undefined {
+  return v === undefined ? undefined : v ? "true" : "false";
 }
 
-export function fetchWatched(page: number): Promise<GalleryListResponse> {
-  return apiGet<GalleryListResponse>("/api/watched", { page });
+function advancedToParams(filters?: AdvancedSearchOptions) {
+  if (!filters) return {};
+  return {
+    min_pages: filters.min_pages,
+    max_pages: filters.max_pages,
+    min_rating: filters.min_rating,
+    has_torrent: boolToStr(filters.has_torrent),
+    include_expunged: boolToStr(filters.include_expunged),
+    search_name: boolToStr(filters.search_name),
+    search_tags: boolToStr(filters.search_tags),
+    search_description: boolToStr(filters.search_description),
+    include_low_power_tags: boolToStr(filters.include_low_power_tags),
+    include_downvoted_tags: boolToStr(filters.include_downvoted_tags),
+    disable_language_filter: boolToStr(filters.disable_language_filter),
+    disable_uploader_filter: boolToStr(filters.disable_uploader_filter),
+    disable_tag_filter: boolToStr(filters.disable_tag_filter),
+  };
+}
+
+export function fetchGallerys(
+  page: number,
+  filters?: AdvancedSearchOptions,
+): Promise<GalleryListResponse> {
+  return apiGet<GalleryListResponse>("/api/gallerys", {
+    page,
+    ...advancedToParams(filters),
+  });
+}
+
+export function fetchWatched(
+  page: number,
+  filters?: AdvancedSearchOptions,
+): Promise<GalleryListResponse> {
+  return apiGet<GalleryListResponse>("/api/watched", {
+    page,
+    ...advancedToParams(filters),
+  });
 }
 
 export function fetchPopular(page: number): Promise<GalleryListResponse> {

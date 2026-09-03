@@ -35,6 +35,60 @@ Base URL: `http://localhost:8080`
 | site | string | no | `"exhentai"` | `"exhentai"` 或 `"ehentai"` |
 | categories | string | no | - | 逗号分隔的分类，如 `"doujinshi,manga"` |
 | page | int | no | `0` | 页码 (0-indexed) |
+| min_pages | int | no | - | 最小页数 (>= 0) |
+| max_pages | int | no | - | 最大页数 (>= 0) |
+| min_rating | int | no | - | 最低评分: `2`, `3`, `4`, `5` |
+| has_torrent | bool | no | `false` | 仅显示有种子的画廊 |
+| include_expunged | bool | no | `false` | 包含已删除的画廊 |
+| search_name | bool | no | `false` | 在标题中搜索 |
+| search_tags | bool | no | `false` | 在标签中搜索 |
+| search_description | bool | no | `false` | 在描述中搜索 |
+| include_low_power_tags | bool | no | `false` | 包含低权重标签 |
+| include_downvoted_tags | bool | no | `false` | 包含被降权的标签 |
+| disable_language_filter | bool | no | `false` | 禁用语言自定义过滤器 |
+| disable_uploader_filter | bool | no | `false` | 禁用上传者自定义过滤器 |
+| disable_tag_filter | bool | no | `false` | 禁用标签自定义过滤器 |
+
+> **注意**: 当指定任何高级搜索参数时，`advsearch=1` 会自动启用，无需手动传递。
+
+**Validation Rules:**
+
+- `min_pages` 和 `max_pages` 必须 >= 0
+- 若同时提供 `min_pages` 和 `max_pages`，则 `min_pages <= max_pages`
+- `min_rating` 只允许 `2`, `3`, `4`, `5`
+- 布尔参数接受: `true`, `false`, `1`, `0`
+- 无效参数返回 HTTP 400
+
+**ExHentai Parameter Mapping:**
+
+| API Parameter | ExHentai Parameter |
+|---|---|
+| `q` | `f_search` |
+| `min_pages` | `f_spf` |
+| `max_pages` | `f_spt` |
+| `min_rating` | `f_sr=on` + `f_srdd` |
+| `has_torrent` | `f_sto=on` |
+| `include_expunged` | `f_sh=on` |
+| `search_name` | `f_sname=on` |
+| `search_tags` | `f_stags=on` |
+| `search_description` | `f_sdesc=on` |
+| `include_low_power_tags` | `f_sdt1=on` |
+| `include_downvoted_tags` | `f_sdt2=on` |
+| `disable_language_filter` | `f_sfl=on` |
+| `disable_uploader_filter` | `f_sfu=on` |
+| `disable_tag_filter` | `f_sft=on` |
+
+**Example:**
+
+```
+GET /api/search?q=o:3d$&has_torrent=true&min_pages=10&max_pages=200&min_rating=4
+```
+
+等价于 ExHentai 请求:
+
+```
+https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200&f_sr=on&f_srdd=4
+```
 
 **Response (200):**
 
@@ -216,6 +270,19 @@ Base URL: `http://localhost:8080`
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | page | int | no | `0` | 页码 (0-indexed) |
+| min_pages | int | no | - | 最小页数 (>= 0) |
+| max_pages | int | no | - | 最大页数 (>= 0) |
+| min_rating | int | no | - | 最低评分: `2`, `3`, `4`, `5` |
+| has_torrent | bool | no | `false` | 仅显示有种子的画廊 |
+| include_expunged | bool | no | `false` | 包含已删除的画廊 |
+| search_name | bool | no | `false` | 在标题中搜索 |
+| search_tags | bool | no | `false` | 在标签中搜索 |
+| search_description | bool | no | `false` | 在描述中搜索 |
+| include_low_power_tags | bool | no | `false` | 包含低权重标签 |
+| include_downvoted_tags | bool | no | `false` | 包含被降权的标签 |
+| disable_language_filter | bool | no | `false` | 禁用语言自定义过滤器 |
+| disable_uploader_filter | bool | no | `false` | 禁用上传者自定义过滤器 |
+| disable_tag_filter | bool | no | `false` | 禁用标签自定义过滤器 |
 
 **Response (200):**
 
@@ -255,6 +322,19 @@ Base URL: `http://localhost:8080`
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | page | int | no | `0` | 页码 (0-indexed) |
+| min_pages | int | no | - | 最小页数 (>= 0) |
+| max_pages | int | no | - | 最大页数 (>= 0) |
+| min_rating | int | no | - | 最低评分: `2`, `3`, `4`, `5` |
+| has_torrent | bool | no | `false` | 仅显示有种子的画廊 |
+| include_expunged | bool | no | `false` | 包含已删除的画廊 |
+| search_name | bool | no | `false` | 在标题中搜索 |
+| search_tags | bool | no | `false` | 在标签中搜索 |
+| search_description | bool | no | `false` | 在描述中搜索 |
+| include_low_power_tags | bool | no | `false` | 包含低权重标签 |
+| include_downvoted_tags | bool | no | `false` | 包含被降权的标签 |
+| disable_language_filter | bool | no | `false` | 禁用语言自定义过滤器 |
+| disable_uploader_filter | bool | no | `false` | 禁用上传者自定义过滤器 |
+| disable_tag_filter | bool | no | `false` | 禁用标签自定义过滤器 |
 
 **Response (200):**
 

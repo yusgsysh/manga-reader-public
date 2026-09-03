@@ -32,27 +32,35 @@ export interface GalleryListResponse {
   results: GalleryListItem[];
 }
 
-export interface SearchGalleryItem {
-  id: number;
-  token: string;
-  title: string;
-  category: GalleryCategory;
-  cover: string;
-  posted: string;
-  rating: number;
-  url: string;
-  tags?: string[];
-  uploader: string;
-  pages: number;
-  domain: string;
-}
-
 export interface SearchResponse {
   total: number;
   total_pages: number;
   page: number;
   page_size: number;
-  results: SearchGalleryItem[];
+  results: GalleryListItem[];
+}
+
+export interface AdvancedSearchOptions {
+  min_pages?: number;
+  max_pages?: number;
+  min_rating?: number;
+  has_torrent?: boolean;
+  include_expunged?: boolean;
+  search_name?: boolean;
+  search_tags?: boolean;
+  search_description?: boolean;
+  include_low_power_tags?: boolean;
+  include_downvoted_tags?: boolean;
+  disable_language_filter?: boolean;
+  disable_uploader_filter?: boolean;
+  disable_tag_filter?: boolean;
+}
+
+export interface SearchParams extends AdvancedSearchOptions {
+  q?: string;
+  site?: string;
+  categories?: string;
+  page?: number;
 }
 
 export interface BookshelfItem {
