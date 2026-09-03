@@ -12,7 +12,34 @@ env:
   BACKEND_IMAGE: git.09270721.xyz/abc/manga-reader-backend
 
 jobs:
+  detect-changes:
+    runs-on: [docker]
+    outputs:
+      frontend: ${{ steps.check.outputs.frontend }}
+      backend: ${{ steps.check.outputs.backend }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed files
+        id: check
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -q '^frontend/'; then
+            echo "frontend=true" >> $GITHUB_OUTPUT
+          else
+            echo "frontend=false" >> $GITHUB_OUTPUT
+          fi
+
+          if git diff --name-only HEAD~1 HEAD | grep -q '^backend/'; then
+            echo "backend=true" >> $GITHUB_OUTPUT
+          else
+            echo "backend=false" >> $GITHUB_OUTPUT
+          fi
+
   build-and-push:
+    needs: detect-changes
     runs-on: self-hosted
     steps:
       - name: Checkout code
@@ -29,19 +56,21 @@ jobs:
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
       - name: Build and push Frontend
+        if: needs.detect-changes.outputs.frontend == 'true'
         uses: docker/build-push-action@v5
         with:
           context: frontend
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ env.FRONTEND_IMAGE }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Build and push Backend
+        if: needs.detect-changes.outputs.backend == 'true'
         uses: docker/build-push-action@v5
         with:
           context: backend
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ env.BACKEND_IMAGE }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
