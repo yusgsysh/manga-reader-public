@@ -10,19 +10,19 @@
 
 services:
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    image: manga-reader-backend:latest
+    # build:
+      # context: ./backend
+      # dockerfile: Dockerfile
+    image: git.09270721.xyz/abc/manga-reader-backend:latest
     env_file:
       - .env
     environment:
       MANGA_READER_DB_PATH: /app/data/manga-reader.db
     volumes:
       - backend_data:/app/data
-    extra_hosts:
+    # extra_hosts:
       # 局域网内 MinIO / EhTagTranslation 等主机名解析（按需修改）
-      - "storage.09270721.xyz:192.168.1.100"
+      # - "storage.09270721.xyz:192.168.1.100"
     healthcheck:
       # alpine 自带 busybox wget，无需额外安装 curl
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
@@ -34,10 +34,10 @@ services:
     restart: unless-stopped
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    image: manga-reader-frontend:latest
+    # build:
+      # context: ./frontend
+      # dockerfile: Dockerfile
+    image: git.09270721.xyz/abc/manga-reader-frontend:latest
     ports:
       - "5173:80"
     environment:
