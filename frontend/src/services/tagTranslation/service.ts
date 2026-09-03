@@ -119,6 +119,39 @@ class TagTranslationService {
     if (exact) return exact;
     return this.namespaceMap.get(namespace.toLowerCase()) ?? namespace;
   }
+
+  searchByTranslation(query: string, limit = 10): TagTranslationEntry[] {
+    if (!query || this.status !== "ready") return [];
+    const lowerQuery = query.toLowerCase();
+    const results: TagTranslationEntry[] = [];
+    for (const entry of this.translationMap.values()) {
+      if (entry.translation.toLowerCase().includes(lowerQuery)) {
+        results.push(entry);
+        if (results.length >= limit) break;
+      }
+    }
+    return results;
+  }
+
+  searchTags(query: string, limit = 10): Array<{ namespace: string; tag: string; translation: string }> {
+    if (!query || this.status !== "ready") return [];
+    const lowerQuery = query.toLowerCase();
+    const results: Array<{ namespace: string; tag: string; translation: string }> = [];
+    for (const entry of this.translationMap.values()) {
+      if (
+        entry.translation.toLowerCase().includes(lowerQuery) ||
+        entry.tag.toLowerCase().includes(lowerQuery)
+      ) {
+        results.push({
+          namespace: entry.namespace,
+          tag: entry.tag,
+          translation: entry.translation,
+        });
+        if (results.length >= limit) break;
+      }
+    }
+    return results;
+  }
 }
 
 export const tagTranslationService = new TagTranslationService();

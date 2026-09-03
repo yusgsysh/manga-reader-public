@@ -1,12 +1,13 @@
 import { useSearchParams } from "react-router";
 import { useSearch } from "../hooks/useSearch";
+import { useTagTranslation } from "../hooks/useTagTranslation";
 import { GalleryGrid } from "../components/gallery/GalleryGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
 import { Input, Button, Checkbox, Select } from "@cloudflare/kumo";
-import { Search, ChevronDown, ChevronUp } from "lucide-react";
-import { useState } from "react";
+import { Search, ChevronDown, ChevronUp, X } from "lucide-react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { SimplePagination } from "../components/common/SimplePagination";
 import type { AdvancedSearchOptions } from "../types/gallery";
 
@@ -87,7 +88,16 @@ export function SearchPage() {
 
   const [inputValue, setInputValue] = useState(q);
   const [tagInput, setTagInput] = useState("");
+  const [pendingTags, setPendingTags] = useState<string[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+
+  const tagInputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  const { searchTags, ready: tagDbReady } = useTagTranslation();
+  const [suggestions, setSuggestions] = useState<Array<{ namespace: string; tag: string; translation: string }>>([]);
 
   const tagQuery = buildTagQuery(tags);
   const fullQuery = [q, tagQuery].filter(Boolean).join(" ");
@@ -117,8 +127,11 @@ export function SearchPage() {
     if (inputValue.trim()) params.set("q", inputValue.trim());
     params.set("site", site);
     if (categories) params.set("categories", categories);
+    const allTags = [...tags, ...pendingTags];
+    if (allTags.length > 0) params.set("tags", allTags.join(","));
     params.set("page", "0");
     setSearchParams(params);
+    setPendingTags([]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -151,25 +164,69 @@ export function SearchPage() {
     updateParams(updates);
   };
 
-  const addTag = () => {
-    const tag = tagInput.trim();
-    if (!tag) return;
-    const newTags = [...tags, tag];
-    updateParams({ tags: newTags.length > 0 ? newTags.join(",") : null, page: "0" });
+  const addPendingTag = (tagValue?: string) => {
+    const tag = tagValue ?? tagInput.trim();
+    if (!tag || pendingTags.includes(tag)) return;
+    setPendingTags([...pendingTags, tag]);
     setTagInput("");
+    setShowSuggestions(false);
+    setSelectedIndex(-1);
   };
 
-  const removeTag = (tagToRemove: string) => {
+  const removePendingTag = (tagToRemove: string) => {
+    setPendingTags(pendingTags.filter((t) => t !== tagToRemove));
+  };
+
+  const removeAppliedTag = (tagToRemove: string) => {
     const newTags = tags.filter((t) => t !== tagToRemove);
     updateParams({ tags: newTags.length > 0 ? newTags.join(",") : null, page: "0" });
   };
 
   const handleTagKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
+    if (e.key === "ArrowDown") {
       e.preventDefault();
-      addTag();
+      setSelectedIndex((prev) => Math.min(prev + 1, suggestions.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelectedIndex((prev) => Math.max(prev - 1, -1));
+    } else if (e.key === "Escape") {
+      setShowSuggestions(false);
+      setSelectedIndex(-1);
     }
   };
+
+  const handleTagInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      setTagInput(value);
+      setSelectedIndex(-1);
+
+      if (tagDbReady && value.trim().length > 0) {
+        const results = searchTags(value.trim(), 8);
+        setSuggestions(results);
+        setShowSuggestions(results.length > 0);
+      } else {
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
+    },
+    [tagDbReady, searchTags],
+  );
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        suggestionsRef.current &&
+        !suggestionsRef.current.contains(e.target as Node) &&
+        tagInputRef.current &&
+        !tagInputRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const resetAdvancedFilters = () => {
     const params = new URLSearchParams();
@@ -178,10 +235,12 @@ export function SearchPage() {
     if (categories) params.set("categories", categories);
     params.set("page", "0");
     setSearchParams(params);
+    setPendingTags([]);
     setTagInput("");
+    setShowSuggestions(false);
   };
 
-  const activeFilterCount = countActiveFilters(advancedOptions) + tags.length;
+  const activeFilterCount = countActiveFilters(advancedOptions) + tags.length + pendingTags.length;
 
   return (
     <div className="space-y-4">
@@ -253,39 +312,98 @@ export function SearchPage() {
             {/* Tags Input */}
             <div className="space-y-2">
               <label className="text-sm font-medium">标签</label>
-              <div className="flex gap-2">
+              <div className="relative">
                 <Input
-                  placeholder="输入标签并按 Enter 添加（例如：yuri, female:sole_female）"
-                  aria-label="添加标签"
+                  ref={tagInputRef}
+                  placeholder="输入标签搜索（例如：yuri, 无修正）"
+                  aria-label="搜索标签"
+                  aria-autocomplete="list"
+                  aria-expanded={showSuggestions}
                   value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
+                  onChange={handleTagInputChange}
                   onKeyDown={handleTagKeyDown}
-                  className="flex-1"
+                  onFocus={() => {
+                    if (suggestions.length > 0) setShowSuggestions(true);
+                  }}
                 />
-                <Button onClick={addTag} disabled={!tagInput.trim()}>
-                  添加
-                </Button>
-              </div>
-              {tags.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-kumo-subtle rounded-md"
-                    >
-                      {tag}
+                {showSuggestions && suggestions.length > 0 && (
+                  <div
+                    ref={suggestionsRef}
+                    className="absolute z-10 top-full left-0 right-0 mt-1 bg-kumo-elevated border border-kumo-border rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                    role="listbox"
+                  >
+                    {suggestions.map((s, index) => (
                       <button
+                        key={`${s.namespace}:${s.tag}`}
                         type="button"
-                        onClick={() => removeTag(tag)}
-                        className="text-kumo-subtle hover:text-kumo-text"
-                        aria-label={`移除标签 ${tag}`}
+                        role="option"
+                        aria-selected={index === selectedIndex}
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-kumo-subtle flex items-center justify-between ${
+                          index === selectedIndex ? "bg-kumo-subtle" : ""
+                        }`}
+                        onClick={() => addPendingTag(`${s.namespace}:${s.tag}`)}
+                        onMouseEnter={() => setSelectedIndex(index)}
                       >
-                        ×
+                        <span className="font-mono text-xs text-kumo-subtle">
+                          {s.namespace}:{s.tag}
+                        </span>
+                        <span className="text-sm">{s.translation}</span>
                       </button>
-                    </span>
-                  ))}
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Applied tags */}
+              {tags.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs text-kumo-subtle">已应用的标签：</p>
+                  <div className="flex flex-wrap gap-2">
+                    {tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-kumo-accent/10 text-kumo-accent rounded-md"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() => removeAppliedTag(tag)}
+                          className="hover:text-kumo-text"
+                          aria-label={`移除标签 ${tag}`}
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
+
+              {/* Pending tags */}
+              {pendingTags.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs text-kumo-subtle">待添加的标签（点击搜索后生效）：</p>
+                  <div className="flex flex-wrap gap-2">
+                    {pendingTags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-kumo-subtle rounded-md"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() => removePendingTag(tag)}
+                          className="text-kumo-subtle hover:text-kumo-text"
+                          aria-label={`移除标签 ${tag}`}
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <p className="text-xs text-kumo-subtle">
                 支持 ExHentai 标签语法：普通标签（yuri）、命名空间标签（female:sole_female）
               </p>
