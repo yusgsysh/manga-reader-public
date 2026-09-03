@@ -13,7 +13,7 @@ env:
 
 jobs:
   detect-changes:
-    runs-on: [docker]
+    runs-on: self-hosted
     outputs:
       frontend: ${{ steps.check.outputs.frontend }}
       backend: ${{ steps.check.outputs.backend }}
