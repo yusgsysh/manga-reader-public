@@ -53,6 +53,26 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
     return tag.namespace ? `${tag.namespace}:${tag.name}` : tag.name;
   };
 
+  const [tagPosition, setTagPosition] = useState<"left" | "right">("right");
+
+  const updateTagPosition = () => {
+    if (tagsRef.current) {
+      const rect = tagsRef.current.getBoundingClientRect();
+      const tagWidth = 224;
+      if (rect.left < tagWidth) {
+        setTagPosition("left");
+      } else {
+        setTagPosition("right");
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (showTags) {
+      updateTagPosition();
+    }
+  }, [showTags]);
+
   return (
     <div
       className="group cursor-pointer relative"
@@ -94,7 +114,9 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
 
           {showTags && (
             <div
-              className="absolute bottom-9 right-0 z-50 w-56 p-2 bg-kumo-elevated border border-kumo-border rounded-lg shadow-lg"
+              className={`absolute bottom-9 z-50 w-56 p-2 bg-kumo-elevated border border-kumo-border rounded-lg shadow-lg ${
+                tagPosition === "left" ? "left-0" : "right-0"
+              }`}
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
             >
