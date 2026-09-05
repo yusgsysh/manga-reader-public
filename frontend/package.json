@@ -12,12 +12,12 @@
     "db:update": "node scripts/update-tag-db.mjs"
   },
   "dependencies": {
-    "@cloudflare/kumo": "^2.13.0",
+    "@cloudflare/kumo": "^2.13.1",
     "@phosphor-icons/react": "^2.1.10",
     "@tanstack/react-query": "^5.102.8",
     "@yui540/comimi": "^0.18.0",
     "@yui540/comimi-react": "^0.2.5",
-    "lucide-react": "^1.40.0",
+    "lucide-react": "^1.41.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router": "^8.3.1"
