@@ -12,7 +12,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/manga-reader .
 
 # ---- Runtime stage ----
-FROM alpine:3.21
+FROM alpine:latest
 
 # CA certificates for HTTPS requests to ExHentai, tzdata for time handling
 RUN apk add --no-cache ca-certificates tzdata \
