@@ -33,7 +33,7 @@ ENV VITE_API_BASE_URL=""
 RUN bun run build
 
 # ---- Runtime stage (Angie minimal) ----
-FROM docker.angie.software/angie:minimal
+FROM git.09270721.xyz/abc/angie:alpine
 
 # envsubst：启动时用环境变量渲染 angie 配置
 RUN apk add --no-cache gettext-envsubst
