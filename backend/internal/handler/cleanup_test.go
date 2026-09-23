@@ -9,8 +9,14 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"manga-reader/internal/ent"
+	"manga-reader/internal/ent/bookshelf"
+	"manga-reader/internal/ent/readingprogress"
 	"manga-reader/internal/database"
 	"manga-reader/internal/model"
+
+	entsql "entgo.io/ent/dialect/sql"
+	_ "modernc.org/sqlite"
 )
 
 func setupTestRouter() *gin.Engine {
@@ -20,7 +26,7 @@ func setupTestRouter() *gin.Engine {
 	return r
 }
 
-func newTestDB(t *testing.T) *sql.DB {
+func newTestDB(t *testing.T) *ent.Client {
 	t.Helper()
 	conn, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
@@ -29,11 +35,14 @@ func newTestDB(t *testing.T) *sql.DB {
 	if _, err := conn.Exec("PRAGMA foreign_keys=ON"); err != nil {
 		t.Fatalf("enable foreign keys: %v", err)
 	}
-	if err := database.RunMigrations(conn); err != nil {
+	drv := entsql.OpenDB("sqlite3", conn)
+	client := ent.NewClient(ent.Driver(drv))
+	if err := client.Schema.Create(t.Context()); err != nil {
+		client.Close()
 		t.Fatalf("run migrations: %v", err)
 	}
-	t.Cleanup(func() { conn.Close() })
-	return conn
+	t.Cleanup(func() { client.Close() })
+	return client
 }
 
 func newTestBookshelf() *model.Bookshelf {
@@ -60,23 +69,27 @@ func newTestBookshelf2() *model.Bookshelf {
 	}
 }
 
-// insertProgressWithTimestamp 直接插入带自定义 updated_at 的阅读记录，用于测试清理边界。
-func insertProgressWithTimestamp(t *testing.T, conn *sql.DB, galleryID int64, token string, updatedAt time.Time) {
+// insertProgressWithTimestamp inserts a reading progress record with a custom updated_at timestamp for cleanup boundary testing.
+func insertProgressWithTimestamp(t *testing.T, client *ent.Client, galleryID int64, token string, updatedAt time.Time) {
 	t.Helper()
-	_, err := conn.ExecContext(t.Context(),
-		`INSERT INTO reading_progress (gallery_id, token, current_page, progress, completed, started_at, updated_at)
-		 VALUES (?, ?, 1, 0.1, 0, ?, ?)`,
-		galleryID, token, updatedAt, updatedAt,
-	)
+	_, err := client.ReadingProgress.Create().
+		SetGalleryID(galleryID).
+		SetToken(token).
+		SetCurrentPage(1).
+		SetProgress(0.1).
+		SetCompleted(false).
+		SetStartedAt(updatedAt).
+		SetUpdatedAt(updatedAt).
+		Save(t.Context())
 	if err != nil {
 		t.Fatalf("insert progress with timestamp: %v", err)
 	}
 }
 
-func countReadingProgress(t *testing.T, conn *sql.DB) int {
+func countReadingProgress(t *testing.T, client *ent.Client) int {
 	t.Helper()
-	var n int
-	if err := conn.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM reading_progress`).Scan(&n); err != nil {
+	n, err := client.ReadingProgress.Query().Count(t.Context())
+	if err != nil {
 		t.Fatalf("count reading progress: %v", err)
 	}
 	return n
@@ -87,10 +100,10 @@ type cleanupResponse struct {
 	Deleted int64 `json:"deleted"`
 }
 
-func performCleanup(t *testing.T, conn *sql.DB, query string) (int, cleanupResponse) {
+func performCleanup(t *testing.T, client *ent.Client, query string) (int, cleanupResponse) {
 	t.Helper()
 	r := setupTestRouter()
-	server := &Server{DB: &database.DB{Conn: conn}}
+	server := &Server{DB: &database.DB{Client: client}}
 	server.RegisterRoutes(r)
 
 	req := httptest.NewRequest("POST", "/api/reading-progress/cleanup"+query, nil)
@@ -106,13 +119,13 @@ func performCleanup(t *testing.T, conn *sql.DB, query string) (int, cleanupRespo
 	return w.Code, resp
 }
 
-// ==================== days 参数测试 ====================
+// ==================== days parameter tests ====================
 
 func TestHandleReadingProgressCleanup_DefaultDays(t *testing.T) {
-	conn := newTestDB(t)
-	insertProgressWithTimestamp(t, conn, 111111, "old", time.Now().UTC().AddDate(0, 0, -31))
+	client := newTestDB(t)
+	insertProgressWithTimestamp(t, client, 111111, "old", time.Now().UTC().AddDate(0, 0, -31))
 
-	code, resp := performCleanup(t, conn, "")
+	code, resp := performCleanup(t, client, "")
 
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", code, http.StatusOK)
@@ -123,17 +136,17 @@ func TestHandleReadingProgressCleanup_DefaultDays(t *testing.T) {
 	if resp.Deleted != 1 {
 		t.Errorf("deleted = %d, want 1", resp.Deleted)
 	}
-	if n := countReadingProgress(t, conn); n != 0 {
+	if n := countReadingProgress(t, client); n != 0 {
 		t.Errorf("remaining records = %d, want 0", n)
 	}
 }
 
 func TestHandleReadingProgressCleanup_Days7(t *testing.T) {
-	conn := newTestDB(t)
-	insertProgressWithTimestamp(t, conn, 111111, "six", time.Now().UTC().AddDate(0, 0, -6))
-	insertProgressWithTimestamp(t, conn, 222222, "eight", time.Now().UTC().AddDate(0, 0, -8))
+	client := newTestDB(t)
+	insertProgressWithTimestamp(t, client, 111111, "six", time.Now().UTC().AddDate(0, 0, -6))
+	insertProgressWithTimestamp(t, client, 222222, "eight", time.Now().UTC().AddDate(0, 0, -8))
 
-	code, resp := performCleanup(t, conn, "?days=7")
+	code, resp := performCleanup(t, client, "?days=7")
 
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", code, http.StatusOK)
@@ -144,17 +157,17 @@ func TestHandleReadingProgressCleanup_Days7(t *testing.T) {
 	if resp.Deleted != 1 {
 		t.Errorf("deleted = %d, want 1 (only the 8-day-old record)", resp.Deleted)
 	}
-	if n := countReadingProgress(t, conn); n != 1 {
+	if n := countReadingProgress(t, client); n != 1 {
 		t.Errorf("remaining records = %d, want 1", n)
 	}
 }
 
 func TestHandleReadingProgressCleanup_Days30(t *testing.T) {
-	conn := newTestDB(t)
-	insertProgressWithTimestamp(t, conn, 111111, "twenty-nine", time.Now().UTC().AddDate(0, 0, -29))
-	insertProgressWithTimestamp(t, conn, 222222, "thirty-one", time.Now().UTC().AddDate(0, 0, -31))
+	client := newTestDB(t)
+	insertProgressWithTimestamp(t, client, 111111, "twenty-nine", time.Now().UTC().AddDate(0, 0, -29))
+	insertProgressWithTimestamp(t, client, 222222, "thirty-one", time.Now().UTC().AddDate(0, 0, -31))
 
-	code, resp := performCleanup(t, conn, "?days=30")
+	code, resp := performCleanup(t, client, "?days=30")
 
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", code, http.StatusOK)
@@ -165,17 +178,17 @@ func TestHandleReadingProgressCleanup_Days30(t *testing.T) {
 	if resp.Deleted != 1 {
 		t.Errorf("deleted = %d, want 1 (only the 31-day-old record)", resp.Deleted)
 	}
-	if n := countReadingProgress(t, conn); n != 1 {
+	if n := countReadingProgress(t, client); n != 1 {
 		t.Errorf("remaining records = %d, want 1 (29-day-old kept)", n)
 	}
 }
 
 func TestHandleReadingProgressCleanup_Days0(t *testing.T) {
-	conn := newTestDB(t)
-	insertProgressWithTimestamp(t, conn, 111111, "fresh", time.Now().UTC())
-	insertProgressWithTimestamp(t, conn, 222222, "old", time.Now().UTC().AddDate(0, 0, -60))
+	client := newTestDB(t)
+	insertProgressWithTimestamp(t, client, 111111, "fresh", time.Now().UTC())
+	insertProgressWithTimestamp(t, client, 222222, "old", time.Now().UTC().AddDate(0, 0, -60))
 
-	code, resp := performCleanup(t, conn, "?days=0")
+	code, resp := performCleanup(t, client, "?days=0")
 
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", code, http.StatusOK)
@@ -186,15 +199,15 @@ func TestHandleReadingProgressCleanup_Days0(t *testing.T) {
 	if resp.Deleted != 2 {
 		t.Errorf("deleted = %d, want 2 (all records)", resp.Deleted)
 	}
-	if n := countReadingProgress(t, conn); n != 0 {
+	if n := countReadingProgress(t, client); n != 0 {
 		t.Errorf("remaining records = %d, want 0", n)
 	}
 }
 
 func TestHandleReadingProgressCleanup_NoRecords(t *testing.T) {
-	conn := newTestDB(t)
+	client := newTestDB(t)
 
-	code, resp := performCleanup(t, conn, "")
+	code, resp := performCleanup(t, client, "")
 
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", code, http.StatusOK)
@@ -204,44 +217,44 @@ func TestHandleReadingProgressCleanup_NoRecords(t *testing.T) {
 	}
 }
 
-// ==================== 非法参数测试 ====================
+// ==================== invalid parameter tests ====================
 
 func TestHandleReadingProgressCleanup_NegativeDays(t *testing.T) {
-	conn := newTestDB(t)
-	insertProgressWithTimestamp(t, conn, 111111, "keep", time.Now().UTC().AddDate(0, 0, -31))
+	client := newTestDB(t)
+	insertProgressWithTimestamp(t, client, 111111, "keep", time.Now().UTC().AddDate(0, 0, -31))
 
-	code, _ := performCleanup(t, conn, "?days=-1")
+	code, _ := performCleanup(t, client, "?days=-1")
 
 	if code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", code, http.StatusBadRequest)
 	}
-	if n := countReadingProgress(t, conn); n != 1 {
+	if n := countReadingProgress(t, client); n != 1 {
 		t.Errorf("records after failed cleanup = %d, want 1 (nothing deleted)", n)
 	}
 }
 
 func TestHandleReadingProgressCleanup_NonNumericDays(t *testing.T) {
-	conn := newTestDB(t)
-	insertProgressWithTimestamp(t, conn, 111111, "keep", time.Now().UTC().AddDate(0, 0, -31))
+	client := newTestDB(t)
+	insertProgressWithTimestamp(t, client, 111111, "keep", time.Now().UTC().AddDate(0, 0, -31))
 
-	code, _ := performCleanup(t, conn, "?days=abc")
+	code, _ := performCleanup(t, client, "?days=abc")
 
 	if code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", code, http.StatusBadRequest)
 	}
-	if n := countReadingProgress(t, conn); n != 1 {
+	if n := countReadingProgress(t, client); n != 1 {
 		t.Errorf("records after failed cleanup = %d, want 1 (nothing deleted)", n)
 	}
 }
 
-// ==================== 回归测试 ====================
+// ==================== regression tests ====================
 
 func TestHandleRecentlyRead_NoAutoCleanup(t *testing.T) {
-	conn := newTestDB(t)
-	insertProgressWithTimestamp(t, conn, 111111, "old", time.Now().UTC().AddDate(0, 0, -31))
+	client := newTestDB(t)
+	insertProgressWithTimestamp(t, client, 111111, "old", time.Now().UTC().AddDate(0, 0, -31))
 
 	r := setupTestRouter()
-	server := &Server{DB: &database.DB{Conn: conn}}
+	server := &Server{DB: &database.DB{Client: client}}
 	server.RegisterRoutes(r)
 
 	req := httptest.NewRequest("GET", "/api/recently-read", nil)
@@ -256,28 +269,35 @@ func TestHandleRecentlyRead_NoAutoCleanup(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal recently-read: %v", err)
 	}
-	// 超过 30 天的记录仍然返回，recently-read 不触发清理
 	if len(resp.Results) != 1 {
 		t.Fatalf("Results length = %d, want 1 (recently-read must not auto-cleanup)", len(resp.Results))
 	}
 	if resp.Results[0].ID != 111111 {
 		t.Errorf("result ID = %d, want 111111", resp.Results[0].ID)
 	}
-	if n := countReadingProgress(t, conn); n != 1 {
+	if n := countReadingProgress(t, client); n != 1 {
 		t.Errorf("records after recently-read = %d, want 1 (no auto-cleanup)", n)
 	}
 }
 
 func TestHandleReadingProgressCleanup_PreservesBookshelf(t *testing.T) {
-	conn := newTestDB(t)
-	bookshelfRepo := database.NewBookshelfRepository(conn)
+	client := newTestDB(t)
 	b := newTestBookshelf()
-	if err := bookshelfRepo.Add(t.Context(), b); err != nil {
+	_, err := client.Bookshelf.Create().
+		SetGalleryID(b.GalleryID).
+		SetToken(b.Token).
+		SetTitle(b.Title).
+		SetTitleJpn(string(b.TitleJPN)).
+		SetCategory(string(b.Category)).
+		SetThumbnail(b.Thumbnail).
+		SetPageCount(b.PageCount).
+		Save(t.Context())
+	if err != nil {
 		t.Fatalf("add bookshelf: %v", err)
 	}
-	insertProgressWithTimestamp(t, conn, b.GalleryID, b.Token, time.Now().UTC().AddDate(0, 0, -31))
+	insertProgressWithTimestamp(t, client, b.GalleryID, b.Token, time.Now().UTC().AddDate(0, 0, -31))
 
-	code, resp := performCleanup(t, conn, "?days=30")
+	code, resp := performCleanup(t, client, "?days=30")
 
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", code, http.StatusOK)
@@ -286,18 +306,27 @@ func TestHandleReadingProgressCleanup_PreservesBookshelf(t *testing.T) {
 		t.Errorf("deleted = %d, want 1", resp.Deleted)
 	}
 
-	// Reading progress 已删除
-	progressRepo := database.NewReadingProgressRepository(conn)
-	p, err := progressRepo.Get(t.Context(), b.GalleryID, b.Token)
+	// Reading progress should be deleted
+	exists, err := client.ReadingProgress.Query().
+		Where(
+			readingprogress.GalleryID(b.GalleryID),
+			readingprogress.Token(b.Token),
+		).
+		Exist(t.Context())
 	if err != nil {
-		t.Fatalf("get progress: %v", err)
+		t.Fatalf("check progress: %v", err)
 	}
-	if p.UpdatedAt != nil {
+	if exists {
 		t.Error("reading progress should be deleted after cleanup")
 	}
 
-	// Bookshelf 必须保留
-	exists, _, err := bookshelfRepo.Exists(t.Context(), b.GalleryID, b.Token)
+	// Bookshelf must be preserved
+	exists, err = client.Bookshelf.Query().
+		Where(
+			bookshelf.GalleryID(b.GalleryID),
+			bookshelf.Token(b.Token),
+		).
+		Exist(t.Context())
 	if err != nil {
 		t.Fatalf("check bookshelf: %v", err)
 	}

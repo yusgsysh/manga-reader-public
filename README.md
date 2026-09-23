@@ -2,7 +2,7 @@
 
 单用户、自托管的 ExHentai Web 漫画客户端。
 
-- Backend：Go / Gin / SQLite / MinIO (S3)
+- Backend：Go / Gin / Ent (ORM) / SQLite / MinIO (S3)
 - Frontend：Bun / React / Vite / TypeScript
 
 ## 功能
@@ -24,6 +24,24 @@ manga-reader/
 ├── frontend/         # React 前端（见 frontend/README.md）
 ├── docker-compose.yml
 └── .env.example
+```
+
+### 后端目录结构
+
+```text
+backend/
+├── main.go                       # 应用入口
+├── internal/
+│   ├── database/                 # 数据库初始化 (Ent Client)
+│   ├── ent/                      # Ent ORM 定义与生成代码
+│   │   ├── schema/               # 数据模型定义 (Schema as Code)
+│   │   ├── bookshelf/            # Bookshelf 查询工具
+│   │   └── readingprogress/      # ReadingProgress 查询工具
+│   ├── handler/                  # HTTP 处理器 (Gin)
+│   ├── model/                    # API 响应模型
+│   ├── exhentai/                 # ExHentai API / 页面抓取
+│   └── cache/                    # MinIO 对象存储缓存
+└── API.md                        # API 文档
 ```
 
 ## 快速开始（Docker Compose）
@@ -95,6 +113,30 @@ go test ./...
 go vet ./...
 go run .
 ```
+
+### Ent ORM 代码生成
+
+后端使用 [Ent](https://entgo.io/) 作为 ORM（Schema as Code）。Schema 定义在 `internal/ent/schema/` 目录下。
+
+修改 Schema 后需重新生成代码：
+
+```bash
+cd backend
+go generate ./internal/ent/...
+```
+
+生成的代码位于 `internal/ent/` 下（由 Ent 自动生成，勿手动编辑）：
+
+| 目录 | 说明 |
+|------|------|
+| `schema/` | 数据模型定义（手动编写） |
+| `bookshelf/` | Bookshelf 字段常量与查询辅助 |
+| `readingprogress/` | ReadingProgress 字段常量与查询辅助 |
+| `migrate/` | 数据库迁移逻辑 |
+
+Schema 文件：
+- `internal/ent/schema/bookshelf.go` — 书架模型
+- `internal/ent/schema/reading_progress.go` — 阅读进度模型
 
 后端默认监听 `:8080`，完整 API 文档见 `backend/API.md`。
 
