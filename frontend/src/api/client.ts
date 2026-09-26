@@ -27,11 +27,8 @@ export function buildApiUrl(
   return url.toString();
 }
 
-async function request<T>(
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
-  const res = await fetch(buildApiUrl(path), init);
+async function fetchChecked(path: string, init?: RequestInit): Promise<Response> {
+  const res = await fetch(path, init);
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {
@@ -42,6 +39,14 @@ async function request<T>(
     }
     throw new ApiRequestError(res.status, message);
   }
+  return res;
+}
+
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const res = await fetchChecked(path, init);
   return res.json() as Promise<T>;
 }
 
@@ -69,4 +74,13 @@ export function apiPut<T>(path: string, body?: unknown): Promise<T> {
 
 export function apiDelete<T>(path: string): Promise<T> {
   return request<T>(buildApiUrl(path), { method: "DELETE" });
+}
+
+export async function apiBlob(
+  path: string,
+  params?: Record<string, string | number | undefined>,
+  init?: RequestInit,
+): Promise<Blob> {
+  const res = await fetchChecked(buildApiUrl(path, params), init);
+  return res.blob();
 }

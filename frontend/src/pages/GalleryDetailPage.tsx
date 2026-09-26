@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { Badge, Button } from "@cloudflare/kumo";
+import { Badge, Button, Dialog, Meter } from "@cloudflare/kumo";
 import {
   ArrowLeft,
   Bookmark,
   BookmarkCheck,
   Book,
+  Download,
   Star,
   Loader2,
 } from "lucide-react";
@@ -14,6 +16,7 @@ import {
   useGalleryDetail,
 } from "../hooks/useGalleryDetail";
 import { useReadingProgress } from "../hooks/useReaderData";
+import { useGalleryZip } from "../hooks/useGalleryZip";
 import { ErrorState } from "../components/common/ErrorState";
 import { TagList } from "../components/tag";
 import { thumbnailUrl } from "../lib/image";
@@ -48,6 +51,13 @@ export function GalleryDetailPage() {
   const { data: shelfStatus } = useBookshelfStatus(id, token ?? "");
   const { add, remove } = useBookshelfToggle(id, token ?? "");
   const { data: progress } = useReadingProgress(id, token ?? "");
+  const zip = useGalleryZip();
+  const [downloadOpen, setDownloadOpen] = useState(false);
+
+  const closeDownload = () => {
+    zip.cancel();
+    setDownloadOpen(false);
+  };
 
   const inShelf = shelfStatus?.in_bookshelf ?? false;
   const hasProgress = progress && (progress.current_page > 0 || progress.completed);
@@ -73,6 +83,12 @@ export function GalleryDetailPage() {
     } else {
       add.mutate();
     }
+  };
+
+  const handleDownload = async () => {
+    setDownloadOpen(true);
+    await zip.start(gallery.title, gallery.page_urls);
+    setDownloadOpen(false);
   };
 
   return (
@@ -200,6 +216,21 @@ export function GalleryDetailPage() {
               )}
               {inShelf ? "已收藏 · 点击移除" : "收藏到书架"}
             </Button>
+            {gallery.page_urls.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => void handleDownload()}
+                disabled={zip.running}
+                aria-label="下载为 ZIP"
+              >
+                {zip.running ? (
+                  <Loader2 className="mr-1 size-4 animate-spin" />
+                ) : (
+                  <Download className="mr-1 size-4" />
+                )}
+                下载 ZIP
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -211,6 +242,44 @@ export function GalleryDetailPage() {
           <TagList tags={gallery.tags} />
         </section>
       )}
+
+      {/* Download ZIP progress */}
+      <Dialog.Root
+        open={downloadOpen}
+        onOpenChange={(open) => {
+          if (!open) closeDownload();
+        }}
+      >
+        <Dialog className="w-[min(92vw,26rem)] p-6">
+          <Dialog.Title className="text-base font-semibold">
+            {zip.status === "zipping" ? "正在打包 ZIP" : "正在下载"}
+          </Dialog.Title>
+          <Dialog.Description className="mt-1 text-sm text-kumo-subtle">
+            {gallery.title}
+          </Dialog.Description>
+          <div className="mt-4">
+            <Meter
+              label="下载进度"
+              value={
+                zip.status === "zipping" || zip.total === 0
+                  ? 100
+                  : (zip.done / zip.total) * 100
+              }
+              customValue={
+                zip.status === "zipping"
+                  ? "正在打包…"
+                  : `${zip.done} / ${zip.total} 页`
+              }
+              showValue
+            />
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button variant="secondary" onClick={closeDownload}>
+              取消
+            </Button>
+          </div>
+        </Dialog>
+      </Dialog.Root>
     </div>
   );
 }
