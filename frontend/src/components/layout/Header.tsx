@@ -16,9 +16,9 @@ const NAV_ITEMS = [
 ];
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
-  { mode: "system", label: " 跟随系统", icon: Monitor },
-  { mode: "light", label: " 浅色", icon: Sun },
-  { mode: "dark", label: " 深色", icon: Moon },
+  { mode: "system", label: "跟随系统", icon: Monitor },
+  { mode: "light", label: "浅色", icon: Sun },
+  { mode: "dark", label: "深色", icon: Moon },
 ];
 
 export function Header() {
@@ -75,7 +75,7 @@ export function Header() {
               {THEME_OPTIONS.map((option) => (
                 <DropdownMenu.Item
                   key={option.mode}
-                  icon={<option.icon className="size-4" />}
+                  icon={option.icon}
                   selected={mode === option.mode}
                   onClick={() => setMode(option.mode)}
                 >
