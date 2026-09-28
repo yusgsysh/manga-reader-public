@@ -1,59 +1,90 @@
 # Manga Reader - Docker Compose
 #
 # 前置：复制 .env.example 为 .env 并配置 ExHentai Cookie。
-# 启动：docker compose up -d --build
+#
+# 启动：
+#   docker compose up -d
+#
+# 更新镜像：
+#   docker compose pull
+#   docker compose up -d
 #
 # 拓扑：
-#   frontend (Angie :80) 托管静态文件并反代 /api/* → backend (:8080)
-#   backend  (Gin :8080)  不对外发布端口，仅通过 frontend 反代访问；
-#   需要本地调试时可取消注释 backend 的 ports（绑定 127.0.0.1，避免暴露到局域网）。
+#   frontend (Angie :80)
+#     ├── 静态文件
+#     └── /api/* → backend (:8080)
+#
+#   backend (Gin :8080)
+#     └── 不对外发布端口，仅通过 frontend 访问
+#
+# 本地调试 backend 时，可临时取消注释：
+#   ports:
+#     - "127.0.0.1:8080:8080"
 
 services:
   backend:
-    # build:
-      # context: ./backend
-      # dockerfile: Dockerfile
     image: git.09270721.xyz/abc/manga-reader-backend:latest
+
+    init: true
+
     env_file:
       - .env
+
     environment:
       MANGA_READER_DB_PATH: /app/data/manga-reader.db
+
     volumes:
       - backend_data:/app/data
+
+    # 局域网内 MinIO / EhTagTranslation 等主机名解析（按需修改）
     # extra_hosts:
-      # 局域网内 MinIO / EhTagTranslation 等主机名解析（按需修改）
-      # - "storage.09270721.xyz:192.168.1.100"
-    healthcheck:
-      # alpine 自带 busybox wget，无需额外安装 curl
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+    #   - "storage.09270721.xyz:192.168.1.100"
+
+    # 本地调试时使用，默认不对外暴露
+    # ports:
+    #   - "127.0.0.1:8080:8080"
+
+    security_opt:
+      - no-new-privileges:true
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
     stop_grace_period: 30s
     restart: unless-stopped
 
   frontend:
-    # build:
-      # context: ./frontend
-      # dockerfile: Dockerfile
     image: git.09270721.xyz/abc/manga-reader-frontend:latest
+
+    init: true
+
     ports:
       - "5173:80"
+
     environment:
-      # 反代后端地址，来自 .env 的 ANGIE_BACKEND_URL（默认 backend:8080）
+      # 反代后端地址
+      # 默认使用 Compose 内部 DNS：
+      # backend:8080
       ANGIE_BACKEND_URL: ${ANGIE_BACKEND_URL:-backend:8080}
+
     depends_on:
-      backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/healthz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      - backend
+
+    security_opt:
+      - no-new-privileges:true
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
     stop_grace_period: 10s
     restart: unless-stopped
 
 volumes:
   backend_data:
+    name: manga-reader-backend-data
