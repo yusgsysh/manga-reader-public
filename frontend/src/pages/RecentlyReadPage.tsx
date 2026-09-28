@@ -34,9 +34,8 @@ export function RecentlyReadPage() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-lg font-bold">最近阅读</h1>
-        {results.length > 0 && (
+      {results.length > 0 && (
+        <div className="mb-4 flex items-center justify-end">
           <Button
             variant="ghost"
             size="sm"
@@ -46,8 +45,8 @@ export function RecentlyReadPage() {
             <Trash2 className="mr-1 size-4" />
             删除所有阅读记录
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {results.length === 0 ? (
         <EmptyState

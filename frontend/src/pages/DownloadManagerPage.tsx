@@ -235,9 +235,8 @@ export function DownloadManagerPage() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-lg font-bold">下载管理</h1>
-        {jobs.length > 0 && (
+      {jobs.length > 0 && (
+        <div className="mb-4 flex items-center justify-end">
           <Button
             variant="ghost"
             size="sm"
@@ -247,8 +246,8 @@ export function DownloadManagerPage() {
             <Trash2 className="mr-1 size-4" />
             清理记录
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {jobs.length === 0 ? (
         <EmptyState
