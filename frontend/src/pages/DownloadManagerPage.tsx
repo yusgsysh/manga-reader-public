@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { Badge, Button, Dialog, Input, Loader, Meter, useKumoToastManager } from "@cloudflare/kumo";
+import { Badge, Button, Dialog, Loader, Meter, useKumoToastManager } from "@cloudflare/kumo";
 import { Download, Loader2, Trash2, X } from "lucide-react";
 import {
   useCancelPrefillJob,
@@ -162,7 +162,6 @@ export function DownloadManagerPage() {
   const cleanup = useCleanupPrefillJobs();
   const toast = useKumoToastManager();
   const [cleanupOpen, setCleanupOpen] = useState(false);
-  const [cleanupDays, setCleanupDays] = useState("30");
 
   const jobs = data?.jobs ?? [];
 
@@ -193,12 +192,7 @@ export function DownloadManagerPage() {
   };
 
   const handleCleanup = () => {
-    const days = Number(cleanupDays);
-    if (!Number.isInteger(days) || days < 0) {
-      toast.add({ title: "请输入不小于 0 的整数天数", variant: "error" });
-      return;
-    }
-    cleanup.mutate(days, {
+    cleanup.mutate(0, {
       onSuccess: (resp) => {
         toast.add({
           title: "清理完成",
@@ -273,23 +267,11 @@ export function DownloadManagerPage() {
       <Dialog.Root open={cleanupOpen} onOpenChange={setCleanupOpen}>
         <Dialog className="w-[min(92vw,26rem)] p-6">
           <Dialog.Title className="text-base font-semibold">
-            清理下载记录
+            清理全部下载记录
           </Dialog.Title>
           <Dialog.Description className="mt-1 text-sm text-kumo-subtle">
-            删除已结束（已完成 / 已取消 / 失败）的任务记录，进行中的任务不受影响。填 0 清空全部已结束记录。
+            清空所有已结束（已完成 / 已取消 / 失败）的任务记录，进行中的任务不受影响。
           </Dialog.Description>
-          <div className="mt-4">
-            <label className="mb-1 block text-xs text-kumo-subtle" htmlFor="cleanup-days">
-              保留最近 N 天
-            </label>
-            <Input
-              id="cleanup-days"
-              type="number"
-              min={0}
-              value={cleanupDays}
-              onChange={(e) => setCleanupDays(e.target.value)}
-            />
-          </div>
           <div className="mt-4 flex justify-end gap-2">
             <Dialog.Close render={<Button variant="secondary">取消</Button>} />
             <Button
