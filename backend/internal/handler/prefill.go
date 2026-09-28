@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"net/url"
 	"path"
@@ -91,7 +92,7 @@ func (m *prefillManager) recoverPending(s *Server) {
 	}
 	ctx := context.Background()
 	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := range 3 {
 		n, err := s.DB.Client.PrefillJob.Update().
 			Where(prefilljob.Status(prefillStatusRunning)).
 			SetStatus(prefillStatusQueued).
@@ -160,7 +161,7 @@ func (m *prefillManager) nextQueued(s *Server) (int, bool) {
 			return 0, false
 		}
 		var lastErr error
-		for attempt := 0; attempt < 3; attempt++ {
+		for attempt := range 3 {
 			n, err := s.DB.Client.PrefillJob.Update().
 				Where(prefilljob.ID(row.ID), prefilljob.Status(prefillStatusQueued)).
 				SetStatus(prefillStatusRunning).
@@ -311,7 +312,7 @@ func (s *Server) finishPrefillJob(id int, status string, failed int, errs []mode
 	}
 	now := time.Now()
 	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := range 3 {
 		n, err := s.DB.Client.PrefillJob.Update().
 			Where(
 				prefilljob.ID(id),
@@ -504,9 +505,7 @@ func (s *Server) handlePrefillList(c *gin.Context) {
 	// Snapshot active runs once to avoid per-row locking.
 	m.mu.Lock()
 	runSnapshot := make(map[int]*prefillRun, len(m.runs))
-	for id, run := range m.runs {
-		runSnapshot[id] = run
-	}
+	maps.Copy(runSnapshot, m.runs)
 	m.mu.Unlock()
 
 	rows, err := s.DB.Client.PrefillJob.Query().
@@ -619,7 +618,7 @@ func (s *Server) handlePrefillCancel(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 
-	for attempt := 0; attempt < 3; attempt++ {
+	for range 3 {
 		row, err := s.DB.Client.PrefillJob.Get(ctx, id)
 		if err != nil {
 			if ent.IsNotFound(err) {

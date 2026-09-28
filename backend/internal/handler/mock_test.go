@@ -122,10 +122,7 @@ func mockPaginatedGalleryHandler(gid int, title string, total int) http.HandlerF
 			p, _ = strconv.Atoi(v)
 		}
 		start := p*40 + 1
-		end := start + 40
-		if end > total+1 {
-			end = total + 1
-		}
+		end := min(start+40, total+1)
 		var links strings.Builder
 		for i := start; i < end; i++ {
 			links.WriteString(fmt.Sprintf(`<a href="https://exhentai.org/s/abc%d/%d-%d">p%d</a>`, i, gid, i, i))

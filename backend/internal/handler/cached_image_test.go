@@ -316,16 +316,14 @@ func TestSingleflight_CoalescesRequests(t *testing.T) {
 	start := make(chan struct{})
 
 	for range n {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			<-start
 			client := newMockClient(mockServer.URL)
 			_, _, err := exhentai.FetchPageImage(context.Background(), client, pageURL)
 			if err != nil {
 				errCount.Add(1)
 			}
-		}()
+		})
 	}
 
 	close(start)

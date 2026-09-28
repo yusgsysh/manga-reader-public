@@ -46,7 +46,7 @@ func fetchThumbnail(ctx context.Context, client *http.Client, thumbnailURL strin
 	if err == nil {
 		return data, contentType, nil
 	}
-	for attempt := 0; attempt < maxThumbnailRetries; attempt++ {
+	for range maxThumbnailRetries {
 		select {
 		case <-ctx.Done():
 			return nil, "", ctx.Err()
@@ -163,7 +163,7 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 // The returned imageResult indicates whether the data came from cache (cacheHit)
 // and whether it was successfully stored (stored).
 func (s *Server) loadOrFetchImage(ctx context.Context, key string, decodedURL string) (*imageResult, error) {
-	v, sfErr, _ := cachedImageGroup.Do(key, func() (interface{}, error) {
+	v, sfErr, _ := cachedImageGroup.Do(key, func() (any, error) {
 		// Use a context that won't be cancelled by the leader's cancellation
 		// (e.g., client disconnect) so that waiters aren't affected.
 		// The outer context still bounds the operation.
@@ -209,7 +209,7 @@ const (
 // loadOrFetchThumbnail returns the cached thumbnail for key, fetching it from
 // the upstream on a cache miss. Concurrent calls for the same key are coalesced.
 func (s *Server) loadOrFetchThumbnail(ctx context.Context, key string, rawURL string) (*imageResult, error) {
-	v, sfErr, _ := cachedImageGroup.Do(key, func() (interface{}, error) {
+	v, sfErr, _ := cachedImageGroup.Do(key, func() (any, error) {
 		fetchCtx := context.WithoutCancel(ctx)
 		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
 		defer cancel()
@@ -252,7 +252,7 @@ func (s *Server) loadOrFetchThumbnail(ctx context.Context, key string, rawURL st
 // sad panda, 4xx errors) are not retried.
 func (s *Server) fetchWithRetry(ctx context.Context, key string, decodedURL string) (*imageResult, error) {
 	var lastErr error
-	for attempt := 0; attempt < pageFetchMaxAttempts; attempt++ {
+	for attempt := range pageFetchMaxAttempts {
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():

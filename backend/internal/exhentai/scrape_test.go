@@ -122,7 +122,8 @@ func BenchmarkBuildCategoryFilter(b *testing.B) {
 	}
 }
 
-func intPtr(v int) *int { return &v }
+//go:fix inline
+func intPtr(v int) *int { return new(v) }
 
 func TestBuildSearchQuery(t *testing.T) {
 	tests := []struct {
@@ -154,8 +155,8 @@ func TestBuildSearchQuery(t *testing.T) {
 			name:    "page range",
 			keyword: "test",
 			opts: &SearchOptions{
-				MinPages: intPtr(10),
-				MaxPages: intPtr(200),
+				MinPages: new(10),
+				MaxPages: new(200),
 			},
 			expected: map[string]string{
 				"f_search":  "test",
@@ -168,7 +169,7 @@ func TestBuildSearchQuery(t *testing.T) {
 			name:    "min rating",
 			keyword: "test",
 			opts: &SearchOptions{
-				MinRating: intPtr(4),
+				MinRating: new(4),
 			},
 			expected: map[string]string{
 				"f_search":  "test",
@@ -251,9 +252,9 @@ func TestBuildSearchQuery(t *testing.T) {
 			name:    "combined advanced search",
 			keyword: "o:3d$",
 			opts: &SearchOptions{
-				MinPages:   intPtr(10),
-				MaxPages:   intPtr(200),
-				MinRating:  intPtr(4),
+				MinPages:   new(10),
+				MaxPages:   new(200),
+				MinRating:  new(4),
 				HasTorrent: true,
 			},
 			expected: map[string]string{
@@ -278,7 +279,7 @@ func TestBuildSearchQuery(t *testing.T) {
 			name:    "only min_pages",
 			keyword: "test",
 			opts: &SearchOptions{
-				MinPages: intPtr(5),
+				MinPages: new(5),
 			},
 			expected: map[string]string{
 				"f_search":  "test",
@@ -290,7 +291,7 @@ func TestBuildSearchQuery(t *testing.T) {
 			name:    "only max_pages",
 			keyword: "test",
 			opts: &SearchOptions{
-				MaxPages: intPtr(100),
+				MaxPages: new(100),
 			},
 			expected: map[string]string{
 				"f_search":  "test",

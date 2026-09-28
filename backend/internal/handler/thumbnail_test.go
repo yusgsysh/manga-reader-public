@@ -415,16 +415,14 @@ func TestCachedThumbnail_ConcurrentMissSingleFetch(t *testing.T) {
 	start := make(chan struct{})
 
 	for range n {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			<-start
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, httptest.NewRequest("GET", "/api/cached-thumbnail?url="+escaped, nil))
 			if w.Code != http.StatusOK {
 				errCount.Add(1)
 			}
-		}()
+		})
 	}
 
 	close(start)

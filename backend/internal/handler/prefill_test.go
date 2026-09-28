@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -164,10 +165,8 @@ func waitPrefillStatus(t *testing.T, r *gin.Engine, id int, timeout time.Duratio
 			var job prefillJobResp
 			if json.Unmarshal(body, &job) == nil {
 				last = job
-				for _, w := range want {
-					if job.Status == w {
-						return job
-					}
+				if slices.Contains(want, job.Status) {
+					return job
 				}
 			}
 		}

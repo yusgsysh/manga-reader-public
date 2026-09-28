@@ -43,8 +43,7 @@ func HTTPStatusError(err error) bool {
 
 // HTTPStatusCode returns the HTTP status code from an error, or 0 if not a status error.
 func HTTPStatusCode(err error) int {
-	var hse *httpStatusError
-	if errors.As(err, &hse) {
+	if hse, ok := errors.AsType[*httpStatusError](err); ok {
 		return hse.code
 	}
 	return 0
