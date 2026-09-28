@@ -27,6 +27,8 @@ export function ReaderPage() {
   const viewerRef = useRef<MangaViewerHandle>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [barVisible, setBarVisible] = useState(false);
+  const hideBarTimer = useRef<number | undefined>(undefined);
   const id = Number(idParam);
   const restart = searchParams.get("restart") === "1";
 
@@ -41,20 +43,49 @@ export function ReaderPage() {
     [isDark],
   );
 
-  // 真全屏由页面容器持有（顶栏保留在全屏内，按钮可退出）；
-  // comimi 的 layoutMode（inline/wide/browserFullscreen）由库自理，两者互不干扰
+  // 真全屏由页面容器持有（comimi 的 layoutMode 由库自理，两者互不干扰）。
+  // 全屏时顶栏悬浮于顶部、闲置 3 秒自动隐藏，鼠标/触摸时浮现。
+  // 进入全屏时两个 state 同批更新，避免顶栏"先滑出再滑回"的闪烁
   useEffect(() => {
     let isFs = false;
     const onChange = () => {
       isFs = document.fullscreenElement === containerRef.current;
       setIsFullscreen(isFs);
+      setBarVisible(isFs);
     };
     document.addEventListener("fullscreenchange", onChange);
     return () => {
       document.removeEventListener("fullscreenchange", onChange);
-      if (isFs) void document.exitFullscreen();
+      // 离开路由时兜底退出真全屏
+      if (isFs && document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
     };
   }, []);
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const hideBar = () => {
+      hideBarTimer.current = undefined;
+      setBarVisible(false);
+    };
+    const poke = () => {
+      setBarVisible(true);
+      window.clearTimeout(hideBarTimer.current);
+      hideBarTimer.current = window.setTimeout(hideBar, 3000);
+    };
+    poke();
+    window.addEventListener("mousemove", poke);
+    window.addEventListener("touchstart", poke, { passive: true });
+    window.addEventListener("wheel", poke, { passive: true });
+    return () => {
+      window.clearTimeout(hideBarTimer.current);
+      hideBarTimer.current = undefined;
+      window.removeEventListener("mousemove", poke);
+      window.removeEventListener("touchstart", poke);
+      window.removeEventListener("wheel", poke);
+    };
+  }, [isFullscreen]);
 
   const toggleFullscreen = () => {
     const el = containerRef.current;
@@ -165,9 +196,24 @@ export function ReaderPage() {
   }
 
   return (
-    <div ref={containerRef} className="flex h-[100dvh] flex-col bg-kumo-base">
-      {/* Top bar */}
-      <div className="relative z-10 flex h-12 shrink-0 items-center gap-2 border-b border-kumo-hairline bg-kumo-elevated px-3">
+    <div
+      ref={containerRef}
+      className="reader-shell flex h-[100dvh] flex-col bg-kumo-base"
+    >
+      {/* Top bar：全屏时悬浮于顶部，闲置自动隐藏 */}
+      <div
+        className={[
+          "flex h-12 shrink-0 items-center gap-2 border-b border-kumo-hairline bg-kumo-elevated px-3",
+          isFullscreen
+            ? [
+                "fixed inset-x-0 top-0 z-[1000] transition-[opacity,transform] duration-200",
+                barVisible
+                  ? "translate-y-0 opacity-100"
+                  : "pointer-events-none -translate-y-full opacity-0",
+              ].join(" ")
+            : "relative z-10",
+        ].join(" ")}
+      >
         <Button
           variant="ghost"
           size="sm"
