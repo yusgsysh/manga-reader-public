@@ -36,6 +36,7 @@ export function ReaderPage() {
     () => ({
       theme: isDark ? "dark" : "light",
       backgroundColor: isDark ? "black" : "white",
+      pageTurnMode: "single",
     }),
     [isDark],
   );
