@@ -44,6 +44,12 @@ body {
   overflow: hidden;
 }
 
+/* 真全屏：顶栏交由 comimi 接管（控件由库内 dock 提供），整屏只留阅读器 */
+.reader-shell:fullscreen > .reader-topbar,
+.reader-shell:-webkit-full-screen > .reader-topbar {
+  display: none;
+}
+
 /* 真全屏：阅读器从 inline 卡片铺满整屏 */
 .reader-shell:fullscreen .comimi-root,
 .reader-shell:-webkit-full-screen .comimi-root {
