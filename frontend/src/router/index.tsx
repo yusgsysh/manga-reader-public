@@ -25,6 +25,11 @@ const RecentlyReadPage = lazy(() =>
     default: m.RecentlyReadPage,
   })),
 );
+const DownloadManagerPage = lazy(() =>
+  import("../pages/DownloadManagerPage").then((m) => ({
+    default: m.DownloadManagerPage,
+  })),
+);
 const GalleryDetailPage = lazy(() =>
   import("../pages/GalleryDetailPage").then((m) => ({
     default: m.GalleryDetailPage,
@@ -104,6 +109,14 @@ export const router = createBrowserRouter([
         element: (
           <LazyPage>
             <RecentlyReadPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "downloads",
+        element: (
+          <LazyPage>
+            <DownloadManagerPage />
           </LazyPage>
         ),
       },

@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"manga-reader/internal/database"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/readingprogress"
-	"manga-reader/internal/database"
 	"manga-reader/internal/model"
 
 	entsql "entgo.io/ent/dialect/sql"
@@ -32,8 +32,16 @@ func newTestDB(t *testing.T) *ent.Client {
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
+	// A plain :memory: database is private to its connection; if the pool
+	// opened a second connection it would see an empty database. One
+	// connection keeps every query (including the ones made by background
+	// goroutines) on the same database.
+	conn.SetMaxOpenConns(1)
 	if _, err := conn.Exec("PRAGMA foreign_keys=ON"); err != nil {
 		t.Fatalf("enable foreign keys: %v", err)
+	}
+	if _, err := conn.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		t.Fatalf("set busy timeout: %v", err)
 	}
 	drv := entsql.OpenDB("sqlite3", conn)
 	client := ent.NewClient(ent.Driver(drv))

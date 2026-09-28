@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"net/http"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/minio/minio-go/v7"
@@ -21,6 +22,9 @@ type Server struct {
 	Client *http.Client
 	DB     *database.DB
 	Cache  ImageCache
+
+	prefillOnce sync.Once
+	prefillMgr  *prefillManager
 }
 
 type Config struct {
@@ -59,4 +63,12 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 	r.GET("/api/thumbnail", s.handleThumbnail)
 	r.GET("/api/cached-thumbnail", s.handleCachedThumbnail)
 	r.GET("/api/cached-image", s.handleCachedImage)
+
+	r.POST("/api/prefill", s.handlePrefillStart)
+	r.GET("/api/prefill", s.handlePrefillList)
+	r.POST("/api/prefill/cleanup", s.handlePrefillCleanup)
+	r.GET("/api/prefill/:id", s.handlePrefillGet)
+	r.POST("/api/prefill/:id/cancel", s.handlePrefillCancel)
+	r.DELETE("/api/prefill/:id", s.handlePrefillDelete)
+	r.GET("/api/prefill/:id/zip", s.handlePrefillZip)
 }

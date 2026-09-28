@@ -12,6 +12,7 @@ import (
 	"manga-reader/internal/ent/migrate"
 
 	"manga-reader/internal/ent/bookshelf"
+	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/readingprogress"
 
 	"entgo.io/ent"
@@ -26,6 +27,8 @@ type Client struct {
 	Schema *migrate.Schema
 	// Bookshelf is the client for interacting with the Bookshelf builders.
 	Bookshelf *BookshelfClient
+	// PrefillJob is the client for interacting with the PrefillJob builders.
+	PrefillJob *PrefillJobClient
 	// ReadingProgress is the client for interacting with the ReadingProgress builders.
 	ReadingProgress *ReadingProgressClient
 }
@@ -40,6 +43,7 @@ func NewClient(opts ...Option) *Client {
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.Bookshelf = NewBookshelfClient(c.config)
+	c.PrefillJob = NewPrefillJobClient(c.config)
 	c.ReadingProgress = NewReadingProgressClient(c.config)
 }
 
@@ -134,6 +138,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ctx:             ctx,
 		config:          cfg,
 		Bookshelf:       NewBookshelfClient(cfg),
+		PrefillJob:      NewPrefillJobClient(cfg),
 		ReadingProgress: NewReadingProgressClient(cfg),
 	}, nil
 }
@@ -155,6 +160,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ctx:             ctx,
 		config:          cfg,
 		Bookshelf:       NewBookshelfClient(cfg),
+		PrefillJob:      NewPrefillJobClient(cfg),
 		ReadingProgress: NewReadingProgressClient(cfg),
 	}, nil
 }
@@ -185,6 +191,7 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	c.Bookshelf.Use(hooks...)
+	c.PrefillJob.Use(hooks...)
 	c.ReadingProgress.Use(hooks...)
 }
 
@@ -192,6 +199,7 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	c.Bookshelf.Intercept(interceptors...)
+	c.PrefillJob.Intercept(interceptors...)
 	c.ReadingProgress.Intercept(interceptors...)
 }
 
@@ -200,6 +208,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
 	case *BookshelfMutation:
 		return c.Bookshelf.mutate(ctx, m)
+	case *PrefillJobMutation:
+		return c.PrefillJob.mutate(ctx, m)
 	case *ReadingProgressMutation:
 		return c.ReadingProgress.mutate(ctx, m)
 	default:
@@ -340,6 +350,139 @@ func (c *BookshelfClient) mutate(ctx context.Context, m *BookshelfMutation) (Val
 	}
 }
 
+// PrefillJobClient is a client for the PrefillJob schema.
+type PrefillJobClient struct {
+	config
+}
+
+// NewPrefillJobClient returns a client for the PrefillJob from the given config.
+func NewPrefillJobClient(c config) *PrefillJobClient {
+	return &PrefillJobClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `prefilljob.Hooks(f(g(h())))`.
+func (c *PrefillJobClient) Use(hooks ...Hook) {
+	c.hooks.PrefillJob = append(c.hooks.PrefillJob, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `prefilljob.Intercept(f(g(h())))`.
+func (c *PrefillJobClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PrefillJob = append(c.inters.PrefillJob, interceptors...)
+}
+
+// Create returns a builder for creating a PrefillJob entity.
+func (c *PrefillJobClient) Create() *PrefillJobCreate {
+	mutation := newPrefillJobMutation(c.config, OpCreate)
+	return &PrefillJobCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of PrefillJob entities.
+func (c *PrefillJobClient) CreateBulk(builders ...*PrefillJobCreate) *PrefillJobCreateBulk {
+	return &PrefillJobCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PrefillJobClient) MapCreateBulk(slice any, setFunc func(*PrefillJobCreate, int)) *PrefillJobCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PrefillJobCreateBulk{err: fmt.Errorf("calling to PrefillJobClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PrefillJobCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PrefillJobCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for PrefillJob.
+func (c *PrefillJobClient) Update() *PrefillJobUpdate {
+	mutation := newPrefillJobMutation(c.config, OpUpdate)
+	return &PrefillJobUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PrefillJobClient) UpdateOne(_m *PrefillJob) *PrefillJobUpdateOne {
+	mutation := newPrefillJobMutation(c.config, OpUpdateOne, withPrefillJob(_m))
+	return &PrefillJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PrefillJobClient) UpdateOneID(id int) *PrefillJobUpdateOne {
+	mutation := newPrefillJobMutation(c.config, OpUpdateOne, withPrefillJobID(id))
+	return &PrefillJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for PrefillJob.
+func (c *PrefillJobClient) Delete() *PrefillJobDelete {
+	mutation := newPrefillJobMutation(c.config, OpDelete)
+	return &PrefillJobDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PrefillJobClient) DeleteOne(_m *PrefillJob) *PrefillJobDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PrefillJobClient) DeleteOneID(id int) *PrefillJobDeleteOne {
+	builder := c.Delete().Where(prefilljob.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PrefillJobDeleteOne{builder}
+}
+
+// Query returns a query builder for PrefillJob.
+func (c *PrefillJobClient) Query() *PrefillJobQuery {
+	return &PrefillJobQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePrefillJob},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a PrefillJob entity by its id.
+func (c *PrefillJobClient) Get(ctx context.Context, id int) (*PrefillJob, error) {
+	return c.Query().Where(prefilljob.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PrefillJobClient) GetX(ctx context.Context, id int) *PrefillJob {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *PrefillJobClient) Hooks() []Hook {
+	return c.hooks.PrefillJob
+}
+
+// Interceptors returns the client interceptors.
+func (c *PrefillJobClient) Interceptors() []Interceptor {
+	return c.inters.PrefillJob
+}
+
+func (c *PrefillJobClient) mutate(ctx context.Context, m *PrefillJobMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PrefillJobCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PrefillJobUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PrefillJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PrefillJobDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown PrefillJob mutation op: %q", m.Op())
+	}
+}
+
 // ReadingProgressClient is a client for the ReadingProgress schema.
 type ReadingProgressClient struct {
 	config
@@ -476,9 +619,9 @@ func (c *ReadingProgressClient) mutate(ctx context.Context, m *ReadingProgressMu
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Bookshelf, ReadingProgress []ent.Hook
+		Bookshelf, PrefillJob, ReadingProgress []ent.Hook
 	}
 	inters struct {
-		Bookshelf, ReadingProgress []ent.Interceptor
+		Bookshelf, PrefillJob, ReadingProgress []ent.Interceptor
 	}
 )

@@ -824,6 +824,189 @@ POST /api/reading-progress/cleanup?days=0
 
 > 只删除 `reading_progress`，不影响 Bookshelf / Gallery / MinIO 缓存。
 
+### 20. Prefill Start（创建离线下载任务）
+
+`POST /api/prefill`
+
+创建后台预填充任务：服务端按 `urls` 顺序**逐页串行**抓取页面图片并写入 MinIO 缓存，不生成 ZIP，响应中不包含任何图片数据。任务由全局单 worker 严格排队执行（同一时刻只有一个任务、一次只抓一页）。进度通过轮询 `GET /api/prefill/:id` 获取。
+
+**Request Body (JSON):**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| urls | string[] | yes | 页面 URL 列表（顺序即抓取顺序），1~2000 个，必须为 `exhentai.org` / `e-hentai.org` |
+| gallery_id | int | no | 画廊 ID（与 gallery_token 一起用于去重） |
+| gallery_token | string | no | 画廊 token |
+| title | string | no | 任务显示标题 |
+
+去重规则：相同 `gallery_id` + `gallery_token` 已存在 `queued`/`running` 任务时，直接返回该任务（`200`），不重复创建；否则创建新任务（`202`）。
+
+**示例:**
+
+```http
+POST /api/prefill
+Content-Type: application/json
+
+{
+  "gallery_id": 3138775,
+  "gallery_token": "30b0285f9b",
+  "title": "Test Gallery",
+  "urls": [
+    "https://exhentai.org/s/abc/3138775-1",
+    "https://exhentai.org/s/def/3138775-2"
+  ]
+}
+```
+
+**Response (202 创建 / 200 去重命中):**
+
+```json
+{
+  "id": 1,
+  "gallery_id": 3138775,
+  "gallery_token": "30b0285f9b",
+  "title": "Test Gallery",
+  "status": "queued",
+  "total": 2,
+  "progress": null,
+  "failed_count": 0,
+  "errors": [],
+  "created_at": "2026-09-28T06:00:00Z",
+  "updated_at": "2026-09-28T06:00:00Z",
+  "finished_at": null
+}
+```
+
+**PrefillJob 对象（以下 Prefill 接口共用）:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | int | 任务 ID |
+| gallery_id | int \| null | 画廊 ID（可空） |
+| gallery_token | string | 画廊 token |
+| title | string | 任务标题 |
+| status | string | `queued` / `running` / `completed` / `cancelled` / `failed` |
+| total | int | 页面总数（= `urls` 长度） |
+| progress | object \| null | 仅本进程内 `running` 时存在：`{done, cached, fetched}`。纯内存计数、不落库（图片缓存约 30 天过期，落库的进度会失真）；其余状态为 `null` |
+| failed_count | int | 抓取失败的页数 |
+| errors | array | 至多 20 条 `{index, url, error}` |
+| created_at | string | 创建时间（RFC3339） |
+| updated_at | string | 更新时间（RFC3339） |
+| finished_at | string \| null | 结束时间（RFC3339），未结束为 `null` |
+
+进程重启时，数据库中 `queued`/`running` 的任务会自动重新排队继续执行；失败页会在下载 ZIP 时按需补抓。
+
+**Error Responses:**
+
+| Status Code | Description |
+|-------------|-------------|
+| 400 | body 无效 / `urls` 为空 / 超过 2000 个 / URL 非法（域名或 scheme 不允许） |
+| 503 | 数据库或缓存未配置 |
+
+---
+
+### 21. Prefill List（任务列表）
+
+`GET /api/prefill`
+
+按创建时间倒序返回最近 200 个任务。
+
+**Response (200):**
+
+```json
+{
+  "jobs": [ /* PrefillJob 数组，最新在前 */ ]
+}
+```
+
+---
+
+### 22. Prefill Get（查询单个任务）
+
+`GET /api/prefill/:id`
+
+返回单个 `PrefillJob` 快照，用于轮询进度。`running` 时包含 `progress`。
+
+**Error Responses:** `400` 非法 id、`404` 不存在。
+
+---
+
+### 23. Prefill Cancel（取消任务）
+
+`POST /api/prefill/:id/cancel`
+
+取消 `queued` 或 `running` 任务。取消在响应中立即生效（状态 CAS 翻转为 `cancelled` 并写入 `finished_at`），正在抓取的 worker 随后停止。
+
+**Response (200):** 取消后的 `PrefillJob`。
+
+**Error Responses:**
+
+| Status Code | Description |
+|-------------|-------------|
+| 400 | 非法 id |
+| 404 | 不存在 |
+| 409 | 任务已 `completed`/`failed`（已 `cancelled` 幂等返回 200） |
+
+---
+
+### 24. Prefill Delete（删除任务记录）
+
+`DELETE /api/prefill/:id`
+
+只删除已结束（`completed` / `cancelled` / `failed`）的任务记录。
+
+**Response (200):**
+
+```json
+{ "deleted": 1 }
+```
+
+**Error Responses:** `409` 任务仍在排队/运行（先取消）、`404` 不存在、`400` 非法 id。
+
+---
+
+### 25. Prefill Cleanup（批量清理任务记录）
+
+`POST /api/prefill/cleanup`
+
+批量删除已结束的任务记录，进行中的任务永远不会被清理。
+
+**Query Parameters:**
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| days | int | no | `30` | 删除 N 天以前结束的记录；`0` 表示删除全部已结束记录 |
+
+**Response (200):**
+
+```json
+{ "days": 30, "deleted": 12 }
+```
+
+**Error Responses:** `400`（`days` 为负数或非整数）、`500` 数据库错误。
+
+---
+
+### 26. Prefill ZIP（流式下载 ZIP）
+
+`GET /api/prefill/:id/zip`
+
+以 chunked 流式方式返回 `application/zip`，边读缓存边写出，不在内存中组装完整压缩包。条目按页面顺序命名为 `001.jpg` / `002.png` / …（扩展名由图片 Content-Type 决定）。
+
+- 缓存命中：直接从 MinIO 读出写入 ZIP；
+- 缓存缺失：即时抓取补全（经 singleflight 去重，不排队在 worker 后面）；
+- 缺失且抓取失败的页会被跳过（ZIP 中少一个条目）。
+
+**Headers:**
+
+```http
+Content-Type: application/zip
+Content-Disposition: attachment; filename="..."; filename*=UTF-8''...
+Cache-Control: no-store
+```
+
+**Error Responses:** `404` 不存在、`400` 非法 id、`503` 数据库或缓存未配置。
+
 ---
 
 ## Error Responses
@@ -840,5 +1023,7 @@ POST /api/reading-progress/cleanup?days=0
 |-------------|-------------|
 | 400 | Bad request (参数无效) |
 | 404 | Resource not found |
+| 409 | Conflict (任务状态不允许该操作) |
 | 500 | Internal server error |
 | 502 | Upstream error (ExHentai API 或抓取失败) |
+| 503 | Service unavailable (依赖未配置) |

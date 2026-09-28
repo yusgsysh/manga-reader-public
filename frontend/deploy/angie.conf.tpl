@@ -407,6 +407,37 @@ http {
         }
 
         # ========================================================
+        # Prefill Download Tasks
+        #
+        # POST   /api/prefill
+        # GET    /api/prefill
+        # GET    /api/prefill/:id
+        # POST   /api/prefill/:id/cancel
+        # DELETE /api/prefill/:id
+        # POST   /api/prefill/cleanup
+        # GET    /api/prefill/:id/zip   (streaming ZIP)
+        #
+        # 不缓存；ZIP 为流式响应，关闭缓冲；大画廊补抓可能较慢，超时 600s
+        # ========================================================
+
+        location /api/prefill {
+            proxy_pass http://${ANGIE_BACKEND_URL};
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            proxy_no_cache 1;
+            proxy_cache_bypass 1;
+
+            proxy_buffering off;
+
+            proxy_read_timeout 600s;
+            proxy_send_timeout 600s;
+        }
+
+        # ========================================================
         # Other API
         #
         # 默认不缓存

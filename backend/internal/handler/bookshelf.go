@@ -373,7 +373,7 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 	items := make([]model.RecentlyReadItem, 0, len(entities))
 	for _, rp := range entities {
 		item := model.RecentlyReadItem{
-			ID:   rp.GalleryID,
+			ID:    rp.GalleryID,
 			Token: rp.Token,
 			Reading: model.ReadingProgress{
 				GalleryID:   rp.GalleryID,

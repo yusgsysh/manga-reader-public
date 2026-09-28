@@ -158,10 +158,10 @@ func TestBuildSearchQuery(t *testing.T) {
 				MaxPages: intPtr(200),
 			},
 			expected: map[string]string{
-				"f_search": "test",
+				"f_search":  "test",
 				"advsearch": "1",
-				"f_spf":    "10",
-				"f_spt":    "200",
+				"f_spf":     "10",
+				"f_spt":     "200",
 			},
 		},
 		{
@@ -171,10 +171,10 @@ func TestBuildSearchQuery(t *testing.T) {
 				MinRating: intPtr(4),
 			},
 			expected: map[string]string{
-				"f_search": "test",
+				"f_search":  "test",
 				"advsearch": "1",
-				"f_sr":     "on",
-				"f_srdd":   "4",
+				"f_sr":      "on",
+				"f_srdd":    "4",
 			},
 		},
 		{
@@ -184,9 +184,9 @@ func TestBuildSearchQuery(t *testing.T) {
 				HasTorrent: true,
 			},
 			expected: map[string]string{
-				"f_search": "test",
+				"f_search":  "test",
 				"advsearch": "1",
-				"f_sto":    "on",
+				"f_sto":     "on",
 			},
 		},
 		{
@@ -196,9 +196,9 @@ func TestBuildSearchQuery(t *testing.T) {
 				IncludeExpunged: true,
 			},
 			expected: map[string]string{
-				"f_search": "test",
+				"f_search":  "test",
 				"advsearch": "1",
-				"f_sh":     "on",
+				"f_sh":      "on",
 			},
 		},
 		{
@@ -210,11 +210,11 @@ func TestBuildSearchQuery(t *testing.T) {
 				SearchDescription: true,
 			},
 			expected: map[string]string{
-				"f_search": "test",
+				"f_search":  "test",
 				"advsearch": "1",
-				"f_sname":  "on",
-				"f_stags":  "on",
-				"f_sdesc":  "on",
+				"f_sname":   "on",
+				"f_stags":   "on",
+				"f_sdesc":   "on",
 			},
 		},
 		{
@@ -225,10 +225,10 @@ func TestBuildSearchQuery(t *testing.T) {
 				IncludeDownvotedTags: true,
 			},
 			expected: map[string]string{
-				"f_search": "test",
+				"f_search":  "test",
 				"advsearch": "1",
-				"f_sdt1":   "on",
-				"f_sdt2":   "on",
+				"f_sdt1":    "on",
+				"f_sdt2":    "on",
 			},
 		},
 		{
@@ -240,30 +240,30 @@ func TestBuildSearchQuery(t *testing.T) {
 				DisableTagFilter:      true,
 			},
 			expected: map[string]string{
-				"f_search": "test",
+				"f_search":  "test",
 				"advsearch": "1",
-				"f_sfl":    "on",
-				"f_sfu":    "on",
-				"f_sft":    "on",
+				"f_sfl":     "on",
+				"f_sfu":     "on",
+				"f_sft":     "on",
 			},
 		},
 		{
 			name:    "combined advanced search",
 			keyword: "o:3d$",
 			opts: &SearchOptions{
-				MinPages:  intPtr(10),
-				MaxPages:  intPtr(200),
-				MinRating: intPtr(4),
+				MinPages:   intPtr(10),
+				MaxPages:   intPtr(200),
+				MinRating:  intPtr(4),
 				HasTorrent: true,
 			},
 			expected: map[string]string{
-				"f_search": "o:3d$",
+				"f_search":  "o:3d$",
 				"advsearch": "1",
-				"f_spf":    "10",
-				"f_spt":    "200",
-				"f_sr":     "on",
-				"f_srdd":   "4",
-				"f_sto":    "on",
+				"f_spf":     "10",
+				"f_spt":     "200",
+				"f_sr":      "on",
+				"f_srdd":    "4",
+				"f_sto":     "on",
 			},
 		},
 		{
@@ -281,9 +281,9 @@ func TestBuildSearchQuery(t *testing.T) {
 				MinPages: intPtr(5),
 			},
 			expected: map[string]string{
-				"f_search": "test",
+				"f_search":  "test",
 				"advsearch": "1",
-				"f_spf":    "5",
+				"f_spf":     "5",
 			},
 		},
 		{
@@ -293,9 +293,9 @@ func TestBuildSearchQuery(t *testing.T) {
 				MaxPages: intPtr(100),
 			},
 			expected: map[string]string{
-				"f_search": "test",
+				"f_search":  "test",
 				"advsearch": "1",
-				"f_spt":    "100",
+				"f_spt":     "100",
 			},
 		},
 	}

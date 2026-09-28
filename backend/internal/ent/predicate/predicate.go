@@ -9,5 +9,8 @@ import (
 // Bookshelf is the predicate function for bookshelf builders.
 type Bookshelf func(*sql.Selector)
 
+// PrefillJob is the predicate function for prefilljob builders.
+type PrefillJob func(*sql.Selector)
+
 // ReadingProgress is the predicate function for readingprogress builders.
 type ReadingProgress func(*sql.Selector)

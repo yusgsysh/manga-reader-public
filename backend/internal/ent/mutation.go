@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/predicate"
+	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/readingprogress"
+	"manga-reader/internal/model"
 	"sync"
 	"time"
 
@@ -26,6 +28,7 @@ const (
 
 	// Node types.
 	TypeBookshelf       = "Bookshelf"
+	TypePrefillJob      = "PrefillJob"
 	TypeReadingProgress = "ReadingProgress"
 )
 
@@ -854,6 +857,981 @@ func (m *BookshelfMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *BookshelfMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown Bookshelf edge %s", name)
+}
+
+// PrefillJobMutation represents an operation that mutates the PrefillJob nodes in the graph.
+type PrefillJobMutation struct {
+	config
+	op              Op
+	typ             string
+	id              *int
+	gallery_id      *int64
+	addgallery_id   *int64
+	gallery_token   *string
+	title           *string
+	urls            *[]string
+	appendurls      []string
+	status          *string
+	failed_count    *int
+	addfailed_count *int
+	errors          *[]model.PrefillItemError
+	appenderrors    []model.PrefillItemError
+	created_at      *time.Time
+	updated_at      *time.Time
+	finished_at     *time.Time
+	clearedFields   map[string]struct{}
+	done            bool
+	oldValue        func(context.Context) (*PrefillJob, error)
+	predicates      []predicate.PrefillJob
+}
+
+var _ ent.Mutation = (*PrefillJobMutation)(nil)
+
+// prefilljobOption allows management of the mutation configuration using functional options.
+type prefilljobOption func(*PrefillJobMutation)
+
+// newPrefillJobMutation creates new mutation for the PrefillJob entity.
+func newPrefillJobMutation(c config, op Op, opts ...prefilljobOption) *PrefillJobMutation {
+	m := &PrefillJobMutation{
+		config:        c,
+		op:            op,
+		typ:           TypePrefillJob,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withPrefillJobID sets the ID field of the mutation.
+func withPrefillJobID(id int) prefilljobOption {
+	return func(m *PrefillJobMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *PrefillJob
+		)
+		m.oldValue = func(ctx context.Context) (*PrefillJob, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().PrefillJob.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withPrefillJob sets the old PrefillJob of the mutation.
+func withPrefillJob(node *PrefillJob) prefilljobOption {
+	return func(m *PrefillJobMutation) {
+		m.oldValue = func(context.Context) (*PrefillJob, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m PrefillJobMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m PrefillJobMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *PrefillJobMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *PrefillJobMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().PrefillJob.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetGalleryID sets the "gallery_id" field.
+func (m *PrefillJobMutation) SetGalleryID(i int64) {
+	m.gallery_id = &i
+	m.addgallery_id = nil
+}
+
+// GalleryID returns the value of the "gallery_id" field in the mutation.
+func (m *PrefillJobMutation) GalleryID() (r int64, exists bool) {
+	v := m.gallery_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGalleryID returns the old "gallery_id" field's value of the PrefillJob entity.
+// If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrefillJobMutation) OldGalleryID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGalleryID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGalleryID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGalleryID: %w", err)
+	}
+	return oldValue.GalleryID, nil
+}
+
+// AddGalleryID adds i to the "gallery_id" field.
+func (m *PrefillJobMutation) AddGalleryID(i int64) {
+	if m.addgallery_id != nil {
+		*m.addgallery_id += i
+	} else {
+		m.addgallery_id = &i
+	}
+}
+
+// AddedGalleryID returns the value that was added to the "gallery_id" field in this mutation.
+func (m *PrefillJobMutation) AddedGalleryID() (r int64, exists bool) {
+	v := m.addgallery_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearGalleryID clears the value of the "gallery_id" field.
+func (m *PrefillJobMutation) ClearGalleryID() {
+	m.gallery_id = nil
+	m.addgallery_id = nil
+	m.clearedFields[prefilljob.FieldGalleryID] = struct{}{}
+}
+
+// GalleryIDCleared returns if the "gallery_id" field was cleared in this mutation.
+func (m *PrefillJobMutation) GalleryIDCleared() bool {
+	_, ok := m.clearedFields[prefilljob.FieldGalleryID]
+	return ok
+}
+
+// ResetGalleryID resets all changes to the "gallery_id" field.
+func (m *PrefillJobMutation) ResetGalleryID() {
+	m.gallery_id = nil
+	m.addgallery_id = nil
+	delete(m.clearedFields, prefilljob.FieldGalleryID)
+}
+
+// SetGalleryToken sets the "gallery_token" field.
+func (m *PrefillJobMutation) SetGalleryToken(s string) {
+	m.gallery_token = &s
+}
+
+// GalleryToken returns the value of the "gallery_token" field in the mutation.
+func (m *PrefillJobMutation) GalleryToken() (r string, exists bool) {
+	v := m.gallery_token
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGalleryToken returns the old "gallery_token" field's value of the PrefillJob entity.
+// If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrefillJobMutation) OldGalleryToken(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGalleryToken is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGalleryToken requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGalleryToken: %w", err)
+	}
+	return oldValue.GalleryToken, nil
+}
+
+// ResetGalleryToken resets all changes to the "gallery_token" field.
+func (m *PrefillJobMutation) ResetGalleryToken() {
+	m.gallery_token = nil
+}
+
+// SetTitle sets the "title" field.
+func (m *PrefillJobMutation) SetTitle(s string) {
+	m.title = &s
+}
+
+// Title returns the value of the "title" field in the mutation.
+func (m *PrefillJobMutation) Title() (r string, exists bool) {
+	v := m.title
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTitle returns the old "title" field's value of the PrefillJob entity.
+// If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrefillJobMutation) OldTitle(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTitle is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTitle requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTitle: %w", err)
+	}
+	return oldValue.Title, nil
+}
+
+// ResetTitle resets all changes to the "title" field.
+func (m *PrefillJobMutation) ResetTitle() {
+	m.title = nil
+}
+
+// SetUrls sets the "urls" field.
+func (m *PrefillJobMutation) SetUrls(s []string) {
+	m.urls = &s
+	m.appendurls = nil
+}
+
+// Urls returns the value of the "urls" field in the mutation.
+func (m *PrefillJobMutation) Urls() (r []string, exists bool) {
+	v := m.urls
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUrls returns the old "urls" field's value of the PrefillJob entity.
+// If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrefillJobMutation) OldUrls(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUrls is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUrls requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUrls: %w", err)
+	}
+	return oldValue.Urls, nil
+}
+
+// AppendUrls adds s to the "urls" field.
+func (m *PrefillJobMutation) AppendUrls(s []string) {
+	m.appendurls = append(m.appendurls, s...)
+}
+
+// AppendedUrls returns the list of values that were appended to the "urls" field in this mutation.
+func (m *PrefillJobMutation) AppendedUrls() ([]string, bool) {
+	if len(m.appendurls) == 0 {
+		return nil, false
+	}
+	return m.appendurls, true
+}
+
+// ResetUrls resets all changes to the "urls" field.
+func (m *PrefillJobMutation) ResetUrls() {
+	m.urls = nil
+	m.appendurls = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *PrefillJobMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *PrefillJobMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the PrefillJob entity.
+// If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrefillJobMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *PrefillJobMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetFailedCount sets the "failed_count" field.
+func (m *PrefillJobMutation) SetFailedCount(i int) {
+	m.failed_count = &i
+	m.addfailed_count = nil
+}
+
+// FailedCount returns the value of the "failed_count" field in the mutation.
+func (m *PrefillJobMutation) FailedCount() (r int, exists bool) {
+	v := m.failed_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailedCount returns the old "failed_count" field's value of the PrefillJob entity.
+// If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrefillJobMutation) OldFailedCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailedCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailedCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailedCount: %w", err)
+	}
+	return oldValue.FailedCount, nil
+}
+
+// AddFailedCount adds i to the "failed_count" field.
+func (m *PrefillJobMutation) AddFailedCount(i int) {
+	if m.addfailed_count != nil {
+		*m.addfailed_count += i
+	} else {
+		m.addfailed_count = &i
+	}
+}
+
+// AddedFailedCount returns the value that was added to the "failed_count" field in this mutation.
+func (m *PrefillJobMutation) AddedFailedCount() (r int, exists bool) {
+	v := m.addfailed_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFailedCount resets all changes to the "failed_count" field.
+func (m *PrefillJobMutation) ResetFailedCount() {
+	m.failed_count = nil
+	m.addfailed_count = nil
+}
+
+// SetErrors sets the "errors" field.
+func (m *PrefillJobMutation) SetErrors(mie []model.PrefillItemError) {
+	m.errors = &mie
+	m.appenderrors = nil
+}
+
+// Errors returns the value of the "errors" field in the mutation.
+func (m *PrefillJobMutation) Errors() (r []model.PrefillItemError, exists bool) {
+	v := m.errors
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrors returns the old "errors" field's value of the PrefillJob entity.
+// If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrefillJobMutation) OldErrors(ctx context.Context) (v []model.PrefillItemError, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrors is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrors requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrors: %w", err)
+	}
+	return oldValue.Errors, nil
+}
+
+// AppendErrors adds mie to the "errors" field.
+func (m *PrefillJobMutation) AppendErrors(mie []model.PrefillItemError) {
+	m.appenderrors = append(m.appenderrors, mie...)
+}
+
+// AppendedErrors returns the list of values that were appended to the "errors" field in this mutation.
+func (m *PrefillJobMutation) AppendedErrors() ([]model.PrefillItemError, bool) {
+	if len(m.appenderrors) == 0 {
+		return nil, false
+	}
+	return m.appenderrors, true
+}
+
+// ClearErrors clears the value of the "errors" field.
+func (m *PrefillJobMutation) ClearErrors() {
+	m.errors = nil
+	m.appenderrors = nil
+	m.clearedFields[prefilljob.FieldErrors] = struct{}{}
+}
+
+// ErrorsCleared returns if the "errors" field was cleared in this mutation.
+func (m *PrefillJobMutation) ErrorsCleared() bool {
+	_, ok := m.clearedFields[prefilljob.FieldErrors]
+	return ok
+}
+
+// ResetErrors resets all changes to the "errors" field.
+func (m *PrefillJobMutation) ResetErrors() {
+	m.errors = nil
+	m.appenderrors = nil
+	delete(m.clearedFields, prefilljob.FieldErrors)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *PrefillJobMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *PrefillJobMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the PrefillJob entity.
+// If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrefillJobMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *PrefillJobMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *PrefillJobMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *PrefillJobMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the PrefillJob entity.
+// If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrefillJobMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *PrefillJobMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetFinishedAt sets the "finished_at" field.
+func (m *PrefillJobMutation) SetFinishedAt(t time.Time) {
+	m.finished_at = &t
+}
+
+// FinishedAt returns the value of the "finished_at" field in the mutation.
+func (m *PrefillJobMutation) FinishedAt() (r time.Time, exists bool) {
+	v := m.finished_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFinishedAt returns the old "finished_at" field's value of the PrefillJob entity.
+// If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrefillJobMutation) OldFinishedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFinishedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFinishedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFinishedAt: %w", err)
+	}
+	return oldValue.FinishedAt, nil
+}
+
+// ClearFinishedAt clears the value of the "finished_at" field.
+func (m *PrefillJobMutation) ClearFinishedAt() {
+	m.finished_at = nil
+	m.clearedFields[prefilljob.FieldFinishedAt] = struct{}{}
+}
+
+// FinishedAtCleared returns if the "finished_at" field was cleared in this mutation.
+func (m *PrefillJobMutation) FinishedAtCleared() bool {
+	_, ok := m.clearedFields[prefilljob.FieldFinishedAt]
+	return ok
+}
+
+// ResetFinishedAt resets all changes to the "finished_at" field.
+func (m *PrefillJobMutation) ResetFinishedAt() {
+	m.finished_at = nil
+	delete(m.clearedFields, prefilljob.FieldFinishedAt)
+}
+
+// Where appends a list predicates to the PrefillJobMutation builder.
+func (m *PrefillJobMutation) Where(ps ...predicate.PrefillJob) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the PrefillJobMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *PrefillJobMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.PrefillJob, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *PrefillJobMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *PrefillJobMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (PrefillJob).
+func (m *PrefillJobMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *PrefillJobMutation) Fields() []string {
+	fields := make([]string, 0, 10)
+	if m.gallery_id != nil {
+		fields = append(fields, prefilljob.FieldGalleryID)
+	}
+	if m.gallery_token != nil {
+		fields = append(fields, prefilljob.FieldGalleryToken)
+	}
+	if m.title != nil {
+		fields = append(fields, prefilljob.FieldTitle)
+	}
+	if m.urls != nil {
+		fields = append(fields, prefilljob.FieldUrls)
+	}
+	if m.status != nil {
+		fields = append(fields, prefilljob.FieldStatus)
+	}
+	if m.failed_count != nil {
+		fields = append(fields, prefilljob.FieldFailedCount)
+	}
+	if m.errors != nil {
+		fields = append(fields, prefilljob.FieldErrors)
+	}
+	if m.created_at != nil {
+		fields = append(fields, prefilljob.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, prefilljob.FieldUpdatedAt)
+	}
+	if m.finished_at != nil {
+		fields = append(fields, prefilljob.FieldFinishedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *PrefillJobMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case prefilljob.FieldGalleryID:
+		return m.GalleryID()
+	case prefilljob.FieldGalleryToken:
+		return m.GalleryToken()
+	case prefilljob.FieldTitle:
+		return m.Title()
+	case prefilljob.FieldUrls:
+		return m.Urls()
+	case prefilljob.FieldStatus:
+		return m.Status()
+	case prefilljob.FieldFailedCount:
+		return m.FailedCount()
+	case prefilljob.FieldErrors:
+		return m.Errors()
+	case prefilljob.FieldCreatedAt:
+		return m.CreatedAt()
+	case prefilljob.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case prefilljob.FieldFinishedAt:
+		return m.FinishedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *PrefillJobMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case prefilljob.FieldGalleryID:
+		return m.OldGalleryID(ctx)
+	case prefilljob.FieldGalleryToken:
+		return m.OldGalleryToken(ctx)
+	case prefilljob.FieldTitle:
+		return m.OldTitle(ctx)
+	case prefilljob.FieldUrls:
+		return m.OldUrls(ctx)
+	case prefilljob.FieldStatus:
+		return m.OldStatus(ctx)
+	case prefilljob.FieldFailedCount:
+		return m.OldFailedCount(ctx)
+	case prefilljob.FieldErrors:
+		return m.OldErrors(ctx)
+	case prefilljob.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case prefilljob.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case prefilljob.FieldFinishedAt:
+		return m.OldFinishedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown PrefillJob field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PrefillJobMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case prefilljob.FieldGalleryID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGalleryID(v)
+		return nil
+	case prefilljob.FieldGalleryToken:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGalleryToken(v)
+		return nil
+	case prefilljob.FieldTitle:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTitle(v)
+		return nil
+	case prefilljob.FieldUrls:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUrls(v)
+		return nil
+	case prefilljob.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case prefilljob.FieldFailedCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailedCount(v)
+		return nil
+	case prefilljob.FieldErrors:
+		v, ok := value.([]model.PrefillItemError)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrors(v)
+		return nil
+	case prefilljob.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case prefilljob.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case prefilljob.FieldFinishedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFinishedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown PrefillJob field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *PrefillJobMutation) AddedFields() []string {
+	var fields []string
+	if m.addgallery_id != nil {
+		fields = append(fields, prefilljob.FieldGalleryID)
+	}
+	if m.addfailed_count != nil {
+		fields = append(fields, prefilljob.FieldFailedCount)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *PrefillJobMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case prefilljob.FieldGalleryID:
+		return m.AddedGalleryID()
+	case prefilljob.FieldFailedCount:
+		return m.AddedFailedCount()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PrefillJobMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case prefilljob.FieldGalleryID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGalleryID(v)
+		return nil
+	case prefilljob.FieldFailedCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFailedCount(v)
+		return nil
+	}
+	return fmt.Errorf("unknown PrefillJob numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *PrefillJobMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(prefilljob.FieldGalleryID) {
+		fields = append(fields, prefilljob.FieldGalleryID)
+	}
+	if m.FieldCleared(prefilljob.FieldErrors) {
+		fields = append(fields, prefilljob.FieldErrors)
+	}
+	if m.FieldCleared(prefilljob.FieldFinishedAt) {
+		fields = append(fields, prefilljob.FieldFinishedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *PrefillJobMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *PrefillJobMutation) ClearField(name string) error {
+	switch name {
+	case prefilljob.FieldGalleryID:
+		m.ClearGalleryID()
+		return nil
+	case prefilljob.FieldErrors:
+		m.ClearErrors()
+		return nil
+	case prefilljob.FieldFinishedAt:
+		m.ClearFinishedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown PrefillJob nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *PrefillJobMutation) ResetField(name string) error {
+	switch name {
+	case prefilljob.FieldGalleryID:
+		m.ResetGalleryID()
+		return nil
+	case prefilljob.FieldGalleryToken:
+		m.ResetGalleryToken()
+		return nil
+	case prefilljob.FieldTitle:
+		m.ResetTitle()
+		return nil
+	case prefilljob.FieldUrls:
+		m.ResetUrls()
+		return nil
+	case prefilljob.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case prefilljob.FieldFailedCount:
+		m.ResetFailedCount()
+		return nil
+	case prefilljob.FieldErrors:
+		m.ResetErrors()
+		return nil
+	case prefilljob.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case prefilljob.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case prefilljob.FieldFinishedAt:
+		m.ResetFinishedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown PrefillJob field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *PrefillJobMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *PrefillJobMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *PrefillJobMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *PrefillJobMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *PrefillJobMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *PrefillJobMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *PrefillJobMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown PrefillJob unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *PrefillJobMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown PrefillJob edge %s", name)
 }
 
 // ReadingProgressMutation represents an operation that mutates the ReadingProgress nodes in the graph.

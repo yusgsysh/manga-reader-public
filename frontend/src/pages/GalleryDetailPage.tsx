@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, Dialog, Meter, useKumoToastManager } from "@cloudflare/kumo";
+import { Badge, Button, useKumoToastManager } from "@cloudflare/kumo";
 import {
   ArrowLeft,
   Bookmark,
@@ -18,7 +18,7 @@ import {
 } from "../hooks/useGalleryDetail";
 import { fetchGalleryPages } from "../api/gallery";
 import { useReadingProgress } from "../hooks/useReaderData";
-import { useGalleryZip } from "../hooks/useGalleryZip";
+import { useStartPrefillJob } from "../hooks/usePrefillJobs";
 import { ErrorState } from "../components/common/ErrorState";
 import { TagList } from "../components/tag";
 import { thumbnailUrl } from "../lib/image";
@@ -53,15 +53,10 @@ export function GalleryDetailPage() {
   const { data: shelfStatus } = useBookshelfStatus(id, token ?? "");
   const { add, remove } = useBookshelfToggle(id, token ?? "");
   const { data: progress } = useReadingProgress(id, token ?? "");
-  const zip = useGalleryZip();
+  const startPrefill = useStartPrefillJob();
   const queryClient = useQueryClient();
   const toast = useKumoToastManager();
-  const [downloadOpen, setDownloadOpen] = useState(false);
-
-  const closeDownload = () => {
-    zip.cancel();
-    setDownloadOpen(false);
-  };
+  const [preparingDownload, setPreparingDownload] = useState(false);
 
   const inShelf = shelfStatus?.in_bookshelf ?? false;
   const hasProgress = progress && (progress.current_page > 0 || progress.completed);
@@ -89,17 +84,40 @@ export function GalleryDetailPage() {
     }
   };
 
+  const downloadPending = preparingDownload || startPrefill.isPending;
+
   const handleDownload = async () => {
-    setDownloadOpen(true);
+    if (downloadPending) return;
+    setPreparingDownload(true);
     try {
       const pagesData = await queryClient.fetchQuery({
         queryKey: ["gallery-pages", id, token ?? ""],
         queryFn: () => fetchGalleryPages(id, token ?? ""),
         staleTime: 5 * 60_000,
       });
-      await zip.start(
-        gallery.title,
-        pagesData.pages.map((p) => p.page_url),
+      startPrefill.mutate(
+        {
+          gallery_id: id,
+          gallery_token: token ?? "",
+          title: gallery.title,
+          urls: pagesData.pages.map((p) => p.page_url),
+        },
+        {
+          onSuccess: (job) => {
+            toast.add({
+              title: "已添加下载任务",
+              description: `共 ${job.total} 页 · 在「下载管理」查看进度`,
+              variant: "success",
+            });
+          },
+          onError: (error) => {
+            toast.add({
+              title: "创建下载任务失败",
+              description: error.message,
+              variant: "error",
+            });
+          },
+        },
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -109,7 +127,7 @@ export function GalleryDetailPage() {
         variant: "error",
       });
     } finally {
-      setDownloadOpen(false);
+      setPreparingDownload(false);
     }
   };
 
@@ -242,15 +260,15 @@ export function GalleryDetailPage() {
               <Button
                 variant="outline"
                 onClick={() => void handleDownload()}
-                disabled={zip.running}
-                aria-label="下载为 ZIP"
+                disabled={downloadPending}
+                aria-label="添加下载任务"
               >
-                {zip.running ? (
+                {downloadPending ? (
                   <Loader2 className="mr-1 size-4 animate-spin" />
                 ) : (
                   <Download className="mr-1 size-4" />
                 )}
-                下载 ZIP
+                添加下载任务
               </Button>
             )}
           </div>
@@ -264,44 +282,6 @@ export function GalleryDetailPage() {
           <TagList tags={gallery.tags} />
         </section>
       )}
-
-      {/* Download ZIP progress */}
-      <Dialog.Root
-        open={downloadOpen}
-        onOpenChange={(open) => {
-          if (!open) closeDownload();
-        }}
-      >
-        <Dialog className="w-[min(92vw,26rem)] p-6">
-          <Dialog.Title className="text-base font-semibold">
-            {zip.status === "zipping" ? "正在打包 ZIP" : "正在下载"}
-          </Dialog.Title>
-          <Dialog.Description className="mt-1 text-sm text-kumo-subtle">
-            {gallery.title}
-          </Dialog.Description>
-          <div className="mt-4">
-            <Meter
-              label="下载进度"
-              value={
-                zip.status === "zipping" || zip.total === 0
-                  ? 100
-                  : (zip.done / zip.total) * 100
-              }
-              customValue={
-                zip.status === "zipping"
-                  ? "正在打包…"
-                  : `${zip.done} / ${zip.total} 页`
-              }
-              showValue
-            />
-          </div>
-          <div className="mt-4 flex justify-end">
-            <Button variant="secondary" onClick={closeDownload}>
-              取消
-            </Button>
-          </div>
-        </Dialog>
-      </Dialog.Root>
     </div>
   );
 }

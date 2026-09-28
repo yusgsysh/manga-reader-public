@@ -14,6 +14,8 @@ type Tx struct {
 	config
 	// Bookshelf is the client for interacting with the Bookshelf builders.
 	Bookshelf *BookshelfClient
+	// PrefillJob is the client for interacting with the PrefillJob builders.
+	PrefillJob *PrefillJobClient
 	// ReadingProgress is the client for interacting with the ReadingProgress builders.
 	ReadingProgress *ReadingProgressClient
 
@@ -148,6 +150,7 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.Bookshelf = NewBookshelfClient(tx.config)
+	tx.PrefillJob = NewPrefillJobClient(tx.config)
 	tx.ReadingProgress = NewReadingProgressClient(tx.config)
 }
 

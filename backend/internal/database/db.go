@@ -43,6 +43,13 @@ func NewDB(dataSourceName string) (*DB, error) {
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 
+	// The prefill worker writes from a background goroutine while request
+	// handlers may write concurrently; wait instead of failing with SQLITE_BUSY.
+	if _, err := conn.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("set busy timeout: %w", err)
+	}
+
 	drv := entsql.OpenDB("sqlite3", conn)
 	client := ent.NewClient(ent.Driver(drv))
 

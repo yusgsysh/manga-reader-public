@@ -20,6 +20,18 @@ func (f BookshelfFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, e
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BookshelfMutation", m)
 }
 
+// The PrefillJobFunc type is an adapter to allow the use of ordinary
+// function as PrefillJob mutator.
+type PrefillJobFunc func(context.Context, *ent.PrefillJobMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f PrefillJobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.PrefillJobMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PrefillJobMutation", m)
+}
+
 // The ReadingProgressFunc type is an adapter to allow the use of ordinary
 // function as ReadingProgress mutator.
 type ReadingProgressFunc func(context.Context, *ent.ReadingProgressMutation) (ent.Value, error)

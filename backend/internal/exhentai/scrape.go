@@ -98,11 +98,11 @@ func ParseStars(stars string) float64 {
 }
 
 type SearchOptions struct {
-	MinPages *int
-	MaxPages *int
+	MinPages  *int
+	MaxPages  *int
 	MinRating *int
 
-	HasTorrent     bool
+	HasTorrent      bool
 	IncludeExpunged bool
 
 	SearchName        bool

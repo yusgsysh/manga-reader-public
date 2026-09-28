@@ -12,6 +12,7 @@
 - 书架（Bookshelf）收藏与快照
 - 阅读进度（Reading Progress）、最近阅读（Recently Read）
 - 阅读记录手动清理（Cleanup API）
+- 离线下载任务（Prefill）：后台排队预填充图片缓存、下载管理页、流式 ZIP 下载
 - 缩略图源站代理与 MinIO 缓存
 - 页面图片 MinIO 缓存（可选）
 - 单用户设计，无登录、无多用户
@@ -163,6 +164,31 @@ curl -X POST http://localhost:8080/api/reading-progress/cleanup?days=7
 # 删除全部
 curl -X POST http://localhost:8080/api/reading-progress/cleanup?days=0
 ```
+
+### 离线下载（Prefill）
+
+画廊详情页的「添加下载任务」把页面 URL 列表交给后端，由后台 worker 逐页串行抓取并写入 MinIO 缓存（约 30 天过期），不生成 ZIP、不返回图片数据。前端「下载管理」页（`/downloads`）轮询进度，支持取消、删除、批量清理，并可随时按任务流式下载 ZIP。
+
+```bash
+# 创建任务（同画廊已有排队/运行中的任务时返回该任务）
+curl -X POST http://localhost:8080/api/prefill \
+  -H 'Content-Type: application/json' \
+  -d '{"gallery_id":123,"gallery_token":"abc","title":"My Gallery","urls":["https://exhentai.org/s/x/123-1"]}'
+
+# 任务列表 / 单个任务（轮询进度）
+curl http://localhost:8080/api/prefill
+curl http://localhost:8080/api/prefill/1
+
+# 取消 / 删除记录 / 批量清理（0 = 全部已结束记录）
+curl -X POST http://localhost:8080/api/prefill/1/cancel
+curl -X DELETE http://localhost:8080/api/prefill/1
+curl -X POST 'http://localhost:8080/api/prefill/cleanup?days=30'
+
+# 流式下载 ZIP（缓存缺失的页会即时补抓）
+curl -OJ http://localhost:8080/api/prefill/1/zip
+```
+
+进度（`progress.done/cached/fetched`）只在任务于本进程内运行时存在，不落库；数据库仅存任务元信息与终态。进程重启后 `queued`/`running` 的任务自动重新排队。详见 `backend/API.md`。
 
 ## 前端开发
 

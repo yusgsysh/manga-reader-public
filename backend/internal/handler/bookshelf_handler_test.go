@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/database"
+	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/model"
 )
 

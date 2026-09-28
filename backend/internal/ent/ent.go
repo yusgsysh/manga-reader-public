@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"manga-reader/internal/ent/bookshelf"
+	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/readingprogress"
 	"reflect"
 	"sync"
@@ -75,6 +76,7 @@ func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			bookshelf.Table:       bookshelf.ValidColumn,
+			prefilljob.Table:      prefilljob.ValidColumn,
 			readingprogress.Table: readingprogress.ValidColumn,
 		})
 	})

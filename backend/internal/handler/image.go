@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sync/singleflight"
@@ -196,6 +197,22 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 
 	log.Printf("cached-image miss key=%s", key[:16])
 
+	result, err := s.loadOrFetchImage(ctx, key, decodedURL)
+	if err != nil {
+		log.Printf("cached-image error key=%s err=%v", key[:16], err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
+		return
+	}
+
+	c.Header("Cache-Control", cacheControlHeader)
+	c.Data(http.StatusOK, result.contentType, result.data)
+}
+
+// loadOrFetchImage returns the cached image for key, fetching it from the
+// upstream page URL on a cache miss. Concurrent calls for the same key are
+// coalesced through the shared singleflight group, so the prefill worker, the
+// streaming ZIP endpoint and handleCachedImage never fetch the same URL twice.
+func (s *Server) loadOrFetchImage(ctx context.Context, key string, decodedURL string) (*imageResult, error) {
 	v, sfErr, _ := cachedImageGroup.Do(key, func() (interface{}, error) {
 		if _, headErr := s.Cache.Head(ctx, key); headErr == nil {
 			data, contentType, getErr := s.Cache.Get(ctx, key)
@@ -218,14 +235,38 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 
 		return &imageResult{data: data, contentType: contentType}, nil
 	})
-
 	if sfErr != nil {
-		log.Printf("cached-image error key=%s err=%v", key[:16], sfErr)
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", sfErr)})
-		return
+		return nil, sfErr
 	}
+	return v.(*imageResult), nil
+}
 
-	result := v.(*imageResult)
-	c.Header("Cache-Control", cacheControlHeader)
-	c.Data(http.StatusOK, result.contentType, result.data)
+const (
+	pageFetchMaxAttempts = 3
+	pageFetchRetryDelay  = 500 * time.Millisecond
+)
+
+// fetchWithRetry loads an image through loadOrFetchImage, retrying transient
+// failures up to pageFetchMaxAttempts times. It respects ctx cancellation and
+// never retries after the context is done.
+func (s *Server) fetchWithRetry(ctx context.Context, key string, decodedURL string) (*imageResult, error) {
+	var lastErr error
+	for attempt := 0; attempt < pageFetchMaxAttempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(pageFetchRetryDelay):
+			}
+		}
+		result, err := s.loadOrFetchImage(ctx, key, decodedURL)
+		if err == nil {
+			return result, nil
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		lastErr = err
+	}
+	return nil, lastErr
 }

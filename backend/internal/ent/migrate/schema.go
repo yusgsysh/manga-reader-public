@@ -35,6 +35,33 @@ var (
 			},
 		},
 	}
+	// PrefillJobColumns holds the columns for the "prefill_job" table.
+	PrefillJobColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "gallery_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "gallery_token", Type: field.TypeString, Default: ""},
+		{Name: "title", Type: field.TypeString, Default: ""},
+		{Name: "urls", Type: field.TypeJSON},
+		{Name: "status", Type: field.TypeString, Default: "queued"},
+		{Name: "failed_count", Type: field.TypeInt, Default: 0},
+		{Name: "errors", Type: field.TypeJSON, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "finished_at", Type: field.TypeTime, Nullable: true},
+	}
+	// PrefillJobTable holds the schema information for the "prefill_job" table.
+	PrefillJobTable = &schema.Table{
+		Name:       "prefill_job",
+		Columns:    PrefillJobColumns,
+		PrimaryKey: []*schema.Column{PrefillJobColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "prefilljob_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{PrefillJobColumns[5], PrefillJobColumns[8]},
+			},
+		},
+	}
 	// ReadingProgressColumns holds the columns for the "reading_progress" table.
 	ReadingProgressColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -62,6 +89,7 @@ var (
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		BookshelfTable,
+		PrefillJobTable,
 		ReadingProgressTable,
 	}
 )
@@ -69,6 +97,9 @@ var (
 func init() {
 	BookshelfTable.Annotation = &entsql.Annotation{
 		Table: "bookshelf",
+	}
+	PrefillJobTable.Annotation = &entsql.Annotation{
+		Table: "prefill_job",
 	}
 	ReadingProgressTable.Annotation = &entsql.Annotation{
 		Table: "reading_progress",
