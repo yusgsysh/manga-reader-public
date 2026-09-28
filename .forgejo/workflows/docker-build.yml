@@ -74,3 +74,28 @@ jobs:
           tags: ${{ env.BACKEND_IMAGE }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy
+    needs: build-and-push
+    if: github.event_name == 'push'
+    runs-on: self-hosted
+    env:
+      DEPLOY_PATH: /root/manga-reader
+
+    steps:
+      - name: Deploy with Docker Compose
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+        run: |
+          set -e
+
+          sshpass -p "$DEPLOY_PASSWORD" \
+            ssh \
+              -o StrictHostKeyChecking=accept-new \
+              "${DEPLOY_USER}@${DEPLOY_HOST}" \
+              "cd ${DEPLOY_PATH} && \
+               docker compose pull && \
+               docker compose up -d --remove-orphans"
