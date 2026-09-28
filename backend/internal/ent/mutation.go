@@ -872,6 +872,8 @@ type PrefillJobMutation struct {
 	urls            *[]string
 	appendurls      []string
 	status          *string
+	total           *int
+	addtotal        *int
 	failed_count    *int
 	addfailed_count *int
 	errors          *[]model.PrefillItemError
@@ -1212,6 +1214,62 @@ func (m *PrefillJobMutation) ResetStatus() {
 	m.status = nil
 }
 
+// SetTotal sets the "total" field.
+func (m *PrefillJobMutation) SetTotal(i int) {
+	m.total = &i
+	m.addtotal = nil
+}
+
+// Total returns the value of the "total" field in the mutation.
+func (m *PrefillJobMutation) Total() (r int, exists bool) {
+	v := m.total
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTotal returns the old "total" field's value of the PrefillJob entity.
+// If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrefillJobMutation) OldTotal(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTotal is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTotal requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTotal: %w", err)
+	}
+	return oldValue.Total, nil
+}
+
+// AddTotal adds i to the "total" field.
+func (m *PrefillJobMutation) AddTotal(i int) {
+	if m.addtotal != nil {
+		*m.addtotal += i
+	} else {
+		m.addtotal = &i
+	}
+}
+
+// AddedTotal returns the value that was added to the "total" field in this mutation.
+func (m *PrefillJobMutation) AddedTotal() (r int, exists bool) {
+	v := m.addtotal
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTotal resets all changes to the "total" field.
+func (m *PrefillJobMutation) ResetTotal() {
+	m.total = nil
+	m.addtotal = nil
+}
+
 // SetFailedCount sets the "failed_count" field.
 func (m *PrefillJobMutation) SetFailedCount(i int) {
 	m.failed_count = &i
@@ -1488,7 +1546,7 @@ func (m *PrefillJobMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PrefillJobMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 11)
 	if m.gallery_id != nil {
 		fields = append(fields, prefilljob.FieldGalleryID)
 	}
@@ -1503,6 +1561,9 @@ func (m *PrefillJobMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, prefilljob.FieldStatus)
+	}
+	if m.total != nil {
+		fields = append(fields, prefilljob.FieldTotal)
 	}
 	if m.failed_count != nil {
 		fields = append(fields, prefilljob.FieldFailedCount)
@@ -1537,6 +1598,8 @@ func (m *PrefillJobMutation) Field(name string) (ent.Value, bool) {
 		return m.Urls()
 	case prefilljob.FieldStatus:
 		return m.Status()
+	case prefilljob.FieldTotal:
+		return m.Total()
 	case prefilljob.FieldFailedCount:
 		return m.FailedCount()
 	case prefilljob.FieldErrors:
@@ -1566,6 +1629,8 @@ func (m *PrefillJobMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldUrls(ctx)
 	case prefilljob.FieldStatus:
 		return m.OldStatus(ctx)
+	case prefilljob.FieldTotal:
+		return m.OldTotal(ctx)
 	case prefilljob.FieldFailedCount:
 		return m.OldFailedCount(ctx)
 	case prefilljob.FieldErrors:
@@ -1620,6 +1685,13 @@ func (m *PrefillJobMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetStatus(v)
 		return nil
+	case prefilljob.FieldTotal:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTotal(v)
+		return nil
 	case prefilljob.FieldFailedCount:
 		v, ok := value.(int)
 		if !ok {
@@ -1666,6 +1738,9 @@ func (m *PrefillJobMutation) AddedFields() []string {
 	if m.addgallery_id != nil {
 		fields = append(fields, prefilljob.FieldGalleryID)
 	}
+	if m.addtotal != nil {
+		fields = append(fields, prefilljob.FieldTotal)
+	}
 	if m.addfailed_count != nil {
 		fields = append(fields, prefilljob.FieldFailedCount)
 	}
@@ -1679,6 +1754,8 @@ func (m *PrefillJobMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case prefilljob.FieldGalleryID:
 		return m.AddedGalleryID()
+	case prefilljob.FieldTotal:
+		return m.AddedTotal()
 	case prefilljob.FieldFailedCount:
 		return m.AddedFailedCount()
 	}
@@ -1696,6 +1773,13 @@ func (m *PrefillJobMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddGalleryID(v)
+		return nil
+	case prefilljob.FieldTotal:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTotal(v)
 		return nil
 	case prefilljob.FieldFailedCount:
 		v, ok := value.(int)
@@ -1766,6 +1850,9 @@ func (m *PrefillJobMutation) ResetField(name string) error {
 		return nil
 	case prefilljob.FieldStatus:
 		m.ResetStatus()
+		return nil
+	case prefilljob.FieldTotal:
+		m.ResetTotal()
 		return nil
 	case prefilljob.FieldFailedCount:
 		m.ResetFailedCount()

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -27,6 +26,8 @@ const (
 type imageResult struct {
 	data        []byte
 	contentType string
+	cacheHit    bool
+	stored      bool
 }
 
 var cachedImageGroup singleflight.Group
@@ -45,10 +46,18 @@ func fetchThumbnail(ctx context.Context, client *http.Client, thumbnailURL strin
 	if err == nil {
 		return data, contentType, nil
 	}
-	for range maxThumbnailRetries {
+	for attempt := 0; attempt < maxThumbnailRetries; attempt++ {
+		select {
+		case <-ctx.Done():
+			return nil, "", ctx.Err()
+		case <-time.After(pageFetchRetryDelay):
+		}
 		data, contentType, err = exhentai.ProxyImage(ctx, client, thumbnailURL)
 		if err == nil {
 			return data, contentType, nil
+		}
+		if exhentai.IsPermanentUpstreamError(err) {
+			return nil, "", err
 		}
 	}
 	return nil, "", err
@@ -97,57 +106,17 @@ func (s *Server) handleCachedThumbnail(c *gin.Context) {
 		return
 	}
 
-	if _, err := s.Cache.Head(ctx, key); err == nil {
-		data, contentType, err := s.Cache.Get(ctx, key)
-		if err != nil {
-			log.Printf("cached-thumbnail error key=%s err=%v", key[:16], err)
-			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("cache read failed: %v", err)})
+	result, err := s.loadOrFetchThumbnail(ctx, key, rawURL)
+	if err != nil {
+		if cache.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "thumbnail not found"})
 			return
 		}
-		log.Printf("cached-thumbnail hit key=%s", key[:16])
-		c.Header("Cache-Control", cacheControlHeader)
-		c.Data(http.StatusOK, contentType, data)
-		return
-	} else if !isNotFound(err) {
 		log.Printf("cached-thumbnail error key=%s err=%v", key[:16], err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("cache check failed: %v", err)})
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download thumbnail failed: %v", err)})
 		return
 	}
 
-	log.Printf("cached-thumbnail miss key=%s", key[:16])
-
-	v, sfErr, _ := cachedImageGroup.Do(key, func() (interface{}, error) {
-		if _, headErr := s.Cache.Head(ctx, key); headErr == nil {
-			data, contentType, getErr := s.Cache.Get(ctx, key)
-			if getErr != nil {
-				return nil, getErr
-			}
-			return &imageResult{data: data, contentType: contentType}, nil
-		}
-
-		data, contentType, fetchErr := fetchThumbnail(ctx, s.Client, rawURL)
-		if fetchErr != nil {
-			return nil, fetchErr
-		}
-
-		if putErr := s.Cache.PutWithMeta(ctx, key, data, contentType, map[string]string{
-			"source-url": rawURL,
-		}, cacheControlHeader); putErr != nil {
-			log.Printf("cached-thumbnail store failed key=%s err=%v", key[:16], putErr)
-		} else {
-			log.Printf("cached-thumbnail stored key=%s", key[:16])
-		}
-
-		return &imageResult{data: data, contentType: contentType}, nil
-	})
-
-	if sfErr != nil {
-		log.Printf("cached-thumbnail error key=%s err=%v", key[:16], sfErr)
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download thumbnail failed: %v", sfErr)})
-		return
-	}
-
-	result := v.(*imageResult)
 	c.Header("Cache-Control", cacheControlHeader)
 	c.Data(http.StatusOK, result.contentType, result.data)
 }
@@ -159,46 +128,25 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 		return
 	}
 
-	decodedURL, err := url.QueryUnescape(rawURL)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid url"})
-		return
-	}
-
-	if err := exhentai.ValidatePageURL(decodedURL); err != nil {
+	if err := exhentai.ValidatePageURL(rawURL); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	ctx := c.Request.Context()
-	key := cache.CacheKey(decodedURL)
+	key := cache.CacheKey(rawURL)
 
 	if s.Cache == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
 		return
 	}
 
-	if _, err := s.Cache.Head(ctx, key); err == nil {
-		data, contentType, err := s.Cache.Get(ctx, key)
-		if err != nil {
-			log.Printf("cached-image error key=%s err=%v", key[:16], err)
-			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("cache read failed: %v", err)})
+	result, err := s.loadOrFetchImage(ctx, key, rawURL)
+	if err != nil {
+		if cache.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "image not found"})
 			return
 		}
-		log.Printf("cached-image hit key=%s", key[:16])
-		c.Header("Cache-Control", cacheControlHeader)
-		c.Data(http.StatusOK, contentType, data)
-		return
-	} else if !isNotFound(err) {
-		log.Printf("cached-image error key=%s err=%v", key[:16], err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("cache check failed: %v", err)})
-		return
-	}
-
-	log.Printf("cached-image miss key=%s", key[:16])
-
-	result, err := s.loadOrFetchImage(ctx, key, decodedURL)
-	if err != nil {
 		log.Printf("cached-image error key=%s err=%v", key[:16], err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
 		return
@@ -212,28 +160,40 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 // upstream page URL on a cache miss. Concurrent calls for the same key are
 // coalesced through the shared singleflight group, so the prefill worker, the
 // streaming ZIP endpoint and handleCachedImage never fetch the same URL twice.
+// The returned imageResult indicates whether the data came from cache (cacheHit)
+// and whether it was successfully stored (stored).
 func (s *Server) loadOrFetchImage(ctx context.Context, key string, decodedURL string) (*imageResult, error) {
 	v, sfErr, _ := cachedImageGroup.Do(key, func() (interface{}, error) {
-		if _, headErr := s.Cache.Head(ctx, key); headErr == nil {
-			data, contentType, getErr := s.Cache.Get(ctx, key)
+		// Use a context that won't be cancelled by the leader's cancellation
+		// (e.g., client disconnect) so that waiters aren't affected.
+		// The outer context still bounds the operation.
+		fetchCtx := context.WithoutCancel(ctx)
+		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
+		defer cancel()
+
+		if _, headErr := s.Cache.Head(fetchCtx, key); headErr == nil {
+			data, contentType, getErr := s.Cache.Get(fetchCtx, key)
 			if getErr != nil {
 				return nil, getErr
 			}
-			return &imageResult{data: data, contentType: contentType}, nil
+			return &imageResult{data: data, contentType: contentType, cacheHit: true, stored: true}, nil
 		}
 
-		data, contentType, fetchErr := exhentai.FetchPageImage(ctx, s.Client, decodedURL)
+		data, contentType, fetchErr := exhentai.FetchPageImage(fetchCtx, s.Client, decodedURL)
 		if fetchErr != nil {
 			return nil, fetchErr
 		}
 
-		if putErr := s.Cache.Put(ctx, key, data, contentType, cacheControlHeader); putErr != nil {
+		var stored bool
+		if putErr := s.Cache.Put(fetchCtx, key, data, contentType, cacheControlHeader); putErr != nil {
 			log.Printf("cached-image store failed key=%s err=%v", key[:16], putErr)
+			stored = false
 		} else {
 			log.Printf("cached-image stored key=%s", key[:16])
+			stored = true
 		}
 
-		return &imageResult{data: data, contentType: contentType}, nil
+		return &imageResult{data: data, contentType: contentType, cacheHit: false, stored: stored}, nil
 	})
 	if sfErr != nil {
 		return nil, sfErr
@@ -246,9 +206,50 @@ const (
 	pageFetchRetryDelay  = 500 * time.Millisecond
 )
 
+// loadOrFetchThumbnail returns the cached thumbnail for key, fetching it from
+// the upstream on a cache miss. Concurrent calls for the same key are coalesced.
+func (s *Server) loadOrFetchThumbnail(ctx context.Context, key string, rawURL string) (*imageResult, error) {
+	v, sfErr, _ := cachedImageGroup.Do(key, func() (interface{}, error) {
+		fetchCtx := context.WithoutCancel(ctx)
+		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
+		defer cancel()
+
+		if _, headErr := s.Cache.Head(fetchCtx, key); headErr == nil {
+			data, contentType, getErr := s.Cache.Get(fetchCtx, key)
+			if getErr != nil {
+				return nil, getErr
+			}
+			return &imageResult{data: data, contentType: contentType, cacheHit: true, stored: true}, nil
+		}
+
+		data, contentType, fetchErr := fetchThumbnail(fetchCtx, s.Client, rawURL)
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
+
+		var stored bool
+		if putErr := s.Cache.PutWithMeta(fetchCtx, key, data, contentType, map[string]string{
+			"source-url": rawURL,
+		}, cacheControlHeader); putErr != nil {
+			log.Printf("cached-thumbnail store failed key=%s err=%v", key[:16], putErr)
+			stored = false
+		} else {
+			log.Printf("cached-thumbnail stored key=%s", key[:16])
+			stored = true
+		}
+
+		return &imageResult{data: data, contentType: contentType, cacheHit: false, stored: stored}, nil
+	})
+	if sfErr != nil {
+		return nil, sfErr
+	}
+	return v.(*imageResult), nil
+}
+
 // fetchWithRetry loads an image through loadOrFetchImage, retrying transient
 // failures up to pageFetchMaxAttempts times. It respects ctx cancellation and
-// never retries after the context is done.
+// never retries after the context is done. Permanent upstream errors (IP banned,
+// sad panda, 4xx errors) are not retried.
 func (s *Server) fetchWithRetry(ctx context.Context, key string, decodedURL string) (*imageResult, error) {
 	var lastErr error
 	for attempt := 0; attempt < pageFetchMaxAttempts; attempt++ {
@@ -267,6 +268,9 @@ func (s *Server) fetchWithRetry(ctx context.Context, key string, decodedURL stri
 			return nil, ctx.Err()
 		}
 		lastErr = err
+		if exhentai.IsPermanentUpstreamError(err) {
+			return nil, err
+		}
 	}
 	return nil, lastErr
 }

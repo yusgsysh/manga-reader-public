@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite"
 
@@ -28,26 +29,19 @@ func NewDB(dataSourceName string) (*DB, error) {
 		}
 	}
 
-	conn, err := sql.Open("sqlite", dataSourceName)
+	// Use DSN parameters to apply pragmas to every connection in the pool.
+	// modernc.org/sqlite supports _pragma=... for per-connection settings.
+	dsn := dataSourceName
+	if strings.Contains(dsn, "?") {
+		dsn += "&"
+	} else {
+		dsn += "?"
+	}
+	dsn += "_pragma=journal_mode=wal&_pragma=foreign_keys=on&_pragma=busy_timeout=5000"
+
+	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
-	}
-
-	if _, err := conn.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("set WAL mode: %w", err)
-	}
-
-	if _, err := conn.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("enable foreign keys: %w", err)
-	}
-
-	// The prefill worker writes from a background goroutine while request
-	// handlers may write concurrently; wait instead of failing with SQLITE_BUSY.
-	if _, err := conn.Exec("PRAGMA busy_timeout=5000"); err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("set busy timeout: %w", err)
 	}
 
 	drv := entsql.OpenDB("sqlite3", conn)
@@ -61,8 +55,34 @@ func NewDB(dataSourceName string) (*DB, error) {
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
 
+	// Backfill total for existing prefill_job rows where total=0.
+	// Use raw SQL to avoid loading the full urls JSON.
+	if err := backfillPrefillTotal(context.Background(), conn); err != nil {
+		client.Close()
+		return nil, fmt.Errorf("backfill prefill total: %w", err)
+	}
+
 	log.Printf("database initialized: %s", dataSourceName)
 	return &DB{Client: client}, nil
+}
+
+func backfillPrefillTotal(ctx context.Context, conn *sql.DB) error {
+	// First check if the prefill_job table exists and has the total column.
+	var count int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='prefill_job'`).Scan(&count); err != nil {
+		return err
+	}
+	if count == 0 {
+		return nil
+	}
+
+	// Use JSON1 extension to get array length of urls column.
+	_, err := conn.ExecContext(ctx, `
+		UPDATE prefill_job
+		SET total = json_array_length(urls)
+		WHERE total = 0 AND urls IS NOT NULL
+	`)
+	return err
 }
 
 func (db *DB) Close() error {

@@ -60,16 +60,20 @@ func init() {
 	prefilljobDescStatus := prefilljobFields[4].Descriptor()
 	// prefilljob.DefaultStatus holds the default value on creation for the status field.
 	prefilljob.DefaultStatus = prefilljobDescStatus.Default.(string)
+	// prefilljobDescTotal is the schema descriptor for total field.
+	prefilljobDescTotal := prefilljobFields[5].Descriptor()
+	// prefilljob.DefaultTotal holds the default value on creation for the total field.
+	prefilljob.DefaultTotal = prefilljobDescTotal.Default.(int)
 	// prefilljobDescFailedCount is the schema descriptor for failed_count field.
-	prefilljobDescFailedCount := prefilljobFields[5].Descriptor()
+	prefilljobDescFailedCount := prefilljobFields[6].Descriptor()
 	// prefilljob.DefaultFailedCount holds the default value on creation for the failed_count field.
 	prefilljob.DefaultFailedCount = prefilljobDescFailedCount.Default.(int)
 	// prefilljobDescCreatedAt is the schema descriptor for created_at field.
-	prefilljobDescCreatedAt := prefilljobFields[7].Descriptor()
+	prefilljobDescCreatedAt := prefilljobFields[8].Descriptor()
 	// prefilljob.DefaultCreatedAt holds the default value on creation for the created_at field.
 	prefilljob.DefaultCreatedAt = prefilljobDescCreatedAt.Default.(func() time.Time)
 	// prefilljobDescUpdatedAt is the schema descriptor for updated_at field.
-	prefilljobDescUpdatedAt := prefilljobFields[8].Descriptor()
+	prefilljobDescUpdatedAt := prefilljobFields[9].Descriptor()
 	// prefilljob.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	prefilljob.DefaultUpdatedAt = prefilljobDescUpdatedAt.Default.(func() time.Time)
 	// prefilljob.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

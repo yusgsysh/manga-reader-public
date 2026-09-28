@@ -43,6 +43,7 @@ var (
 		{Name: "title", Type: field.TypeString, Default: ""},
 		{Name: "urls", Type: field.TypeJSON},
 		{Name: "status", Type: field.TypeString, Default: "queued"},
+		{Name: "total", Type: field.TypeInt, Default: 0},
 		{Name: "failed_count", Type: field.TypeInt, Default: 0},
 		{Name: "errors", Type: field.TypeJSON, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
@@ -58,7 +59,7 @@ var (
 			{
 				Name:    "prefilljob_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{PrefillJobColumns[5], PrefillJobColumns[8]},
+				Columns: []*schema.Column{PrefillJobColumns[5], PrefillJobColumns[9]},
 			},
 		},
 	}

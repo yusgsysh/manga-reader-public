@@ -92,3 +92,10 @@ export async function apiBlob(
   const res = await fetchChecked(buildApiUrl(path, params), init);
   return res.blob();
 }
+
+export async function apiHead(
+  path: string,
+  params?: Record<string, string | number | undefined>,
+): Promise<Response> {
+  return fetchChecked(buildApiUrl(path, params), { method: "HEAD" });
+}

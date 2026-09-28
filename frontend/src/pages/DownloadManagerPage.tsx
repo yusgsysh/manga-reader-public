@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { Badge, Button, Dialog, Loader, Meter, useKumoToastManager } from "@cloudflare/kumo";
-import { Download, Loader2, Trash2, X } from "lucide-react";
+import { Badge, Button, Dialog, Loader, Meter } from "@cloudflare/kumo";
+import { Download, Loader2, Trash2, X, AlertCircle } from "lucide-react";
 import {
   useCancelPrefillJob,
   useCleanupPrefillJobs,
   useDeletePrefillJob,
   usePrefillJobs,
 } from "../hooks/usePrefillJobs";
-import { prefillZipUrl } from "../api/prefill";
+import { prefillZipUrl, headPrefillZip } from "../api/prefill";
 import {
   isActivePrefillStatus,
   prefillProgressPercent,
@@ -37,25 +37,31 @@ function statusBadgeVariant(
   }
 }
 
-function downloadZip(id: number) {
-  const anchor = document.createElement("a");
-  anchor.href = prefillZipUrl(id);
-  anchor.rel = "noopener";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-}
-
 interface JobRowProps {
   job: PrefillJob;
-  cancelPending: boolean;
-  deletePending: boolean;
-  onCancel: (id: number) => void;
-  onDelete: (id: number) => void;
+  zippingIds: Set<number>;
+  onZipStart: (id: number) => void;
 }
 
-function JobRow({ job, cancelPending, deletePending, onCancel, onDelete }: JobRowProps) {
+function JobRow({
+  job,
+  zippingIds,
+  onZipStart,
+}: JobRowProps) {
   const active = isActivePrefillStatus(job.status);
+  const isZipping = zippingIds.has(job.id);
+  const cancel = useCancelPrefillJob();
+  const remove = useDeletePrefillJob();
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  const handleDelete = () => {
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = () => {
+    remove.mutate(job.id);
+    setDeleteConfirmOpen(false);
+  };
 
   return (
     <div className="space-y-3 rounded-lg border border-kumo-hairline bg-kumo-elevated p-4">
@@ -87,8 +93,8 @@ function JobRow({ job, cancelPending, deletePending, onCancel, onDelete }: JobRo
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onCancel(job.id)}
-              disabled={cancelPending}
+              onClick={() => cancel.mutate(job.id)}
+              disabled={cancel.isPending}
               aria-label="取消任务"
             >
               <X className="mr-1 size-3.5" />
@@ -100,10 +106,15 @@ function JobRow({ job, cancelPending, deletePending, onCancel, onDelete }: JobRo
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => downloadZip(job.id)}
+                  onClick={() => onZipStart(job.id)}
+                  disabled={isZipping}
                   aria-label="下载为 ZIP"
                 >
-                  <Download className="mr-1 size-3.5" />
+                  {isZipping ? (
+                    <Loader2 className="mr-1 size-3.5 animate-spin" />
+                  ) : (
+                    <Download className="mr-1 size-3.5" />
+                  )}
                   ZIP
                 </Button>
               )}
@@ -111,8 +122,8 @@ function JobRow({ job, cancelPending, deletePending, onCancel, onDelete }: JobRo
                 variant="ghost"
                 size="sm"
                 className="text-kumo-danger"
-                onClick={() => onDelete(job.id)}
-                disabled={deletePending}
+                onClick={handleDelete}
+                disabled={remove.isPending}
                 aria-label="删除记录"
               >
                 <Trash2 className="mr-1 size-3.5" />
@@ -130,6 +141,13 @@ function JobRow({ job, cancelPending, deletePending, onCancel, onDelete }: JobRo
           customValue={prefillProgressText(job)}
           showValue
         />
+      )}
+
+      {job.failed_count > 0 && !active && (
+        <p className="text-xs text-kumo-danger flex items-center gap-1">
+          <AlertCircle className="size-3.5" />
+          下载完成，但有 {job.failed_count} 页缺失（已在 ZIP 中标记为 _missing.txt）
+        </p>
       )}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-kumo-subtle">
@@ -151,63 +169,70 @@ function JobRow({ job, cancelPending, deletePending, onCancel, onDelete }: JobRo
           </span>
         )}
       </div>
+
+      <Dialog.Root open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <Dialog className="w-[min(92vw,26rem)] p-6">
+          <Dialog.Title className="text-base font-semibold">
+            删除记录
+          </Dialog.Title>
+          <Dialog.Description className="mt-1 text-sm text-kumo-subtle">
+            确定要删除 "{job.title || "未命名任务"}" 的记录吗？此操作不可恢复。
+          </Dialog.Description>
+          <div className="mt-4 flex justify-end gap-2">
+            <Dialog.Close render={<Button variant="secondary">取消</Button>} />
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={remove.isPending}
+            >
+              {remove.isPending && <Loader2 className="mr-1 size-4 animate-spin" />}
+              删除
+            </Button>
+          </div>
+        </Dialog>
+      </Dialog.Root>
     </div>
   );
 }
 
 export function DownloadManagerPage() {
   const { data, isLoading, error, refetch } = usePrefillJobs();
-  const cancel = useCancelPrefillJob();
-  const remove = useDeletePrefillJob();
   const cleanup = useCleanupPrefillJobs();
-  const toast = useKumoToastManager();
   const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [zippingIds, setZippingIds] = useState<Set<number>>(new Set());
 
   const jobs = data?.jobs ?? [];
 
-  const handleCancel = (id: number) => {
-    cancel.mutate(id, {
-      onSuccess: () =>
-        toast.add({ title: "任务已取消", variant: "info" }),
-      onError: (err) =>
-        toast.add({
-          title: "取消任务失败",
-          description: err.message,
-          variant: "error",
-        }),
-    });
-  };
-
-  const handleDelete = (id: number) => {
-    remove.mutate(id, {
-      onSuccess: () =>
-        toast.add({ title: "记录已删除", variant: "success" }),
-      onError: (err) =>
-        toast.add({
-          title: "删除记录失败",
-          description: err.message,
-          variant: "error",
-        }),
-    });
-  };
-
   const handleCleanup = () => {
-    cleanup.mutate(0, {
-      onSuccess: (resp) => {
-        toast.add({
-          title: "清理完成",
-          description: `已删除 ${resp.deleted} 条记录`,
-          variant: "success",
+    cleanup.mutate(0);
+  };
+
+  const onZipStart = (id: number) => {
+    setZippingIds((prev) => new Set(prev).add(id));
+    headPrefillZip(id)
+      .then((ok) => {
+        if (!ok) {
+          throw new Error("无法下载：任务不存在或缓存未就绪");
+        }
+        const anchor = document.createElement("a");
+        anchor.href = prefillZipUrl(id);
+        anchor.target = "_blank";
+        anchor.rel = "noopener";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      })
+      .catch((err) => {
+        // Error toast is handled by the component's error boundary or could be added here
+        console.error("Download failed:", err);
+      })
+      .finally(() => {
+        setZippingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
         });
-        setCleanupOpen(false);
-      },
-      onError: (err) =>
-        toast.add({
-          title: "清理失败",
-          description: err.message,
-          variant: "error",
-        }),
-    });
+      });
   };
 
   if (isLoading) {
@@ -218,7 +243,7 @@ export function DownloadManagerPage() {
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <ErrorState
         message={error.message || "加载下载任务失败"}
@@ -229,6 +254,17 @@ export function DownloadManagerPage() {
 
   return (
     <div>
+      {/* Error banner for transient failures while data is still visible */}
+      {error && data && (
+        <div className="mb-4 flex items-center gap-2 rounded-md bg-kumo-danger/10 p-3 text-sm text-kumo-danger">
+          <AlertCircle className="size-4 shrink-0" />
+          <span>刷新失败，正在重试… ({error.message})</span>
+          <Button variant="ghost" size="sm" onClick={() => refetch()}>
+            立即重试
+          </Button>
+        </div>
+      )}
+
       {jobs.length > 0 && (
         <div className="mb-4 flex items-center justify-end">
           <Button
@@ -255,13 +291,17 @@ export function DownloadManagerPage() {
             <JobRow
               key={job.id}
               job={job}
-              cancelPending={cancel.isPending && cancel.variables === job.id}
-              deletePending={remove.isPending && remove.variables === job.id}
-              onCancel={handleCancel}
-              onDelete={handleDelete}
+              zippingIds={zippingIds}
+              onZipStart={onZipStart}
             />
           ))}
         </div>
+      )}
+
+      {jobs.length > 0 && jobs.length >= 200 && (
+        <p className="mt-4 text-center text-xs text-kumo-subtle">
+          仅显示最近 200 条记录
+        </p>
       )}
 
       <Dialog.Root open={cleanupOpen} onOpenChange={setCleanupOpen}>

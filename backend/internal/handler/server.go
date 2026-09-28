@@ -71,4 +71,5 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 	r.POST("/api/prefill/:id/cancel", s.handlePrefillCancel)
 	r.DELETE("/api/prefill/:id", s.handlePrefillDelete)
 	r.GET("/api/prefill/:id/zip", s.handlePrefillZip)
+	r.HEAD("/api/prefill/:id/zip", s.handlePrefillZipHead)
 }

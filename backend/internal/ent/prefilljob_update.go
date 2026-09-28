@@ -111,6 +111,27 @@ func (_u *PrefillJobUpdate) SetNillableStatus(v *string) *PrefillJobUpdate {
 	return _u
 }
 
+// SetTotal sets the "total" field.
+func (_u *PrefillJobUpdate) SetTotal(v int) *PrefillJobUpdate {
+	_u.mutation.ResetTotal()
+	_u.mutation.SetTotal(v)
+	return _u
+}
+
+// SetNillableTotal sets the "total" field if the given value is not nil.
+func (_u *PrefillJobUpdate) SetNillableTotal(v *int) *PrefillJobUpdate {
+	if v != nil {
+		_u.SetTotal(*v)
+	}
+	return _u
+}
+
+// AddTotal adds value to the "total" field.
+func (_u *PrefillJobUpdate) AddTotal(v int) *PrefillJobUpdate {
+	_u.mutation.AddTotal(v)
+	return _u
+}
+
 // SetFailedCount sets the "failed_count" field.
 func (_u *PrefillJobUpdate) SetFailedCount(v int) *PrefillJobUpdate {
 	_u.mutation.ResetFailedCount()
@@ -252,6 +273,12 @@ func (_u *PrefillJobUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(prefilljob.FieldStatus, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Total(); ok {
+		_spec.SetField(prefilljob.FieldTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedTotal(); ok {
+		_spec.AddField(prefilljob.FieldTotal, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.FailedCount(); ok {
 		_spec.SetField(prefilljob.FieldFailedCount, field.TypeInt, value)
 	}
@@ -376,6 +403,27 @@ func (_u *PrefillJobUpdateOne) SetNillableStatus(v *string) *PrefillJobUpdateOne
 	if v != nil {
 		_u.SetStatus(*v)
 	}
+	return _u
+}
+
+// SetTotal sets the "total" field.
+func (_u *PrefillJobUpdateOne) SetTotal(v int) *PrefillJobUpdateOne {
+	_u.mutation.ResetTotal()
+	_u.mutation.SetTotal(v)
+	return _u
+}
+
+// SetNillableTotal sets the "total" field if the given value is not nil.
+func (_u *PrefillJobUpdateOne) SetNillableTotal(v *int) *PrefillJobUpdateOne {
+	if v != nil {
+		_u.SetTotal(*v)
+	}
+	return _u
+}
+
+// AddTotal adds value to the "total" field.
+func (_u *PrefillJobUpdateOne) AddTotal(v int) *PrefillJobUpdateOne {
+	_u.mutation.AddTotal(v)
 	return _u
 }
 
@@ -549,6 +597,12 @@ func (_u *PrefillJobUpdateOne) sqlSave(ctx context.Context) (_node *PrefillJob, 
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(prefilljob.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Total(); ok {
+		_spec.SetField(prefilljob.FieldTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedTotal(); ok {
+		_spec.AddField(prefilljob.FieldTotal, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.FailedCount(); ok {
 		_spec.SetField(prefilljob.FieldFailedCount, field.TypeInt, value)

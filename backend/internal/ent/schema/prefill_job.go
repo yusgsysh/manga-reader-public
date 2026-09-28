@@ -36,6 +36,7 @@ func (PrefillJob) Fields() []ent.Field {
 		field.String("title").Default(""),
 		field.JSON("urls", []string{}),
 		field.String("status").Default("queued"),
+		field.Int("total").Default(0),
 		field.Int("failed_count").Default(0),
 		field.JSON("errors", []model.PrefillItemError{}).Optional(),
 		field.Time("created_at").Default(time.Now).Immutable(),

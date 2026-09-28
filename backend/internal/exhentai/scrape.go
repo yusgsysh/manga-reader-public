@@ -25,6 +25,9 @@ const (
 	// upstreamDocTimeout bounds each HTML document fetch so a hung
 	// upstream connection cannot stall a request indefinitely.
 	upstreamDocTimeout = 15 * time.Second
+
+	// maxImageBytes limits the size of a single image response to prevent OOM.
+	maxImageBytes = 30 << 20 // 30 MiB
 )
 
 var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+)\+? results?`)
@@ -654,7 +657,7 @@ func ScrapePageImageURL(ctx context.Context, client *http.Client, pageURL string
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes))
 	if err != nil {
 		return "", "", err
 	}
@@ -735,11 +738,11 @@ func ProxyImage(ctx context.Context, client *http.Client, imgURL string) (data [
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("HTTP %d", resp.StatusCode)
+		return nil, "", fmt.Errorf("HTTP %d: %w", resp.StatusCode, ErrNonOKStatus)
 	}
 
 	contentType = resp.Header.Get("Content-Type")
-	data, err = io.ReadAll(resp.Body)
+	data, err = io.ReadAll(io.LimitReader(resp.Body, maxImageBytes))
 	if err != nil {
 		return nil, "", err
 	}

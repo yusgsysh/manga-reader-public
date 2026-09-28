@@ -33,6 +33,9 @@ const (
 	prefillMaxErrors          = 20
 	prefillCleanupDaysDefault = 30
 	prefillListLimit          = 200
+
+	prefillPageTimeout          = 90 * time.Second
+	prefillConsecutiveFailLimit = 10
 )
 
 // prefillRun holds the in-memory progress of an active prefill job. Counters
@@ -53,10 +56,8 @@ type prefillManager struct {
 	mu sync.Mutex
 	// runs tracks in-memory progress for active jobs.
 	runs map[int]*prefillRun
-	// cancelPending records cancel requests that arrived after the worker
-	// claimed a job but before its run was registered, so they are never lost.
-	cancelPending map[int]struct{}
-	wake          chan struct{}
+	wake chan struct{}
+	stop chan struct{}
 }
 
 func (m *prefillManager) signal() {
@@ -72,37 +73,56 @@ func (m *prefillManager) signal() {
 func (s *Server) ensurePrefill() *prefillManager {
 	s.prefillOnce.Do(func() {
 		m := &prefillManager{
-			runs:          make(map[int]*prefillRun),
-			cancelPending: make(map[int]struct{}),
-			wake:          make(chan struct{}, 1),
+			runs: make(map[int]*prefillRun),
+			wake: make(chan struct{}, 1),
+			stop: make(chan struct{}),
 		}
 		s.prefillMgr = m
-		m.recoverPending(s)
 		go m.worker(s)
+		m.recoverPending(s)
 	})
 	return s.prefillMgr
 }
 
 func (m *prefillManager) recoverPending(s *Server) {
-	ctx := context.Background()
-	n, err := s.DB.Client.PrefillJob.Update().
-		Where(prefilljob.Status(prefillStatusRunning)).
-		SetStatus(prefillStatusQueued).
-		SetUpdatedAt(time.Now()).
-		Save(ctx)
-	if err != nil {
-		log.Printf("prefill recover failed: %v", err)
+	if s.Cache == nil {
+		log.Printf("prefill recover skipped: cache not configured")
 		return
 	}
-	if n > 0 {
-		log.Printf("prefill re-queued %d interrupted job(s)", n)
+	ctx := context.Background()
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		n, err := s.DB.Client.PrefillJob.Update().
+			Where(prefilljob.Status(prefillStatusRunning)).
+			SetStatus(prefillStatusQueued).
+			SetUpdatedAt(time.Now()).
+			Save(ctx)
+		if err == nil {
+			if n > 0 {
+				log.Printf("prefill re-queued %d interrupted job(s)", n)
+			}
+			m.signal()
+			return
+		}
+		lastErr = err
+		log.Printf("prefill recover attempt %d failed: %v", attempt+1, err)
+		time.Sleep(100 * time.Millisecond)
 	}
-	m.signal()
+	log.Printf("prefill recover failed after retries: %v", lastErr)
 }
 
 func (m *prefillManager) worker(s *Server) {
-	for range m.wake {
-		m.drain(s)
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-m.wake:
+			m.drain(s)
+		case <-ticker.C:
+			m.drain(s)
+		case <-m.stop:
+			return
+		}
 	}
 }
 
@@ -139,51 +159,67 @@ func (m *prefillManager) nextQueued(s *Server) (int, bool) {
 			}
 			return 0, false
 		}
-		n, err := s.DB.Client.PrefillJob.Update().
-			Where(prefilljob.ID(row.ID), prefilljob.Status(prefillStatusQueued)).
-			SetStatus(prefillStatusRunning).
-			SetUpdatedAt(time.Now()).
-			Save(ctx)
-		if err != nil {
-			log.Printf("prefill claim failed id=%d err=%v", row.ID, err)
-			return 0, false
+		var lastErr error
+		for attempt := 0; attempt < 3; attempt++ {
+			n, err := s.DB.Client.PrefillJob.Update().
+				Where(prefilljob.ID(row.ID), prefilljob.Status(prefillStatusQueued)).
+				SetStatus(prefillStatusRunning).
+				SetUpdatedAt(time.Now()).
+				Save(ctx)
+			if err == nil {
+				if n == 0 {
+					break // cancelled between query and claim; take the next one
+				}
+				return row.ID, true
+			}
+			lastErr = err
+			log.Printf("prefill claim attempt %d failed id=%d err=%v", attempt+1, row.ID, err)
+			time.Sleep(50 * time.Millisecond)
 		}
-		if n == 0 {
-			continue // cancelled between query and claim; take the next one
-		}
-		return row.ID, true
+		log.Printf("prefill claim failed after retries id=%d err=%v", row.ID, lastErr)
+		return 0, false
 	}
 }
 
 func (m *prefillManager) runJob(s *Server, id int) {
 	ctx := context.Background()
-	row, err := s.DB.Client.PrefillJob.Get(ctx, id)
-	if err != nil {
-		if !ent.IsNotFound(err) {
-			log.Printf("prefill load failed id=%d err=%v", id, err)
-		}
+
+	// Guard against missing cache configuration.
+	if s.Cache == nil {
+		s.finishPrefillJob(id, prefillStatusFailed, 0, []model.PrefillItemError{
+			{Index: 0, URL: "", Error: "cache not configured"},
+		})
 		return
 	}
 
-	// nextQueued already flipped the row to "running". Register the run now so
-	// that any cancel arriving from here on finds the cancel func; cancels that
-	// landed in the claim/registration gap are held in cancelPending.
-	jobCtx, cancel := context.WithCancel(context.Background())
+	// Register the run first so cancels arriving from here on find the cancel func.
+	jobCtx, cancel := context.WithCancel(ctx)
 	run := &prefillRun{cancel: cancel}
 	m.mu.Lock()
 	m.runs[id] = run
-	_, pending := m.cancelPending[id]
-	delete(m.cancelPending, id)
 	m.mu.Unlock()
 	defer func() {
 		cancel()
 		m.mu.Lock()
 		delete(m.runs, id)
-		delete(m.cancelPending, id)
 		m.mu.Unlock()
 	}()
-	if pending {
-		cancel()
+
+	row, err := s.DB.Client.PrefillJob.Get(ctx, id)
+	if err != nil {
+		if !ent.IsNotFound(err) {
+			log.Printf("prefill load failed id=%d err=%v", id, err)
+			// Non-NotFound error: mark as failed so the row doesn't stay running forever.
+			s.finishPrefillJob(id, prefillStatusFailed, 0, []model.PrefillItemError{
+				{Index: 0, URL: "", Error: fmt.Sprintf("load failed: %v", err)},
+			})
+		}
+		return
+	}
+
+	// If the job was cancelled (or otherwise terminal) before we started, exit.
+	if row.Status != prefillStatusRunning {
+		return
 	}
 
 	log.Printf("prefill job %d started pages=%d", id, len(row.Urls))
@@ -207,21 +243,16 @@ func (m *prefillManager) runJob(s *Server, id int) {
 // in-memory counters after each page. It returns the terminal status.
 func (m *prefillManager) processPages(s *Server, ctx context.Context, run *prefillRun, urls []string) string {
 	status := prefillStatusCompleted
+	consecutiveFails := 0
 	for i, pageURL := range urls {
 		if ctx.Err() != nil {
 			return prefillStatusCancelled
 		}
 		key := cache.CacheKey(pageURL)
 
-		if _, err := s.Cache.Head(ctx, key); err == nil {
-			m.mu.Lock()
-			run.done++
-			run.cached++
-			m.mu.Unlock()
-			continue
-		}
-
-		_, err := s.fetchWithRetry(ctx, key, pageURL)
+		pageCtx, pageCancel := context.WithTimeout(ctx, prefillPageTimeout)
+		res, err := s.loadOrFetchImage(pageCtx, key, pageURL)
+		pageCancel()
 		m.mu.Lock()
 		if err != nil {
 			if ctx.Err() != nil {
@@ -230,6 +261,7 @@ func (m *prefillManager) processPages(s *Server, ctx context.Context, run *prefi
 			}
 			run.done++
 			run.failed++
+			consecutiveFails++
 			if len(run.errs) < prefillMaxErrors {
 				run.errs = append(run.errs, model.PrefillItemError{
 					Index: i,
@@ -237,11 +269,35 @@ func (m *prefillManager) processPages(s *Server, ctx context.Context, run *prefi
 					Error: err.Error(),
 				})
 			}
+			if consecutiveFails >= prefillConsecutiveFailLimit {
+				m.mu.Unlock()
+				return prefillStatusFailed
+			}
+			m.mu.Unlock()
+			continue
+		}
+		if res.cacheHit {
+			run.cached++
+		} else if res.stored {
+			run.fetched++
+		} else {
+			run.failed++
+			if len(run.errs) < prefillMaxErrors {
+				run.errs = append(run.errs, model.PrefillItemError{
+					Index: i,
+					URL:   pageURL,
+					Error: "cache store failed",
+				})
+			}
+			if consecutiveFails >= prefillConsecutiveFailLimit {
+				m.mu.Unlock()
+				return prefillStatusFailed
+			}
 			m.mu.Unlock()
 			continue
 		}
 		run.done++
-		run.fetched++
+		consecutiveFails = 0
 		m.mu.Unlock()
 	}
 	return status
@@ -254,35 +310,34 @@ func (s *Server) finishPrefillJob(id int, status string, failed int, errs []mode
 		errs = []model.PrefillItemError{}
 	}
 	now := time.Now()
-	n, err := s.DB.Client.PrefillJob.Update().
-		Where(
-			prefilljob.ID(id),
-			prefilljob.StatusIn(prefillStatusQueued, prefillStatusRunning),
-		).
-		SetStatus(status).
-		SetFailedCount(failed).
-		SetErrors(errs).
-		SetFinishedAt(now).
-		SetUpdatedAt(now).
-		Save(context.Background())
-	if err != nil {
-		log.Printf("prefill finish failed id=%d err=%v", id, err)
-		return
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		n, err := s.DB.Client.PrefillJob.Update().
+			Where(
+				prefilljob.ID(id),
+				prefilljob.StatusIn(prefillStatusQueued, prefillStatusRunning),
+			).
+			SetStatus(status).
+			SetFailedCount(failed).
+			SetErrors(errs).
+			SetFinishedAt(now).
+			SetUpdatedAt(now).
+			Save(context.Background())
+		if err == nil {
+			if n == 0 {
+				log.Printf("prefill job %d terminal state already set, counts discarded", id)
+			}
+			return
+		}
+		lastErr = err
+		log.Printf("prefill finish attempt %d failed id=%d err=%v", attempt+1, id, err)
+		time.Sleep(100 * time.Millisecond)
 	}
-	if n == 0 {
-		log.Printf("prefill job %d terminal state already set, counts discarded", id)
-	}
-	if m := s.prefillMgr; m != nil {
-		m.mu.Lock()
-		delete(m.cancelPending, id)
-		m.mu.Unlock()
-	}
+	log.Printf("prefill finish failed after retries id=%d err=%v", id, lastErr)
 }
 
-// cancelRun stops an active run. When the worker has claimed a row but has
-// not registered its run yet, the cancel is remembered and applied at
-// registration time so it is never lost. Returns true when a live run was
-// cancelled directly (as opposed to the pending path).
+// cancelRun stops an active run by cancelling its context.
+// Returns true when a live run was cancelled directly.
 func (m *prefillManager) cancelRun(id int) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -290,14 +345,7 @@ func (m *prefillManager) cancelRun(id int) bool {
 		run.cancel()
 		return true
 	}
-	m.cancelPending[id] = struct{}{}
 	return false
-}
-
-func (m *prefillManager) clearPending(id int) {
-	m.mu.Lock()
-	delete(m.cancelPending, id)
-	m.mu.Unlock()
 }
 
 // requirePrefill validates the database dependency and ensures the manager.
@@ -356,7 +404,7 @@ func prefillJobJSON(m *prefillManager, row *ent.PrefillJob) gin.H {
 		"gallery_token": row.GalleryToken,
 		"title":         row.Title,
 		"status":        row.Status,
-		"total":         len(row.Urls),
+		"total":         row.Total,
 		"progress":      progress,
 		"failed_count":  failedCount,
 		"errors":        errs,
@@ -431,7 +479,8 @@ func (s *Server) handlePrefillStart(c *gin.Context) {
 		SetUrls(req.URLs).
 		SetGalleryToken(req.GalleryToken).
 		SetTitle(req.Title).
-		SetStatus(prefillStatusQueued)
+		SetStatus(prefillStatusQueued).
+		SetTotal(len(req.URLs))
 	if req.GalleryID != 0 {
 		create.SetGalleryID(req.GalleryID)
 	}
@@ -452,7 +501,28 @@ func (s *Server) handlePrefillList(c *gin.Context) {
 	if m == nil {
 		return
 	}
+	// Snapshot active runs once to avoid per-row locking.
+	m.mu.Lock()
+	runSnapshot := make(map[int]*prefillRun, len(m.runs))
+	for id, run := range m.runs {
+		runSnapshot[id] = run
+	}
+	m.mu.Unlock()
+
 	rows, err := s.DB.Client.PrefillJob.Query().
+		Select(
+			prefilljob.FieldID,
+			prefilljob.FieldGalleryID,
+			prefilljob.FieldGalleryToken,
+			prefilljob.FieldTitle,
+			prefilljob.FieldStatus,
+			prefilljob.FieldTotal,
+			prefilljob.FieldFailedCount,
+			prefilljob.FieldErrors,
+			prefilljob.FieldCreatedAt,
+			prefilljob.FieldUpdatedAt,
+			prefilljob.FieldFinishedAt,
+		).
 		Order(ent.Desc(prefilljob.FieldCreatedAt)).
 		Limit(prefillListLimit).
 		All(c.Request.Context())
@@ -463,9 +533,52 @@ func (s *Server) handlePrefillList(c *gin.Context) {
 	}
 	jobs := make([]gin.H, 0, len(rows))
 	for _, row := range rows {
-		jobs = append(jobs, prefillJobJSON(m, row))
+		jobs = append(jobs, prefillJobJSONWithRuns(row, runSnapshot))
 	}
 	c.JSON(http.StatusOK, gin.H{"jobs": jobs})
+}
+
+// prefillJobJSONWithRuns is like prefillJobJSON but takes a pre-snapshot of runs.
+func prefillJobJSONWithRuns(row *ent.PrefillJob, runs map[int]*prefillRun) gin.H {
+	var progress gin.H
+	failedCount := row.FailedCount
+	errs := row.Errors
+
+	if run, ok := runs[row.ID]; ok && row.Status == prefillStatusRunning {
+		progress = gin.H{
+			"done":    run.done,
+			"cached":  run.cached,
+			"fetched": run.fetched,
+		}
+		failedCount = run.failed
+		errs = run.errs
+	}
+
+	if errs == nil {
+		errs = []model.PrefillItemError{}
+	}
+	var galleryID any
+	if row.GalleryID != nil {
+		galleryID = *row.GalleryID
+	}
+	var finishedAt any
+	if row.FinishedAt != nil {
+		finishedAt = row.FinishedAt.Format(time.RFC3339)
+	}
+	return gin.H{
+		"id":            row.ID,
+		"gallery_id":    galleryID,
+		"gallery_token": row.GalleryToken,
+		"title":         row.Title,
+		"status":        row.Status,
+		"total":         row.Total,
+		"progress":      progress,
+		"failed_count":  failedCount,
+		"errors":        errs,
+		"created_at":    row.CreatedAt.Format(time.RFC3339),
+		"updated_at":    row.UpdatedAt.Format(time.RFC3339),
+		"finished_at":   finishedAt,
+	}
 }
 
 // handlePrefillGet returns a single job snapshot.
@@ -526,9 +639,6 @@ func (s *Server) handlePrefillCancel(c *gin.Context) {
 			return
 		}
 
-		if row.Status == prefillStatusRunning {
-			m.cancelRun(id)
-		}
 		now := time.Now()
 		n, err := s.DB.Client.PrefillJob.Update().
 			Where(prefilljob.ID(id), prefilljob.Status(row.Status)).
@@ -542,7 +652,10 @@ func (s *Server) handlePrefillCancel(c *gin.Context) {
 			return
 		}
 		if n == 1 {
-			m.clearPending(id)
+			// CAS succeeded. If the job was running, cancel the in-flight run.
+			if row.Status == prefillStatusRunning {
+				m.cancelRun(id)
+			}
 			row.Status = prefillStatusCancelled
 			row.FinishedAt = &now
 			c.JSON(http.StatusOK, prefillJobJSON(m, row))
@@ -654,53 +767,95 @@ func (s *Server) handlePrefillZip(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	name := prefillZipFilename(row.Title)
-	c.Header("Content-Type", "application/zip")
-	c.Header("Content-Disposition", fmt.Sprintf(
-		`attachment; filename="%s"; filename*=UTF-8''%s`,
-		asciiFallback(name), rfc5987Escape(name),
-	))
-	c.Header("Cache-Control", "no-store")
-	c.Status(http.StatusOK)
-
 	zw := zip.NewWriter(c.Writer)
+	started := false
+	written := 0
+	missing := []string{}
+
 	for i, pageURL := range row.Urls {
 		if ctx.Err() != nil {
 			break
 		}
 		key := cache.CacheKey(pageURL)
-		var data []byte
-		var contentType string
-		if _, headErr := s.Cache.Head(ctx, key); headErr == nil {
-			d, ct, getErr := s.Cache.Get(ctx, key)
-			if getErr != nil {
-				log.Printf("prefill zip cache read failed index=%d err=%v", i, getErr)
-				continue
-			}
-			data, contentType = d, ct
-		} else {
-			res, fetchErr := s.fetchWithRetry(ctx, key, pageURL)
-			if fetchErr != nil {
-				log.Printf("prefill zip fetch failed index=%d err=%v", i, fetchErr)
-				continue
-			}
-			data, contentType = res.data, res.contentType
+
+		pageCtx, pageCancel := context.WithTimeout(ctx, prefillPageTimeout)
+		res, err := s.loadOrFetchImage(pageCtx, key, pageURL)
+		pageCancel()
+		if err != nil {
+			log.Printf("prefill zip fetch failed index=%d err=%v", i, err)
+			missing = append(missing, fmt.Sprintf("%d: %s", i+1, err.Error()))
+			continue
 		}
 
-		entryName := fmt.Sprintf("%03d%s", i+1, prefillImageExt(contentType, pageURL))
+		if !started {
+			c.Header("Content-Type", "application/zip")
+			c.Header("Content-Disposition", fmt.Sprintf(
+				`attachment; filename="%s"; filename*=UTF-8''%s`,
+				asciiFallback(name), rfc5987Escape(name),
+			))
+			c.Header("Cache-Control", "no-store")
+			c.Status(http.StatusOK)
+			started = true
+		}
+
+		entryName := fmt.Sprintf("%03d%s", i+1, prefillImageExt(res.contentType, pageURL))
 		w, err := zw.CreateHeader(&zip.FileHeader{Name: entryName, Method: zip.Store})
 		if err != nil {
 			log.Printf("prefill zip entry failed index=%d err=%v", i, err)
 			break
 		}
-		if _, err := w.Write(data); err != nil {
+		if _, err := w.Write(res.data); err != nil {
 			log.Printf("prefill zip write failed index=%d err=%v", i, err)
 			break
 		}
 		c.Writer.Flush()
+		written++
 	}
+
+	if !started {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no pages could be fetched for ZIP"})
+		return
+	}
+
+	if len(missing) > 0 {
+		missingData := []byte(strings.Join(missing, "\n"))
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: "_missing.txt", Method: zip.Store})
+		if err == nil {
+			w.Write(missingData)
+		}
+	}
+
 	if err := zw.Close(); err != nil {
 		log.Printf("prefill zip close failed: %v", err)
 	}
+}
+
+// handlePrefillZipHead handles HEAD requests for the ZIP endpoint.
+// It returns 200 if the job exists and cache is configured, without streaming any data.
+func (s *Server) handlePrefillZipHead(c *gin.Context) {
+	if s.DB == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not configured"})
+		return
+	}
+	if s.Cache == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
+		return
+	}
+	id, ok := prefillJobID(c)
+	if !ok {
+		return
+	}
+	_, err := s.DB.Client.PrefillJob.Get(c.Request.Context(), id)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "prefill job not found"})
+			return
+		}
+		log.Printf("prefill zip head get failed id=%d err=%v", id, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
+		return
+	}
+	c.Status(http.StatusOK)
 }
 
 // ==================== Helpers ====================

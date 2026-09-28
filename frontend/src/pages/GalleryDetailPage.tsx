@@ -111,9 +111,10 @@ export function GalleryDetailPage() {
             });
           },
           onError: (error) => {
+            const message = error instanceof Error ? error.message : String(error);
             toast.add({
               title: "创建下载任务失败",
-              description: error.message,
+              description: message,
               variant: "error",
             });
           },

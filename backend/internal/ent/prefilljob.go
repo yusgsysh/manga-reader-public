@@ -29,6 +29,8 @@ type PrefillJob struct {
 	Urls []string `json:"urls,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
+	// Total holds the value of the "total" field.
+	Total int `json:"total,omitempty"`
 	// FailedCount holds the value of the "failed_count" field.
 	FailedCount int `json:"failed_count,omitempty"`
 	// Errors holds the value of the "errors" field.
@@ -49,7 +51,7 @@ func (*PrefillJob) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case prefilljob.FieldUrls, prefilljob.FieldErrors:
 			values[i] = new([]byte)
-		case prefilljob.FieldID, prefilljob.FieldGalleryID, prefilljob.FieldFailedCount:
+		case prefilljob.FieldID, prefilljob.FieldGalleryID, prefilljob.FieldTotal, prefilljob.FieldFailedCount:
 			values[i] = new(sql.NullInt64)
 		case prefilljob.FieldGalleryToken, prefilljob.FieldTitle, prefilljob.FieldStatus:
 			values[i] = new(sql.NullString)
@@ -108,6 +110,12 @@ func (_m *PrefillJob) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = value.String
+			}
+		case prefilljob.FieldTotal:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field total", values[i])
+			} else if value.Valid {
+				_m.Total = int(value.Int64)
 			}
 		case prefilljob.FieldFailedCount:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -194,6 +202,9 @@ func (_m *PrefillJob) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
+	builder.WriteString(", ")
+	builder.WriteString("total=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Total))
 	builder.WriteString(", ")
 	builder.WriteString("failed_count=")
 	builder.WriteString(fmt.Sprintf("%v", _m.FailedCount))

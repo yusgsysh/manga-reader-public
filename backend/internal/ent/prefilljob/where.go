@@ -74,6 +74,11 @@ func Status(v string) predicate.PrefillJob {
 	return predicate.PrefillJob(sql.FieldEQ(FieldStatus, v))
 }
 
+// Total applies equality check predicate on the "total" field. It's identical to TotalEQ.
+func Total(v int) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldEQ(FieldTotal, v))
+}
+
 // FailedCount applies equality check predicate on the "failed_count" field. It's identical to FailedCountEQ.
 func FailedCount(v int) predicate.PrefillJob {
 	return predicate.PrefillJob(sql.FieldEQ(FieldFailedCount, v))
@@ -337,6 +342,46 @@ func StatusEqualFold(v string) predicate.PrefillJob {
 // StatusContainsFold applies the ContainsFold predicate on the "status" field.
 func StatusContainsFold(v string) predicate.PrefillJob {
 	return predicate.PrefillJob(sql.FieldContainsFold(FieldStatus, v))
+}
+
+// TotalEQ applies the EQ predicate on the "total" field.
+func TotalEQ(v int) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldEQ(FieldTotal, v))
+}
+
+// TotalNEQ applies the NEQ predicate on the "total" field.
+func TotalNEQ(v int) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldNEQ(FieldTotal, v))
+}
+
+// TotalIn applies the In predicate on the "total" field.
+func TotalIn(vs ...int) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldIn(FieldTotal, vs...))
+}
+
+// TotalNotIn applies the NotIn predicate on the "total" field.
+func TotalNotIn(vs ...int) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldNotIn(FieldTotal, vs...))
+}
+
+// TotalGT applies the GT predicate on the "total" field.
+func TotalGT(v int) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldGT(FieldTotal, v))
+}
+
+// TotalGTE applies the GTE predicate on the "total" field.
+func TotalGTE(v int) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldGTE(FieldTotal, v))
+}
+
+// TotalLT applies the LT predicate on the "total" field.
+func TotalLT(v int) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldLT(FieldTotal, v))
+}
+
+// TotalLTE applies the LTE predicate on the "total" field.
+func TotalLTE(v int) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldLTE(FieldTotal, v))
 }
 
 // FailedCountEQ applies the EQ predicate on the "failed_count" field.

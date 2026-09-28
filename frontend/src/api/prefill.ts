@@ -1,8 +1,10 @@
 import {
   apiDelete,
   apiGet,
+  apiHead,
   apiPost,
   apiPostJson,
+  ApiRequestError,
   buildApiUrl,
 } from "./client";
 import type {
@@ -36,6 +38,18 @@ export function cleanupPrefillJobs(
   days: number,
 ): Promise<PrefillCleanupResponse> {
   return apiPost<PrefillCleanupResponse>("/api/prefill/cleanup", { days });
+}
+
+export async function headPrefillZip(id: number): Promise<boolean> {
+  try {
+    await apiHead(`/api/prefill/${id}/zip`);
+    return true;
+  } catch (err) {
+    if (err instanceof ApiRequestError) {
+      return false;
+    }
+    throw err;
+  }
 }
 
 export function prefillZipUrl(id: number): string {

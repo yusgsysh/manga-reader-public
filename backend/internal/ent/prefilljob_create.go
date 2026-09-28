@@ -83,6 +83,20 @@ func (_c *PrefillJobCreate) SetNillableStatus(v *string) *PrefillJobCreate {
 	return _c
 }
 
+// SetTotal sets the "total" field.
+func (_c *PrefillJobCreate) SetTotal(v int) *PrefillJobCreate {
+	_c.mutation.SetTotal(v)
+	return _c
+}
+
+// SetNillableTotal sets the "total" field if the given value is not nil.
+func (_c *PrefillJobCreate) SetNillableTotal(v *int) *PrefillJobCreate {
+	if v != nil {
+		_c.SetTotal(*v)
+	}
+	return _c
+}
+
 // SetFailedCount sets the "failed_count" field.
 func (_c *PrefillJobCreate) SetFailedCount(v int) *PrefillJobCreate {
 	_c.mutation.SetFailedCount(v)
@@ -192,6 +206,10 @@ func (_c *PrefillJobCreate) defaults() {
 		v := prefilljob.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.Total(); !ok {
+		v := prefilljob.DefaultTotal
+		_c.mutation.SetTotal(v)
+	}
 	if _, ok := _c.mutation.FailedCount(); !ok {
 		v := prefilljob.DefaultFailedCount
 		_c.mutation.SetFailedCount(v)
@@ -219,6 +237,9 @@ func (_c *PrefillJobCreate) check() error {
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "PrefillJob.status"`)}
+	}
+	if _, ok := _c.mutation.Total(); !ok {
+		return &ValidationError{Name: "total", err: errors.New(`ent: missing required field "PrefillJob.total"`)}
 	}
 	if _, ok := _c.mutation.FailedCount(); !ok {
 		return &ValidationError{Name: "failed_count", err: errors.New(`ent: missing required field "PrefillJob.failed_count"`)}
@@ -274,6 +295,10 @@ func (_c *PrefillJobCreate) createSpec() (*PrefillJob, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(prefilljob.FieldStatus, field.TypeString, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.Total(); ok {
+		_spec.SetField(prefilljob.FieldTotal, field.TypeInt, value)
+		_node.Total = value
 	}
 	if value, ok := _c.mutation.FailedCount(); ok {
 		_spec.SetField(prefilljob.FieldFailedCount, field.TypeInt, value)

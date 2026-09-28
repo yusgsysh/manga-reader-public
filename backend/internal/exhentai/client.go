@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 const ExhentaiBase = "https://exhentai.org"
@@ -100,7 +101,13 @@ func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 	}
 	jar.SetCookies(u, cookies)
 
-	return &http.Client{Jar: jar}, nil
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = 30 * time.Second
+
+	return &http.Client{
+		Jar:       jar,
+		Transport: transport,
+	}, nil
 }
 
 // MakeRequest sends an HTTP GET request with ExHentai headers.

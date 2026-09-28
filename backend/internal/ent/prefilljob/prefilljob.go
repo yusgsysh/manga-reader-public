@@ -23,6 +23,8 @@ const (
 	FieldUrls = "urls"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldTotal holds the string denoting the total field in the database.
+	FieldTotal = "total"
 	// FieldFailedCount holds the string denoting the failed_count field in the database.
 	FieldFailedCount = "failed_count"
 	// FieldErrors holds the string denoting the errors field in the database.
@@ -45,6 +47,7 @@ var Columns = []string{
 	FieldTitle,
 	FieldUrls,
 	FieldStatus,
+	FieldTotal,
 	FieldFailedCount,
 	FieldErrors,
 	FieldCreatedAt,
@@ -69,6 +72,8 @@ var (
 	DefaultTitle string
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
+	// DefaultTotal holds the default value on creation for the "total" field.
+	DefaultTotal int
 	// DefaultFailedCount holds the default value on creation for the "failed_count" field.
 	DefaultFailedCount int
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
@@ -105,6 +110,11 @@ func ByTitle(opts ...sql.OrderTermOption) OrderOption {
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// ByTotal orders the results by the total field.
+func ByTotal(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTotal, opts...).ToFunc()
 }
 
 // ByFailedCount orders the results by the failed_count field.
