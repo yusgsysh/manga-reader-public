@@ -16,9 +16,9 @@ const NAV_ITEMS = [
 ];
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
-  { mode: "system", label: "跟随系统", icon: Monitor },
-  { mode: "light", label: "浅色", icon: Sun },
-  { mode: "dark", label: "深色", icon: Moon },
+  { mode: "system", label: " 跟随系统", icon: Monitor },
+  { mode: "light", label: " 浅色", icon: Sun },
+  { mode: "dark", label: " 深色", icon: Moon },
 ];
 
 export function Header() {
