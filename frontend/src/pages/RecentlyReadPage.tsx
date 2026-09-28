@@ -43,7 +43,7 @@ export function RecentlyReadPage() {
             onClick={() => setConfirmOpen(true)}
           >
             <Trash2 className="mr-1 size-4" />
-            删除所有阅读记录
+            清理记录
           </Button>
         </div>
       )}
