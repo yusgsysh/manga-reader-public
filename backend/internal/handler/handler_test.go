@@ -1,12 +1,13 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
+
+	json "encoding/json/v2"
 
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/model"

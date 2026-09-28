@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +9,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	json "encoding/json/v2"
 
 	"manga-reader/internal/model"
 
@@ -202,7 +203,7 @@ func TestMockGetGallery_EmptyToken(t *testing.T) {
 func TestMockGetGallery_APIError(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.MarshalWrite(w, map[string]any{
 			"gmetadata": []map[string]any{
 				{"gid": 12345, "token": "abc", "error": "Invalid or missing parameters"},
 			},
@@ -225,7 +226,7 @@ func TestMockGetGallery_APIError(t *testing.T) {
 func TestMockGetGallery_EmptyMetadata(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.MarshalWrite(w, map[string]any{
 			"gmetadata": []map[string]any{},
 		})
 	})
@@ -246,7 +247,7 @@ func TestMockGetGallery_EmptyMetadata(t *testing.T) {
 func TestMockGetGallery_Success(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.MarshalWrite(w, map[string]any{
 			"gmetadata": []map[string]any{
 				{
 					"gid":          3138775,

@@ -3,9 +3,10 @@ package exhentai
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
+
+	json "encoding/json/v2"
 
 	"manga-reader/internal/model"
 )
@@ -51,7 +52,7 @@ func PostGalleryMetadata(ctx context.Context, client *http.Client, gid int64, to
 	}
 
 	var result response
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &result); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
 

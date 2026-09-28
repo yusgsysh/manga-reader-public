@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	json "encoding/json/v2"
 
 	"github.com/minio/minio-go/v7"
 

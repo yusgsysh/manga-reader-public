@@ -2,11 +2,12 @@ package handler
 
 import (
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	json "encoding/json/v2"
 
 	"github.com/gin-gonic/gin"
 	"manga-reader/internal/database"

@@ -3,7 +3,6 @@ package handler
 import (
 	"archive/zip"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +13,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	json "encoding/json/v2"
+	"encoding/json/jsontext"
 
 	"github.com/gin-gonic/gin"
 
@@ -98,7 +100,7 @@ func doJSON(t *testing.T, r *gin.Engine, method, target string, body any) (int, 
 	t.Helper()
 	var rd io.Reader
 	if body != nil {
-		if raw, ok := body.(json.RawMessage); ok {
+		if raw, ok := body.(jsontext.Value); ok {
 			rd = bytes.NewReader(raw)
 		} else {
 			b, err := json.Marshal(body)
@@ -200,7 +202,7 @@ func TestPrefillStart_Validation(t *testing.T) {
 	r := setupMockRouter(&Server{Client: &http.Client{}})
 
 	// Malformed body
-	code, body := doJSON(t, r, http.MethodPost, "/api/prefill", json.RawMessage(`{not json`))
+	code, body := doJSON(t, r, http.MethodPost, "/api/prefill", jsontext.Value(`{not json`))
 	if code != http.StatusBadRequest {
 		t.Errorf("malformed body: status = %d, want 400, body: %s", code, body)
 	}

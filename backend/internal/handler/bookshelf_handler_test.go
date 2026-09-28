@@ -2,11 +2,12 @@ package handler
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	json "encoding/json/v2"
 
 	"manga-reader/internal/database"
 	"manga-reader/internal/ent/bookshelf"
@@ -50,7 +51,7 @@ func TestHandleBookshelfAdd_Success(t *testing.T) {
 
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.MarshalWrite(w, map[string]any{
 			"gmetadata": []map[string]any{
 				{
 					"gid":       123456,
@@ -100,7 +101,7 @@ func TestHandleBookshelfAdd_Idempotent(t *testing.T) {
 
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.MarshalWrite(w, map[string]any{
 			"gmetadata": []map[string]any{
 				{
 					"gid":       123456,
