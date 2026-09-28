@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 
@@ -20,6 +21,10 @@ import (
 const (
 	ExhentaiURL = "https://exhentai.org"
 	EhentaiURL  = "https://e-hentai.org"
+
+	// upstreamDocTimeout bounds each HTML document fetch so a hung
+	// upstream connection cannot stall a request indefinitely.
+	upstreamDocTimeout = 15 * time.Second
 )
 
 var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+)\+? results?`)
@@ -40,6 +45,9 @@ func httpGet(ctx context.Context, client *http.Client, url string) (*http.Respon
 }
 
 func httpGetDoc(ctx context.Context, client *http.Client, url string) (*goquery.Document, error) {
+	ctx, cancel := context.WithTimeout(ctx, upstreamDocTimeout)
+	defer cancel()
+
 	resp, err := httpGet(ctx, client, url)
 	if err != nil {
 		return nil, err
@@ -544,44 +552,6 @@ func ScrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL s
 		})
 	})
 
-	numImages := doc.Find(".gpc").Text()
-	matches := numReg.FindStringSubmatch(numImages)
-	var total int
-	if len(matches) >= 3 {
-		matches[2] = strings.ReplaceAll(matches[2], ",", "")
-		total, _ = strconv.Atoi(matches[2])
-	}
-
-	var pageUrls []string
-	doc.Find("#gdt > a").Each(func(i int, s *goquery.Selection) {
-		href, _ := s.Attr("href")
-		if href != "" {
-			pageUrls = append(pageUrls, href)
-		}
-	})
-
-	if total > len(pageUrls) && len(pageUrls) > 0 {
-		end := len(pageUrls)
-		pages := total / end
-		if total%end != 0 {
-			pages++
-		}
-		for p := 1; p < pages; p++ {
-			u, _ := url.Parse(galleryURL)
-			u.RawQuery = fmt.Sprintf("p=%d", p)
-			pageDoc, err := httpGetDoc(ctx, client, u.String())
-			if err != nil {
-				break
-			}
-			pageDoc.Find("#gdt > a").Each(func(i int, s *goquery.Selection) {
-				href, _ := s.Attr("href")
-				if href != "" {
-					pageUrls = append(pageUrls, href)
-				}
-			})
-		}
-	}
-
 	domain := ""
 	if strings.Contains(galleryURL, "exhentai.org") {
 		domain = "exhentai.org"
@@ -619,8 +589,62 @@ func ScrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL s
 		RatingCount: ratingCount,
 		Rating:      rating,
 		Tags:        tags,
-		PageUrls:    pageUrls,
 	}, nil
+}
+
+// extractPageURLs collects gallery page links from a gallery document.
+func extractPageURLs(doc *goquery.Document) []string {
+	var urls []string
+	doc.Find("#gdt > a").Each(func(i int, s *goquery.Selection) {
+		href, _ := s.Attr("href")
+		if href != "" {
+			urls = append(urls, href)
+		}
+	})
+	return urls
+}
+
+// galleryTotalImages parses the total image count from the ".gpc" counter.
+func galleryTotalImages(doc *goquery.Document) int {
+	matches := numReg.FindStringSubmatch(doc.Find(".gpc").Text())
+	if len(matches) < 3 {
+		return 0
+	}
+	matches[2] = strings.ReplaceAll(matches[2], ",", "")
+	total, _ := strconv.Atoi(matches[2])
+	return total
+}
+
+// ScrapeGalleryPageURLs fetches the full list of gallery page URLs,
+// walking the paginated thumbnail list when the gallery has more pages
+// than fit on the first thumbnail page.
+func ScrapeGalleryPageURLs(ctx context.Context, client *http.Client, galleryURL string) ([]string, error) {
+	doc, err := httpGetDoc(ctx, client, galleryURL)
+	if err != nil {
+		return nil, err
+	}
+
+	pageUrls := extractPageURLs(doc)
+	total := galleryTotalImages(doc)
+
+	if total > len(pageUrls) && len(pageUrls) > 0 {
+		end := len(pageUrls)
+		pages := total / end
+		if total%end != 0 {
+			pages++
+		}
+		for p := 1; p < pages; p++ {
+			u, _ := url.Parse(galleryURL)
+			u.RawQuery = fmt.Sprintf("p=%d", p)
+			pageDoc, err := httpGetDoc(ctx, client, u.String())
+			if err != nil {
+				break
+			}
+			pageUrls = append(pageUrls, extractPageURLs(pageDoc)...)
+		}
+	}
+
+	return pageUrls, nil
 }
 
 func ScrapePageImageURL(ctx context.Context, client *http.Client, pageURL string) (imgURL string, fallbackURL string, err error) {

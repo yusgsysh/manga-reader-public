@@ -284,7 +284,6 @@ func TestAPI_GalleryDetails(t *testing.T) {
 		Rating    float64     `json:"rating"`
 		Favorited int         `json:"favorited"`
 		Tags      []model.Tag `json:"tags"`
-		PageUrls  []string    `json:"page_urls"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &details); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
@@ -301,9 +300,6 @@ func TestAPI_GalleryDetails(t *testing.T) {
 	}
 	if details.PageCount <= 0 {
 		t.Errorf("PageCount = %d, want > 0", details.PageCount)
-	}
-	if len(details.PageUrls) == 0 {
-		t.Error("PageUrls should not be empty")
 	}
 	t.Logf("Gallery details: %s (%s), pages=%d, rating=%.2f, tags=%d, favorited=%d",
 		details.Title, details.Category, details.PageCount, details.Rating, len(details.Tags), details.Favorited)
@@ -648,7 +644,6 @@ func TestAPI_GalleryDetailsFullStructure(t *testing.T) {
 		Rating     float64     `json:"rating"`
 		Favorited  int         `json:"favorited"`
 		Tags       []model.Tag `json:"tags"`
-		PageUrls   []string    `json:"page_urls"`
 		Translated bool        `json:"translated"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &details); err != nil {
@@ -678,12 +673,6 @@ func TestAPI_GalleryDetailsFullStructure(t *testing.T) {
 	}
 	if details.Rating <= 0 || details.Rating > 5 {
 		t.Errorf("Rating = %f, want (0, 5]", details.Rating)
-	}
-	if len(details.PageUrls) == 0 {
-		t.Error("PageUrls should not be empty")
-	}
-	if len(details.PageUrls) != details.PageCount {
-		t.Errorf("PageUrls len = %d, want %d (= PageCount)", len(details.PageUrls), details.PageCount)
 	}
 	t.Logf("Details: %s, cat=%s, uploader=%s, lang=%s, pages=%d, rating=%.2f, favorited=%d, tags=%d",
 		details.Title, details.Category, details.Uploader, details.Language,

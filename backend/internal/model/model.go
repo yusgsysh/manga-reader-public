@@ -183,7 +183,6 @@ type GalleryDetail struct {
 	RatingCount int
 	Rating      float64
 	Tags        []TagItem
-	PageUrls    []string
 }
 
 type TagItem struct {

@@ -191,13 +191,11 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
   "rating": 4.5,
   "tags": [
     { "namespace": "female", "name": "yuri" }
-  ],
-  "page_urls": [
-    "https://exhentai.org/s/abcdef1234/123456-1",
-    "https://exhentai.org/s/abcdef1234/123456-2"
   ]
 }
 ```
+
+> 完整的页面 URL 列表请使用 `/pages` 接口（见第 4 节）。`details` 只抓取 gallery 首页，单次上游请求即可返回。
 
 ---
 
@@ -244,7 +242,7 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| url | string | yes | 页面 URL (来自 `page_urls` 或 `pages` 数组) |
+| url | string | yes | 页面 URL (来自 `pages` 数组) |
 
 **Response:**
 
@@ -374,7 +372,7 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| url | string | yes | 页面 URL (来自 `page_urls` 或 `pages` 数组) |
+| url | string | yes | 页面 URL (来自 `pages` 数组) |
 
 **Response:**
 

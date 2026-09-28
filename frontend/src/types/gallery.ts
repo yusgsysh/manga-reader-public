@@ -112,7 +112,6 @@ export interface GalleryDetail {
   rating_count: number;
   rating: number;
   tags: Tag[];
-  page_urls: string[];
 }
 
 export interface Tag {

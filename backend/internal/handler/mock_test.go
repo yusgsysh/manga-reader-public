@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"manga-reader/internal/model"
@@ -109,6 +111,32 @@ func mockGalleryDetailHTML(gid int, title string, pageCount int) string {
 <div class="gpc">Showing 1 - %d of %d images</div>
 <div id="gdt">%s</div>
 </body></html>`, title, title, pageCount, tagsHTML.String(), pageCount, pageCount, pageLinks.String())
+}
+
+// mockPaginatedGalleryHandler serves a gallery details page whose thumbnail
+// list is paginated 40 links per request, selected by the "p" query parameter.
+func mockPaginatedGalleryHandler(gid int, title string, total int) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		p := 0
+		if v := r.URL.Query().Get("p"); v != "" {
+			p, _ = strconv.Atoi(v)
+		}
+		start := p*40 + 1
+		end := start + 40
+		if end > total+1 {
+			end = total + 1
+		}
+		var links strings.Builder
+		for i := start; i < end; i++ {
+			links.WriteString(fmt.Sprintf(`<a href="https://exhentai.org/s/abc%d/%d-%d">p%d</a>`, i, gid, i, i))
+		}
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<!DOCTYPE html><html><head></head><body>
+<div id="gn">%s</div>
+<div class="gpc">Showing 1 - %d of %d images</div>
+<div id="gdt">%s</div>
+</body></html>`, title, end-start, total, links.String())
+	}
 }
 
 // mockPageHTML returns a gallery page with image URL and optional nl fallback.
@@ -686,7 +714,9 @@ func TestMockGalleryDetails_ScrapeFailure(t *testing.T) {
 }
 
 func TestMockGalleryDetails_Success(t *testing.T) {
+	var reqCount atomic.Int32
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		reqCount.Add(1)
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, mockGalleryDetailHTML(3138775, "Test Gallery", 65))
 	})
@@ -703,6 +733,13 @@ func TestMockGalleryDetails_Success(t *testing.T) {
 		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
+	if got := reqCount.Load(); got != 1 {
+		t.Errorf("upstream requests = %d, want 1 (details must not fetch thumbnail pages)", got)
+	}
+	if strings.Contains(w.Body.String(), "page_urls") {
+		t.Error("details response should not contain page_urls")
+	}
+
 	var details struct {
 		ID        int         `json:"id"`
 		Token     string      `json:"token"`
@@ -713,7 +750,6 @@ func TestMockGalleryDetails_Success(t *testing.T) {
 		PageCount int         `json:"page_count"`
 		Rating    float64     `json:"rating"`
 		Tags      []model.Tag `json:"tags"`
-		PageUrls  []string    `json:"page_urls"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &details); err != nil {
 		t.Fatalf("failed to unmarshal: %v. body: %s", err, w.Body.String())
@@ -736,9 +772,6 @@ func TestMockGalleryDetails_Success(t *testing.T) {
 	}
 	if len(details.Tags) == 0 {
 		t.Error("Tags should not be empty")
-	}
-	if len(details.PageUrls) == 0 {
-		t.Error("PageUrls should not be empty")
 	}
 }
 
@@ -806,6 +839,57 @@ func TestMockGalleryPages_Success(t *testing.T) {
 		}
 		if p.Index != i {
 			t.Errorf("pages[%d].index = %d, want %d", i, p.Index, i)
+		}
+	}
+}
+
+func TestMockGalleryPages_Paginated(t *testing.T) {
+	var reqCount atomic.Int32
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		reqCount.Add(1)
+		mockPaginatedGalleryHandler(12345, "Paginated", 65)(w, r)
+	})
+	defer mockServer.Close()
+
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345/pages", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	if got := reqCount.Load(); got != 2 {
+		t.Errorf("upstream requests = %d, want 2 (first page + ?p=1)", got)
+	}
+
+	var resp struct {
+		Total int `json:"total"`
+		Pages []struct {
+			PageURL string `json:"page_url"`
+			Index   int    `json:"index"`
+		} `json:"pages"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal: %v. body: %s", err, w.Body.String())
+	}
+
+	if resp.Total != 65 {
+		t.Errorf("total = %d, want 65", resp.Total)
+	}
+	if len(resp.Pages) != 65 {
+		t.Fatalf("pages len = %d, want 65", len(resp.Pages))
+	}
+	for i, p := range resp.Pages {
+		if p.Index != i {
+			t.Errorf("pages[%d].index = %d, want %d", i, p.Index, i)
+		}
+		wantSuffix := fmt.Sprintf("-%d", i+1)
+		if !strings.HasSuffix(p.PageURL, wantSuffix) {
+			t.Errorf("pages[%d].page_url = %q, want suffix %q", i, p.PageURL, wantSuffix)
 		}
 	}
 }

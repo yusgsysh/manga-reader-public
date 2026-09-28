@@ -80,7 +80,6 @@ func (s *Server) handleGalleryDetails(c *gin.Context) {
 		"rating_count": details.RatingCount,
 		"rating":       details.Rating,
 		"tags":         tags,
-		"page_urls":    details.PageUrls,
 	})
 }
 
@@ -95,9 +94,9 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 	u := exhentai.GalleryURL(id, token)
 	ctx := c.Request.Context()
 
-	details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u)
+	pageUrls, err := exhentai.ScrapeGalleryPageURLs(ctx, s.Client, u)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery pages failed: %v", err)})
 		return
 	}
 
@@ -106,8 +105,8 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 		Index   int    `json:"index"`
 	}
 
-	pages := make([]pageInfo, len(details.PageUrls))
-	for i, p := range details.PageUrls {
+	pages := make([]pageInfo, len(pageUrls))
+	for i, p := range pageUrls {
 		pages[i] = pageInfo{
 			PageURL: p,
 			Index:   i,

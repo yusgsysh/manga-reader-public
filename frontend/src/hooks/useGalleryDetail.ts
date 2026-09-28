@@ -11,6 +11,7 @@ export function useGalleryDetail(id: number, token: string) {
     queryKey: ["gallery-detail", id, token],
     queryFn: () => fetchGalleryDetail(id, token),
     enabled: Number.isFinite(id) && token.length > 0,
+    staleTime: 5 * 60_000,
   });
 }
 

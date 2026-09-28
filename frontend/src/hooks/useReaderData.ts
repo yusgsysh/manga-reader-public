@@ -15,6 +15,7 @@ export function useGalleryPages(id: number, token: string) {
     queryKey: ["gallery-pages", id, token],
     queryFn: () => fetchGalleryPages(id, token),
     enabled: Number.isFinite(id) && token.length > 0,
+    staleTime: 5 * 60_000,
   });
 }
 

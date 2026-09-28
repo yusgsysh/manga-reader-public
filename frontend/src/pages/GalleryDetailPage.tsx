@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { Badge, Button, Dialog, Meter } from "@cloudflare/kumo";
+import { useQueryClient } from "@tanstack/react-query";
+import { Badge, Button, Dialog, Meter, useKumoToastManager } from "@cloudflare/kumo";
 import {
   ArrowLeft,
   Bookmark,
@@ -15,6 +16,7 @@ import {
   useBookshelfToggle,
   useGalleryDetail,
 } from "../hooks/useGalleryDetail";
+import { fetchGalleryPages } from "../api/gallery";
 import { useReadingProgress } from "../hooks/useReaderData";
 import { useGalleryZip } from "../hooks/useGalleryZip";
 import { ErrorState } from "../components/common/ErrorState";
@@ -52,6 +54,8 @@ export function GalleryDetailPage() {
   const { add, remove } = useBookshelfToggle(id, token ?? "");
   const { data: progress } = useReadingProgress(id, token ?? "");
   const zip = useGalleryZip();
+  const queryClient = useQueryClient();
+  const toast = useKumoToastManager();
   const [downloadOpen, setDownloadOpen] = useState(false);
 
   const closeDownload = () => {
@@ -87,8 +91,26 @@ export function GalleryDetailPage() {
 
   const handleDownload = async () => {
     setDownloadOpen(true);
-    await zip.start(gallery.title, gallery.page_urls);
-    setDownloadOpen(false);
+    try {
+      const pagesData = await queryClient.fetchQuery({
+        queryKey: ["gallery-pages", id, token ?? ""],
+        queryFn: () => fetchGalleryPages(id, token ?? ""),
+        staleTime: 5 * 60_000,
+      });
+      await zip.start(
+        gallery.title,
+        pagesData.pages.map((p) => p.page_url),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.add({
+        title: "获取页面列表失败",
+        description: message,
+        variant: "error",
+      });
+    } finally {
+      setDownloadOpen(false);
+    }
   };
 
   return (
@@ -216,7 +238,7 @@ export function GalleryDetailPage() {
               )}
               {inShelf ? "已收藏 · 点击移除" : "收藏到书架"}
             </Button>
-            {gallery.page_urls.length > 0 && (
+            {gallery.page_count > 0 && (
               <Button
                 variant="outline"
                 onClick={() => void handleDownload()}
