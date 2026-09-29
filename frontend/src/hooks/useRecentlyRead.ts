@@ -4,7 +4,7 @@ import { fetchRecentlyRead } from "../api/recentlyRead";
 import { fetchGallery } from "../api/gallery";
 import { cleanupReadingProgress } from "../api/progress";
 import type { Gallery } from "../types/reader";
-import type { RecentlyReadItem } from "../types/recentlyRead";
+import type { RecentlyReadItem, RecentlyReadResponse } from "../types/recentlyRead";
 
 function needsEnrichment(item: RecentlyReadItem): boolean {
   return !item.title || !item.thumbnail || !item.pages;
@@ -17,6 +17,7 @@ export function useRecentlyRead() {
     queryKey: ["recently-read"],
     queryFn: fetchRecentlyRead,
     staleTime: RECENTLY_READ_STALE_TIME,
+    placeholderData: (previousData: RecentlyReadResponse | undefined) => previousData,
   });
 
   const items = useMemo(() => listQuery.data?.results ?? [], [listQuery.data]);
