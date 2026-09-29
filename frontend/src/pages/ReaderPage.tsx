@@ -27,6 +27,7 @@ export function ReaderPage() {
   const navigationType = useNavigationType();
   const { resolvedMode } = useTheme();
   const viewerRef = useRef<MangaViewerHandle>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("inline");
   const id = Number(idParam);
   const restart = searchParams.get("restart") === "1";
@@ -45,8 +46,9 @@ export function ReaderPage() {
     [isDark],
   );
 
-  // 全屏完全交给 comimi：nativeFullscreen 在不支持的浏览器（如 iOS）会自动
-  // 回退 browserFullscreen。进入前不再自定义 requestFullscreen。
+  // 全屏 = 库的 browserFullscreen 布局（跨平台一致、iOS 可用）叠加容器的
+  // 原生全屏（可用时隐藏浏览器 UI）。容器是原生全屏元素，因此悬浮退出按钮
+  // 也在全屏子树内，桌面端无需 Esc 即可退出。
   const toggleFullscreen = useCallback(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
@@ -55,18 +57,25 @@ export function ReaderPage() {
       document.fullscreenElement !== null ||
       mode === "browserFullscreen" ||
       mode === "nativeFullscreen";
-    void viewer.setLayoutMode(isFull ? "inline" : "nativeFullscreen");
+    if (isFull) {
+      // setLayoutMode("inline") 会在必要时自行 exitFullscreen
+      void viewer.setLayoutMode("inline");
+      return;
+    }
+    void viewer.setLayoutMode("browserFullscreen");
+    const el = containerRef.current;
+    if (el && typeof el.requestFullscreen === "function") {
+      el.requestFullscreen().catch(() => {});
+    }
   }, []);
 
   // 用户通过浏览器/系统手势退出原生全屏时，库不会自行回到 inline，这里补齐。
   useEffect(() => {
     const handleFullscreenChange = () => {
       const viewer = viewerRef.current;
-      if (!viewer) return;
-      if (
-        !document.fullscreenElement &&
-        viewer.getState().layout.mode === "nativeFullscreen"
-      ) {
+      if (!viewer || document.fullscreenElement) return;
+      const mode = viewer.getState().layout.mode;
+      if (mode === "nativeFullscreen" || mode === "browserFullscreen") {
         void viewer.setLayoutMode("inline");
       }
     };
@@ -177,7 +186,10 @@ export function ReaderPage() {
   }
 
   return (
-    <div className="reader-shell flex h-[100dvh] flex-col bg-kumo-base">
+    <div
+      ref={containerRef}
+      className="reader-shell flex h-[100dvh] flex-col bg-kumo-base"
+    >
       {/* Top bar：全屏时由 comimi 接管，控件交给库内 dock */}
       <div className="reader-topbar relative z-10 flex min-h-12 shrink-0 items-center gap-2 border-b border-kumo-hairline bg-kumo-elevated px-3 pt-[env(safe-area-inset-top)]">
         <Button
@@ -195,9 +207,7 @@ export function ReaderPage() {
         >
           <ArrowLeft className="size-4" />
         </Button>
-        <h1 className="min-w-0 flex-1 truncate text-sm font-medium">
-          {gallery.title}
-        </h1>
+        <div className="min-w-0 flex-1" />
         <span className="shrink-0 text-xs text-kumo-subtle">
           {currentPage + 1} / {total}
         </span>
