@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchSearch } from "../api/search";
 import type { SearchParams } from "../types/gallery";
 
+const SEARCH_STALE_TIME = 5 * 60_000;
+
 export function useSearch(params: SearchParams) {
   return useQuery({
     queryKey: [
@@ -26,5 +28,6 @@ export function useSearch(params: SearchParams) {
     ],
     queryFn: () => fetchSearch(params),
     enabled: (params.q ?? "").trim().length > 0,
+    staleTime: SEARCH_STALE_TIME,
   });
 }

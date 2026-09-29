@@ -10,10 +10,13 @@ function needsEnrichment(item: RecentlyReadItem): boolean {
   return !item.title || !item.thumbnail || !item.pages;
 }
 
+const RECENTLY_READ_STALE_TIME = 2 * 60_000;
+
 export function useRecentlyRead() {
   const listQuery = useQuery({
     queryKey: ["recently-read"],
     queryFn: fetchRecentlyRead,
+    staleTime: RECENTLY_READ_STALE_TIME,
   });
 
   const items = useMemo(() => listQuery.data?.results ?? [], [listQuery.data]);

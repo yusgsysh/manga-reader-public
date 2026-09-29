@@ -13,10 +13,13 @@ import type { PrefillStartRequest } from "../types/prefill";
 
 const PREFILL_KEY = ["prefill-jobs"] as const;
 
+const PREFILL_STALE_TIME = 30_000;
+
 export function usePrefillJobs() {
   return useQuery({
     queryKey: PREFILL_KEY,
     queryFn: fetchPrefillJobs,
+    staleTime: PREFILL_STALE_TIME,
     // Poll while any job is queued or running; stop when everything settles.
     refetchInterval: (query) =>
       hasActivePrefillJob(query.state.data?.jobs ?? []) ? 1500 : false,
