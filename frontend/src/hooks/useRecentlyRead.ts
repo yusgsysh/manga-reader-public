@@ -4,7 +4,7 @@ import { fetchRecentlyRead } from "../api/recentlyRead";
 import { fetchGallery } from "../api/gallery";
 import { cleanupReadingProgress } from "../api/progress";
 import type { Gallery } from "../types/reader";
-import type { RecentlyReadItem, RecentlyReadResponse } from "../types/recentlyRead";
+import type { RecentlyReadItem } from "../types/recentlyRead";
 
 function needsEnrichment(item: RecentlyReadItem): boolean {
   return !item.title || !item.thumbnail || !item.pages;
