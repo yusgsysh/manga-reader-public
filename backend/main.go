@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -29,19 +30,23 @@ func CORSMiddleware() gin.HandlerFunc {
 	}
 }
 
-func setupLogger(level string) *slog.Logger {
-	var logLevel slog.Level
-	switch level {
+func parseLogLevel(value string) slog.Level {
+	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "debug":
-		logLevel = slog.LevelDebug
-	case "warn":
-		logLevel = slog.LevelWarn
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
 	case "error":
-		logLevel = slog.LevelError
+		return slog.LevelError
 	default:
-		logLevel = slog.LevelInfo
+		return slog.LevelWarn
 	}
+}
 
+func setupLogger(level string) *slog.Logger {
+	logLevel := parseLogLevel(level)
 	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: logLevel,
 	})
@@ -51,10 +56,16 @@ func setupLogger(level string) *slog.Logger {
 }
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("application failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	cfg, err := config.Load()
 	if err != nil {
-		slog.Error("config load failed", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	logger := setupLogger(cfg.LogLevel)
@@ -72,13 +83,13 @@ func main() {
 	})
 	if err != nil {
 		logger.Error("http client init failed", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	db, err := database.NewDB(cfg.DBPath)
 	if err != nil {
 		logger.Error("database init failed", "error", err)
-		os.Exit(1)
+		return err
 	}
 	defer db.Close()
 
@@ -98,7 +109,7 @@ func main() {
 		})
 		if err != nil {
 			logger.Error("minio cache init failed", "error", err)
-			os.Exit(1)
+			return err
 		}
 		handlerCfg.Cache = minioCache
 		logger.Info("minio cache enabled", "bucket", cfg.MinIO.Bucket)
@@ -122,8 +133,5 @@ func main() {
 		port = ":" + port
 	}
 	logger.Info("listening", "addr", port)
-	if err := r.Run(port); err != nil {
-		logger.Error("server failed", "error", err)
-		os.Exit(1)
-	}
+	return r.Run(port)
 }

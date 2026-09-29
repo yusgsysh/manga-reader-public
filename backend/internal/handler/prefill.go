@@ -106,7 +106,7 @@ func (m *prefillManager) recoverPending(s *Server) {
 			return
 		}
 		lastErr = err
-		slog.Info("prefill recover attempt failed", "attempt", attempt+1, "error", err)
+		slog.Warn("prefill recover attempt failed", "attempt", attempt+1, "error", err)
 		time.Sleep(100 * time.Millisecond)
 	}
 	slog.Error("prefill recover failed after retries", "error", lastErr)
@@ -173,9 +173,9 @@ func (m *prefillManager) nextQueued(s *Server) (int, bool) {
 				}
 				return row.ID, true
 			}
-			lastErr = err
-			slog.Error("prefill claim attempt failed", "attempt", attempt+1, "job_id", row.ID, "error", err)
-			time.Sleep(50 * time.Millisecond)
+		lastErr = err
+		slog.Warn("prefill claim attempt failed", "attempt", attempt+1, "job_id", row.ID, "error", err)
+		time.Sleep(50 * time.Millisecond)
 		}
 		slog.Error("prefill claim failed after retries", "job_id", row.ID, "error", lastErr)
 		return 0, false
@@ -331,7 +331,7 @@ func (s *Server) finishPrefillJob(id int, status string, failed int, errs []mode
 			return
 		}
 		lastErr = err
-		slog.Error("prefill finish attempt failed", "attempt", attempt+1, "job_id", id, "error", err)
+		slog.Warn("prefill finish attempt failed", "attempt", attempt+1, "job_id", id, "error", err)
 		time.Sleep(100 * time.Millisecond)
 	}
 	slog.Error("prefill finish failed after retries", "job_id", id, "error", lastErr)

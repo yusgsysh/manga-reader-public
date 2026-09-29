@@ -43,7 +43,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Port:        getEnv("EHENTAI_PORT", ":8080"),
 		DBPath:      getEnv("MANGA_READER_DB_PATH", "data/manga-reader.db"),
-		LogLevel:    getEnv("LOG_LEVEL", "info"),
+		LogLevel:    getEnv("LOG_LEVEL", "warn"),
 		Environment: getEnv("ENVIRONMENT", "production"),
 		Cookie: CookieConfig{
 			IpbMemberID: getEnv("EHENTAI_COOKIE_IPB_MEMBER_ID", ""),
