@@ -1,5 +1,4 @@
 import { Button } from "@cloudflare/kumo";
-import { Loader2 } from "lucide-react";
 import { useInfiniteScroll } from "../../hooks/useInfiniteScroll";
 
 interface InfiniteScrollTriggerProps {
@@ -23,25 +22,25 @@ export function InfiniteScrollTrigger({
     fetchNextPage,
   });
 
-  return (
-    <div
-      ref={sentinelRef}
-      className="flex min-h-12 items-center justify-center py-6 text-sm text-kumo-subtle"
-    >
-      {isFetchingNextPage ? (
-        <span className="flex items-center gap-2">
-          <Loader2 className="size-4 animate-spin" />
-          加载中...
-        </span>
-      ) : isFetchNextPageError ? (
+  if (isFetchNextPageError) {
+    return (
+      <div className="flex min-h-12 items-center justify-center py-6">
         <Button variant="secondary" size="sm" onClick={() => fetchNextPage()}>
           加载失败，点击重试
         </Button>
-      ) : hasNextPage ? (
-        <span>向下滚动加载更多</span>
-      ) : (
-        <span>{endMessage}</span>
-      )}
-    </div>
-  );
+      </div>
+    );
+  }
+
+  if (!hasNextPage) {
+    return (
+      <div className="flex min-h-12 items-center justify-center py-6 text-sm text-kumo-subtle">
+        {endMessage}
+      </div>
+    );
+  }
+
+  // While the next page is prefetched, render only an invisible sentinel so no
+  // loading animation is shown before the user reaches the bottom.
+  return <div ref={sentinelRef} aria-hidden className="h-px" />;
 }
