@@ -4,13 +4,21 @@ import { Trash2, Loader2 } from "lucide-react";
 import { useRecentlyRead, useCleanupReadingProgress } from "../hooks/useRecentlyRead";
 import { BookshelfCard } from "../components/gallery/BookshelfCard";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
+import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorState } from "../components/common/ErrorState";
-import { SimplePagination } from "../components/common/SimplePagination";
 
 export function RecentlyReadPage() {
-  const [page, setPage] = useState(0);
-  const { data, isLoading, error, refetch } = useRecentlyRead(page);
+  const {
+    items,
+    isLoading,
+    error,
+    refetch,
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    fetchNextPage,
+  } = useRecentlyRead();
   const cleanup = useCleanupReadingProgress();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const cleanupFiredRef = useRef(false);
@@ -32,11 +40,9 @@ export function RecentlyReadPage() {
     );
   }
 
-  const results = data?.results ?? [];
-
   return (
     <div>
-      {results.length > 0 && (
+      {items.length > 0 && (
         <div className="mb-4 flex items-center justify-end">
           <Button
             variant="ghost"
@@ -50,7 +56,7 @@ export function RecentlyReadPage() {
         </div>
       )}
 
-      {results.length === 0 ? (
+      {items.length === 0 ? (
         <EmptyState
           message="还没有阅读记录"
           actionLabel="浏览首页"
@@ -58,18 +64,18 @@ export function RecentlyReadPage() {
         />
       ) : (
         <div className="gallery-grid">
-          {results.map((item) => (
+          {items.map((item) => (
             <BookshelfCard key={`${item.id}-${item.token}`} item={item} />
           ))}
         </div>
       )}
 
-      {data && (
-        <SimplePagination
-          page={data.page}
-          hasMore={data.page + 1 < data.total_pages}
-          totalPages={data.total_pages}
-          onPageChange={setPage}
+      {items.length > 0 && (
+        <InfiniteScrollTrigger
+          hasNextPage={!!hasNextPage}
+          isFetchingNextPage={isFetchingNextPage}
+          isFetchNextPageError={isFetchNextPageError}
+          fetchNextPage={() => fetchNextPage()}
         />
       )}
 

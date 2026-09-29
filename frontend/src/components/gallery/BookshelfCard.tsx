@@ -31,6 +31,7 @@ export function BookshelfCard({ item }: BookshelfCardProps) {
             src={thumbnailUrl(item.thumbnail)}
             alt={item.title || `#${item.id}`}
             loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
             onError={(e) => {
               e.currentTarget.style.display = "none";

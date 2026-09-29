@@ -1,17 +1,16 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { fetchSearch } from "../api/search";
-import type { SearchParams } from "../types/gallery";
+import type { SearchParams, SearchResponse } from "../types/gallery";
 
 const SEARCH_STALE_TIME = 5 * 60_000;
 
 export function useSearch(params: SearchParams) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: [
       "search",
       params.q,
       params.site,
       params.categories,
-      params.page,
       params.min_pages,
       params.max_pages,
       params.min_rating,
@@ -26,7 +25,12 @@ export function useSearch(params: SearchParams) {
       params.disable_uploader_filter,
       params.disable_tag_filter,
     ],
-    queryFn: () => fetchSearch(params),
+    queryFn: ({ pageParam }) => fetchSearch({ ...params, page: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage: SearchResponse) =>
+      lastPage.page + 1 < lastPage.total_pages
+        ? lastPage.page + 1
+        : undefined,
     enabled: (params.q ?? "").trim().length > 0,
     staleTime: SEARCH_STALE_TIME,
   });

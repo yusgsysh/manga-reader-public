@@ -1,14 +1,21 @@
-import { useState } from "react";
 import { useBookshelf } from "../hooks/useBookshelf";
 import { BookshelfGrid } from "../components/gallery/BookshelfGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
-import { SimplePagination } from "../components/common/SimplePagination";
+import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";
 import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
 
 export function BookshelfPage() {
-  const [page, setPage] = useState(0);
-  const { data, isLoading, error, refetch } = useBookshelf(page);
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    fetchNextPage,
+  } = useBookshelf();
 
   if (isLoading) {
     return <GalleryGridSkeleton />;
@@ -23,7 +30,9 @@ export function BookshelfPage() {
     );
   }
 
-  if (!data || data.results.length === 0) {
+  const items = data?.pages.flatMap((page) => page.results) ?? [];
+
+  if (items.length === 0) {
     return (
       <EmptyState
         message="书架还是空的"
@@ -35,11 +44,12 @@ export function BookshelfPage() {
 
   return (
     <div>
-      <BookshelfGrid items={data.results} />
-      <SimplePagination
-        page={data.page}
-        hasMore={(data.page + 1) * data.page_size < data.total}
-        onPageChange={setPage}
+      <BookshelfGrid items={items} />
+      <InfiniteScrollTrigger
+        hasNextPage={!!hasNextPage}
+        isFetchingNextPage={isFetchingNextPage}
+        isFetchNextPageError={isFetchNextPageError}
+        fetchNextPage={() => fetchNextPage()}
       />
     </div>
   );

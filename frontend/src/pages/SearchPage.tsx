@@ -8,7 +8,7 @@ import { EmptyState } from "../components/common/EmptyState";
 import { Input, Button, Checkbox, Select } from "@cloudflare/kumo";
 import { Search, ChevronDown, ChevronUp, X } from "lucide-react";
 import { useState, useCallback, useRef, useEffect } from "react";
-import { SimplePagination } from "../components/common/SimplePagination";
+import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";
 import type { AdvancedSearchOptions } from "../types/gallery";
 
 const CATEGORIES = [
@@ -84,7 +84,6 @@ export function SearchPage() {
   const q = searchParams.get("q") ?? "";
   const siteParam = searchParams.get("site") ?? "exhentai";
   const categoriesParam = searchParams.get("categories") ?? "";
-  const page = Number(searchParams.get("page") ?? "0");
   const appliedAdvancedOptions = parseAdvancedParams(searchParams);
   const appliedTags = parseTags(searchParams);
 
@@ -107,11 +106,19 @@ export function SearchPage() {
   const tagQuery = buildTagQuery(appliedTags);
   const fullQuery = [q, tagQuery].filter(Boolean).join(" ");
 
-  const { data, isLoading, error, refetch } = useSearch({
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    fetchNextPage,
+  } = useSearch({
     q: fullQuery || undefined,
     site: siteParam,
     categories: categoriesParam,
-    page,
     ...appliedAdvancedOptions,
   });
 
@@ -134,7 +141,6 @@ export function SearchPage() {
     if (categories) params.set("categories", categories);
     const allTags = [...appliedTags, ...pendingTags];
     if (allTags.length > 0) params.set("tags", [...new Set(allTags)].join(","));
-    params.set("page", "0");
     for (const [key, value] of Object.entries(pendingAdvancedOptions)) {
       if (value !== undefined && value !== false && value !== "") {
         params.set(key, String(value));
@@ -146,12 +152,6 @@ export function SearchPage() {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleSearch();
-  };
-
-  const handlePageChange = (newPage: number) => {
-    const params = new URLSearchParams(searchParams);
-    params.set("page", String(newPage));
-    setSearchParams(params);
   };
 
   const toggleCategory = (cat: string) => {
@@ -186,7 +186,6 @@ export function SearchPage() {
     } else {
       params.delete("tags");
     }
-    params.set("page", "0");
     setSearchParams(params);
   };
 
@@ -244,6 +243,9 @@ export function SearchPage() {
   };
 
   const activeFilterCount = countActiveFilters(pendingAdvancedOptions, appliedTags, pendingTags);
+
+  const galleries = data?.pages.flatMap((page) => page.results) ?? [];
+  const total = data?.pages[0]?.total ?? 0;
 
   return (
     <div className="space-y-4">
@@ -584,20 +586,21 @@ export function SearchPage() {
         />
       )}
 
-      {!isLoading && !error && data && data.results.length === 0 && (
+      {!isLoading && !error && data && galleries.length === 0 && (
         <EmptyState message="没有找到相关 Gallery，请修改搜索条件" />
       )}
 
-      {!isLoading && !error && data && data.results.length > 0 && (
+      {!isLoading && !error && galleries.length > 0 && (
         <div>
           <p className="mb-3 text-sm text-kumo-subtle">
-            共找到 {data.total} 个结果
+            共找到 {total} 个结果
           </p>
-          <GalleryGrid galleries={data.results} />
-          <SimplePagination
-            page={data.page}
-            hasMore={(data.page + 1) * data.page_size < data.total}
-            onPageChange={handlePageChange}
+          <GalleryGrid galleries={galleries} />
+          <InfiniteScrollTrigger
+            hasNextPage={!!hasNextPage}
+            isFetchingNextPage={isFetchingNextPage}
+            isFetchNextPageError={isFetchNextPageError}
+            fetchNextPage={() => fetchNextPage()}
           />
         </div>
       )}

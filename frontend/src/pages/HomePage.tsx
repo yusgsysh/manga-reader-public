@@ -1,14 +1,21 @@
-import { useState } from "react";
 import { useGalleries } from "../hooks/useGalleryList";
 import { GalleryGrid } from "../components/gallery/GalleryGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
-import { SimplePagination } from "../components/common/SimplePagination";
+import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";
 import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
 
 export function HomePage() {
-  const [page, setPage] = useState(0);
-  const { data, isLoading, error, refetch } = useGalleries(page);
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    fetchNextPage,
+  } = useGalleries();
 
   if (isLoading) {
     return <GalleryGridSkeleton />;
@@ -23,19 +30,20 @@ export function HomePage() {
     );
   }
 
-  if (!data || data.results.length === 0) {
+  const galleries = data?.pages.flatMap((page) => page.results) ?? [];
+
+  if (galleries.length === 0) {
     return <EmptyState message="暂无 Gallery" />;
   }
 
-  const hasMore = data.results.length >= data.page_size;
-
   return (
     <div>
-      <GalleryGrid galleries={data.results} />
-      <SimplePagination
-        page={data.page}
-        hasMore={hasMore}
-        onPageChange={setPage}
+      <GalleryGrid galleries={galleries} />
+      <InfiniteScrollTrigger
+        hasNextPage={!!hasNextPage}
+        isFetchingNextPage={isFetchingNextPage}
+        isFetchNextPageError={isFetchNextPageError}
+        fetchNextPage={() => fetchNextPage()}
       />
     </div>
   );

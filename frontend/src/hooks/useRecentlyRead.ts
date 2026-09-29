@@ -1,5 +1,10 @@
 import { useMemo } from "react";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueries,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { fetchRecentlyRead } from "../api/recentlyRead";
 import { fetchGallery } from "../api/gallery";
 import { cleanupReadingProgress } from "../api/progress";
@@ -13,17 +18,25 @@ function needsEnrichment(item: RecentlyReadItem): boolean {
 
 const RECENTLY_READ_STALE_TIME = 2 * 60_000;
 
-export function useRecentlyRead(page = 0) {
-  const listQuery = useQuery({
-    queryKey: ["recently-read", page],
-    queryFn: async () => {
+export function useRecentlyRead() {
+  const listQuery = useInfiniteQuery({
+    queryKey: ["recently-read"],
+    queryFn: async ({ pageParam }) => {
       await whenProgressSavesSettled();
-      return fetchRecentlyRead(page);
+      return fetchRecentlyRead(pageParam);
     },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) =>
+      lastPage.page + 1 < lastPage.total_pages
+        ? lastPage.page + 1
+        : undefined,
     staleTime: RECENTLY_READ_STALE_TIME,
   });
 
-  const items = useMemo(() => listQuery.data?.results ?? [], [listQuery.data]);
+  const items = useMemo(
+    () => listQuery.data?.pages.flatMap((page) => page.results) ?? [],
+    [listQuery.data],
+  );
   const missing = useMemo(() => items.filter(needsEnrichment), [items]);
 
   // Galleries removed from the bookshelf lack title/thumbnail in the
@@ -36,32 +49,49 @@ export function useRecentlyRead(page = 0) {
     })),
   });
 
-  const data = useMemo(() => {
-    if (!listQuery.data) return listQuery.data;
-    const lookup = new Map<number, Gallery>();
+  const lookup = useMemo(() => {
+    const map = new Map<number, Gallery>();
     missing.forEach((item, index) => {
       const gallery = galleryQueries[index]?.data;
-      if (gallery) lookup.set(item.id, gallery);
+      if (gallery) map.set(item.id, gallery);
     });
+    return map;
+  }, [missing, galleryQueries]);
 
+  const enrichItem = useMemo(
+    () => (item: RecentlyReadItem): RecentlyReadItem => {
+      const gallery = lookup.get(item.id);
+      if (!gallery) return item;
+      return {
+        ...item,
+        title: item.title || gallery.title,
+        title_jpn: item.title_jpn || gallery.title_jpn,
+        thumbnail: item.thumbnail || gallery.thumbnail,
+        pages: item.pages || gallery.page_count,
+        category: (item.category ||
+          gallery.category) as RecentlyReadItem["category"],
+      };
+    },
+    [lookup],
+  );
+
+  const data = useMemo(() => {
+    if (!listQuery.data) return listQuery.data;
     return {
       ...listQuery.data,
-      results: items.map((item) => {
-        const gallery = lookup.get(item.id);
-        if (!gallery) return item;
-        return {
-          ...item,
-          title: item.title || gallery.title,
-          title_jpn: item.title_jpn || gallery.title_jpn,
-          thumbnail: item.thumbnail || gallery.thumbnail,
-          pages: item.pages || gallery.page_count,
-          category: (item.category || gallery.category) as RecentlyReadItem["category"],
-        };
-      }),
+      pages: listQuery.data.pages.map((page) => ({
+        ...page,
+        results: page.results.map(enrichItem),
+      })),
     };
-  }, [listQuery.data, items, missing, galleryQueries]);
+  }, [listQuery.data, enrichItem]);
 
-  return { ...listQuery, data };
+  const enrichedItems = useMemo(
+    () => data?.pages.flatMap((page) => page.results) ?? [],
+    [data],
+  );
+
+  return { ...listQuery, data, items: enrichedItems };
 }
 
 export function useCleanupReadingProgress() {
