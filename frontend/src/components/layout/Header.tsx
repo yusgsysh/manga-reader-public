@@ -61,7 +61,6 @@ export function Header() {
                 key={item.to}
                 href={item.to}
                 variant={isActive ? "primary" : "ghost"}
-                size="sm"
                 className="text-sm"
               >
                 {item.label}
@@ -131,7 +130,6 @@ export function Header() {
                 key={item.to}
                 href={item.to}
                 variant={isActive ? "primary" : "ghost"}
-                size="sm"
                 className="mb-1 w-full justify-start text-sm"
                 onClick={() => setMenuPath(null)}
               >
