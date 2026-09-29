@@ -4,15 +4,17 @@ Base URL: `http://localhost:8080`
 
 ## 分页与列表加载
 
-所有列表端点（Search / Homepage / Watched / Popular / Bookshelf / Recently Read）均保持无状态分页：每页固定 25 条，`page` 从 `0` 开始，可独立调用。
+所有列表端点（Search / Homepage / Watched / Popular / Bookshelf / Recently Read）均以 `page`（从 `0` 开始）分页，客户端可独立请求任意页。上游每页 25 条；响应中的 `page_size` 是**实际返回条数**（末页可能少于 25）。
 
-前端列表页在其之上实现无限滚动：
+Search / Homepage / Watched / Popular 的上游（ExHentai）使用 `next=<gallery-id>` 游标翻页，并不支持 `?page=N`。服务端会按列表 URL 缓存游标链，因此 `page=0,1,2...` 能稳定映射到不同页，且顺序翻页（无限滚动）每页只需一次上游请求。
+
+前端列表页在此基础上实现无限滚动：
 
 - 滚动接近底部时自动按 `page=0,1,2...` 递增请求并追加结果，不再提供上一页 / 下一页按钮。
 - 通过 `IntersectionObserver`（`rootMargin: 0px 0px 200% 0px`，约提前 2 屏）预取下一页，期间不显示加载动画，即“提前加载”。
 - 缩略图使用 `loading="lazy"` 懒加载，接近视口时才请求 `/api/cached-thumbnail`。
 
-是否还有下一页按端点元信息判断：Search / Bookshelf / Recently Read 使用 `total` / `total_pages`；Homepage / Watched / Popular 按每页 25 条的固定页大小判断。
+是否还有下一页按端点元信息判断：Search / Bookshelf / Recently Read 使用 `total` / `total_pages`；Homepage / Watched / Popular 按上游每页 25 条的固定页大小判断。
 
 ## Common Response Types
 
@@ -89,6 +91,7 @@ Base URL: `http://localhost:8080`
 | `disable_language_filter` | `f_sfl=on` |
 | `disable_uploader_filter` | `f_sfu=on` |
 | `disable_tag_filter` | `f_sft=on` |
+| `page` | 上游 `next=<id>` 游标（服务端解析并缓存，见「分页与列表加载」） |
 
 **Example:**
 
@@ -811,7 +814,7 @@ GET /api/recently-read?page=1
 | Field | Type | Description |
 |-------|------|-------------|
 | page | int | 当前页码 (0-indexed) |
-| page_size | int | 每页固定 25 条 |
+| page_size | int | 实际返回条数（通常 25，末页可能更少） |
 | total | int | 阅读记录总数 |
 | total_pages | int | 总页数，`total = 0` 时为 `0` |
 | results | array | 当前页的最近阅读记录 |
