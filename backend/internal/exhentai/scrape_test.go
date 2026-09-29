@@ -1,7 +1,12 @@
 package exhentai
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
+	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -321,5 +326,130 @@ func TestBuildSearchQuery(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+const searchResultsHTML = `<html><head><title>x</title></head><body>
+<div class="ido"><div></div><div><div class="searchtext"><p>Found 100 results</p></div>
+<table class="itg gltm"><tbody><tr>
+<td class="gl3m glname"><a href="https://exhentai.org/g/123/abc"><div class="glink">Title</div></a></td>
+<td class="gl1m"><div class="cs">Doujinshi</div></td>
+<td class="gl2m"><div class="ir" style="background-position:-16px -1px"></div></td>
+<td class="gl5m"><div><a>uploader</a></div></td>
+</tr></tbody></table>
+</div></div></body></html>`
+
+const emptyListingHTML = `<html><head><title>x</title></head><body><div class="ido">nothing here</div></body></html>`
+
+const searchResultsNoBannerHTML = `<html><head><title>x</title></head><body>
+<div class="ido"><div></div><div>
+<table class="itg gltm"><tbody><tr>
+<td class="gl3m glname"><a href="https://exhentai.org/g/123/abc"><div class="glink">Title</div></a></td>
+<td class="gl1m"><div class="cs">Doujinshi</div></td>
+<td class="gl2m"><div class="ir" style="background-position:-16px -1px"></div></td>
+<td class="gl5m"><div><a>uploader</a></div></td>
+</tr></tbody></table>
+</div></div></body></html>`
+
+func TestScrapeGalleryList_PagingUsesSingleRequest(t *testing.T) {
+	var requests atomic.Int32
+	var lastQuery atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		lastQuery.Store(r.URL.RawQuery)
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, emptyListingHTML)
+	}))
+	defer srv.Close()
+
+	results, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 2, nil, true)
+	if err != nil {
+		t.Fatalf("ScrapeGalleryList error: %v", err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected 0 results, got %d", len(results))
+	}
+	if got := requests.Load(); got != 1 {
+		t.Errorf("upstream requests = %d, want 1", got)
+	}
+	if q := lastQuery.Load().(string); q != "page=2" {
+		t.Errorf("upstream query = %q, want page=2", q)
+	}
+}
+
+func TestScrapeGalleryList_NonPagingWalksNext(t *testing.T) {
+	var requests atomic.Int32
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<html><head><title>x</title></head><body><div class="ido"><a href="%s/?page=1">Next &gt;</a></div></body></html>`, srv.URL)
+	}))
+	defer srv.Close()
+
+	_, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 2, nil, false)
+	if err != nil {
+		t.Fatalf("ScrapeGalleryList error: %v", err)
+	}
+	if got := requests.Load(); got != 3 {
+		t.Errorf("upstream requests = %d, want 3 (walk page 0 -> 1 -> 2)", got)
+	}
+}
+
+func TestScrapeSearch_PagingUsesSingleRequest(t *testing.T) {
+	var requests atomic.Int32
+	var lastQuery atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		lastQuery.Store(r.URL.RawQuery)
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, searchResultsHTML)
+	}))
+	defer srv.Close()
+
+	total, results, err := ScrapeSearch(t.Context(), srv.Client(), srv.URL+"/", "test", nil, 2, nil)
+	if err != nil {
+		t.Fatalf("ScrapeSearch error: %v", err)
+	}
+	if total != 100 {
+		t.Errorf("total = %d, want 100", total)
+	}
+	if len(results) != 1 || results[0].GalleryID != 123 {
+		t.Fatalf("unexpected results: %+v", results)
+	}
+	if got := requests.Load(); got != 1 {
+		t.Errorf("upstream requests = %d, want 1", got)
+	}
+	if !strings.Contains(lastQuery.Load().(string), "page=2") {
+		t.Errorf("upstream query = %q, want it to contain page=2", lastQuery.Load())
+	}
+}
+
+func TestScrapeSearch_FallsBackToPageZeroForTotal(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "text/html")
+		if r.URL.Query().Get("page") == "2" {
+			// Target page lacks the result-count banner but still has rows.
+			fmt.Fprint(w, searchResultsNoBannerHTML)
+			return
+		}
+		fmt.Fprint(w, searchResultsHTML)
+	}))
+	defer srv.Close()
+
+	total, results, err := ScrapeSearch(t.Context(), srv.Client(), srv.URL+"/", "test", nil, 2, nil)
+	if err != nil {
+		t.Fatalf("ScrapeSearch error: %v", err)
+	}
+	if total != 100 {
+		t.Errorf("total = %d, want 100", total)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if got := requests.Load(); got != 2 {
+		t.Errorf("upstream requests = %d, want 2 (target + page 0 fallback)", got)
 	}
 }

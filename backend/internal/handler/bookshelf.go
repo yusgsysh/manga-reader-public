@@ -14,6 +14,12 @@ import (
 	"manga-reader/internal/model"
 )
 
+// galleryRef identifies a gallery by its id/token pair.
+type galleryRef struct {
+	id    int64
+	token string
+}
+
 func (s *Server) handleBookshelfList(c *gin.Context) {
 	pageStr := c.DefaultQuery("page", "0")
 	page, _ := strconv.Atoi(pageStr)
@@ -44,13 +50,28 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 	}
 
 	results := make([]model.BookshelfItem, 0, len(items))
+
+	ids := make([]int64, 0, len(items))
 	for _, b := range items {
-		progress, _ := s.DB.Client.ReadingProgress.Query().
-			Where(
-				readingprogress.GalleryID(b.GalleryID),
-				readingprogress.Token(b.Token),
-			).
-			Only(ctx)
+		ids = append(ids, b.GalleryID)
+	}
+
+	progressByKey := make(map[galleryRef]*ent.ReadingProgress, len(ids))
+	if len(ids) > 0 {
+		progressRows, err := s.DB.Client.ReadingProgress.Query().
+			Where(readingprogress.GalleryIDIn(ids...)).
+			All(ctx)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list reading progress failed: %v", err)})
+			return
+		}
+		for _, p := range progressRows {
+			progressByKey[galleryRef{id: p.GalleryID, token: p.Token}] = p
+		}
+	}
+
+	for _, b := range items {
+		progress := progressByKey[galleryRef{id: b.GalleryID, token: b.Token}]
 
 		item := model.BookshelfItem{
 			ID:        b.GalleryID,

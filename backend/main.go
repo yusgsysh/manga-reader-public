@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -132,6 +137,41 @@ func run() error {
 	if port[0] != ':' {
 		port = ":" + port
 	}
-	logger.Info("listening", "addr", port)
-	return r.Run(port)
+
+	httpServer := &http.Server{
+		Addr:              port,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		// WriteTimeout intentionally unset: ZIP/image streaming can run long.
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		logger.Info("listening", "addr", port)
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+		}
+	}()
+
+	select {
+	case err := <-errCh:
+		srv.StopPrefill()
+		return err
+	case <-ctx.Done():
+		logger.Info("shutdown signal received")
+	}
+
+	srv.StopPrefill()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		logger.Error("graceful shutdown failed", "error", err)
+		return err
+	}
+	return nil
 }

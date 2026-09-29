@@ -206,7 +206,11 @@ func ScrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 		return 0, nil, err
 	}
 
-	u.RawQuery = BuildSearchQuery(keyword, categories, opts).Encode()
+	q := BuildSearchQuery(keyword, categories, opts)
+	if page > 0 {
+		q.Set("page", strconv.Itoa(page))
+	}
+	u.RawQuery = q.Encode()
 
 	doc, err := httpGetDoc(ctx, client, u.String())
 	if err != nil {
@@ -218,35 +222,46 @@ func ScrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 		return 0, nil, fmt.Errorf("no hits found: %s", noHits)
 	}
 
-	foundResults := doc.Find("body > div.ido > div:nth-child(2) > div.searchtext > p").Text()
-	matches := foundReg.FindStringSubmatch(foundResults)
-	if len(matches) == 0 {
-		if foundThousandsReg.MatchString(foundResults) {
-			total = 9999
-		} else {
-			return 0, nil, fmt.Errorf("could not parse result count from: %s", foundResults)
+	total, ok := parseSearchTotal(doc)
+	if !ok && page > 0 {
+		// The result count banner is expected on every page, but fall back to
+		// page 0 (a single extra request) if it is missing so callers still get
+		// a correct total_pages for pagination.
+		firstURL := siteURL
+		if enc := BuildSearchQuery(keyword, categories, opts).Encode(); enc != "" {
+			firstURL += "?" + enc
 		}
-	} else {
-		totalStr := strings.ReplaceAll(matches[1], ",", "")
-		total, _ = strconv.Atoi(totalStr)
+		if firstDoc, ferr := httpGetDoc(ctx, client, firstURL); ferr == nil {
+			total, ok = parseSearchTotal(firstDoc)
+		}
+	}
+	if !ok {
+		return 0, nil, fmt.Errorf("could not parse result count")
 	}
 	if total == 0 {
 		return 0, nil, fmt.Errorf("no results")
 	}
 
-	for range page {
-		nextURL := extractNextURL(doc)
-		if nextURL == "" {
-			return total, nil, nil
-		}
-		doc, err = httpGetDoc(ctx, client, nextURL)
-		if err != nil {
-			return 0, nil, err
-		}
-	}
-
 	results, err = parseSearchResults(doc)
 	return
+}
+
+// parseSearchTotal extracts the total result count from a search results page.
+func parseSearchTotal(doc *goquery.Document) (int, bool) {
+	foundResults := doc.Find("body > div.ido > div:nth-child(2) > div.searchtext > p").Text()
+	matches := foundReg.FindStringSubmatch(foundResults)
+	if len(matches) == 0 {
+		if foundThousandsReg.MatchString(foundResults) {
+			return 9999, true
+		}
+		return 0, false
+	}
+	totalStr := strings.ReplaceAll(matches[1], ",", "")
+	total, err := strconv.Atoi(totalStr)
+	if err != nil {
+		return 0, false
+	}
+	return total, true
 }
 
 func extractNextURL(doc *goquery.Document) string {
@@ -749,7 +764,7 @@ func ProxyImage(ctx context.Context, client *http.Client, imgURL string) (data [
 	return data, contentType, nil
 }
 
-func ScrapeGalleryList(ctx context.Context, client *http.Client, listURL string, page int, opts *SearchOptions) (results []model.SearchResult, err error) {
+func ScrapeGalleryList(ctx context.Context, client *http.Client, listURL string, page int, opts *SearchOptions, supportsPaging bool) (results []model.SearchResult, err error) {
 	u, err := url.Parse(listURL)
 	if err != nil {
 		return nil, err
@@ -764,6 +779,24 @@ func ScrapeGalleryList(ctx context.Context, client *http.Client, listURL string,
 			}
 		}
 		u.RawQuery = existing.Encode()
+	}
+
+	if supportsPaging {
+		// Paged listings accept ?page=N directly, so fetch the target page in a
+		// single upstream request instead of walking "Next" from page 0.
+		q := u.Query()
+		q.Set("page", strconv.Itoa(page))
+		u.RawQuery = q.Encode()
+
+		doc, err := httpGetDoc(ctx, client, u.String())
+		if err != nil {
+			return nil, err
+		}
+		results, err = parseGalleryListResults(doc)
+		if err != nil && err.Error() == "empty gallery list" {
+			return []model.SearchResult{}, nil
+		}
+		return results, err
 	}
 
 	doc, err := httpGetDoc(ctx, client, u.String())

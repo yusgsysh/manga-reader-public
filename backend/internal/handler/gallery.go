@@ -220,7 +220,7 @@ func (s *Server) handlePageImage(c *gin.Context) {
 	c.Data(http.StatusOK, contentType, data)
 }
 
-func (s *Server) handleGalleryList(listURL string) gin.HandlerFunc {
+func (s *Server) handleGalleryList(listURL string, paging bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		pageStr := c.DefaultQuery("page", "0")
 		page, _ := strconv.Atoi(pageStr)
@@ -236,7 +236,7 @@ func (s *Server) handleGalleryList(listURL string) gin.HandlerFunc {
 
 		ctx := c.Request.Context()
 
-		results, err := exhentai.ScrapeGalleryList(ctx, s.Client, listURL, page, opts)
+		results, err := exhentai.ScrapeGalleryList(ctx, s.Client, listURL, page, opts, paging)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery list failed: %v", err)})
 			return
@@ -284,15 +284,15 @@ func (s *Server) handleGalleryList(listURL string) gin.HandlerFunc {
 }
 
 func (s *Server) handleGalleries(c *gin.Context) {
-	s.handleGalleryList(exhentai.ExhentaiURL + "/")(c)
+	s.handleGalleryList(exhentai.ExhentaiURL+"/", true)(c)
 }
 
 func (s *Server) handleWatched(c *gin.Context) {
-	s.handleGalleryList(exhentai.ExhentaiURL + "/watched")(c)
+	s.handleGalleryList(exhentai.ExhentaiURL+"/watched", false)(c)
 }
 
 func (s *Server) handlePopular(c *gin.Context) {
-	s.handleGalleryList(exhentai.ExhentaiURL + "/popular")(c)
+	s.handleGalleryList(exhentai.ExhentaiURL+"/popular", false)(c)
 }
 
 func parseOptionalInt(c *gin.Context, key string) (*int, error) {

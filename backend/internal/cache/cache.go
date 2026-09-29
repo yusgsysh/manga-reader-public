@@ -1,15 +1,16 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -112,7 +113,7 @@ func (c *MinIOCache) ensureBucket(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("minio make bucket failed: %w", err)
 	}
-		slog.Info("minio bucket created", "bucket", c.bucket)
+	slog.Info("minio bucket created", "bucket", c.bucket)
 	return nil
 }
 
@@ -125,7 +126,8 @@ func IsNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-	if minioErr, ok := err.(minio.ErrorResponse); ok {
+	var minioErr minio.ErrorResponse
+	if errors.As(err, &minioErr) {
 		return minioErr.Code == "NoSuchKey" || minioErr.Code == "NoSuchBucket" || minioErr.Code == "NotFound"
 	}
 	return false
@@ -152,7 +154,7 @@ func (c *MinIOCache) Get(ctx context.Context, key string) (data []byte, contentT
 }
 
 func (c *MinIOCache) Put(ctx context.Context, key string, data []byte, contentType string, cacheControl string) error {
-	reader := strings.NewReader(string(data))
+	reader := bytes.NewReader(data)
 	_, err := c.client.PutObject(ctx, c.bucket, key, reader, int64(len(data)), minio.PutObjectOptions{
 		ContentType:  contentType,
 		CacheControl: cacheControl,
@@ -164,7 +166,7 @@ func (c *MinIOCache) Put(ctx context.Context, key string, data []byte, contentTy
 }
 
 func (c *MinIOCache) PutWithMeta(ctx context.Context, key string, data []byte, contentType string, meta map[string]string, cacheControl string) error {
-	reader := strings.NewReader(string(data))
+	reader := bytes.NewReader(data)
 	_, err := c.client.PutObject(ctx, c.bucket, key, reader, int64(len(data)), minio.PutObjectOptions{
 		ContentType:  contentType,
 		CacheControl: cacheControl,
@@ -178,4 +180,19 @@ func (c *MinIOCache) PutWithMeta(ctx context.Context, key string, data []byte, c
 
 func (c *MinIOCache) Head(ctx context.Context, key string) (minio.ObjectInfo, error) {
 	return c.client.StatObject(ctx, c.bucket, key, minio.StatObjectOptions{})
+}
+
+// Open returns a streamable handle to the cached object together with its
+// metadata. The caller is responsible for closing the returned reader.
+func (c *MinIOCache) Open(ctx context.Context, key string) (io.ReadCloser, minio.ObjectInfo, error) {
+	obj, err := c.client.GetObject(ctx, c.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, minio.ObjectInfo{}, fmt.Errorf("minio get object: %w", err)
+	}
+	info, err := obj.Stat()
+	if err != nil {
+		obj.Close()
+		return nil, minio.ObjectInfo{}, fmt.Errorf("minio stat object: %w", err)
+	}
+	return obj, info, nil
 }

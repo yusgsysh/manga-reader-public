@@ -59,6 +59,8 @@ type prefillManager struct {
 	runs map[int]*prefillRun
 	wake chan struct{}
 	stop chan struct{}
+	// stopOnce guards closing stop so shutdown is idempotent.
+	stopOnce sync.Once
 }
 
 func (m *prefillManager) signal() {
@@ -78,11 +80,32 @@ func (s *Server) ensurePrefill() *prefillManager {
 			wake: make(chan struct{}, 1),
 			stop: make(chan struct{}),
 		}
+		s.prefillMu.Lock()
 		s.prefillMgr = m
+		s.prefillMu.Unlock()
 		go m.worker(s)
 		m.recoverPending(s)
 	})
 	return s.prefillMgr
+}
+
+// StopPrefill cancels active runs and stops the worker goroutine. It is safe to
+// call multiple times and when the manager was never started.
+func (s *Server) StopPrefill() {
+	s.prefillMu.Lock()
+	m := s.prefillMgr
+	s.prefillMu.Unlock()
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	for _, run := range m.runs {
+		if run.cancel != nil {
+			run.cancel()
+		}
+	}
+	m.mu.Unlock()
+	m.stopOnce.Do(func() { close(m.stop) })
 }
 
 func (m *prefillManager) recoverPending(s *Server) {
@@ -173,9 +196,9 @@ func (m *prefillManager) nextQueued(s *Server) (int, bool) {
 				}
 				return row.ID, true
 			}
-		lastErr = err
-		slog.Warn("prefill claim attempt failed", "attempt", attempt+1, "job_id", row.ID, "error", err)
-		time.Sleep(50 * time.Millisecond)
+			lastErr = err
+			slog.Warn("prefill claim attempt failed", "attempt", attempt+1, "job_id", row.ID, "error", err)
+			time.Sleep(50 * time.Millisecond)
 		}
 		slog.Error("prefill claim failed after retries", "job_id", row.ID, "error", lastErr)
 		return 0, false

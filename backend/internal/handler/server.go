@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"sync"
 
@@ -18,12 +19,19 @@ type ImageCache interface {
 	PutWithMeta(ctx context.Context, key string, data []byte, contentType string, meta map[string]string, cacheControl string) error
 }
 
+// streamCache is implemented by caches that can serve objects without buffering
+// them fully in memory. Handlers type-assert the configured cache against it.
+type streamCache interface {
+	Open(ctx context.Context, key string) (io.ReadCloser, minio.ObjectInfo, error)
+}
+
 type Server struct {
 	Client *http.Client
 	DB     *database.DB
 	Cache  ImageCache
 
 	prefillOnce sync.Once
+	prefillMu   sync.Mutex
 	prefillMgr  *prefillManager
 }
 
