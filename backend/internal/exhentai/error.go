@@ -3,6 +3,8 @@ package exhentai
 import (
 	"errors"
 	"fmt"
+
+apperrors "manga-reader/internal/errors"
 )
 
 var (
@@ -61,4 +63,35 @@ func IsPermanentUpstreamError(err error) bool {
 		}
 	}
 	return false
+}
+
+// ToAppError converts an exhentai error to an AppError with appropriate code.
+func ToAppError(err error) *apperrors.AppError {
+	if err == nil {
+		return nil
+	}
+
+	var appErr *apperrors.AppError
+	if errors.As(err, &appErr) {
+		return appErr
+	}
+
+	switch {
+	case errors.Is(err, ErrIPBanned):
+		return apperrors.Wrap(apperrors.CodeForbidden, "IP banned", err)
+	case errors.Is(err, ErrSadPanda):
+		return apperrors.Wrap(apperrors.CodeServiceUnavailable, "sad panda", err)
+	case errors.Is(err, ErrNoMetadata):
+		return apperrors.Wrap(apperrors.CodeNotFound, "no metadata", err)
+	case errors.Is(err, ErrImageTooLarge):
+		return apperrors.Wrap(apperrors.CodeInvalidInput, "image too large", err)
+	case HTTPStatusError(err):
+		code := HTTPStatusCode(err)
+		if code >= 500 {
+			return apperrors.Wrap(apperrors.CodeUpstreamError, "upstream server error", err)
+		}
+		return apperrors.Wrap(apperrors.CodeUpstreamError, "upstream client error", err)
+	default:
+		return apperrors.Wrap(apperrors.CodeInternalError, "internal error", err)
+	}
 }
