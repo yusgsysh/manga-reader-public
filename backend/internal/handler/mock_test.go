@@ -1166,7 +1166,7 @@ func TestMockGalleryList_Success(t *testing.T) {
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/gallerys", nil)
+	req := httptest.NewRequest("GET", "/api/galleries", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -1288,12 +1288,12 @@ func TestMockGalleryList_Empty(t *testing.T) {
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/gallerys", nil)
+	req := httptest.NewRequest("GET", "/api/galleries", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
 	var resp struct {
@@ -1314,7 +1314,7 @@ func TestMockGalleryList_ScrapeFailure(t *testing.T) {
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/gallerys", nil)
+	req := httptest.NewRequest("GET", "/api/galleries", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -1323,7 +1323,7 @@ func TestMockGalleryList_ScrapeFailure(t *testing.T) {
 	}
 }
 
-// ==================== Watched/Gallerys Advanced Search Tests ====================
+// ==================== Watched/Galleries Advanced Search Tests ====================
 
 func TestMockWatched_AdvancedSearchParams(t *testing.T) {
 	var requestedURL string
@@ -1425,7 +1425,7 @@ func TestMockWatched_InvalidParams(t *testing.T) {
 	}
 }
 
-func TestMockGallerys_AdvancedSearchParams(t *testing.T) {
+func TestMockGalleries_AdvancedSearchParams(t *testing.T) {
 	var requestedURL string
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		requestedURL = r.URL.String()
@@ -1437,7 +1437,7 @@ func TestMockGallerys_AdvancedSearchParams(t *testing.T) {
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/gallerys?include_expunged=true&search_name=true", nil)
+	req := httptest.NewRequest("GET", "/api/galleries?include_expunged=true&search_name=true", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

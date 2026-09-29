@@ -283,7 +283,7 @@ func (s *Server) handleGalleryList(listURL string) gin.HandlerFunc {
 	}
 }
 
-func (s *Server) handleGallerys(c *gin.Context) {
+func (s *Server) handleGalleries(c *gin.Context) {
 	s.handleGalleryList(exhentai.ExhentaiURL + "/")(c)
 }
 

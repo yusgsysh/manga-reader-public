@@ -261,7 +261,7 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 
 ### 6. Homepage Gallery List
 
-`GET /api/gallerys`
+`GET /api/galleries`
 
 **Query Parameters:**
 
@@ -336,7 +336,7 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 
 **Response (200):**
 
-与 `/api/gallerys` 格式相同。
+与 `/api/galleries` 格式相同。
 
 > **注意**: 如果未设置关注标签，返回空列表。ExHentai 的 watched 页面不支持翻页，`page > 0` 始终返回空。
 
@@ -356,7 +356,7 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 
 **Response (200):**
 
-与 `/api/gallerys` 格式相同。
+与 `/api/galleries` 格式相同。
 
 > **注意**: ExHentai 的 popular 页面不支持翻页，只有第一页有数据，`page > 0` 始终返回空。
 

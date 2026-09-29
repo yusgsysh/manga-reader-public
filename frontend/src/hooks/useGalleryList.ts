@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchGallerys, fetchWatched, fetchPopular } from "../api/gallery";
+import { fetchGalleries, fetchWatched, fetchPopular } from "../api/gallery";
 import type { AdvancedSearchOptions } from "../types/gallery";
 
-export function useGallerys(page: number, filters?: AdvancedSearchOptions) {
+export function useGalleries(page: number, filters?: AdvancedSearchOptions) {
   return useQuery({
     queryKey: ["home", page, filters],
-    queryFn: () => fetchGallerys(page, filters),
+    queryFn: () => fetchGalleries(page, filters),
   });
 }
 

@@ -47,7 +47,7 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 	r.GET("/api/gallery/:id/:token/pages", s.handleGalleryPages)
 	r.GET("/api/search", s.handleSearch)
 	r.GET("/api/page-image", s.handlePageImage)
-	r.GET("/api/gallerys", s.handleGallerys)
+	r.GET("/api/galleries", s.handleGalleries)
 	r.GET("/api/watched", s.handleWatched)
 	r.GET("/api/popular", s.handlePopular)
 

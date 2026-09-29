@@ -29,11 +29,11 @@ function advancedToParams(filters?: AdvancedSearchOptions) {
   };
 }
 
-export function fetchGallerys(
+export function fetchGalleries(
   page: number,
   filters?: AdvancedSearchOptions,
 ): Promise<GalleryListResponse> {
-  return apiGet<GalleryListResponse>("/api/gallerys", {
+  return apiGet<GalleryListResponse>("/api/galleries", {
     page,
     ...advancedToParams(filters),
   });

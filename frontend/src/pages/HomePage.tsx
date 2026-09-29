@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useGallerys } from "../hooks/useGalleryList";
+import { useGalleries } from "../hooks/useGalleryList";
 import { GalleryGrid } from "../components/gallery/GalleryGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { SimplePagination } from "../components/common/SimplePagination";
@@ -8,7 +8,7 @@ import { EmptyState } from "../components/common/EmptyState";
 
 export function HomePage() {
   const [page, setPage] = useState(0);
-  const { data, isLoading, error, refetch } = useGallerys(page);
+  const { data, isLoading, error, refetch } = useGalleries(page);
 
   if (isLoading) {
     return <GalleryGridSkeleton />;

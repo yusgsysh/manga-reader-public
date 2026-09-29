@@ -36,12 +36,12 @@ http {
         # ========================================================
         # Homepage Gallery List
         #
-        # GET /api/gallerys?page=0
+        # GET /api/galleries?page=0
         #
         # Cache: 5 minutes
         # ========================================================
 
-        location = /api/gallerys {
+        location = /api/galleries {
             proxy_pass http://${ANGIE_BACKEND_URL};
 
             proxy_set_header Host $host;
@@ -138,7 +138,7 @@ http {
         #
         # GET /api/gallery/:id/:token
         #
-        # Cache: 60 minutes
+        # Cache: 1 day
         # ========================================================
 
         location ~ ^/api/gallery/[0-9]+/[^/]+$ {
@@ -151,7 +151,7 @@ http {
 
             proxy_cache api_cache;
             proxy_cache_methods GET HEAD;
-            proxy_cache_valid 200 60m;
+            proxy_cache_valid 200 1d;
 
             add_header X-Cache-Status $upstream_cache_status always;
 
@@ -163,7 +163,7 @@ http {
         #
         # GET /api/gallery/:id/:token/details
         #
-        # Cache: 60 minutes
+        # Cache: 1 day
         # ========================================================
 
         location ~ ^/api/gallery/[0-9]+/[^/]+/details$ {
@@ -176,7 +176,7 @@ http {
 
             proxy_cache api_cache;
             proxy_cache_methods GET HEAD;
-            proxy_cache_valid 200 60m;
+            proxy_cache_valid 200 1d;
 
             add_header X-Cache-Status $upstream_cache_status always;
 
@@ -188,7 +188,7 @@ http {
         #
         # GET /api/gallery/:id/:token/pages
         #
-        # Cache: 60 minutes
+        # Cache: 1 day
         # ========================================================
 
         location ~ ^/api/gallery/[0-9]+/[^/]+/pages$ {
@@ -201,7 +201,7 @@ http {
 
             proxy_cache api_cache;
             proxy_cache_methods GET HEAD;
-            proxy_cache_valid 200 60m;
+            proxy_cache_valid 200 1d;
 
             add_header X-Cache-Status $upstream_cache_status always;
 
