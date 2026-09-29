@@ -4,82 +4,38 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
-	"os"
-	"strings"
 	"time"
+
+	"manga-reader/internal/config"
 )
 
 const ExhentaiBase = "https://exhentai.org"
 
 // CookieConfig stores cookie configuration.
-type CookieConfig struct {
-	IpbMemberID string
-	IpbPassHash string
-	Igneous     string
-	SK          string
-}
+type CookieConfig = config.CookieConfig
 
 // LoadCookieConfig loads cookie configuration from environment variables.
+// Deprecated: use config.Load() instead.
 func LoadCookieConfig() *CookieConfig {
-	cfg := &CookieConfig{}
-
-	if cookieStr := os.Getenv("EHENTAI_COOKIE"); cookieStr != "" {
-		cfg.parseCookieString(cookieStr)
+	cfg, err := config.Load()
+	if err != nil {
+		return &CookieConfig{}
 	}
-
-	if v := os.Getenv("EHENTAI_COOKIE_IPB_MEMBER_ID"); v != "" {
-		cfg.IpbMemberID = v
-	}
-	if v := os.Getenv("EHENTAI_COOKIE_IPB_PASS_HASH"); v != "" {
-		cfg.IpbPassHash = v
-	}
-	if v := os.Getenv("EHENTAI_COOKIE_IGNEOUS"); v != "" {
-		cfg.Igneous = v
-	}
-	if v := os.Getenv("EHENTAI_COOKIE_SK"); v != "" {
-		cfg.SK = v
-	}
-
-	return cfg
-}
-
-func (c *CookieConfig) parseCookieString(s string) {
-	pairs := strings.SplitSeq(s, ";")
-	for pair := range pairs {
-		pair = strings.TrimSpace(pair)
-		if pair == "" {
-			continue
-		}
-		parts := strings.SplitN(pair, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-		switch key {
-		case "ipb_member_id":
-			c.IpbMemberID = value
-		case "ipb_pass_hash":
-			c.IpbPassHash = value
-		case "igneous":
-			c.Igneous = value
-		case "sk":
-			c.SK = value
-		}
-	}
+	return &cfg.Cookie
 }
 
 // IsValid checks whether the required cookies are present.
-func (c *CookieConfig) IsValid() bool {
+func IsValidCookieConfig(c *CookieConfig) bool {
 	return c.IpbMemberID != "" && c.IpbPassHash != ""
 }
 
 // CreateHTTPClient creates an HTTP client with ExHentai cookies.
 func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
-	if !cfg.IsValid() {
+	if !IsValidCookieConfig(cfg) {
 		return nil, fmt.Errorf("missing required cookies: ipb_member_id and ipb_pass_hash")
 	}
 
@@ -103,6 +59,17 @@ func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.ResponseHeaderTimeout = 30 * time.Second
+	transport.MaxIdleConns = 100
+	transport.MaxIdleConnsPerHost = 10
+	transport.MaxConnsPerHost = 50
+	transport.IdleConnTimeout = 90 * time.Second
+	transport.ForceAttemptHTTP2 = true
+
+	slog.Debug("http client created",
+		"max_idle_conns", transport.MaxIdleConns,
+		"max_idle_conns_per_host", transport.MaxIdleConnsPerHost,
+		"max_conns_per_host", transport.MaxConnsPerHost,
+	)
 
 	return &http.Client{
 		Jar:       jar,

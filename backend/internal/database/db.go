@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,7 +37,8 @@ func NewDB(dataSourceName string) (*DB, error) {
 	} else {
 		dsn += "?"
 	}
-	dsn += "_pragma=journal_mode=wal&_pragma=foreign_keys=on&_pragma=busy_timeout=5000"
+	dsn += "_pragma=journal_mode=wal&_pragma=foreign_keys=on&_pragma=busy_timeout=5000" +
+		"&_pragma=synchronous=NORMAL&_pragma=cache_size=-64000&_pragma=temp_store=MEMORY"
 
 	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
@@ -62,7 +63,7 @@ func NewDB(dataSourceName string) (*DB, error) {
 		return nil, fmt.Errorf("backfill prefill total: %w", err)
 	}
 
-	log.Printf("database initialized: %s", dataSourceName)
+	slog.Info("database initialized", "path", dataSourceName)
 	return &DB{Client: client}, nil
 }
 
