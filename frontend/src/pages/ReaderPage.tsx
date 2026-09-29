@@ -90,7 +90,7 @@ export function ReaderPage() {
     return clampPageIndex(progressQuery.data?.current_page ?? 0, total);
   }, [total, restart, progressQuery.data?.current_page]);
 
-  const { currentPage, onPageChange } = useReadingProgressSync(
+  const { currentPage, onPageChange, flushProgress } = useReadingProgressSync(
     id,
     token ?? "",
     total,
@@ -153,7 +153,13 @@ export function ReaderPage() {
     return (
       <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-kumo-base">
         <p className="text-sm text-kumo-subtle">没有可用的页面</p>
-        <Button variant="secondary" onClick={() => navigate(-1)}>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            flushProgress();
+            navigate(-1);
+          }}
+        >
           <ArrowLeft className="mr-1 size-4" />
           返回
         </Button>
@@ -171,11 +177,14 @@ export function ReaderPage() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() =>
-            navigationType === "PUSH"
-              ? navigate(-1)
-              : navigate(`/gallery/${id}/${token}`)
-          }
+          onClick={() => {
+            flushProgress();
+            if (navigationType === "PUSH") {
+              navigate(-1);
+            } else {
+              navigate(`/gallery/${id}/${token}`);
+            }
+          }}
           aria-label="返回 Gallery"
         >
           <ArrowLeft className="size-4" />

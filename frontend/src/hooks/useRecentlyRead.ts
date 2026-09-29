@@ -3,6 +3,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { fetchRecentlyRead } from "../api/recentlyRead";
 import { fetchGallery } from "../api/gallery";
 import { cleanupReadingProgress } from "../api/progress";
+import { whenProgressSavesSettled } from "../lib/progressSave";
 import type { Gallery } from "../types/reader";
 import type { RecentlyReadItem } from "../types/recentlyRead";
 
@@ -15,7 +16,10 @@ const RECENTLY_READ_STALE_TIME = 2 * 60_000;
 export function useRecentlyRead() {
   const listQuery = useQuery({
     queryKey: ["recently-read"],
-    queryFn: fetchRecentlyRead,
+    queryFn: async () => {
+      await whenProgressSavesSettled();
+      return fetchRecentlyRead();
+    },
     staleTime: RECENTLY_READ_STALE_TIME,
   });
 
