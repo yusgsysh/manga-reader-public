@@ -1,9 +1,38 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { updateReadingProgress } from "../api/progress";
 import { calculateProgress, clampPageIndex } from "../lib/reader";
 import { useUpdateReadingProgress } from "./useReaderData";
 
 const SAVE_DEBOUNCE_MS = 800;
+
+type ReaderState = {
+  currentPage: number;
+  latestPage: number;
+  navigated: boolean;
+  total: number;
+};
+
+type ReaderAction =
+  | { type: "SET_TOTAL"; total: number }
+  | { type: "SET_INITIAL_PAGE"; page: number }
+  | { type: "NAVIGATE_TO"; page: number };
+
+function readerReducer(state: ReaderState, action: ReaderAction): ReaderState {
+  switch (action.type) {
+    case "SET_TOTAL":
+      return { ...state, total: action.total };
+    case "SET_INITIAL_PAGE":
+      if (state.navigated) return state;
+      return { ...state, currentPage: action.page, latestPage: action.page };
+    case "NAVIGATE_TO":
+      return {
+        ...state,
+        currentPage: action.page,
+        latestPage: action.page,
+        navigated: true,
+      };
+  }
+}
 
 export function useReadingProgressSync(
   id: number,
@@ -12,64 +41,59 @@ export function useReadingProgressSync(
   initialPage: number,
 ) {
   const mutation = useUpdateReadingProgress(id, token);
-  const [currentPage, setCurrentPage] = useState(initialPage);
+  const [state, dispatch] = useReducer(readerReducer, {
+    currentPage: initialPage,
+    latestPage: initialPage,
+    navigated: false,
+    total,
+  });
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestPageRef = useRef(initialPage);
-  const navigatedRef = useRef(false);
-  const totalRef = useRef(total);
 
   useEffect(() => {
-    totalRef.current = total;
+    dispatch({ type: "SET_TOTAL", total });
   }, [total]);
 
-  // Keep the restored page in sync while the reader data is still loading.
   useEffect(() => {
-    if (!navigatedRef.current) {
-      latestPageRef.current = initialPage;
-      setCurrentPage(initialPage);
-    }
+    dispatch({ type: "SET_INITIAL_PAGE", page: initialPage });
   }, [initialPage]);
 
-  const buildBody = useCallback((page: number) => {
-    const clamped = clampPageIndex(page, totalRef.current);
-    const { progress, completed } = calculateProgress(
-      clamped,
-      totalRef.current,
-    );
-    return { current_page: clamped, progress, completed };
-  }, []);
+  const buildBody = useCallback(
+    (page: number) => {
+      const clamped = clampPageIndex(page, state.total);
+      const { progress, completed } = calculateProgress(clamped, state.total);
+      return { current_page: clamped, progress, completed };
+    },
+    [state.total],
+  );
 
   const onPageChange = useCallback(
     (pageIndex: number) => {
-      navigatedRef.current = true;
-      latestPageRef.current = pageIndex;
-      setCurrentPage(pageIndex);
+      dispatch({ type: "NAVIGATE_TO", page: pageIndex });
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
         timerRef.current = null;
-        mutation.mutate(buildBody(latestPageRef.current));
+        mutation.mutate(buildBody(state.latestPage));
       }, SAVE_DEBOUNCE_MS);
     },
-    [mutation, buildBody],
+    [mutation, buildBody, state.latestPage],
   );
 
-  // Flush the latest progress when leaving the reader.
   useEffect(() => {
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
-      updateReadingProgress(id, token, buildBody(latestPageRef.current)).catch(
+      updateReadingProgress(id, token, buildBody(state.latestPage)).catch(
         () => {
           // Progress save failure must not block reading.
         },
       );
     };
-  }, [id, token, buildBody]);
+  }, [id, token, buildBody, state.latestPage]);
 
   return {
-    currentPage,
+    currentPage: state.currentPage,
     onPageChange,
     isSaving: mutation.isPending,
   };
