@@ -54,6 +54,9 @@ func IsCode(err error, code ErrorCode) bool {
 }
 
 func GetCode(err error) ErrorCode {
+	if err == nil {
+		return ""
+	}
 	var appErr *AppError
 	if errors.As(err, &appErr) {
 		return appErr.Code
@@ -62,6 +65,9 @@ func GetCode(err error) ErrorCode {
 }
 
 func GetMessage(err error) string {
+	if err == nil {
+		return ""
+	}
 	var appErr *AppError
 	if errors.As(err, &appErr) {
 		return appErr.Message
