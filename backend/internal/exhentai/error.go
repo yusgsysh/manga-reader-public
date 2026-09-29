@@ -84,13 +84,23 @@ func ToAppError(err error) *apperrors.AppError {
 	case errors.Is(err, ErrNoMetadata):
 		return apperrors.Wrap(apperrors.CodeNotFound, "no metadata", err)
 	case errors.Is(err, ErrImageTooLarge):
-		return apperrors.Wrap(apperrors.CodeInvalidInput, "image too large", err)
+		return apperrors.Wrap(apperrors.CodeUpstreamError, "image too large", err)
 	case HTTPStatusError(err):
 		code := HTTPStatusCode(err)
-		if code >= 500 {
+		switch {
+		case code == 404:
+			return apperrors.Wrap(apperrors.CodeNotFound, "resource not found", err)
+		case code == 401:
+			return apperrors.Wrap(apperrors.CodeUnauthorized, "unauthorized", err)
+		case code == 403:
+			return apperrors.Wrap(apperrors.CodeForbidden, "forbidden", err)
+		case code == 429:
+			return apperrors.Wrap(apperrors.CodeServiceUnavailable, "rate limited", err)
+		case code >= 500:
 			return apperrors.Wrap(apperrors.CodeUpstreamError, "upstream server error", err)
+		default:
+			return apperrors.Wrap(apperrors.CodeUpstreamError, "upstream client error", err)
 		}
-		return apperrors.Wrap(apperrors.CodeUpstreamError, "upstream client error", err)
 	default:
 		return apperrors.Wrap(apperrors.CodeInternalError, "internal error", err)
 	}
