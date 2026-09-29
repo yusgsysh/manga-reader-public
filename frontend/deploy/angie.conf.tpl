@@ -1,4 +1,14 @@
 # angie.conf.tpl
+#
+# Rendered at container start by deploy/docker-entrypoint.sh:
+#   envsubst '${ANGIE_BACKEND_URL}' < angie.conf.tpl > angie.conf
+#
+# Optimizations vs. the previous revision:
+#   - one `upstream` block with keepalive (connection reuse to the backend)
+#   - shared proxy headers / timeouts declared once at server level
+#   - locations grouped (5m list cache, 1d gallery cache, streamed image endpoints)
+#   - gzip, immutable caching for hashed /assets, no-store for index.html
+#   - cache stampede lock + stale-while-revalidate
 
 user angie;
 worker_processes auto;
@@ -13,7 +23,72 @@ http {
     include /etc/angie/mime.types;
     default_type application/octet-stream;
 
+    access_log /dev/stdout;
+    server_tokens off;
+
     sendfile on;
+    sendfile_max_chunk 1m;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+
+    open_file_cache max=1000 inactive=20s;
+    open_file_cache_valid 30s;
+    open_file_cache_min_uses 2;
+    open_file_cache_errors on;
+
+    # ============================================================
+    # Compression (gzip + brotli + zstd, negotiated via
+    # Accept-Encoding; whichever filter runs first wins)
+    # ============================================================
+
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_min_length 1024;
+    gzip_types
+        text/plain
+        text/css
+        text/javascript
+        application/javascript
+        application/json
+        application/xml
+        image/svg+xml;
+
+    brotli on;
+    brotli_comp_level 5;
+    brotli_min_length 1024;
+    brotli_types
+        text/plain
+        text/css
+        text/javascript
+        application/javascript
+        application/json
+        application/xml
+        image/svg+xml;
+
+    zstd on;
+    zstd_comp_level 5;
+    zstd_min_length 1024;
+    zstd_types
+        text/plain
+        text/css
+        text/javascript
+        application/javascript
+        application/json
+        application/xml
+        image/svg+xml;
+
+    # ============================================================
+    # Backend upstream (keepalive connection pool)
+    # ============================================================
+
+    upstream backend {
+        server ${ANGIE_BACKEND_URL};
+        keepalive 32;
+    }
 
     # ============================================================
     # API Cache
@@ -34,445 +109,110 @@ http {
         index index.html;
 
         # ========================================================
-        # Homepage Gallery List
-        #
-        # GET /api/galleries?page=0
-        #
-        # Cache: 5 minutes
+        # Shared proxy defaults, inherited by every location that
+        # proxies. A location only overrides what it needs.
         # ========================================================
 
-        location = /api/galleries {
-            proxy_pass http://${ANGIE_BACKEND_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
 
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+
+        # Default: no caching. Cached locations opt in explicitly.
+        proxy_cache off;
+
+        # Cache stampede protection + stale-while-revalidate.
+        proxy_cache_lock on;
+        proxy_cache_background_update on;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+
+        # ========================================================
+        # Cached: list endpoints (5 minutes)
+        #
+        # GET /api/galleries | /api/search | /api/popular | /api/watched
+        # ========================================================
+
+        location ~ ^/api/(galleries|search|popular|watched)$ {
+            proxy_pass http://backend;
 
             proxy_cache api_cache;
-            proxy_cache_methods GET HEAD;
             proxy_cache_valid 200 5m;
 
             add_header X-Cache-Status $upstream_cache_status always;
-
-            proxy_read_timeout 60s;
         }
 
         # ========================================================
-        # Search
+        # Cached: gallery detail / scraped details / pages (1 day)
         #
-        # GET /api/search?q=xxx&page=0
-        #
-        # Cache: 5 minutes
+        # GET /api/gallery/:id/:token[/details|/pages]
         # ========================================================
 
-        location = /api/search {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
+        location /api/gallery/ {
+            proxy_pass http://backend;
 
             proxy_cache api_cache;
-            proxy_cache_methods GET HEAD;
-            proxy_cache_valid 200 5m;
-
-            add_header X-Cache-Status $upstream_cache_status always;
-
-            proxy_read_timeout 60s;
-        }
-
-        # ========================================================
-        # Popular
-        #
-        # GET /api/popular?page=0
-        #
-        # Cache: 5 minutes
-        # ========================================================
-
-        location = /api/popular {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_cache api_cache;
-            proxy_cache_methods GET HEAD;
-            proxy_cache_valid 200 5m;
-
-            add_header X-Cache-Status $upstream_cache_status always;
-
-            proxy_read_timeout 60s;
-        }
-
-        # ========================================================
-        # Watched / Subscription
-        #
-        # GET /api/watched?page=0
-        #
-        # Cache: 5 minutes
-        # ========================================================
-
-        location = /api/watched {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_cache api_cache;
-            proxy_cache_methods GET HEAD;
-            proxy_cache_valid 200 5m;
-
-            add_header X-Cache-Status $upstream_cache_status always;
-
-            proxy_read_timeout 60s;
-        }
-
-        # ========================================================
-        # Gallery Detail
-        #
-        # GET /api/gallery/:id/:token
-        #
-        # Cache: 1 day
-        # ========================================================
-
-        location ~ ^/api/gallery/[0-9]+/[^/]+$ {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_cache api_cache;
-            proxy_cache_methods GET HEAD;
             proxy_cache_valid 200 1d;
 
             add_header X-Cache-Status $upstream_cache_status always;
-
-            proxy_read_timeout 60s;
         }
 
         # ========================================================
-        # Gallery Details (Scraped)
+        # Streamed image proxies (Angie does not cache; backend uses MinIO)
         #
-        # GET /api/gallery/:id/:token/details
-        #
-        # Cache: 1 day
+        # GET /api/thumbnail | /api/cached-thumbnail
+        #     | /api/cached-image | /api/page-image
         # ========================================================
 
-        location ~ ^/api/gallery/[0-9]+/[^/]+/details$ {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_cache api_cache;
-            proxy_cache_methods GET HEAD;
-            proxy_cache_valid 200 1d;
-
-            add_header X-Cache-Status $upstream_cache_status always;
-
-            proxy_read_timeout 60s;
-        }
-
-        # ========================================================
-        # Gallery Pages
-        #
-        # GET /api/gallery/:id/:token/pages
-        #
-        # Cache: 1 day
-        # ========================================================
-
-        location ~ ^/api/gallery/[0-9]+/[^/]+/pages$ {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_cache api_cache;
-            proxy_cache_methods GET HEAD;
-            proxy_cache_valid 200 1d;
-
-            add_header X-Cache-Status $upstream_cache_status always;
-
-            proxy_read_timeout 60s;
-        }
-
-        # ========================================================
-        # Thumbnail
-        #
-        # GET /api/thumbnail?url=...
-        #
-        # 不使用 Angie Cache
-        # ========================================================
-
-        location = /api/thumbnail {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_no_cache 1;
-            proxy_cache_bypass 1;
+        location ~ ^/api/(thumbnail|cached-thumbnail|cached-image|page-image)$ {
+            proxy_pass http://backend;
 
             proxy_buffering off;
-
-            proxy_read_timeout 60s;
-            proxy_send_timeout 60s;
-        }
-
-        # ========================================================
-        # Cached Thumbnail
-        #
-        # GET /api/cached-thumbnail?url=...
-        #
-        # Angie 不缓存
-        # Backend -> MinIO
-        # ========================================================
-
-        location = /api/cached-thumbnail {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_no_cache 1;
-            proxy_cache_bypass 1;
-
-            proxy_buffering off;
-
-            proxy_read_timeout 60s;
-            proxy_send_timeout 60s;
-        }
-
-        # ========================================================
-        # Cached Image
-        #
-        # GET /api/cached-image?url=...
-        #
-        # Angie 不缓存
-        # Backend -> MinIO
-        # ========================================================
-
-        location = /api/cached-image {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_no_cache 1;
-            proxy_cache_bypass 1;
-
-            proxy_buffering off;
-
             proxy_read_timeout 120s;
             proxy_send_timeout 120s;
         }
 
         # ========================================================
-        # Page Image
+        # Prefill download tasks (streaming ZIP; slow backfills)
         #
-        # GET /api/page-image?url=...
-        #
-        # 不缓存
-        # ========================================================
-
-        location = /api/page-image {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_no_cache 1;
-            proxy_cache_bypass 1;
-
-            proxy_buffering off;
-
-            proxy_read_timeout 120s;
-            proxy_send_timeout 120s;
-        }
-
-        # ========================================================
-        # Bookshelf
-        #
-        # GET    /api/bookshelf
-        # POST   /api/bookshelf/:id/:token
-        # DELETE /api/bookshelf/:id/:token
-        # GET    /api/bookshelf/:id/:token/status
-        #
-        # 不缓存
-        # ========================================================
-
-        location /api/bookshelf {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_no_cache 1;
-            proxy_cache_bypass 1;
-
-            proxy_read_timeout 60s;
-            proxy_send_timeout 60s;
-        }
-
-        # ========================================================
-        # Reading Progress
-        #
-        # GET /api/progress/:id/:token
-        # PUT /api/progress/:id/:token
-        #
-        # 不缓存
-        # ========================================================
-
-        location /api/progress {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_no_cache 1;
-            proxy_cache_bypass 1;
-
-            proxy_read_timeout 60s;
-            proxy_send_timeout 60s;
-        }
-
-        # ========================================================
-        # Recently Read
-        #
-        # GET /api/recently-read
-        #
-        # 不缓存
-        # ========================================================
-
-        location = /api/recently-read {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_no_cache 1;
-            proxy_cache_bypass 1;
-
-            proxy_read_timeout 60s;
-            proxy_send_timeout 60s;
-        }
-
-        # ========================================================
-        # Reading Progress Cleanup
-        #
-        # POST /api/reading-progress/cleanup?days=30
-        #
-        # 不缓存
-        # ========================================================
-
-        location = /api/reading-progress/cleanup {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_no_cache 1;
-            proxy_cache_bypass 1;
-
-            proxy_read_timeout 60s;
-            proxy_send_timeout 60s;
-        }
-
-        # ========================================================
-        # Prefill Download Tasks
-        #
-        # POST   /api/prefill
-        # GET    /api/prefill
-        # GET    /api/prefill/:id
-        # POST   /api/prefill/:id/cancel
-        # DELETE /api/prefill/:id
-        # POST   /api/prefill/cleanup
-        # GET    /api/prefill/:id/zip   (streaming ZIP)
-        #
-        # 不缓存；ZIP 为流式响应，关闭缓冲；大画廊补抓可能较慢，超时 600s
+        # /api/prefill/*
         # ========================================================
 
         location /api/prefill {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_no_cache 1;
-            proxy_cache_bypass 1;
+            proxy_pass http://backend;
 
             proxy_buffering off;
-
             proxy_read_timeout 600s;
             proxy_send_timeout 600s;
         }
 
         # ========================================================
-        # Other API
+        # All other API endpoints: pass through, never cached.
         #
-        # 默认不缓存
-        #
-        # 防止以后新增 API 时意外被缓存
+        # /api/bookshelf, /api/progress, /api/recently-read,
+        # /api/reading-progress/cleanup, ...
         # ========================================================
 
         location /api/ {
-            proxy_pass http://${ANGIE_BACKEND_URL};
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            proxy_no_cache 1;
-            proxy_cache_bypass 1;
+            proxy_pass http://backend;
 
             proxy_buffering off;
-
-            proxy_read_timeout 60s;
-            proxy_send_timeout 60s;
         }
 
         # ========================================================
-        # EhTagTranslation
+        # EhTagTranslation dictionary
         # ========================================================
 
         location = /db.text.js {
-            expires 1d;
-            add_header Cache-Control "public";
+            add_header Cache-Control "public, max-age=86400";
         }
 
         # ========================================================
-        # Health Check
+        # Health check
         # ========================================================
 
         location = /healthz {
@@ -486,6 +226,16 @@ http {
         # ========================================================
         # SPA
         # ========================================================
+
+        # Vite emits content-hashed files under /assets/ -> cache forever.
+        location /assets/ {
+            add_header Cache-Control "public, max-age=31536000, immutable";
+        }
+
+        # The HTML shell must always be revalidated.
+        location = /index.html {
+            add_header Cache-Control "no-store";
+        }
 
         location / {
             try_files $uri $uri/ /index.html;
