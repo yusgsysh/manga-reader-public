@@ -1,0 +1,39 @@
+info:
+  name: Prefill List
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/prefill"
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.jobs
+      operator: isArray
+  scripts:
+    - type: tests
+      code: |-
+        test("returns at most the 200 most recent jobs", function () {
+          expect(res.body.jobs.length).to.be.at.most(200);
+        });
+
+        test("jobs are ordered newest first", function () {
+          var jobs = res.body.jobs;
+          for (var i = 1; i < jobs.length; i++) {
+            expect(new Date(jobs[i - 1].created_at).getTime())
+              .to.be.at.least(new Date(jobs[i].created_at).getTime());
+          }
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  List the 200 most recent prefill jobs, newest first.

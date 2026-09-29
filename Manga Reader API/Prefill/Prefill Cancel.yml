@@ -1,0 +1,41 @@
+info:
+  name: Prefill Cancel
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/prefill/:id/cancel"
+  params:
+    - name: id
+      value: "{{prefillId}}"
+      type: path
+      description: Prefill job ID
+
+runtime:
+  assertions:
+    - expression: res.body.status
+      operator: isString
+  scripts:
+    - type: tests
+      code: |-
+        test("cancels the job (or is idempotent)", function () {
+          expect([200, 409]).to.include(res.status);
+          if (res.status === 200) {
+            expect(res.body.status).to.equal("cancelled");
+          }
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Cancel a `queued` or `running` prefill job. Cancellation takes effect in the
+  response (status CAS-flipped to `cancelled`, `finished_at` set); the worker
+  stops shortly after.
+
+  Errors: 400 invalid id, 404 not found, 409 already `completed`/`failed`
+  (cancelling an already `cancelled` job idempotently returns 200).

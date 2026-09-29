@@ -1,0 +1,37 @@
+info:
+  name: Prefill ZIP
+  type: http
+  seq: 7
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/prefill/:id/zip"
+  params:
+    - name: id
+      value: "{{prefillId}}"
+      type: path
+      description: Prefill job ID
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("responds with a streamed zip", function () {
+          expect(res.status).to.equal(200);
+          expect(res.getHeader("content-type")).to.equal("application/zip");
+          expect(res.getHeader("content-disposition")).to.include("attachment");
+          expect(res.getHeader("cache-control")).to.equal("no-store");
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Stream the cached images as a ZIP (`application/zip`, chunked). Entries are
+  named `001.jpg` / `002.png` / ... in page order. Cache misses are fetched on
+  demand (singleflight); pages that fail are skipped.
+
+  Errors: 404 not found, 400 invalid id, 503 database or cache not configured.

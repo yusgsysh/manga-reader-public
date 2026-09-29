@@ -1,0 +1,32 @@
+info:
+  name: Prefill Delete
+  type: http
+  seq: 5
+
+http:
+  method: DELETE
+  url: "{{baseUrl}}/api/prefill/:id"
+  params:
+    - name: id
+      value: "{{prefillId}}"
+      type: path
+      description: Prefill job ID
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.deleted
+      operator: isNumber
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Delete a finished (`completed` / `cancelled` / `failed`) prefill job record.
+
+  Errors: 409 still queued/running (cancel first), 404 not found, 400 invalid id.

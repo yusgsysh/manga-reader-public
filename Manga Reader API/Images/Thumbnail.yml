@@ -1,0 +1,43 @@
+info:
+  name: Thumbnail
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/thumbnail"
+  params:
+    - name: url
+      value: "{{thumbnailUrl}}"
+      type: query
+      description: Thumbnail URL from the cover / thumbnail field
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+  scripts:
+    - type: tests
+      code: |-
+        test("responds with image bytes", function () {
+          expect(res.getHeader("content-type")).to.match(/^image\//);
+        });
+
+        test("uses a short cache window", function () {
+          expect(res.getHeader("cache-control")).to.include("max-age=3600");
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Proxy the upstream thumbnail bytes without touching MinIO. Retries up to 2
+  times on failure.
+
+  Errors: 400 missing/invalid url, 502 upstream failure.
+  Requires `https://` and a whitelisted thumbnail host
+  (`s.exhentai.org`, `ehgt.org`, `ul.e-hentai.org`); internal addresses are blocked.

@@ -1,0 +1,40 @@
+info:
+  name: Prefill Cleanup
+  type: http
+  seq: 6
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/prefill/cleanup"
+  params:
+    - name: days
+      value: "{{cleanupDays}}"
+      type: query
+      description: Delete finished records older than N days; 0 deletes all finished records
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.days
+      operator: isNumber
+    - expression: res.body.deleted
+      operator: isNumber
+  scripts:
+    - type: tests
+      code: |-
+        test("realises the requested retention window", function () {
+          expect(res.body.days).to.equal(30);
+          expect(res.body.deleted).to.be.at.least(0);
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Bulk-delete finished prefill job records. In-progress jobs are never
+  cleaned. `days` defaults to 30 and must be a non-negative integer.

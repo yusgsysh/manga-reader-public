@@ -1,0 +1,65 @@
+info:
+  name: Update Progress
+  type: http
+  seq: 2
+
+http:
+  method: PUT
+  url: "{{baseUrl}}/api/progress/:id/:token"
+  params:
+    - name: id
+      value: "{{galleryId}}"
+      type: path
+      description: Gallery ID
+    - name: token
+      value: "{{galleryToken}}"
+      type: path
+      description: Gallery token
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "current_page": 10,
+        "progress": 0.416,
+        "completed": false
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.current_page
+      operator: eq
+      value: "10"
+    - expression: res.body.progress
+      operator: eq
+      value: "0.416"
+    - expression: res.body.completed
+      operator: eq
+      value: "false"
+    - expression: res.body.started_at
+      operator: isString
+  scripts:
+    - type: tests
+      code: |-
+        test("echoes the stored progress", function () {
+          expect(res.body.current_page).to.equal(10);
+          expect(res.body.progress).to.be.closeTo(0.416, 0.001);
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Create or update reading progress. The first save sets `started_at`;
+  subsequent saves only bump `updated_at`.
+
+  Validation: `current_page >= 0` and `0 <= progress <= 1`, otherwise HTTP 400.
+  Setting `completed` to `true` forces `progress` to `1`.

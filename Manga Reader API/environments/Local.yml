@@ -1,0 +1,20 @@
+name: Local
+variables:
+  - name: baseUrl
+    value: http://localhost:8080
+  - name: site
+    value: exhentai
+  - name: searchQuery
+    value: ""
+  - name: galleryId
+    value: "3138775"
+  - name: galleryToken
+    value: 30b0285f9b
+  - name: pageUrl
+    value: https://exhentai.org/s/abc/3138775-1
+  - name: thumbnailUrl
+    value: https://s.exhentai.org/w/00/999/15582-3owak8q3.webp
+  - name: prefillId
+    value: "1"
+  - name: cleanupDays
+    value: "30"

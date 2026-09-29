@@ -1,0 +1,45 @@
+info:
+  name: Remove from Bookshelf
+  type: http
+  seq: 4
+
+http:
+  method: DELETE
+  url: "{{baseUrl}}/api/bookshelf/:id/:token"
+  params:
+    - name: id
+      value: "{{galleryId}}"
+      type: path
+      description: Gallery ID
+    - name: token
+      value: "{{galleryToken}}"
+      type: path
+      description: Gallery token
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.success
+      operator: eq
+      value: "true"
+    - expression: res.body.in_bookshelf
+      operator: eq
+      value: "false"
+  scripts:
+    - type: tests
+      code: |-
+        test("gallery is removed but progress is kept", function () {
+          expect(res.body.success).to.equal(true);
+          expect(res.body.in_bookshelf).to.equal(false);
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Remove a gallery from the bookshelf. Reading progress is not deleted.

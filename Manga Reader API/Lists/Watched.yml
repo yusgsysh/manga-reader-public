@@ -1,0 +1,57 @@
+info:
+  name: Watched
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/watched"
+  params:
+    - name: page
+      value: "0"
+      type: query
+      description: Page number (0-indexed); > 0 always returns empty
+    - name: min_pages
+      value: "10"
+      type: query
+      description: Minimum page count (>= 0)
+      disabled: true
+    - name: max_pages
+      value: "200"
+      type: query
+      description: Maximum page count (>= 0)
+      disabled: true
+    - name: min_rating
+      value: "4"
+      type: query
+      description: Minimum rating (2, 3, 4 or 5)
+      disabled: true
+    - name: has_torrent
+      value: "true"
+      type: query
+      description: Only show galleries with a torrent
+      disabled: true
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.results
+      operator: isArray
+  scripts:
+    - type: tests
+      code: |-
+        test("returns a result array", function () {
+          expect(res.body.results).to.be.an("array");
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Galleries matching the watched tags. Returns an empty list when no watched
+  tags are configured; `page > 0` always returns empty.

@@ -1,0 +1,52 @@
+info:
+  name: Get Progress
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/progress/:id/:token"
+  params:
+    - name: id
+      value: "{{galleryId}}"
+      type: path
+      description: Gallery ID
+    - name: token
+      value: "{{galleryToken}}"
+      type: path
+      description: Gallery token
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.current_page
+      operator: isNumber
+    - expression: res.body.progress
+      operator: isNumber
+    - expression: res.body.completed
+      operator: isBoolean
+  scripts:
+    - type: tests
+      code: |-
+        test("progress stays within range", function () {
+          expect(res.body.progress).to.be.at.least(0);
+          expect(res.body.progress).to.be.at.most(1);
+        });
+
+        test("missing records return null timestamps", function () {
+          if (res.body.current_page === 0 && res.body.progress === 0) {
+            expect(res.body.started_at).to.equal(null);
+          }
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Fetch reading progress for a gallery. When no record exists all numeric
+  fields are zero and `started_at` / `updated_at` are `null`.

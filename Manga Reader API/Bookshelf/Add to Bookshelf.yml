@@ -1,0 +1,46 @@
+info:
+  name: Add to Bookshelf
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/bookshelf/:id/:token"
+  params:
+    - name: id
+      value: "{{galleryId}}"
+      type: path
+      description: Gallery ID
+    - name: token
+      value: "{{galleryToken}}"
+      type: path
+      description: Gallery token
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.success
+      operator: eq
+      value: "true"
+    - expression: res.body.in_bookshelf
+      operator: eq
+      value: "true"
+  scripts:
+    - type: tests
+      code: |-
+        test("gallery is now in the bookshelf", function () {
+          expect(res.body.success).to.equal(true);
+          expect(res.body.in_bookshelf).to.equal(true);
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Add a gallery to the bookshelf (idempotent). The first add fetches and
+  snapshots gallery info from ExHentai.

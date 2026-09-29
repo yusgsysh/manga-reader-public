@@ -1,0 +1,52 @@
+info:
+  name: Recently Read
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/recently-read"
+  params:
+    - name: page
+      value: "0"
+      type: query
+      description: Page number (0-indexed)
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.total
+      operator: isNumber
+    - expression: res.body.total_pages
+      operator: isNumber
+    - expression: res.body.results
+      operator: isArray
+  scripts:
+    - type: tests
+      code: |-
+        test("total_pages is consistent with total", function () {
+          if (res.body.total === 0) {
+            expect(res.body.total_pages).to.equal(0);
+          } else {
+            expect(res.body.total_pages).to.equal(Math.ceil(res.body.total / 25));
+          }
+        });
+
+        test("each entry carries a reading progress object", function () {
+          res.body.results.forEach(function (entry) {
+            expect(entry.reading).to.have.property("current_page");
+            expect(entry.reading.progress).to.be.within(0, 1);
+          });
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Recently read galleries, newest first, 25 per page. Independent of the
+  bookshelf; an invalid `page` returns HTTP 400 with `{"error": "invalid page"}`.

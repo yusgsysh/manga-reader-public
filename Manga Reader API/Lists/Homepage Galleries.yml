@@ -1,0 +1,70 @@
+info:
+  name: Homepage Galleries
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/galleries"
+  params:
+    - name: page
+      value: "0"
+      type: query
+      description: Page number (0-indexed)
+    - name: min_pages
+      value: "10"
+      type: query
+      description: Minimum page count (>= 0)
+      disabled: true
+    - name: max_pages
+      value: "200"
+      type: query
+      description: Maximum page count (>= 0)
+      disabled: true
+    - name: min_rating
+      value: "4"
+      type: query
+      description: Minimum rating (2, 3, 4 or 5)
+      disabled: true
+    - name: has_torrent
+      value: "true"
+      type: query
+      description: Only show galleries with a torrent
+      disabled: true
+    - name: include_expunged
+      value: "false"
+      type: query
+      description: Include expunged galleries
+      disabled: true
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.page
+      operator: isNumber
+    - expression: res.body.page_size
+      operator: isNumber
+    - expression: res.body.results
+      operator: isArray
+  scripts:
+    - type: tests
+      code: |-
+        test("page echoes the request", function () {
+          expect(res.body.page).to.equal(0);
+        });
+
+        test("at most 25 results per page", function () {
+          expect(res.body.results.length).to.be.at.most(25);
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Homepage gallery list. This endpoint has no `total`; the client decides
+  whether another page exists from the fixed upstream page size of 25.

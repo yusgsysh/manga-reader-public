@@ -1,0 +1,132 @@
+info:
+  name: Search
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/search"
+  params:
+    - name: q
+      value: "{{searchQuery}}"
+      type: query
+      description: Search keyword (empty string returns the whole site)
+    - name: site
+      value: "{{site}}"
+      type: query
+      description: "\"exhentai\" or \"ehentai\""
+    - name: categories
+      value: doujinshi,manga
+      type: query
+      description: Comma separated categories
+      disabled: true
+    - name: page
+      value: "0"
+      type: query
+      description: Page number (0-indexed)
+    - name: min_pages
+      value: "10"
+      type: query
+      description: Minimum page count (>= 0)
+      disabled: true
+    - name: max_pages
+      value: "200"
+      type: query
+      description: Maximum page count (>= 0)
+      disabled: true
+    - name: min_rating
+      value: "4"
+      type: query
+      description: Minimum rating (2, 3, 4 or 5)
+      disabled: true
+    - name: has_torrent
+      value: "true"
+      type: query
+      description: Only show galleries with a torrent
+      disabled: true
+    - name: include_expunged
+      value: "false"
+      type: query
+      description: Include expunged galleries
+      disabled: true
+    - name: search_name
+      value: "false"
+      type: query
+      description: Search in gallery name
+      disabled: true
+    - name: search_tags
+      value: "false"
+      type: query
+      description: Search in tags
+      disabled: true
+    - name: search_description
+      value: "false"
+      type: query
+      description: Search in description
+      disabled: true
+    - name: include_low_power_tags
+      value: "false"
+      type: query
+      description: Include low power tags
+      disabled: true
+    - name: include_downvoted_tags
+      value: "false"
+      type: query
+      description: Include downvoted tags
+      disabled: true
+    - name: disable_language_filter
+      value: "false"
+      type: query
+      description: Disable language custom filter
+      disabled: true
+    - name: disable_uploader_filter
+      value: "false"
+      type: query
+      description: Disable uploader custom filter
+      disabled: true
+    - name: disable_tag_filter
+      value: "false"
+      type: query
+      description: Disable tag custom filter
+      disabled: true
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.page
+      operator: isNumber
+    - expression: res.body.page_size
+      operator: isNumber
+    - expression: res.body.results
+      operator: isArray
+  scripts:
+    - type: tests
+      code: |-
+        test("returns the requested page", function () {
+          expect(res.body.page).to.equal(0);
+        });
+
+        test("every result has id, token and title", function () {
+          res.body.results.forEach(function (gallery) {
+            expect(gallery).to.have.property("id");
+            expect(gallery).to.have.property("token");
+            expect(gallery).to.have.property("title");
+          });
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Search galleries on ExHentai / E-Hentai.
+
+  `q` is required (an empty value returns the whole site). When any advanced
+  search parameter is supplied, `advsearch=1` is enabled automatically.
+
+  Invalid parameters (`min_pages < 0`, `min_pages > max_pages`,
+  `min_rating` not in 2..5, ...) return HTTP 400.

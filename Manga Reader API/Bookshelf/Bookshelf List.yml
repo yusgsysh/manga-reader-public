@@ -1,0 +1,45 @@
+info:
+  name: Bookshelf List
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/bookshelf"
+  params:
+    - name: page
+      value: "0"
+      type: query
+      description: Page number (0-indexed)
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.total
+      operator: isNumber
+    - expression: res.body.total_pages
+      operator: isNumber
+    - expression: res.body.results
+      operator: isArray
+  scripts:
+    - type: tests
+      code: |-
+        test("results are ordered by added_at descending", function () {
+          var list = res.body.results;
+          for (var i = 1; i < list.length; i++) {
+            expect(new Date(list[i - 1].added_at).getTime())
+              .to.be.at.least(new Date(list[i].added_at).getTime());
+          }
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Bookshelf listing, newest first. The `reading` field is only present when
+  reading progress exists.

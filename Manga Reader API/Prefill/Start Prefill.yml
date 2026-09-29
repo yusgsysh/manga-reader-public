@@ -1,0 +1,67 @@
+info:
+  name: Start Prefill
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/prefill"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "gallery_id": 3138775,
+        "gallery_token": "30b0285f9b",
+        "title": "Test Gallery",
+        "urls": [
+          "https://exhentai.org/s/abc/3138775-1",
+          "https://exhentai.org/s/def/3138775-2"
+        ]
+      }
+
+runtime:
+  assertions:
+    - expression: res.body.id
+      operator: isNumber
+    - expression: res.body.status
+      operator: isString
+    - expression: res.body.total
+      operator: isNumber
+    - expression: res.body.errors
+      operator: isArray
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("prefillId", res.body.id);
+    - type: tests
+      code: |-
+        test("creates (202) or deduplicates (200) the job", function () {
+          expect([200, 202]).to.include(res.status);
+        });
+
+        test("stores the captured job id", function () {
+          expect(bru.getVar("prefillId")).to.equal(res.body.id);
+        });
+
+        test("total equals the number of urls", function () {
+          expect(res.body.total).to.equal(2);
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Create a background prefill job. The single global worker fetches the page
+  images serially and writes them to MinIO; no image data is returned here.
+
+  If a `queued`/`running` job already exists for the same
+  `gallery_id` + `gallery_token`, it is returned with HTTP 200 instead of
+  creating a duplicate (HTTP 202 on create).
+
+  The job id is captured into `{{prefillId}}` for the other Prefill requests.

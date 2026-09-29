@@ -1,0 +1,35 @@
+info:
+  name: Page Image
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/page-image"
+  params:
+    - name: url
+      value: "{{pageUrl}}"
+      type: query
+      description: Page URL from the gallery pages list
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+  scripts:
+    - type: tests
+      code: |-
+        test("responds with an image content type", function () {
+          expect(res.headers["content-type"]).to.match(/^image\//);
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Proxy the raw ExHentai page image bytes. Retries up to 2 times on upstream
+  failure; a failed download returns HTTP 502.

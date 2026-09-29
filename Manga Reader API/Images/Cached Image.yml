@@ -1,0 +1,43 @@
+info:
+  name: Cached Image
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/cached-image"
+  params:
+    - name: url
+      value: "{{pageUrl}}"
+      type: query
+      description: Page URL from the gallery pages list
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+  scripts:
+    - type: tests
+      code: |-
+        test("responds with image bytes", function () {
+          expect(res.getHeader("content-type")).to.match(/^image\//);
+        });
+
+        test("is immutably cacheable", function () {
+          expect(res.getHeader("cache-control")).to.include("max-age=31536000");
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Image proxy backed by a MinIO cache. Cache hits are served from MinIO; cache
+  misses fetch from ExHentai and store the result. Concurrent misses for the
+  same URL trigger a single upstream request (singleflight).
+
+  Errors: 400 invalid/missing url, 502 upstream failure, 503 cache not configured.
+  Only `exhentai.org` / `e-hentai.org` URLs are allowed (SSRF protection).
