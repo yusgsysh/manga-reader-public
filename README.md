@@ -7,7 +7,7 @@
 
 ## 功能
 
-- 搜索 / 首页 / 订阅 / 热门 Gallery 列表
+- 搜索 / 首页 / 订阅 / 热门 Gallery 列表（响应式瀑布流网格、无限滚动、缩略图懒加载与下一页预取）
 - Gallery 详情、页面列表、图片代理
 - 书架（Bookshelf）收藏与快照
 - 阅读进度（Reading Progress）、最近阅读（Recently Read）
@@ -37,7 +37,8 @@ backend/
 │   ├── ent/                      # Ent ORM 定义与生成代码
 │   │   ├── schema/               # 数据模型定义 (Schema as Code)
 │   │   ├── bookshelf/            # Bookshelf 查询工具
-│   │   └── readingprogress/      # ReadingProgress 查询工具
+│   │   ├── readingprogress/      # ReadingProgress 查询工具
+│   │   └── prefilljob/           # PrefillJob 查询工具
 │   ├── handler/                  # HTTP 处理器 (Gin)
 │   ├── model/                    # API 响应模型
 │   ├── exhentai/                 # ExHentai API / 页面抓取
@@ -133,11 +134,13 @@ go generate ./internal/ent/...
 | `schema/` | 数据模型定义（手动编写） |
 | `bookshelf/` | Bookshelf 字段常量与查询辅助 |
 | `readingprogress/` | ReadingProgress 字段常量与查询辅助 |
+| `prefilljob/` | PrefillJob 字段常量与查询辅助 |
 | `migrate/` | 数据库迁移逻辑 |
 
 Schema 文件：
 - `internal/ent/schema/bookshelf.go` — 书架模型
 - `internal/ent/schema/reading_progress.go` — 阅读进度模型
+- `internal/ent/schema/prefill_job.go` — 离线下载任务模型
 
 后端默认监听 `:8080`，完整 API 文档见 `backend/API.md`。
 

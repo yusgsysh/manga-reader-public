@@ -69,6 +69,17 @@ bun run build
 - SPA 路由靠 `try_files ... /index.html` 回退。
 - `db.text.js`（翻译库）同源加载，更新按钮仍从 GitHub 拉取。
 
+## 列表渲染
+
+首页 / 订阅 / 热门 / 搜索 / 书架 / 最近阅读等列表页统一使用：
+
+- **响应式瀑布流网格**：`.gallery-grid` 按视口宽度自动切换 2 / 3 / 4 / 5 / 6 / 7 列（断点 480 / 768 / 1024 / 1440 / 1920px），卡片封面固定 `3:4`。
+- **无限滚动**：滚动接近底部时自动请求下一页并追加，已移除上一页 / 下一页按钮。
+- **懒加载**：缩略图使用 `loading="lazy"` + `decoding="async"`，数据按 `page` 分页按需加载。
+- **提前加载**：`useInfiniteScroll` 通过 `IntersectionObserver`（`rootMargin: 800px`）在哨兵进入视口前预取下一页。
+
+相关实现：`src/hooks/useInfiniteScroll.ts`、`src/components/common/InfiniteScrollTrigger.tsx`，以及 `src/hooks/useGalleryList.ts`、`useSearch.ts`、`useBookshelf.ts`、`useRecentlyRead.ts`（均为 `useInfiniteQuery`）。
+
 ## 路由
 
 | 路径 | 页面 |

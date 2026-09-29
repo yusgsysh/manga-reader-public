@@ -2,6 +2,18 @@
 
 Base URL: `http://localhost:8080`
 
+## 分页与列表加载
+
+所有列表端点（Search / Homepage / Watched / Popular / Bookshelf / Recently Read）均保持无状态分页：每页固定 25 条，`page` 从 `0` 开始，可独立调用。
+
+前端列表页在其之上实现无限滚动：
+
+- 滚动接近底部时自动按 `page=0,1,2...` 递增请求并追加结果，不再提供上一页 / 下一页按钮。
+- 通过 `IntersectionObserver`（`rootMargin: 800px`）在哨兵进入视口前预取下一页，即“提前加载”。
+- 缩略图使用 `loading="lazy"` 懒加载，接近视口时才请求 `/api/cached-thumbnail`。
+
+是否还有下一页按端点元信息判断：Search / Bookshelf / Recently Read 使用 `total` / `total_pages`；Homepage / Watched / Popular 按每页 25 条的固定页大小判断。
+
 ## Common Response Types
 
 ### GalleryCategory
