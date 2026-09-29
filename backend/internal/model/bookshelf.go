@@ -84,9 +84,13 @@ type RecentlyReadItem struct {
 	Reading ReadingProgress `json:"reading"`
 }
 
-// RecentlyReadResponse is the response for the recently read endpoint.
+// RecentlyReadResponse is the paginated response for the recently read endpoint.
 type RecentlyReadResponse struct {
-	Results []RecentlyReadItem `json:"results"`
+	Page       int                `json:"page"`
+	PageSize   int                `json:"page_size"`
+	Total      int                `json:"total"`
+	TotalPages int                `json:"total_pages"`
+	Results    []RecentlyReadItem `json:"results"`
 }
 
 // GalleryToBookshelf converts a Gallery to a Bookshelf snapshot.

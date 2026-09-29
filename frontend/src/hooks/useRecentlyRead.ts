@@ -13,12 +13,12 @@ function needsEnrichment(item: RecentlyReadItem): boolean {
 
 const RECENTLY_READ_STALE_TIME = 2 * 60_000;
 
-export function useRecentlyRead() {
+export function useRecentlyRead(page = 0) {
   const listQuery = useQuery({
-    queryKey: ["recently-read"],
+    queryKey: ["recently-read", page],
     queryFn: async () => {
       await whenProgressSavesSettled();
-      return fetchRecentlyRead();
+      return fetchRecentlyRead(page);
     },
     staleTime: RECENTLY_READ_STALE_TIME,
   });

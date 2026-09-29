@@ -734,14 +734,45 @@ Cache-Control: public, max-age=31536000, immutable
 
 `GET /api/recently-read`
 
-获取最近阅读的 Gallery 列表，按最后阅读时间倒序排列，默认返回 25 条。
+获取最近阅读的 Gallery 列表，按最后阅读时间倒序排列，每页 25 条。
 
 不依赖书架，即使 Gallery 已从书架移除，只要存在阅读记录仍会显示。
+
+**Query Parameters:**
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| page | int | no | `0` | 页码 (0-indexed) |
+
+**Validation Rules:**
+
+- `page` 必须 >= 0
+- 无效参数返回 HTTP 400
+
+**示例:**
+
+```http
+GET /api/recently-read?page=0
+```
+
+返回第 1 ~ 25 条记录。
+
+```http
+GET /api/recently-read?page=1
+```
+
+返回第 26 ~ 50 条记录。
+
+不传 `page` 等价于 `page=0`。
 
 **Response (200):**
 
 ```json
 {
+  "page": 0,
+  "page_size": 25,
+  "total": 100,
+  "total_pages": 4,
   "results": [
     {
       "id": 123456,
@@ -765,7 +796,21 @@ Cache-Control: public, max-age=31536000, immutable
 }
 ```
 
+| Field | Type | Description |
+|-------|------|-------------|
+| page | int | 当前页码 (0-indexed) |
+| page_size | int | 每页固定 25 条 |
+| total | int | 阅读记录总数 |
+| total_pages | int | 总页数，`total = 0` 时为 `0` |
+| results | array | 当前页的最近阅读记录 |
+
 > Gallery 从书架移除后，`title`、`title_jpn`、`category`、`thumbnail`、`pages` 返回空字符串/零值。
+
+**Error Responses:**
+
+| Status Code | Description |
+|-------------|-------------|
+| 400 | `page < 0`，响应体 `{"error": "invalid page"}` |
 
 ---
 

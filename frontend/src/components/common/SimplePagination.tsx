@@ -4,14 +4,17 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 interface SimplePaginationProps {
   page: number;
   hasMore: boolean;
+  totalPages?: number;
   onPageChange: (page: number) => void;
 }
 
 export function SimplePagination({
   page,
   hasMore,
+  totalPages,
   onPageChange,
 }: SimplePaginationProps) {
+  if (totalPages !== undefined && totalPages <= 1) return null;
   if (page === 0 && !hasMore) return null;
 
   return (
@@ -26,7 +29,9 @@ export function SimplePagination({
         上一页
       </Button>
       <span className="px-4 text-sm text-kumo-subtle">
-        第 {page + 1} 页
+        {totalPages === undefined
+          ? `第 ${page + 1} 页`
+          : `${page + 1} / ${totalPages}`}
       </span>
       <Button
         variant="secondary"

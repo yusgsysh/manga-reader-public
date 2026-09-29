@@ -6,9 +6,11 @@ import { BookshelfCard } from "../components/gallery/BookshelfCard";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorState } from "../components/common/ErrorState";
+import { SimplePagination } from "../components/common/SimplePagination";
 
 export function RecentlyReadPage() {
-  const { data, isLoading, error, refetch } = useRecentlyRead();
+  const [page, setPage] = useState(0);
+  const { data, isLoading, error, refetch } = useRecentlyRead(page);
   const cleanup = useCleanupReadingProgress();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const cleanupFiredRef = useRef(false);
@@ -60,6 +62,15 @@ export function RecentlyReadPage() {
             <BookshelfCard key={`${item.id}-${item.token}`} item={item} />
           ))}
         </div>
+      )}
+
+      {data && (
+        <SimplePagination
+          page={data.page}
+          hasMore={data.page + 1 < data.total_pages}
+          totalPages={data.total_pages}
+          onPageChange={setPage}
+        />
       )}
 
       <Dialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
