@@ -1,6 +1,6 @@
 import { Badge } from "@cloudflare/kumo";
 import type { BookshelfItem, GalleryCategory } from "../../types/gallery";
-import { useNavigate } from "react-router";
+import { Link } from "react-router";
 import { thumbnailUrl } from "../../lib/image";
 
 export interface GalleryReadingCardItem {
@@ -18,12 +18,10 @@ interface BookshelfCardProps {
 }
 
 export function BookshelfCard({ item }: BookshelfCardProps) {
-  const navigate = useNavigate();
-
   return (
-    <div
-      className="group cursor-pointer"
-      onClick={() => navigate(`/gallery/${item.id}/${item.token}`)}
+    <Link
+      to={`/gallery/${item.id}/${item.token}`}
+      className="gallery-card group block"
     >
       <div className="aspect-[3/4] overflow-hidden rounded-lg bg-kumo-recessed">
         {item.thumbnail ? (
@@ -53,7 +51,7 @@ export function BookshelfCard({ item }: BookshelfCardProps) {
           {item.title || `#${item.id}`}
         </h3>
 
-        <div className="flex items-center gap-2 text-xs text-kumo-subtle">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-kumo-subtle">
           {item.category && (
             <Badge variant="secondary" className="text-[10px]">
               {item.category}
@@ -72,6 +70,6 @@ export function BookshelfCard({ item }: BookshelfCardProps) {
           </div>
         )}
       </div>
-    </div>
+    </Link>
   );
 }

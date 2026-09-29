@@ -1,3 +1,28 @@
+import { useEffect, useState } from "react";
+
+function columnsForWidth(width: number): number {
+  if (width < 480) return 2;
+  if (width < 768) return 3;
+  if (width < 1024) return 4;
+  if (width < 1440) return 5;
+  if (width < 1920) return 6;
+  return 7;
+}
+
+function useGridColumnCount(): number {
+  const [columns, setColumns] = useState(() =>
+    columnsForWidth(window.innerWidth),
+  );
+
+  useEffect(() => {
+    const onResize = () => setColumns(columnsForWidth(window.innerWidth));
+    window.addEventListener("resize", onResize, { passive: true });
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  return columns;
+}
+
 export function GallerySkeleton() {
   return (
     <div className="animate-pulse">
@@ -11,10 +36,13 @@ export function GallerySkeleton() {
   );
 }
 
-export function GalleryGridSkeleton({ count = 12 }: { count?: number }) {
+export function GalleryGridSkeleton({ count }: { count?: number }) {
+  const columns = useGridColumnCount();
+  const items = count ?? columns * 2;
+
   return (
     <div className="gallery-grid">
-      {Array.from({ length: count }).map((_, i) => (
+      {Array.from({ length: items }).map((_, i) => (
         <GallerySkeleton key={i} />
       ))}
     </div>

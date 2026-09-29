@@ -1,6 +1,11 @@
 import { Link, useLocation } from "react-router";
-import { useState } from "react";
-import { Button, DropdownMenu, useKumoToastManager } from "@cloudflare/kumo";
+import { useEffect, useState } from "react";
+import {
+  Button,
+  DropdownMenu,
+  LinkButton,
+  useKumoToastManager,
+} from "@cloudflare/kumo";
 import { Loader2, Menu, Moon, RefreshCw, Sun, Monitor, X } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
 import { useTagTranslation } from "../../hooks/useTagTranslation";
@@ -24,12 +29,22 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
 
 export function Header() {
   const location = useLocation();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [menuPath, setMenuPath] = useState<string | null>(null);
+  const mobileOpen = menuPath === location.pathname;
   const { mode, setMode } = useTheme();
 
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [mobileOpen]);
+
   return (
-    <header className="sticky top-0 z-50 border-b border-kumo-hairline bg-kumo-elevated/80 backdrop-blur-sm">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
+    <header className="sticky top-0 z-50 border-b border-kumo-hairline bg-kumo-elevated/80 pt-[env(safe-area-inset-top)] backdrop-blur-sm">
+      <div className="app-container flex h-14 items-center justify-between">
         <Link to="/" className="text-lg font-bold">
           Manga Reader
         </Link>
@@ -42,15 +57,15 @@ export function Header() {
                 ? location.pathname === "/"
                 : location.pathname.startsWith(item.to);
             return (
-              <Link key={item.to} to={item.to}>
-                <Button
-                  variant={isActive ? "primary" : "ghost"}
-                  size="sm"
-                  className="text-sm"
-                >
-                  {item.label}
-                </Button>
-              </Link>
+              <LinkButton
+                key={item.to}
+                href={item.to}
+                variant={isActive ? "primary" : "ghost"}
+                size="sm"
+                className="text-sm"
+              >
+                {item.label}
+              </LinkButton>
             );
           })}
         </nav>
@@ -91,7 +106,7 @@ export function Header() {
             variant="ghost"
             size="sm"
             className="md:hidden"
-            onClick={() => setMobileOpen(!mobileOpen)}
+            onClick={() => setMenuPath(mobileOpen ? null : location.pathname)}
             aria-label={mobileOpen ? "关闭菜单" : "打开菜单"}
           >
             {mobileOpen ? (
@@ -112,19 +127,16 @@ export function Header() {
                 ? location.pathname === "/"
                 : location.pathname.startsWith(item.to);
             return (
-              <Link
+              <LinkButton
                 key={item.to}
-                to={item.to}
-                onClick={() => setMobileOpen(false)}
+                href={item.to}
+                variant={isActive ? "primary" : "ghost"}
+                size="sm"
+                className="mb-1 w-full justify-start text-sm"
+                onClick={() => setMenuPath(null)}
               >
-                <Button
-                  variant={isActive ? "primary" : "ghost"}
-                  size="sm"
-                  className="mb-1 w-full justify-start text-sm"
-                >
-                  {item.label}
-                </Button>
-              </Link>
+                {item.label}
+              </LinkButton>
             );
           })}
         </nav>

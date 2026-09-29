@@ -1,7 +1,12 @@
-import { useEffect } from "react";
-import { RouterProvider } from "react-router";
+import { forwardRef, useEffect } from "react";
+import { Link as RouterLink, RouterProvider } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Toasty, TooltipProvider } from "@cloudflare/kumo";
+import {
+  LinkProvider,
+  Toasty,
+  TooltipProvider,
+  type LinkComponentProps,
+} from "@cloudflare/kumo";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { ThemeProvider } from "./lib/theme";
 import { tagTranslationService } from "./services/tagTranslation";
@@ -17,6 +22,11 @@ const queryClient = new QueryClient({
   },
 });
 
+const AppLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(
+  ({ href, ...rest }, ref) => <RouterLink ref={ref} to={href ?? ""} {...rest} />,
+);
+AppLink.displayName = "AppLink";
+
 export default function App() {
   useEffect(() => {
     tagTranslationService.load();
@@ -26,11 +36,13 @@ export default function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
-            <Toasty>
-              <RouterProvider router={router} />
-            </Toasty>
-          </TooltipProvider>
+          <LinkProvider component={AppLink}>
+            <TooltipProvider>
+              <Toasty>
+                <RouterProvider router={router} />
+              </Toasty>
+            </TooltipProvider>
+          </LinkProvider>
         </QueryClientProvider>
       </ThemeProvider>
     </ErrorBoundary>
