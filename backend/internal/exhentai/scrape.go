@@ -3,6 +3,7 @@ package exhentai
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -205,15 +207,14 @@ func ScrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 	if err != nil {
 		return 0, nil, err
 	}
+	u.RawQuery = BuildSearchQuery(keyword, categories, opts).Encode()
+	firstURL := u.String()
 
-	q := BuildSearchQuery(keyword, categories, opts)
-	if page > 0 {
-		q.Set("page", strconv.Itoa(page))
-	}
-	u.RawQuery = q.Encode()
-
-	doc, err := httpGetDoc(ctx, client, u.String())
+	doc, err := fetchListingDoc(ctx, client, firstURL, page)
 	if err != nil {
+		if errors.Is(err, errNoNextPage) {
+			return 0, nil, fmt.Errorf("no results")
+		}
 		return 0, nil, err
 	}
 
@@ -227,10 +228,6 @@ func ScrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 		// The result count banner is expected on every page, but fall back to
 		// page 0 (a single extra request) if it is missing so callers still get
 		// a correct total_pages for pagination.
-		firstURL := siteURL
-		if enc := BuildSearchQuery(keyword, categories, opts).Encode(); enc != "" {
-			firstURL += "?" + enc
-		}
 		if firstDoc, ferr := httpGetDoc(ctx, client, firstURL); ferr == nil {
 			total, ok = parseSearchTotal(firstDoc)
 		}
@@ -265,13 +262,115 @@ func parseSearchTotal(doc *goquery.Document) (int, bool) {
 }
 
 func extractNextURL(doc *goquery.Document) string {
+	// Prefer the stable ids/rel the site exposes; fall back to the label text.
+	for _, selector := range []string{"a#unext", "a#dnext", `a[rel="next"]`} {
+		if href, ok := doc.Find(selector).First().Attr("href"); ok && href != "" {
+			return href
+		}
+	}
 	var nextURL string
 	doc.Find("a").Each(func(i int, s *goquery.Selection) {
-		if s.Text() == "Next >" {
+		if nextURL == "" && s.Text() == "Next >" {
 			nextURL, _ = s.Attr("href")
 		}
 	})
 	return nextURL
+}
+
+// errNoNextPage reports that a cursor-paginated listing has no further pages.
+var errNoNextPage = errors.New("no next page")
+
+// ExHentai paginates listings (front page, watched, popular, search) with a
+// next=<gallery-id> cursor rather than ?page=N, so pages cannot be addressed
+// directly. We remember each page's URL the first time we walk to it, which
+// makes sequential access (the infinite-scroll case) cost one upstream request
+// per page instead of re-walking from page 0 every time.
+const listingCursorTTL = 10 * time.Minute
+
+type listingCursor struct {
+	url     string
+	expires time.Time
+}
+
+var listingCursors = struct {
+	mu sync.Mutex
+	m  map[string]listingCursor
+}{m: make(map[string]listingCursor)}
+
+func listingCursorKey(firstURL string, page int) string {
+	return firstURL + "\x00" + strconv.Itoa(page)
+}
+
+func getListingCursor(firstURL string, page int) (string, bool) {
+	key := listingCursorKey(firstURL, page)
+	listingCursors.mu.Lock()
+	defer listingCursors.mu.Unlock()
+	entry, ok := listingCursors.m[key]
+	if !ok {
+		return "", false
+	}
+	if time.Now().After(entry.expires) {
+		delete(listingCursors.m, key)
+		return "", false
+	}
+	return entry.url, true
+}
+
+func setListingCursor(firstURL string, page int, u string) {
+	if u == "" {
+		return
+	}
+	listingCursors.mu.Lock()
+	defer listingCursors.mu.Unlock()
+	if len(listingCursors.m) > 2000 {
+		listingCursors.m = make(map[string]listingCursor)
+	}
+	listingCursors.m[listingCursorKey(firstURL, page)] = listingCursor{
+		url:     u,
+		expires: time.Now().Add(listingCursorTTL),
+	}
+}
+
+// fetchListingDoc returns the parsed document for the given 0-indexed page of a
+// cursor-paginated listing. Cursors discovered while walking are cached so a
+// later request for the next page can jump straight to it.
+func fetchListingDoc(ctx context.Context, client *http.Client, firstURL string, page int) (*goquery.Document, error) {
+	if page <= 0 {
+		doc, err := httpGetDoc(ctx, client, firstURL)
+		if err != nil {
+			return nil, err
+		}
+		setListingCursor(firstURL, 1, extractNextURL(doc))
+		return doc, nil
+	}
+
+	if next, ok := getListingCursor(firstURL, page); ok {
+		doc, err := httpGetDoc(ctx, client, next)
+		if err != nil {
+			return nil, err
+		}
+		setListingCursor(firstURL, page+1, extractNextURL(doc))
+		return doc, nil
+	}
+
+	// No cached cursor for this page: walk from the first page, caching as we go.
+	doc, err := httpGetDoc(ctx, client, firstURL)
+	if err != nil {
+		return nil, err
+	}
+	setListingCursor(firstURL, 1, extractNextURL(doc))
+	for i := 1; i <= page; i++ {
+		next, ok := getListingCursor(firstURL, i)
+		if !ok {
+			return nil, errNoNextPage
+		}
+		doc, err = httpGetDoc(ctx, client, next)
+		if err != nil {
+			return nil, err
+		}
+		setListingCursor(firstURL, i+1, extractNextURL(doc))
+	}
+	return doc, nil
 }
 
 func parseSearchResults(doc *goquery.Document) ([]model.SearchResult, error) {
@@ -764,7 +863,7 @@ func ProxyImage(ctx context.Context, client *http.Client, imgURL string) (data [
 	return data, contentType, nil
 }
 
-func ScrapeGalleryList(ctx context.Context, client *http.Client, listURL string, page int, opts *SearchOptions, supportsPaging bool) (results []model.SearchResult, err error) {
+func ScrapeGalleryList(ctx context.Context, client *http.Client, listURL string, page int, opts *SearchOptions) (results []model.SearchResult, err error) {
 	u, err := url.Parse(listURL)
 	if err != nil {
 		return nil, err
@@ -781,38 +880,12 @@ func ScrapeGalleryList(ctx context.Context, client *http.Client, listURL string,
 		u.RawQuery = existing.Encode()
 	}
 
-	if supportsPaging {
-		// Paged listings accept ?page=N directly, so fetch the target page in a
-		// single upstream request instead of walking "Next" from page 0.
-		q := u.Query()
-		q.Set("page", strconv.Itoa(page))
-		u.RawQuery = q.Encode()
-
-		doc, err := httpGetDoc(ctx, client, u.String())
-		if err != nil {
-			return nil, err
-		}
-		results, err = parseGalleryListResults(doc)
-		if err != nil && err.Error() == "empty gallery list" {
-			return []model.SearchResult{}, nil
-		}
-		return results, err
-	}
-
-	doc, err := httpGetDoc(ctx, client, u.String())
+	doc, err := fetchListingDoc(ctx, client, u.String(), page)
 	if err != nil {
-		return nil, err
-	}
-
-	for range page {
-		nextURL := extractNextURL(doc)
-		if nextURL == "" {
+		if errors.Is(err, errNoNextPage) {
 			return []model.SearchResult{}, nil
 		}
-		doc, err = httpGetDoc(ctx, client, nextURL)
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	results, err = parseGalleryListResults(doc)

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 func TestParseStars(t *testing.T) {
@@ -329,127 +331,174 @@ func TestBuildSearchQuery(t *testing.T) {
 	}
 }
 
-const searchResultsHTML = `<html><head><title>x</title></head><body>
-<div class="ido"><div></div><div><div class="searchtext"><p>Found 100 results</p></div>
-<table class="itg gltm"><tbody><tr>
-<td class="gl3m glname"><a href="https://exhentai.org/g/123/abc"><div class="glink">Title</div></a></td>
-<td class="gl1m"><div class="cs">Doujinshi</div></td>
-<td class="gl2m"><div class="ir" style="background-position:-16px -1px"></div></td>
-<td class="gl5m"><div><a>uploader</a></div></td>
-</tr></tbody></table>
-</div></div></body></html>`
-
-const emptyListingHTML = `<html><head><title>x</title></head><body><div class="ido">nothing here</div></body></html>`
-
-const searchResultsNoBannerHTML = `<html><head><title>x</title></head><body>
-<div class="ido"><div></div><div>
-<table class="itg gltm"><tbody><tr>
-<td class="gl3m glname"><a href="https://exhentai.org/g/123/abc"><div class="glink">Title</div></a></td>
-<td class="gl1m"><div class="cs">Doujinshi</div></td>
-<td class="gl2m"><div class="ir" style="background-position:-16px -1px"></div></td>
-<td class="gl5m"><div><a>uploader</a></div></td>
-</tr></tbody></table>
-</div></div></body></html>`
-
-func TestScrapeGalleryList_PagingUsesSingleRequest(t *testing.T) {
-	var requests atomic.Int32
-	var lastQuery atomic.Value
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests.Add(1)
-		lastQuery.Store(r.URL.RawQuery)
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, emptyListingHTML)
-	}))
-	defer srv.Close()
-
-	results, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 2, nil, true)
-	if err != nil {
-		t.Fatalf("ScrapeGalleryList error: %v", err)
+// listingHTML renders a minimal listing page whose "Next >" cursor points at
+// nextHref (omit nextHref to simulate the last page).
+func listingHTML(nextHref string) string {
+	next := ""
+	if nextHref != "" {
+		next = `<a href="` + nextHref + `">Next &gt;</a>`
 	}
-	if len(results) != 0 {
-		t.Fatalf("expected 0 results, got %d", len(results))
-	}
-	if got := requests.Load(); got != 1 {
-		t.Errorf("upstream requests = %d, want 1", got)
-	}
-	if q := lastQuery.Load().(string); q != "page=2" {
-		t.Errorf("upstream query = %q, want page=2", q)
-	}
+	return `<html><head><title>x</title></head><body><div class="ido">` + next + `</div></body></html>`
 }
 
-func TestScrapeGalleryList_NonPagingWalksNext(t *testing.T) {
+// searchHTML renders a search results page (with the result-count banner when
+// withBanner) and a "Next >" cursor at nextHref.
+func searchHTML(withBanner bool, nextHref string) string {
+	banner := ""
+	if withBanner {
+		banner = `<div class="searchtext"><p>Found 100 results</p></div>`
+	}
+	next := ""
+	if nextHref != "" {
+		next = `<a href="` + nextHref + `">Next &gt;</a>`
+	}
+	return `<html><head><title>x</title></head><body>
+<div class="ido"><div></div><div>` + banner + `
+<table class="itg gltm"><tbody><tr>
+<td class="gl3m glname"><a href="https://exhentai.org/g/123/abc"><div class="glink">Title</div></a></td>
+<td class="gl1m"><div class="cs">Doujinshi</div></td>
+<td class="gl2m"><div class="ir" style="background-position:-16px -1px"></div></td>
+<td class="gl5m"><div><a>uploader</a></div></td>
+</tr></tbody></table>
+</div></div>` + next + `</body></html>`
+}
+
+func cursorServer(t *testing.T, render func(withBanner bool, nextHref string) string) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
 	var requests atomic.Int32
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, `<html><head><title>x</title></head><body><div class="ido"><a href="%s/?page=1">Next &gt;</a></div></body></html>`, srv.URL)
+		n := 1
+		if v := r.URL.Query().Get("next"); v != "" {
+			n, _ = strconv.Atoi(v)
+		}
+		fmt.Fprint(w, render(r.URL.Query().Get("next") == "", fmt.Sprintf("%s/?next=%d", srv.URL, n+1)))
 	}))
-	defer srv.Close()
+	t.Cleanup(srv.Close)
+	return srv, &requests
+}
 
-	_, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 2, nil, false)
-	if err != nil {
-		t.Fatalf("ScrapeGalleryList error: %v", err)
+func TestScrapeGalleryList_SequentialPagesUseCachedCursor(t *testing.T) {
+	srv, requests := cursorServer(t, func(_ bool, nextHref string) string {
+		return listingHTML(nextHref)
+	})
+
+	for page := range 4 {
+		results, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", page, nil)
+		if err != nil {
+			t.Fatalf("page %d: %v", page, err)
+		}
+		if len(results) != 0 {
+			t.Fatalf("page %d: expected empty results, got %d", page, len(results))
+		}
 	}
-	if got := requests.Load(); got != 3 {
-		t.Errorf("upstream requests = %d, want 3 (walk page 0 -> 1 -> 2)", got)
+	if got := requests.Load(); got != 4 {
+		t.Errorf("upstream requests = %d, want 4 (one per sequential page)", got)
 	}
 }
 
-func TestScrapeSearch_PagingUsesSingleRequest(t *testing.T) {
-	var requests atomic.Int32
-	var lastQuery atomic.Value
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests.Add(1)
-		lastQuery.Store(r.URL.RawQuery)
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, searchResultsHTML)
-	}))
-	defer srv.Close()
+func TestScrapeGalleryList_RandomAccessWalksThenCaches(t *testing.T) {
+	srv, requests := cursorServer(t, func(_ bool, nextHref string) string {
+		return listingHTML(nextHref)
+	})
 
-	total, results, err := ScrapeSearch(t.Context(), srv.Client(), srv.URL+"/", "test", nil, 2, nil)
+	if _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 2, nil); err != nil {
+		t.Fatalf("page 2: %v", err)
+	}
+	if got := requests.Load(); got != 3 {
+		t.Errorf("after random page 2: requests = %d, want 3 (walk 0..2)", got)
+	}
+	if _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 3, nil); err != nil {
+		t.Fatalf("page 3: %v", err)
+	}
+	if got := requests.Load(); got != 4 {
+		t.Errorf("after page 3: requests = %d, want 4 (reuse cached cursor)", got)
+	}
+}
+
+func TestScrapeSearch_UsesCachedCursorAcrossPages(t *testing.T) {
+	srv, requests := cursorServer(t, func(_ bool, nextHref string) string {
+		return searchHTML(true, nextHref)
+	})
+
+	total, results, err := ScrapeSearch(t.Context(), srv.Client(), srv.URL+"/", "test", nil, 1, nil)
 	if err != nil {
-		t.Fatalf("ScrapeSearch error: %v", err)
+		t.Fatalf("page 1: %v", err)
 	}
-	if total != 100 {
-		t.Errorf("total = %d, want 100", total)
+	if total != 100 || len(results) != 1 {
+		t.Fatalf("page 1: total=%d results=%d, want 100/1", total, len(results))
 	}
-	if len(results) != 1 || results[0].GalleryID != 123 {
-		t.Fatalf("unexpected results: %+v", results)
+	if got := requests.Load(); got != 2 {
+		t.Errorf("after page 1: requests = %d, want 2 (walk 0..1)", got)
 	}
-	if got := requests.Load(); got != 1 {
-		t.Errorf("upstream requests = %d, want 1", got)
+
+	total, results, err = ScrapeSearch(t.Context(), srv.Client(), srv.URL+"/", "test", nil, 2, nil)
+	if err != nil {
+		t.Fatalf("page 2: %v", err)
 	}
-	if !strings.Contains(lastQuery.Load().(string), "page=2") {
-		t.Errorf("upstream query = %q, want it to contain page=2", lastQuery.Load())
+	if total != 100 || len(results) != 1 {
+		t.Fatalf("page 2: total=%d results=%d, want 100/1", total, len(results))
+	}
+	if got := requests.Load(); got != 3 {
+		t.Errorf("after page 2: requests = %d, want 3 (reuse cached cursor)", got)
 	}
 }
 
 func TestScrapeSearch_FallsBackToPageZeroForTotal(t *testing.T) {
-	var requests atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests.Add(1)
-		w.Header().Set("Content-Type", "text/html")
-		if r.URL.Query().Get("page") == "2" {
-			// Target page lacks the result-count banner but still has rows.
-			fmt.Fprint(w, searchResultsNoBannerHTML)
-			return
-		}
-		fmt.Fprint(w, searchResultsHTML)
-	}))
-	defer srv.Close()
+	srv, requests := cursorServer(t, func(withBanner bool, nextHref string) string {
+		return searchHTML(withBanner, nextHref)
+	})
 
-	total, results, err := ScrapeSearch(t.Context(), srv.Client(), srv.URL+"/", "test", nil, 2, nil)
+	total, results, err := ScrapeSearch(t.Context(), srv.Client(), srv.URL+"/", "test", nil, 1, nil)
 	if err != nil {
 		t.Fatalf("ScrapeSearch error: %v", err)
 	}
-	if total != 100 {
-		t.Errorf("total = %d, want 100", total)
+	if total != 100 || len(results) != 1 {
+		t.Fatalf("total=%d results=%d, want 100/1", total, len(results))
 	}
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(results))
+	if got := requests.Load(); got != 3 {
+		t.Errorf("upstream requests = %d, want 3 (walk 0..1 + page 0 fallback)", got)
 	}
-	if got := requests.Load(); got != 2 {
-		t.Errorf("upstream requests = %d, want 2 (target + page 0 fallback)", got)
+}
+
+func TestExtractNextURL(t *testing.T) {
+	tests := []struct {
+		name string
+		html string
+		want string
+	}{
+		{
+			"unext id preferred over label",
+			`<html><body><a id="unext" href="/?next=2">Next &gt;</a><a href="/?other=1">Next &gt;</a></body></html>`,
+			"/?next=2",
+		},
+		{
+			"rel=next",
+			`<html><body><a rel="next" href="/?next=5">anything</a></body></html>`,
+			"/?next=5",
+		},
+		{
+			"label fallback",
+			`<html><body><a href="/?next=7">Next &gt;</a></body></html>`,
+			"/?next=7",
+		},
+		{
+			"none",
+			`<html><body><a href="/?x=1">Prev</a></body></html>`,
+			"",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := goquery.NewDocumentFromReader(strings.NewReader(tt.html))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := extractNextURL(doc); got != tt.want {
+				t.Errorf("extractNextURL() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
