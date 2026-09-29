@@ -27,6 +27,16 @@ type ReadingProgress struct {
 	Progress float64 `json:"progress,omitempty"`
 	// Completed holds the value of the "completed" field.
 	Completed bool `json:"completed,omitempty"`
+	// Title holds the value of the "title" field.
+	Title string `json:"title,omitempty"`
+	// TitleJpn holds the value of the "title_jpn" field.
+	TitleJpn string `json:"title_jpn,omitempty"`
+	// Category holds the value of the "category" field.
+	Category string `json:"category,omitempty"`
+	// Thumbnail holds the value of the "thumbnail" field.
+	Thumbnail string `json:"thumbnail,omitempty"`
+	// PageCount holds the value of the "page_count" field.
+	PageCount int `json:"page_count,omitempty"`
 	// StartedAt holds the value of the "started_at" field.
 	StartedAt *time.Time `json:"started_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -43,9 +53,9 @@ func (*ReadingProgress) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case readingprogress.FieldProgress:
 			values[i] = new(sql.NullFloat64)
-		case readingprogress.FieldID, readingprogress.FieldGalleryID, readingprogress.FieldCurrentPage:
+		case readingprogress.FieldID, readingprogress.FieldGalleryID, readingprogress.FieldCurrentPage, readingprogress.FieldPageCount:
 			values[i] = new(sql.NullInt64)
-		case readingprogress.FieldToken:
+		case readingprogress.FieldToken, readingprogress.FieldTitle, readingprogress.FieldTitleJpn, readingprogress.FieldCategory, readingprogress.FieldThumbnail:
 			values[i] = new(sql.NullString)
 		case readingprogress.FieldStartedAt, readingprogress.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -99,6 +109,36 @@ func (_m *ReadingProgress) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field completed", values[i])
 			} else if value.Valid {
 				_m.Completed = value.Bool
+			}
+		case readingprogress.FieldTitle:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field title", values[i])
+			} else if value.Valid {
+				_m.Title = value.String
+			}
+		case readingprogress.FieldTitleJpn:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field title_jpn", values[i])
+			} else if value.Valid {
+				_m.TitleJpn = value.String
+			}
+		case readingprogress.FieldCategory:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field category", values[i])
+			} else if value.Valid {
+				_m.Category = value.String
+			}
+		case readingprogress.FieldThumbnail:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field thumbnail", values[i])
+			} else if value.Valid {
+				_m.Thumbnail = value.String
+			}
+		case readingprogress.FieldPageCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field page_count", values[i])
+			} else if value.Valid {
+				_m.PageCount = int(value.Int64)
 			}
 		case readingprogress.FieldStartedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -164,6 +204,21 @@ func (_m *ReadingProgress) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("completed=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Completed))
+	builder.WriteString(", ")
+	builder.WriteString("title=")
+	builder.WriteString(_m.Title)
+	builder.WriteString(", ")
+	builder.WriteString("title_jpn=")
+	builder.WriteString(_m.TitleJpn)
+	builder.WriteString(", ")
+	builder.WriteString("category=")
+	builder.WriteString(_m.Category)
+	builder.WriteString(", ")
+	builder.WriteString("thumbnail=")
+	builder.WriteString(_m.Thumbnail)
+	builder.WriteString(", ")
+	builder.WriteString("page_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PageCount))
 	builder.WriteString(", ")
 	if v := _m.StartedAt; v != nil {
 		builder.WriteString("started_at=")

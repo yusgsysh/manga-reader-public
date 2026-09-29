@@ -23,6 +23,16 @@ const (
 	FieldProgress = "progress"
 	// FieldCompleted holds the string denoting the completed field in the database.
 	FieldCompleted = "completed"
+	// FieldTitle holds the string denoting the title field in the database.
+	FieldTitle = "title"
+	// FieldTitleJpn holds the string denoting the title_jpn field in the database.
+	FieldTitleJpn = "title_jpn"
+	// FieldCategory holds the string denoting the category field in the database.
+	FieldCategory = "category"
+	// FieldThumbnail holds the string denoting the thumbnail field in the database.
+	FieldThumbnail = "thumbnail"
+	// FieldPageCount holds the string denoting the page_count field in the database.
+	FieldPageCount = "page_count"
 	// FieldStartedAt holds the string denoting the started_at field in the database.
 	FieldStartedAt = "started_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -39,6 +49,11 @@ var Columns = []string{
 	FieldCurrentPage,
 	FieldProgress,
 	FieldCompleted,
+	FieldTitle,
+	FieldTitleJpn,
+	FieldCategory,
+	FieldThumbnail,
+	FieldPageCount,
 	FieldStartedAt,
 	FieldUpdatedAt,
 }
@@ -64,6 +79,16 @@ var (
 	ProgressValidator func(float64) error
 	// DefaultCompleted holds the default value on creation for the "completed" field.
 	DefaultCompleted bool
+	// DefaultTitle holds the default value on creation for the "title" field.
+	DefaultTitle string
+	// DefaultTitleJpn holds the default value on creation for the "title_jpn" field.
+	DefaultTitleJpn string
+	// DefaultCategory holds the default value on creation for the "category" field.
+	DefaultCategory string
+	// DefaultThumbnail holds the default value on creation for the "thumbnail" field.
+	DefaultThumbnail string
+	// DefaultPageCount holds the default value on creation for the "page_count" field.
+	DefaultPageCount int
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
 )
@@ -99,6 +124,31 @@ func ByProgress(opts ...sql.OrderTermOption) OrderOption {
 // ByCompleted orders the results by the completed field.
 func ByCompleted(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCompleted, opts...).ToFunc()
+}
+
+// ByTitle orders the results by the title field.
+func ByTitle(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTitle, opts...).ToFunc()
+}
+
+// ByTitleJpn orders the results by the title_jpn field.
+func ByTitleJpn(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTitleJpn, opts...).ToFunc()
+}
+
+// ByCategory orders the results by the category field.
+func ByCategory(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCategory, opts...).ToFunc()
+}
+
+// ByThumbnail orders the results by the thumbnail field.
+func ByThumbnail(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldThumbnail, opts...).ToFunc()
+}
+
+// ByPageCount orders the results by the page_count field.
+func ByPageCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPageCount, opts...).ToFunc()
 }
 
 // ByStartedAt orders the results by the started_at field.

@@ -41,4 +41,16 @@ export interface UpdateReadingProgressRequest {
   current_page: number;
   progress: number;
   completed: boolean;
+  title?: string;
+  title_jpn?: string;
+  category?: string;
+  thumbnail?: string;
+  page_count?: number;
 }
+
+// Gallery metadata snapshot persisted alongside a reading record so the
+// recently-read list can render without re-fetching gallery metadata.
+export type ProgressMetadata = Pick<
+  UpdateReadingProgressRequest,
+  "title" | "title_jpn" | "category" | "thumbnail" | "page_count"
+>;

@@ -79,6 +79,31 @@ func Completed(v bool) predicate.ReadingProgress {
 	return predicate.ReadingProgress(sql.FieldEQ(FieldCompleted, v))
 }
 
+// Title applies equality check predicate on the "title" field. It's identical to TitleEQ.
+func Title(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEQ(FieldTitle, v))
+}
+
+// TitleJpn applies equality check predicate on the "title_jpn" field. It's identical to TitleJpnEQ.
+func TitleJpn(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEQ(FieldTitleJpn, v))
+}
+
+// Category applies equality check predicate on the "category" field. It's identical to CategoryEQ.
+func Category(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEQ(FieldCategory, v))
+}
+
+// Thumbnail applies equality check predicate on the "thumbnail" field. It's identical to ThumbnailEQ.
+func Thumbnail(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEQ(FieldThumbnail, v))
+}
+
+// PageCount applies equality check predicate on the "page_count" field. It's identical to PageCountEQ.
+func PageCount(v int) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEQ(FieldPageCount, v))
+}
+
 // StartedAt applies equality check predicate on the "started_at" field. It's identical to StartedAtEQ.
 func StartedAt(v time.Time) predicate.ReadingProgress {
 	return predicate.ReadingProgress(sql.FieldEQ(FieldStartedAt, v))
@@ -282,6 +307,306 @@ func CompletedEQ(v bool) predicate.ReadingProgress {
 // CompletedNEQ applies the NEQ predicate on the "completed" field.
 func CompletedNEQ(v bool) predicate.ReadingProgress {
 	return predicate.ReadingProgress(sql.FieldNEQ(FieldCompleted, v))
+}
+
+// TitleEQ applies the EQ predicate on the "title" field.
+func TitleEQ(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEQ(FieldTitle, v))
+}
+
+// TitleNEQ applies the NEQ predicate on the "title" field.
+func TitleNEQ(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldNEQ(FieldTitle, v))
+}
+
+// TitleIn applies the In predicate on the "title" field.
+func TitleIn(vs ...string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldIn(FieldTitle, vs...))
+}
+
+// TitleNotIn applies the NotIn predicate on the "title" field.
+func TitleNotIn(vs ...string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldNotIn(FieldTitle, vs...))
+}
+
+// TitleGT applies the GT predicate on the "title" field.
+func TitleGT(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldGT(FieldTitle, v))
+}
+
+// TitleGTE applies the GTE predicate on the "title" field.
+func TitleGTE(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldGTE(FieldTitle, v))
+}
+
+// TitleLT applies the LT predicate on the "title" field.
+func TitleLT(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldLT(FieldTitle, v))
+}
+
+// TitleLTE applies the LTE predicate on the "title" field.
+func TitleLTE(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldLTE(FieldTitle, v))
+}
+
+// TitleContains applies the Contains predicate on the "title" field.
+func TitleContains(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldContains(FieldTitle, v))
+}
+
+// TitleHasPrefix applies the HasPrefix predicate on the "title" field.
+func TitleHasPrefix(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldHasPrefix(FieldTitle, v))
+}
+
+// TitleHasSuffix applies the HasSuffix predicate on the "title" field.
+func TitleHasSuffix(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldHasSuffix(FieldTitle, v))
+}
+
+// TitleEqualFold applies the EqualFold predicate on the "title" field.
+func TitleEqualFold(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEqualFold(FieldTitle, v))
+}
+
+// TitleContainsFold applies the ContainsFold predicate on the "title" field.
+func TitleContainsFold(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldContainsFold(FieldTitle, v))
+}
+
+// TitleJpnEQ applies the EQ predicate on the "title_jpn" field.
+func TitleJpnEQ(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEQ(FieldTitleJpn, v))
+}
+
+// TitleJpnNEQ applies the NEQ predicate on the "title_jpn" field.
+func TitleJpnNEQ(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldNEQ(FieldTitleJpn, v))
+}
+
+// TitleJpnIn applies the In predicate on the "title_jpn" field.
+func TitleJpnIn(vs ...string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldIn(FieldTitleJpn, vs...))
+}
+
+// TitleJpnNotIn applies the NotIn predicate on the "title_jpn" field.
+func TitleJpnNotIn(vs ...string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldNotIn(FieldTitleJpn, vs...))
+}
+
+// TitleJpnGT applies the GT predicate on the "title_jpn" field.
+func TitleJpnGT(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldGT(FieldTitleJpn, v))
+}
+
+// TitleJpnGTE applies the GTE predicate on the "title_jpn" field.
+func TitleJpnGTE(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldGTE(FieldTitleJpn, v))
+}
+
+// TitleJpnLT applies the LT predicate on the "title_jpn" field.
+func TitleJpnLT(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldLT(FieldTitleJpn, v))
+}
+
+// TitleJpnLTE applies the LTE predicate on the "title_jpn" field.
+func TitleJpnLTE(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldLTE(FieldTitleJpn, v))
+}
+
+// TitleJpnContains applies the Contains predicate on the "title_jpn" field.
+func TitleJpnContains(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldContains(FieldTitleJpn, v))
+}
+
+// TitleJpnHasPrefix applies the HasPrefix predicate on the "title_jpn" field.
+func TitleJpnHasPrefix(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldHasPrefix(FieldTitleJpn, v))
+}
+
+// TitleJpnHasSuffix applies the HasSuffix predicate on the "title_jpn" field.
+func TitleJpnHasSuffix(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldHasSuffix(FieldTitleJpn, v))
+}
+
+// TitleJpnEqualFold applies the EqualFold predicate on the "title_jpn" field.
+func TitleJpnEqualFold(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEqualFold(FieldTitleJpn, v))
+}
+
+// TitleJpnContainsFold applies the ContainsFold predicate on the "title_jpn" field.
+func TitleJpnContainsFold(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldContainsFold(FieldTitleJpn, v))
+}
+
+// CategoryEQ applies the EQ predicate on the "category" field.
+func CategoryEQ(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEQ(FieldCategory, v))
+}
+
+// CategoryNEQ applies the NEQ predicate on the "category" field.
+func CategoryNEQ(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldNEQ(FieldCategory, v))
+}
+
+// CategoryIn applies the In predicate on the "category" field.
+func CategoryIn(vs ...string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldIn(FieldCategory, vs...))
+}
+
+// CategoryNotIn applies the NotIn predicate on the "category" field.
+func CategoryNotIn(vs ...string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldNotIn(FieldCategory, vs...))
+}
+
+// CategoryGT applies the GT predicate on the "category" field.
+func CategoryGT(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldGT(FieldCategory, v))
+}
+
+// CategoryGTE applies the GTE predicate on the "category" field.
+func CategoryGTE(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldGTE(FieldCategory, v))
+}
+
+// CategoryLT applies the LT predicate on the "category" field.
+func CategoryLT(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldLT(FieldCategory, v))
+}
+
+// CategoryLTE applies the LTE predicate on the "category" field.
+func CategoryLTE(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldLTE(FieldCategory, v))
+}
+
+// CategoryContains applies the Contains predicate on the "category" field.
+func CategoryContains(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldContains(FieldCategory, v))
+}
+
+// CategoryHasPrefix applies the HasPrefix predicate on the "category" field.
+func CategoryHasPrefix(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldHasPrefix(FieldCategory, v))
+}
+
+// CategoryHasSuffix applies the HasSuffix predicate on the "category" field.
+func CategoryHasSuffix(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldHasSuffix(FieldCategory, v))
+}
+
+// CategoryEqualFold applies the EqualFold predicate on the "category" field.
+func CategoryEqualFold(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEqualFold(FieldCategory, v))
+}
+
+// CategoryContainsFold applies the ContainsFold predicate on the "category" field.
+func CategoryContainsFold(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldContainsFold(FieldCategory, v))
+}
+
+// ThumbnailEQ applies the EQ predicate on the "thumbnail" field.
+func ThumbnailEQ(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEQ(FieldThumbnail, v))
+}
+
+// ThumbnailNEQ applies the NEQ predicate on the "thumbnail" field.
+func ThumbnailNEQ(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldNEQ(FieldThumbnail, v))
+}
+
+// ThumbnailIn applies the In predicate on the "thumbnail" field.
+func ThumbnailIn(vs ...string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldIn(FieldThumbnail, vs...))
+}
+
+// ThumbnailNotIn applies the NotIn predicate on the "thumbnail" field.
+func ThumbnailNotIn(vs ...string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldNotIn(FieldThumbnail, vs...))
+}
+
+// ThumbnailGT applies the GT predicate on the "thumbnail" field.
+func ThumbnailGT(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldGT(FieldThumbnail, v))
+}
+
+// ThumbnailGTE applies the GTE predicate on the "thumbnail" field.
+func ThumbnailGTE(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldGTE(FieldThumbnail, v))
+}
+
+// ThumbnailLT applies the LT predicate on the "thumbnail" field.
+func ThumbnailLT(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldLT(FieldThumbnail, v))
+}
+
+// ThumbnailLTE applies the LTE predicate on the "thumbnail" field.
+func ThumbnailLTE(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldLTE(FieldThumbnail, v))
+}
+
+// ThumbnailContains applies the Contains predicate on the "thumbnail" field.
+func ThumbnailContains(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldContains(FieldThumbnail, v))
+}
+
+// ThumbnailHasPrefix applies the HasPrefix predicate on the "thumbnail" field.
+func ThumbnailHasPrefix(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldHasPrefix(FieldThumbnail, v))
+}
+
+// ThumbnailHasSuffix applies the HasSuffix predicate on the "thumbnail" field.
+func ThumbnailHasSuffix(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldHasSuffix(FieldThumbnail, v))
+}
+
+// ThumbnailEqualFold applies the EqualFold predicate on the "thumbnail" field.
+func ThumbnailEqualFold(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEqualFold(FieldThumbnail, v))
+}
+
+// ThumbnailContainsFold applies the ContainsFold predicate on the "thumbnail" field.
+func ThumbnailContainsFold(v string) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldContainsFold(FieldThumbnail, v))
+}
+
+// PageCountEQ applies the EQ predicate on the "page_count" field.
+func PageCountEQ(v int) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEQ(FieldPageCount, v))
+}
+
+// PageCountNEQ applies the NEQ predicate on the "page_count" field.
+func PageCountNEQ(v int) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldNEQ(FieldPageCount, v))
+}
+
+// PageCountIn applies the In predicate on the "page_count" field.
+func PageCountIn(vs ...int) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldIn(FieldPageCount, vs...))
+}
+
+// PageCountNotIn applies the NotIn predicate on the "page_count" field.
+func PageCountNotIn(vs ...int) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldNotIn(FieldPageCount, vs...))
+}
+
+// PageCountGT applies the GT predicate on the "page_count" field.
+func PageCountGT(v int) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldGT(FieldPageCount, v))
+}
+
+// PageCountGTE applies the GTE predicate on the "page_count" field.
+func PageCountGTE(v int) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldGTE(FieldPageCount, v))
+}
+
+// PageCountLT applies the LT predicate on the "page_count" field.
+func PageCountLT(v int) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldLT(FieldPageCount, v))
+}
+
+// PageCountLTE applies the LTE predicate on the "page_count" field.
+func PageCountLTE(v int) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldLTE(FieldPageCount, v))
 }
 
 // StartedAtEQ applies the EQ predicate on the "started_at" field.

@@ -110,8 +110,28 @@ func init() {
 	readingprogressDescCompleted := readingprogressFields[4].Descriptor()
 	// readingprogress.DefaultCompleted holds the default value on creation for the completed field.
 	readingprogress.DefaultCompleted = readingprogressDescCompleted.Default.(bool)
+	// readingprogressDescTitle is the schema descriptor for title field.
+	readingprogressDescTitle := readingprogressFields[5].Descriptor()
+	// readingprogress.DefaultTitle holds the default value on creation for the title field.
+	readingprogress.DefaultTitle = readingprogressDescTitle.Default.(string)
+	// readingprogressDescTitleJpn is the schema descriptor for title_jpn field.
+	readingprogressDescTitleJpn := readingprogressFields[6].Descriptor()
+	// readingprogress.DefaultTitleJpn holds the default value on creation for the title_jpn field.
+	readingprogress.DefaultTitleJpn = readingprogressDescTitleJpn.Default.(string)
+	// readingprogressDescCategory is the schema descriptor for category field.
+	readingprogressDescCategory := readingprogressFields[7].Descriptor()
+	// readingprogress.DefaultCategory holds the default value on creation for the category field.
+	readingprogress.DefaultCategory = readingprogressDescCategory.Default.(string)
+	// readingprogressDescThumbnail is the schema descriptor for thumbnail field.
+	readingprogressDescThumbnail := readingprogressFields[8].Descriptor()
+	// readingprogress.DefaultThumbnail holds the default value on creation for the thumbnail field.
+	readingprogress.DefaultThumbnail = readingprogressDescThumbnail.Default.(string)
+	// readingprogressDescPageCount is the schema descriptor for page_count field.
+	readingprogressDescPageCount := readingprogressFields[9].Descriptor()
+	// readingprogress.DefaultPageCount holds the default value on creation for the page_count field.
+	readingprogress.DefaultPageCount = readingprogressDescPageCount.Default.(int)
 	// readingprogressDescUpdatedAt is the schema descriptor for updated_at field.
-	readingprogressDescUpdatedAt := readingprogressFields[6].Descriptor()
+	readingprogressDescUpdatedAt := readingprogressFields[11].Descriptor()
 	// readingprogress.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	readingprogress.UpdateDefaultUpdatedAt = readingprogressDescUpdatedAt.UpdateDefault.(func() time.Time)
 }

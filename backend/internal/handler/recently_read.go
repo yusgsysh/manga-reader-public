@@ -7,7 +7,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"manga-reader/internal/ent"
-	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/readingprogress"
 
 	"manga-reader/internal/model"
@@ -46,29 +45,15 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 
 	items := make([]model.RecentlyReadItem, 0, len(entities))
 
-	ids := make([]int64, 0, len(entities))
 	for _, rp := range entities {
-		ids = append(ids, rp.GalleryID)
-	}
-
-	shelfByKey := make(map[galleryRef]*ent.Bookshelf, len(ids))
-	if len(ids) > 0 {
-		shelfRows, err := s.DB.Client.Bookshelf.Query().
-			Where(bookshelf.GalleryIDIn(ids...)).
-			All(ctx)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list bookshelf failed: %v", err)})
-			return
-		}
-		for _, b := range shelfRows {
-			shelfByKey[galleryRef{id: b.GalleryID, token: b.Token}] = b
-		}
-	}
-
-	for _, rp := range entities {
-		item := model.RecentlyReadItem{
-			ID:    rp.GalleryID,
-			Token: rp.Token,
+		items = append(items, model.RecentlyReadItem{
+			ID:        rp.GalleryID,
+			Token:     rp.Token,
+			Title:     rp.Title,
+			TitleJPN:  rp.TitleJpn,
+			Category:  model.GalleryCategory(rp.Category),
+			Thumbnail: rp.Thumbnail,
+			Pages:     rp.PageCount,
 			Reading: model.ReadingProgress{
 				GalleryID:   rp.GalleryID,
 				Token:       rp.Token,
@@ -78,17 +63,7 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 				StartedAt:   rp.StartedAt,
 				UpdatedAt:   rp.UpdatedAt,
 			},
-		}
-
-		if b := shelfByKey[galleryRef{id: rp.GalleryID, token: rp.Token}]; b != nil {
-			item.Title = b.Title
-			item.TitleJPN = b.TitleJpn
-			item.Category = model.GalleryCategory(b.Category)
-			item.Thumbnail = b.Thumbnail
-			item.Pages = b.PageCount
-		}
-
-		items = append(items, item)
+		})
 	}
 
 	c.JSON(http.StatusOK, model.RecentlyReadResponse{

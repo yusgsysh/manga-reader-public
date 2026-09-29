@@ -74,6 +74,76 @@ func (_c *ReadingProgressCreate) SetNillableCompleted(v *bool) *ReadingProgressC
 	return _c
 }
 
+// SetTitle sets the "title" field.
+func (_c *ReadingProgressCreate) SetTitle(v string) *ReadingProgressCreate {
+	_c.mutation.SetTitle(v)
+	return _c
+}
+
+// SetNillableTitle sets the "title" field if the given value is not nil.
+func (_c *ReadingProgressCreate) SetNillableTitle(v *string) *ReadingProgressCreate {
+	if v != nil {
+		_c.SetTitle(*v)
+	}
+	return _c
+}
+
+// SetTitleJpn sets the "title_jpn" field.
+func (_c *ReadingProgressCreate) SetTitleJpn(v string) *ReadingProgressCreate {
+	_c.mutation.SetTitleJpn(v)
+	return _c
+}
+
+// SetNillableTitleJpn sets the "title_jpn" field if the given value is not nil.
+func (_c *ReadingProgressCreate) SetNillableTitleJpn(v *string) *ReadingProgressCreate {
+	if v != nil {
+		_c.SetTitleJpn(*v)
+	}
+	return _c
+}
+
+// SetCategory sets the "category" field.
+func (_c *ReadingProgressCreate) SetCategory(v string) *ReadingProgressCreate {
+	_c.mutation.SetCategory(v)
+	return _c
+}
+
+// SetNillableCategory sets the "category" field if the given value is not nil.
+func (_c *ReadingProgressCreate) SetNillableCategory(v *string) *ReadingProgressCreate {
+	if v != nil {
+		_c.SetCategory(*v)
+	}
+	return _c
+}
+
+// SetThumbnail sets the "thumbnail" field.
+func (_c *ReadingProgressCreate) SetThumbnail(v string) *ReadingProgressCreate {
+	_c.mutation.SetThumbnail(v)
+	return _c
+}
+
+// SetNillableThumbnail sets the "thumbnail" field if the given value is not nil.
+func (_c *ReadingProgressCreate) SetNillableThumbnail(v *string) *ReadingProgressCreate {
+	if v != nil {
+		_c.SetThumbnail(*v)
+	}
+	return _c
+}
+
+// SetPageCount sets the "page_count" field.
+func (_c *ReadingProgressCreate) SetPageCount(v int) *ReadingProgressCreate {
+	_c.mutation.SetPageCount(v)
+	return _c
+}
+
+// SetNillablePageCount sets the "page_count" field if the given value is not nil.
+func (_c *ReadingProgressCreate) SetNillablePageCount(v *int) *ReadingProgressCreate {
+	if v != nil {
+		_c.SetPageCount(*v)
+	}
+	return _c
+}
+
 // SetStartedAt sets the "started_at" field.
 func (_c *ReadingProgressCreate) SetStartedAt(v time.Time) *ReadingProgressCreate {
 	_c.mutation.SetStartedAt(v)
@@ -149,6 +219,26 @@ func (_c *ReadingProgressCreate) defaults() {
 		v := readingprogress.DefaultCompleted
 		_c.mutation.SetCompleted(v)
 	}
+	if _, ok := _c.mutation.Title(); !ok {
+		v := readingprogress.DefaultTitle
+		_c.mutation.SetTitle(v)
+	}
+	if _, ok := _c.mutation.TitleJpn(); !ok {
+		v := readingprogress.DefaultTitleJpn
+		_c.mutation.SetTitleJpn(v)
+	}
+	if _, ok := _c.mutation.Category(); !ok {
+		v := readingprogress.DefaultCategory
+		_c.mutation.SetCategory(v)
+	}
+	if _, ok := _c.mutation.Thumbnail(); !ok {
+		v := readingprogress.DefaultThumbnail
+		_c.mutation.SetThumbnail(v)
+	}
+	if _, ok := _c.mutation.PageCount(); !ok {
+		v := readingprogress.DefaultPageCount
+		_c.mutation.SetPageCount(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -177,6 +267,21 @@ func (_c *ReadingProgressCreate) check() error {
 	}
 	if _, ok := _c.mutation.Completed(); !ok {
 		return &ValidationError{Name: "completed", err: errors.New(`ent: missing required field "ReadingProgress.completed"`)}
+	}
+	if _, ok := _c.mutation.Title(); !ok {
+		return &ValidationError{Name: "title", err: errors.New(`ent: missing required field "ReadingProgress.title"`)}
+	}
+	if _, ok := _c.mutation.TitleJpn(); !ok {
+		return &ValidationError{Name: "title_jpn", err: errors.New(`ent: missing required field "ReadingProgress.title_jpn"`)}
+	}
+	if _, ok := _c.mutation.Category(); !ok {
+		return &ValidationError{Name: "category", err: errors.New(`ent: missing required field "ReadingProgress.category"`)}
+	}
+	if _, ok := _c.mutation.Thumbnail(); !ok {
+		return &ValidationError{Name: "thumbnail", err: errors.New(`ent: missing required field "ReadingProgress.thumbnail"`)}
+	}
+	if _, ok := _c.mutation.PageCount(); !ok {
+		return &ValidationError{Name: "page_count", err: errors.New(`ent: missing required field "ReadingProgress.page_count"`)}
 	}
 	return nil
 }
@@ -223,6 +328,26 @@ func (_c *ReadingProgressCreate) createSpec() (*ReadingProgress, *sqlgraph.Creat
 	if value, ok := _c.mutation.Completed(); ok {
 		_spec.SetField(readingprogress.FieldCompleted, field.TypeBool, value)
 		_node.Completed = value
+	}
+	if value, ok := _c.mutation.Title(); ok {
+		_spec.SetField(readingprogress.FieldTitle, field.TypeString, value)
+		_node.Title = value
+	}
+	if value, ok := _c.mutation.TitleJpn(); ok {
+		_spec.SetField(readingprogress.FieldTitleJpn, field.TypeString, value)
+		_node.TitleJpn = value
+	}
+	if value, ok := _c.mutation.Category(); ok {
+		_spec.SetField(readingprogress.FieldCategory, field.TypeString, value)
+		_node.Category = value
+	}
+	if value, ok := _c.mutation.Thumbnail(); ok {
+		_spec.SetField(readingprogress.FieldThumbnail, field.TypeString, value)
+		_node.Thumbnail = value
+	}
+	if value, ok := _c.mutation.PageCount(); ok {
+		_spec.SetField(readingprogress.FieldPageCount, field.TypeInt, value)
+		_node.PageCount = value
 	}
 	if value, ok := _c.mutation.StartedAt(); ok {
 		_spec.SetField(readingprogress.FieldStartedAt, field.TypeTime, value)

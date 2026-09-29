@@ -713,7 +713,12 @@ Cache-Control: public, max-age=31536000, immutable
 {
   "current_page": 10,
   "progress": 0.416,
-  "completed": false
+  "completed": false,
+  "title": "Gallery Title",
+  "title_jpn": "タイトル",
+  "category": "doujinshi",
+  "thumbnail": "https://example.com/thumb.webp",
+  "page_count": 24
 }
 ```
 
@@ -722,6 +727,13 @@ Cache-Control: public, max-age=31536000, immutable
 | current_page | int | yes | 当前阅读页码 (≥ 0) |
 | progress | float | yes | 阅读进度 (0.0 ~ 1.0) |
 | completed | bool | yes | 是否读完。设为 `true` 时 `progress` 自动设为 `1` |
+| title | string | no | Gallery 标题，用于「最近阅读」展示 |
+| title_jpn | string | no | 日文标题 |
+| category | string | no | Gallery 分类 |
+| thumbnail | string | no | 缩略图 URL |
+| page_count | int | no | 页数 |
+
+> 元数据字段会随阅读记录一起持久化，供「最近阅读」列表直接使用，免去逐条查询元数据的额外请求。它们只在记录首次创建（或对应字段尚为空）时写入，后续更新不会覆盖或清空已保存的值。
 
 **Response (200):**
 
@@ -819,7 +831,7 @@ GET /api/recently-read?page=1
 | total_pages | int | 总页数，`total = 0` 时为 `0` |
 | results | array | 当前页的最近阅读记录 |
 
-> Gallery 从书架移除后，`title`、`title_jpn`、`category`、`thumbnail`、`pages` 返回空字符串/零值。
+> 元数据来自阅读记录本身：首次保存阅读进度时随请求体提交的 gallery 元数据会被快照保存，因此即使 Gallery 已从书架移除，`title`、`title_jpn`、`category`、`thumbnail`、`pages` 仍然返回。若首次保存时未携带元数据，则为空字符串/零值。
 
 **Error Responses:**
 

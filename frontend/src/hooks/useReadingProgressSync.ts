@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { updateReadingProgress } from "../api/progress";
 import { calculateProgress, clampPageIndex } from "../lib/reader";
 import { trackProgressSave } from "../lib/progressSave";
-import type { ReadingProgress } from "../types/reader";
+import type { ProgressMetadata, ReadingProgress } from "../types/reader";
 import {
   applyReadingProgressToCaches,
   invalidateReadingLists,
@@ -17,6 +17,7 @@ export function useReadingProgressSync(
   token: string,
   total: number,
   initialPage: number,
+  metadata?: ProgressMetadata,
 ) {
   const mutation = useUpdateReadingProgress(id, token);
   const queryClient = useQueryClient();
@@ -26,10 +27,15 @@ export function useReadingProgressSync(
   const navigatedRef = useRef(false);
   const flushedRef = useRef(false);
   const totalRef = useRef(total);
+  const metadataRef = useRef(metadata);
 
   useEffect(() => {
     totalRef.current = total;
   }, [total]);
+
+  useEffect(() => {
+    metadataRef.current = metadata;
+  }, [metadata]);
 
   // Keep the restored page in sync while the reader data is still loading.
   useEffect(() => {
@@ -45,7 +51,12 @@ export function useReadingProgressSync(
       clamped,
       totalRef.current,
     );
-    return { current_page: clamped, progress, completed };
+    return {
+      current_page: clamped,
+      progress,
+      completed,
+      ...metadataRef.current,
+    };
   }, []);
 
   const flushProgress = useCallback(() => {

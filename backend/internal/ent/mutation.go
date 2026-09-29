@@ -1935,6 +1935,12 @@ type ReadingProgressMutation struct {
 	progress        *float64
 	addprogress     *float64
 	completed       *bool
+	title           *string
+	title_jpn       *string
+	category        *string
+	thumbnail       *string
+	page_count      *int
+	addpage_count   *int
 	started_at      *time.Time
 	updated_at      *time.Time
 	clearedFields   map[string]struct{}
@@ -2281,6 +2287,206 @@ func (m *ReadingProgressMutation) ResetCompleted() {
 	m.completed = nil
 }
 
+// SetTitle sets the "title" field.
+func (m *ReadingProgressMutation) SetTitle(s string) {
+	m.title = &s
+}
+
+// Title returns the value of the "title" field in the mutation.
+func (m *ReadingProgressMutation) Title() (r string, exists bool) {
+	v := m.title
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTitle returns the old "title" field's value of the ReadingProgress entity.
+// If the ReadingProgress object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ReadingProgressMutation) OldTitle(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTitle is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTitle requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTitle: %w", err)
+	}
+	return oldValue.Title, nil
+}
+
+// ResetTitle resets all changes to the "title" field.
+func (m *ReadingProgressMutation) ResetTitle() {
+	m.title = nil
+}
+
+// SetTitleJpn sets the "title_jpn" field.
+func (m *ReadingProgressMutation) SetTitleJpn(s string) {
+	m.title_jpn = &s
+}
+
+// TitleJpn returns the value of the "title_jpn" field in the mutation.
+func (m *ReadingProgressMutation) TitleJpn() (r string, exists bool) {
+	v := m.title_jpn
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTitleJpn returns the old "title_jpn" field's value of the ReadingProgress entity.
+// If the ReadingProgress object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ReadingProgressMutation) OldTitleJpn(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTitleJpn is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTitleJpn requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTitleJpn: %w", err)
+	}
+	return oldValue.TitleJpn, nil
+}
+
+// ResetTitleJpn resets all changes to the "title_jpn" field.
+func (m *ReadingProgressMutation) ResetTitleJpn() {
+	m.title_jpn = nil
+}
+
+// SetCategory sets the "category" field.
+func (m *ReadingProgressMutation) SetCategory(s string) {
+	m.category = &s
+}
+
+// Category returns the value of the "category" field in the mutation.
+func (m *ReadingProgressMutation) Category() (r string, exists bool) {
+	v := m.category
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCategory returns the old "category" field's value of the ReadingProgress entity.
+// If the ReadingProgress object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ReadingProgressMutation) OldCategory(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCategory is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCategory requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCategory: %w", err)
+	}
+	return oldValue.Category, nil
+}
+
+// ResetCategory resets all changes to the "category" field.
+func (m *ReadingProgressMutation) ResetCategory() {
+	m.category = nil
+}
+
+// SetThumbnail sets the "thumbnail" field.
+func (m *ReadingProgressMutation) SetThumbnail(s string) {
+	m.thumbnail = &s
+}
+
+// Thumbnail returns the value of the "thumbnail" field in the mutation.
+func (m *ReadingProgressMutation) Thumbnail() (r string, exists bool) {
+	v := m.thumbnail
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldThumbnail returns the old "thumbnail" field's value of the ReadingProgress entity.
+// If the ReadingProgress object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ReadingProgressMutation) OldThumbnail(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldThumbnail is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldThumbnail requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldThumbnail: %w", err)
+	}
+	return oldValue.Thumbnail, nil
+}
+
+// ResetThumbnail resets all changes to the "thumbnail" field.
+func (m *ReadingProgressMutation) ResetThumbnail() {
+	m.thumbnail = nil
+}
+
+// SetPageCount sets the "page_count" field.
+func (m *ReadingProgressMutation) SetPageCount(i int) {
+	m.page_count = &i
+	m.addpage_count = nil
+}
+
+// PageCount returns the value of the "page_count" field in the mutation.
+func (m *ReadingProgressMutation) PageCount() (r int, exists bool) {
+	v := m.page_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPageCount returns the old "page_count" field's value of the ReadingProgress entity.
+// If the ReadingProgress object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ReadingProgressMutation) OldPageCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPageCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPageCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPageCount: %w", err)
+	}
+	return oldValue.PageCount, nil
+}
+
+// AddPageCount adds i to the "page_count" field.
+func (m *ReadingProgressMutation) AddPageCount(i int) {
+	if m.addpage_count != nil {
+		*m.addpage_count += i
+	} else {
+		m.addpage_count = &i
+	}
+}
+
+// AddedPageCount returns the value that was added to the "page_count" field in this mutation.
+func (m *ReadingProgressMutation) AddedPageCount() (r int, exists bool) {
+	v := m.addpage_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPageCount resets all changes to the "page_count" field.
+func (m *ReadingProgressMutation) ResetPageCount() {
+	m.page_count = nil
+	m.addpage_count = nil
+}
+
 // SetStartedAt sets the "started_at" field.
 func (m *ReadingProgressMutation) SetStartedAt(t time.Time) {
 	m.started_at = &t
@@ -2413,7 +2619,7 @@ func (m *ReadingProgressMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ReadingProgressMutation) Fields() []string {
-	fields := make([]string, 0, 7)
+	fields := make([]string, 0, 12)
 	if m.gallery_id != nil {
 		fields = append(fields, readingprogress.FieldGalleryID)
 	}
@@ -2428,6 +2634,21 @@ func (m *ReadingProgressMutation) Fields() []string {
 	}
 	if m.completed != nil {
 		fields = append(fields, readingprogress.FieldCompleted)
+	}
+	if m.title != nil {
+		fields = append(fields, readingprogress.FieldTitle)
+	}
+	if m.title_jpn != nil {
+		fields = append(fields, readingprogress.FieldTitleJpn)
+	}
+	if m.category != nil {
+		fields = append(fields, readingprogress.FieldCategory)
+	}
+	if m.thumbnail != nil {
+		fields = append(fields, readingprogress.FieldThumbnail)
+	}
+	if m.page_count != nil {
+		fields = append(fields, readingprogress.FieldPageCount)
 	}
 	if m.started_at != nil {
 		fields = append(fields, readingprogress.FieldStartedAt)
@@ -2453,6 +2674,16 @@ func (m *ReadingProgressMutation) Field(name string) (ent.Value, bool) {
 		return m.Progress()
 	case readingprogress.FieldCompleted:
 		return m.Completed()
+	case readingprogress.FieldTitle:
+		return m.Title()
+	case readingprogress.FieldTitleJpn:
+		return m.TitleJpn()
+	case readingprogress.FieldCategory:
+		return m.Category()
+	case readingprogress.FieldThumbnail:
+		return m.Thumbnail()
+	case readingprogress.FieldPageCount:
+		return m.PageCount()
 	case readingprogress.FieldStartedAt:
 		return m.StartedAt()
 	case readingprogress.FieldUpdatedAt:
@@ -2476,6 +2707,16 @@ func (m *ReadingProgressMutation) OldField(ctx context.Context, name string) (en
 		return m.OldProgress(ctx)
 	case readingprogress.FieldCompleted:
 		return m.OldCompleted(ctx)
+	case readingprogress.FieldTitle:
+		return m.OldTitle(ctx)
+	case readingprogress.FieldTitleJpn:
+		return m.OldTitleJpn(ctx)
+	case readingprogress.FieldCategory:
+		return m.OldCategory(ctx)
+	case readingprogress.FieldThumbnail:
+		return m.OldThumbnail(ctx)
+	case readingprogress.FieldPageCount:
+		return m.OldPageCount(ctx)
 	case readingprogress.FieldStartedAt:
 		return m.OldStartedAt(ctx)
 	case readingprogress.FieldUpdatedAt:
@@ -2524,6 +2765,41 @@ func (m *ReadingProgressMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetCompleted(v)
 		return nil
+	case readingprogress.FieldTitle:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTitle(v)
+		return nil
+	case readingprogress.FieldTitleJpn:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTitleJpn(v)
+		return nil
+	case readingprogress.FieldCategory:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCategory(v)
+		return nil
+	case readingprogress.FieldThumbnail:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetThumbnail(v)
+		return nil
+	case readingprogress.FieldPageCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPageCount(v)
+		return nil
 	case readingprogress.FieldStartedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -2555,6 +2831,9 @@ func (m *ReadingProgressMutation) AddedFields() []string {
 	if m.addprogress != nil {
 		fields = append(fields, readingprogress.FieldProgress)
 	}
+	if m.addpage_count != nil {
+		fields = append(fields, readingprogress.FieldPageCount)
+	}
 	return fields
 }
 
@@ -2569,6 +2848,8 @@ func (m *ReadingProgressMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedCurrentPage()
 	case readingprogress.FieldProgress:
 		return m.AddedProgress()
+	case readingprogress.FieldPageCount:
+		return m.AddedPageCount()
 	}
 	return nil, false
 }
@@ -2598,6 +2879,13 @@ func (m *ReadingProgressMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddProgress(v)
+		return nil
+	case readingprogress.FieldPageCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPageCount(v)
 		return nil
 	}
 	return fmt.Errorf("unknown ReadingProgress numeric field %s", name)
@@ -2655,6 +2943,21 @@ func (m *ReadingProgressMutation) ResetField(name string) error {
 		return nil
 	case readingprogress.FieldCompleted:
 		m.ResetCompleted()
+		return nil
+	case readingprogress.FieldTitle:
+		m.ResetTitle()
+		return nil
+	case readingprogress.FieldTitleJpn:
+		m.ResetTitleJpn()
+		return nil
+	case readingprogress.FieldCategory:
+		m.ResetCategory()
+		return nil
+	case readingprogress.FieldThumbnail:
+		m.ResetThumbnail()
+		return nil
+	case readingprogress.FieldPageCount:
+		m.ResetPageCount()
 		return nil
 	case readingprogress.FieldStartedAt:
 		m.ResetStartedAt()

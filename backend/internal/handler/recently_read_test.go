@@ -51,23 +51,18 @@ func TestHandleRecentlyRead_Empty(t *testing.T) {
 func TestHandleRecentlyRead_WithRecords(t *testing.T) {
 	client := newTestDB(t)
 
-	b1 := newTestBookshelf()
-	client.Bookshelf.Create().
-		SetGalleryID(b1.GalleryID).
-		SetToken(b1.Token).
-		SetTitle(b1.Title).
-		SetTitleJpn(b1.TitleJPN).
-		SetCategory(string(b1.Category)).
-		SetThumbnail(b1.Thumbnail).
-		SetPageCount(b1.PageCount).
-		Save(t.Context())
-
+	meta := newTestBookshelf()
 	client.ReadingProgress.Create().
-		SetGalleryID(b1.GalleryID).
-		SetToken(b1.Token).
+		SetGalleryID(meta.GalleryID).
+		SetToken(meta.Token).
 		SetCurrentPage(5).
 		SetProgress(0.2).
 		SetCompleted(false).
+		SetTitle(meta.Title).
+		SetTitleJpn(meta.TitleJPN).
+		SetCategory(string(meta.Category)).
+		SetThumbnail(meta.Thumbnail).
+		SetPageCount(meta.PageCount).
 		SetStartedAt(time.Now().UTC()).
 		SetUpdatedAt(time.Now().UTC()).
 		Save(t.Context())
@@ -105,39 +100,50 @@ func TestHandleRecentlyRead_WithRecords(t *testing.T) {
 	if resp.Results[0].ID != 222222 {
 		t.Errorf("first result ID = %d, want 222222", resp.Results[0].ID)
 	}
-	if resp.Results[1].Title != b1.Title {
-		t.Errorf("second result Title = %q, want %q", resp.Results[1].Title, b1.Title)
+	if resp.Results[1].Title != meta.Title {
+		t.Errorf("second result Title = %q, want %q", resp.Results[1].Title, meta.Title)
+	}
+	if resp.Results[1].Thumbnail != meta.Thumbnail {
+		t.Errorf("second result Thumbnail = %q, want %q", resp.Results[1].Thumbnail, meta.Thumbnail)
+	}
+	if resp.Results[1].Pages != meta.PageCount {
+		t.Errorf("second result Pages = %d, want %d", resp.Results[1].Pages, meta.PageCount)
 	}
 }
 
-func TestHandleRecentlyRead_AfterBookshelfRemove(t *testing.T) {
+func TestHandleRecentlyRead_MetadataSurvivesBookshelfRemove(t *testing.T) {
 	client := newTestDB(t)
 
-	b := newTestBookshelf()
+	meta := newTestBookshelf()
 	client.Bookshelf.Create().
-		SetGalleryID(b.GalleryID).
-		SetToken(b.Token).
-		SetTitle(b.Title).
-		SetTitleJpn(b.TitleJPN).
-		SetCategory(string(b.Category)).
-		SetThumbnail(b.Thumbnail).
-		SetPageCount(b.PageCount).
+		SetGalleryID(meta.GalleryID).
+		SetToken(meta.Token).
+		SetTitle(meta.Title).
+		SetTitleJpn(meta.TitleJPN).
+		SetCategory(string(meta.Category)).
+		SetThumbnail(meta.Thumbnail).
+		SetPageCount(meta.PageCount).
 		Save(t.Context())
 
 	client.ReadingProgress.Create().
-		SetGalleryID(b.GalleryID).
-		SetToken(b.Token).
+		SetGalleryID(meta.GalleryID).
+		SetToken(meta.Token).
 		SetCurrentPage(5).
 		SetProgress(0.2).
 		SetCompleted(false).
+		SetTitle(meta.Title).
+		SetTitleJpn(meta.TitleJPN).
+		SetCategory(string(meta.Category)).
+		SetThumbnail(meta.Thumbnail).
+		SetPageCount(meta.PageCount).
 		SetStartedAt(time.Now().UTC()).
 		SetUpdatedAt(time.Now().UTC()).
 		Save(t.Context())
 
 	client.Bookshelf.Delete().
 		Where(
-			bookshelf.GalleryID(b.GalleryID),
-			bookshelf.Token(b.Token),
+			bookshelf.GalleryID(meta.GalleryID),
+			bookshelf.Token(meta.Token),
 		).
 		Exec(t.Context())
 
@@ -159,8 +165,8 @@ func TestHandleRecentlyRead_AfterBookshelfRemove(t *testing.T) {
 	if len(resp.Results) != 1 {
 		t.Fatalf("Results length = %d, want 1 (reading persists after bookshelf removal)", len(resp.Results))
 	}
-	if resp.Results[0].Title != "" {
-		t.Errorf("Title should be empty after bookshelf removal, got %q", resp.Results[0].Title)
+	if resp.Results[0].Title != meta.Title {
+		t.Errorf("Title should persist after bookshelf removal, got %q, want %q", resp.Results[0].Title, meta.Title)
 	}
 	if resp.Results[0].Reading.CurrentPage != 5 {
 		t.Errorf("Reading.CurrentPage = %d, want 5", resp.Results[0].Reading.CurrentPage)

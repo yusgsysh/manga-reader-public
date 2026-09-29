@@ -5,7 +5,11 @@ import { fetchReadingProgress, updateReadingProgress } from "../api/progress";
 import { trackProgressSave } from "../lib/progressSave";
 import type { GalleryCategory } from "../types/gallery";
 import type { RecentlyReadItem, RecentlyReadResponse } from "../types/recentlyRead";
-import type { Gallery, ReadingProgress } from "../types/reader";
+import type {
+  Gallery,
+  ReadingProgress,
+  UpdateReadingProgressRequest,
+} from "../types/reader";
 
 const GALLERY_STALE_TIME = 5 * 60_000;
 const PAGES_STALE_TIME = 10 * 60_000;
@@ -130,11 +134,7 @@ export function invalidateReadingLists(queryClient: QueryClient): void {
 export function useUpdateReadingProgress(id: number, token: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: {
-      current_page: number;
-      progress: number;
-      completed: boolean;
-    }) => {
+    mutationFn: (body: UpdateReadingProgressRequest) => {
       const save = updateReadingProgress(id, token, body);
       trackProgressSave(save);
       return save;

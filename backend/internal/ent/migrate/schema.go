@@ -71,6 +71,11 @@ var (
 		{Name: "current_page", Type: field.TypeInt, Default: 0},
 		{Name: "progress", Type: field.TypeFloat64, Default: 0},
 		{Name: "completed", Type: field.TypeBool, Default: false},
+		{Name: "title", Type: field.TypeString, Default: ""},
+		{Name: "title_jpn", Type: field.TypeString, Default: ""},
+		{Name: "category", Type: field.TypeString, Default: ""},
+		{Name: "thumbnail", Type: field.TypeString, Default: ""},
+		{Name: "page_count", Type: field.TypeInt, Default: 0},
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
 	}

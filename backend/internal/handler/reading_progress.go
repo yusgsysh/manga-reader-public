@@ -95,19 +95,34 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 	ctx := c.Request.Context()
 	now := time.Now().UTC()
 
-	exists, err := s.DB.Client.ReadingProgress.Query().
+	existing, err := s.DB.Client.ReadingProgress.Query().
 		Where(
 			readingprogress.GalleryID(id),
 			readingprogress.Token(token),
 		).
-		Exist(ctx)
-	if err != nil {
+		Only(ctx)
+	if err != nil && !ent.IsNotFound(err) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("check reading progress: %v", err)})
 		return
 	}
 
-	if exists {
-		err = s.DB.Client.ReadingProgress.Update().
+	if existing == nil {
+		_, err = s.DB.Client.ReadingProgress.Create().
+			SetGalleryID(id).
+			SetToken(token).
+			SetCurrentPage(req.CurrentPage).
+			SetProgress(req.Progress).
+			SetCompleted(req.Completed).
+			SetTitle(req.Title).
+			SetTitleJpn(req.TitleJPN).
+			SetCategory(req.Category).
+			SetThumbnail(req.Thumbnail).
+			SetPageCount(req.PageCount).
+			SetStartedAt(now).
+			SetUpdatedAt(now).
+			Save(ctx)
+	} else {
+		update := s.DB.Client.ReadingProgress.Update().
 			Where(
 				readingprogress.GalleryID(id),
 				readingprogress.Token(token),
@@ -115,18 +130,27 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 			SetCurrentPage(req.CurrentPage).
 			SetProgress(req.Progress).
 			SetCompleted(req.Completed).
-			SetUpdatedAt(now).
-			Exec(ctx)
-	} else {
-		_, err = s.DB.Client.ReadingProgress.Create().
-			SetGalleryID(id).
-			SetToken(token).
-			SetCurrentPage(req.CurrentPage).
-			SetProgress(req.Progress).
-			SetCompleted(req.Completed).
-			SetStartedAt(now).
-			SetUpdatedAt(now).
-			Save(ctx)
+			SetUpdatedAt(now)
+
+		// Snapshot gallery metadata on the first opportunity only; never
+		// overwrite already stored values or clear them with empty ones.
+		if existing.Title == "" && req.Title != "" {
+			update.SetTitle(req.Title)
+		}
+		if existing.TitleJpn == "" && req.TitleJPN != "" {
+			update.SetTitleJpn(req.TitleJPN)
+		}
+		if existing.Category == "" && req.Category != "" {
+			update.SetCategory(req.Category)
+		}
+		if existing.Thumbnail == "" && req.Thumbnail != "" {
+			update.SetThumbnail(req.Thumbnail)
+		}
+		if existing.PageCount == 0 && req.PageCount > 0 {
+			update.SetPageCount(req.PageCount)
+		}
+
+		err = update.Exec(ctx)
 	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("update progress failed: %v", err)})

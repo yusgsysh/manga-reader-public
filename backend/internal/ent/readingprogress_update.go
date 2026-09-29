@@ -119,6 +119,83 @@ func (_u *ReadingProgressUpdate) SetNillableCompleted(v *bool) *ReadingProgressU
 	return _u
 }
 
+// SetTitle sets the "title" field.
+func (_u *ReadingProgressUpdate) SetTitle(v string) *ReadingProgressUpdate {
+	_u.mutation.SetTitle(v)
+	return _u
+}
+
+// SetNillableTitle sets the "title" field if the given value is not nil.
+func (_u *ReadingProgressUpdate) SetNillableTitle(v *string) *ReadingProgressUpdate {
+	if v != nil {
+		_u.SetTitle(*v)
+	}
+	return _u
+}
+
+// SetTitleJpn sets the "title_jpn" field.
+func (_u *ReadingProgressUpdate) SetTitleJpn(v string) *ReadingProgressUpdate {
+	_u.mutation.SetTitleJpn(v)
+	return _u
+}
+
+// SetNillableTitleJpn sets the "title_jpn" field if the given value is not nil.
+func (_u *ReadingProgressUpdate) SetNillableTitleJpn(v *string) *ReadingProgressUpdate {
+	if v != nil {
+		_u.SetTitleJpn(*v)
+	}
+	return _u
+}
+
+// SetCategory sets the "category" field.
+func (_u *ReadingProgressUpdate) SetCategory(v string) *ReadingProgressUpdate {
+	_u.mutation.SetCategory(v)
+	return _u
+}
+
+// SetNillableCategory sets the "category" field if the given value is not nil.
+func (_u *ReadingProgressUpdate) SetNillableCategory(v *string) *ReadingProgressUpdate {
+	if v != nil {
+		_u.SetCategory(*v)
+	}
+	return _u
+}
+
+// SetThumbnail sets the "thumbnail" field.
+func (_u *ReadingProgressUpdate) SetThumbnail(v string) *ReadingProgressUpdate {
+	_u.mutation.SetThumbnail(v)
+	return _u
+}
+
+// SetNillableThumbnail sets the "thumbnail" field if the given value is not nil.
+func (_u *ReadingProgressUpdate) SetNillableThumbnail(v *string) *ReadingProgressUpdate {
+	if v != nil {
+		_u.SetThumbnail(*v)
+	}
+	return _u
+}
+
+// SetPageCount sets the "page_count" field.
+func (_u *ReadingProgressUpdate) SetPageCount(v int) *ReadingProgressUpdate {
+	_u.mutation.ResetPageCount()
+	_u.mutation.SetPageCount(v)
+	return _u
+}
+
+// SetNillablePageCount sets the "page_count" field if the given value is not nil.
+func (_u *ReadingProgressUpdate) SetNillablePageCount(v *int) *ReadingProgressUpdate {
+	if v != nil {
+		_u.SetPageCount(*v)
+	}
+	return _u
+}
+
+// AddPageCount adds value to the "page_count" field.
+func (_u *ReadingProgressUpdate) AddPageCount(v int) *ReadingProgressUpdate {
+	_u.mutation.AddPageCount(v)
+	return _u
+}
+
 // SetStartedAt sets the "started_at" field.
 func (_u *ReadingProgressUpdate) SetStartedAt(v time.Time) *ReadingProgressUpdate {
 	_u.mutation.SetStartedAt(v)
@@ -243,6 +320,24 @@ func (_u *ReadingProgressUpdate) sqlSave(ctx context.Context) (_node int, err er
 	if value, ok := _u.mutation.Completed(); ok {
 		_spec.SetField(readingprogress.FieldCompleted, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.Title(); ok {
+		_spec.SetField(readingprogress.FieldTitle, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.TitleJpn(); ok {
+		_spec.SetField(readingprogress.FieldTitleJpn, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Category(); ok {
+		_spec.SetField(readingprogress.FieldCategory, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Thumbnail(); ok {
+		_spec.SetField(readingprogress.FieldThumbnail, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PageCount(); ok {
+		_spec.SetField(readingprogress.FieldPageCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedPageCount(); ok {
+		_spec.AddField(readingprogress.FieldPageCount, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.StartedAt(); ok {
 		_spec.SetField(readingprogress.FieldStartedAt, field.TypeTime, value)
 	}
@@ -363,6 +458,83 @@ func (_u *ReadingProgressUpdateOne) SetNillableCompleted(v *bool) *ReadingProgre
 	if v != nil {
 		_u.SetCompleted(*v)
 	}
+	return _u
+}
+
+// SetTitle sets the "title" field.
+func (_u *ReadingProgressUpdateOne) SetTitle(v string) *ReadingProgressUpdateOne {
+	_u.mutation.SetTitle(v)
+	return _u
+}
+
+// SetNillableTitle sets the "title" field if the given value is not nil.
+func (_u *ReadingProgressUpdateOne) SetNillableTitle(v *string) *ReadingProgressUpdateOne {
+	if v != nil {
+		_u.SetTitle(*v)
+	}
+	return _u
+}
+
+// SetTitleJpn sets the "title_jpn" field.
+func (_u *ReadingProgressUpdateOne) SetTitleJpn(v string) *ReadingProgressUpdateOne {
+	_u.mutation.SetTitleJpn(v)
+	return _u
+}
+
+// SetNillableTitleJpn sets the "title_jpn" field if the given value is not nil.
+func (_u *ReadingProgressUpdateOne) SetNillableTitleJpn(v *string) *ReadingProgressUpdateOne {
+	if v != nil {
+		_u.SetTitleJpn(*v)
+	}
+	return _u
+}
+
+// SetCategory sets the "category" field.
+func (_u *ReadingProgressUpdateOne) SetCategory(v string) *ReadingProgressUpdateOne {
+	_u.mutation.SetCategory(v)
+	return _u
+}
+
+// SetNillableCategory sets the "category" field if the given value is not nil.
+func (_u *ReadingProgressUpdateOne) SetNillableCategory(v *string) *ReadingProgressUpdateOne {
+	if v != nil {
+		_u.SetCategory(*v)
+	}
+	return _u
+}
+
+// SetThumbnail sets the "thumbnail" field.
+func (_u *ReadingProgressUpdateOne) SetThumbnail(v string) *ReadingProgressUpdateOne {
+	_u.mutation.SetThumbnail(v)
+	return _u
+}
+
+// SetNillableThumbnail sets the "thumbnail" field if the given value is not nil.
+func (_u *ReadingProgressUpdateOne) SetNillableThumbnail(v *string) *ReadingProgressUpdateOne {
+	if v != nil {
+		_u.SetThumbnail(*v)
+	}
+	return _u
+}
+
+// SetPageCount sets the "page_count" field.
+func (_u *ReadingProgressUpdateOne) SetPageCount(v int) *ReadingProgressUpdateOne {
+	_u.mutation.ResetPageCount()
+	_u.mutation.SetPageCount(v)
+	return _u
+}
+
+// SetNillablePageCount sets the "page_count" field if the given value is not nil.
+func (_u *ReadingProgressUpdateOne) SetNillablePageCount(v *int) *ReadingProgressUpdateOne {
+	if v != nil {
+		_u.SetPageCount(*v)
+	}
+	return _u
+}
+
+// AddPageCount adds value to the "page_count" field.
+func (_u *ReadingProgressUpdateOne) AddPageCount(v int) *ReadingProgressUpdateOne {
+	_u.mutation.AddPageCount(v)
 	return _u
 }
 
@@ -519,6 +691,24 @@ func (_u *ReadingProgressUpdateOne) sqlSave(ctx context.Context) (_node *Reading
 	}
 	if value, ok := _u.mutation.Completed(); ok {
 		_spec.SetField(readingprogress.FieldCompleted, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.Title(); ok {
+		_spec.SetField(readingprogress.FieldTitle, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.TitleJpn(); ok {
+		_spec.SetField(readingprogress.FieldTitleJpn, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Category(); ok {
+		_spec.SetField(readingprogress.FieldCategory, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Thumbnail(); ok {
+		_spec.SetField(readingprogress.FieldThumbnail, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PageCount(); ok {
+		_spec.SetField(readingprogress.FieldPageCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedPageCount(); ok {
+		_spec.AddField(readingprogress.FieldPageCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.StartedAt(); ok {
 		_spec.SetField(readingprogress.FieldStartedAt, field.TypeTime, value)
