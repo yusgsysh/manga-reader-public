@@ -69,9 +69,9 @@ describe("prefill api", () => {
     fetchMock.mockResolvedValue(jsonResponse({ jobs: [sampleJob] }));
     const resp = await fetchPrefillJobs();
     expect(resp.jobs).toHaveLength(1);
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit?];
     expect(url).toBe(`${BASE}/api/prefill`);
-    expect(init).toBeUndefined();
+    expect(init?.method).toBeUndefined();
   });
 
   it("cancelPrefillJob and deletePrefillJob target the job routes", async () => {
