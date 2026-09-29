@@ -38,12 +38,15 @@ func NewDB(dataSourceName string) (*DB, error) {
 		dsn += "?"
 	}
 	dsn += "_pragma=journal_mode=wal&_pragma=foreign_keys=on&_pragma=busy_timeout=5000" +
-		"&_pragma=synchronous=NORMAL&_pragma=cache_size=-64000&_pragma=temp_store=MEMORY"
+		"&_pragma=synchronous=NORMAL"
 
 	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
+
+	// SQLite handles one writer at a time; limit connections to avoid contention.
+	conn.SetMaxOpenConns(1)
 
 	drv := entsql.OpenDB("sqlite3", conn)
 	client := ent.NewClient(ent.Driver(drv))
