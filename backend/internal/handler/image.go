@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -112,7 +112,7 @@ func (s *Server) handleCachedThumbnail(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "thumbnail not found"})
 			return
 		}
-		log.Printf("cached-thumbnail error key=%s err=%v", key[:16], err)
+		slog.Error("cached-thumbnail error", "key", key[:16], "error", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download thumbnail failed: %v", err)})
 		return
 	}
@@ -147,7 +147,7 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "image not found"})
 			return
 		}
-		log.Printf("cached-image error key=%s err=%v", key[:16], err)
+		slog.Error("cached-image error", "key", key[:16], "error", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
 		return
 	}
@@ -186,10 +186,10 @@ func (s *Server) loadOrFetchImage(ctx context.Context, key string, decodedURL st
 
 		var stored bool
 		if putErr := s.Cache.Put(fetchCtx, key, data, contentType, cacheControlHeader); putErr != nil {
-			log.Printf("cached-image store failed key=%s err=%v", key[:16], putErr)
+			slog.Error("cached-image store failed", "key", key[:16], "error", putErr)
 			stored = false
 		} else {
-			log.Printf("cached-image stored key=%s", key[:16])
+			slog.Debug("cached-image stored", "key", key[:16])
 			stored = true
 		}
 
@@ -231,10 +231,10 @@ func (s *Server) loadOrFetchThumbnail(ctx context.Context, key string, rawURL st
 		if putErr := s.Cache.PutWithMeta(fetchCtx, key, data, contentType, map[string]string{
 			"source-url": rawURL,
 		}, cacheControlHeader); putErr != nil {
-			log.Printf("cached-thumbnail store failed key=%s err=%v", key[:16], putErr)
+			slog.Error("cached-thumbnail store failed", "key", key[:16], "error", putErr)
 			stored = false
 		} else {
-			log.Printf("cached-thumbnail stored key=%s", key[:16])
+			slog.Debug("cached-thumbnail stored", "key", key[:16])
 			stored = true
 		}
 

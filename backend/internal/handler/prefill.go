@@ -4,7 +4,7 @@ import (
 	"archive/zip"
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"maps"
 	"net/http"
 	"net/url"
@@ -87,7 +87,7 @@ func (s *Server) ensurePrefill() *prefillManager {
 
 func (m *prefillManager) recoverPending(s *Server) {
 	if s.Cache == nil {
-		log.Printf("prefill recover skipped: cache not configured")
+		slog.Warn("prefill recover skipped: cache not configured")
 		return
 	}
 	ctx := context.Background()
@@ -100,16 +100,16 @@ func (m *prefillManager) recoverPending(s *Server) {
 			Save(ctx)
 		if err == nil {
 			if n > 0 {
-				log.Printf("prefill re-queued %d interrupted job(s)", n)
+				slog.Info("prefill re-queued interrupted jobs", "count", n)
 			}
 			m.signal()
 			return
 		}
 		lastErr = err
-		log.Printf("prefill recover attempt %d failed: %v", attempt+1, err)
+		slog.Info("prefill recover attempt failed", "attempt", attempt+1, "error", err)
 		time.Sleep(100 * time.Millisecond)
 	}
-	log.Printf("prefill recover failed after retries: %v", lastErr)
+	slog.Error("prefill recover failed after retries", "error", lastErr)
 }
 
 func (m *prefillManager) worker(s *Server) {
@@ -136,7 +136,7 @@ func (m *prefillManager) drain(s *Server) {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("prefill job %d panic: %v", id, r)
+					slog.Error("prefill job panic", "job_id", id, "panic", r)
 					s.finishPrefillJob(id, prefillStatusFailed, 0, nil)
 				}
 			}()
@@ -156,7 +156,7 @@ func (m *prefillManager) nextQueued(s *Server) (int, bool) {
 			First(ctx)
 		if err != nil {
 			if !ent.IsNotFound(err) {
-				log.Printf("prefill queue query failed: %v", err)
+				slog.Error("prefill queue query failed", "error", err)
 			}
 			return 0, false
 		}
@@ -174,10 +174,10 @@ func (m *prefillManager) nextQueued(s *Server) (int, bool) {
 				return row.ID, true
 			}
 			lastErr = err
-			log.Printf("prefill claim attempt %d failed id=%d err=%v", attempt+1, row.ID, err)
+			slog.Error("prefill claim attempt failed", "attempt", attempt+1, "job_id", row.ID, "error", err)
 			time.Sleep(50 * time.Millisecond)
 		}
-		log.Printf("prefill claim failed after retries id=%d err=%v", row.ID, lastErr)
+		slog.Error("prefill claim failed after retries", "job_id", row.ID, "error", lastErr)
 		return 0, false
 	}
 }
@@ -209,7 +209,7 @@ func (m *prefillManager) runJob(s *Server, id int) {
 	row, err := s.DB.Client.PrefillJob.Get(ctx, id)
 	if err != nil {
 		if !ent.IsNotFound(err) {
-			log.Printf("prefill load failed id=%d err=%v", id, err)
+			slog.Error("prefill load failed", "job_id", id, "error", err)
 			// Non-NotFound error: mark as failed so the row doesn't stay running forever.
 			s.finishPrefillJob(id, prefillStatusFailed, 0, []model.PrefillItemError{
 				{Index: 0, URL: "", Error: fmt.Sprintf("load failed: %v", err)},
@@ -223,7 +223,7 @@ func (m *prefillManager) runJob(s *Server, id int) {
 		return
 	}
 
-	log.Printf("prefill job %d started pages=%d", id, len(row.Urls))
+	slog.Info("prefill job started", "job_id", id, "pages", len(row.Urls))
 	status := m.processPages(s, jobCtx, run, row.Urls)
 
 	m.mu.Lock()
@@ -237,7 +237,7 @@ func (m *prefillManager) runJob(s *Server, id int) {
 	}
 
 	s.finishPrefillJob(id, status, failed, errs)
-	log.Printf("prefill job %d finished status=%s failed=%d", id, status, failed)
+	slog.Info("prefill job finished", "job_id", id, "status", status, "failed", failed)
 }
 
 // processPages fetches every page URL serially, in order, updating the
@@ -326,15 +326,15 @@ func (s *Server) finishPrefillJob(id int, status string, failed int, errs []mode
 			Save(context.Background())
 		if err == nil {
 			if n == 0 {
-				log.Printf("prefill job %d terminal state already set, counts discarded", id)
+				slog.Info("prefill job terminal state already set", "job_id", id)
 			}
 			return
 		}
 		lastErr = err
-		log.Printf("prefill finish attempt %d failed id=%d err=%v", attempt+1, id, err)
+		slog.Error("prefill finish attempt failed", "attempt", attempt+1, "job_id", id, "error", err)
 		time.Sleep(100 * time.Millisecond)
 	}
-	log.Printf("prefill finish failed after retries id=%d err=%v", id, lastErr)
+	slog.Error("prefill finish failed after retries", "job_id", id, "error", lastErr)
 }
 
 // cancelRun stops an active run by cancelling its context.
@@ -470,7 +470,7 @@ func (s *Server) handlePrefillStart(c *gin.Context) {
 			return
 		}
 		if !ent.IsNotFound(err) {
-			log.Printf("prefill dedupe query failed: %v", err)
+			slog.Error("prefill dedupe query failed", "error", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
 			return
 		}
@@ -487,7 +487,7 @@ func (s *Server) handlePrefillStart(c *gin.Context) {
 	}
 	row, err := create.Save(ctx)
 	if err != nil {
-		log.Printf("prefill create failed: %v", err)
+		slog.Error("prefill create failed", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create prefill job failed"})
 		return
 	}
@@ -526,7 +526,7 @@ func (s *Server) handlePrefillList(c *gin.Context) {
 		Limit(prefillListLimit).
 		All(c.Request.Context())
 	if err != nil {
-		log.Printf("prefill list failed: %v", err)
+		slog.Error("prefill list failed", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "query prefill jobs failed"})
 		return
 	}
@@ -596,7 +596,7 @@ func (s *Server) handlePrefillGet(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "prefill job not found"})
 			return
 		}
-		log.Printf("prefill get failed id=%d err=%v", id, err)
+		slog.Error("prefill get failed", "job_id", id, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
 		return
 	}
@@ -625,7 +625,7 @@ func (s *Server) handlePrefillCancel(c *gin.Context) {
 				c.JSON(http.StatusNotFound, gin.H{"error": "prefill job not found"})
 				return
 			}
-			log.Printf("prefill cancel get failed id=%d err=%v", id, err)
+			slog.Error("prefill cancel get failed", "job_id", id, "error", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
 			return
 		}
@@ -646,7 +646,7 @@ func (s *Server) handlePrefillCancel(c *gin.Context) {
 			SetUpdatedAt(now).
 			Save(ctx)
 		if err != nil {
-			log.Printf("prefill cancel failed id=%d err=%v", id, err)
+			slog.Error("prefill cancel failed", "job_id", id, "error", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "cancel prefill job failed"})
 			return
 		}
@@ -682,7 +682,7 @@ func (s *Server) handlePrefillDelete(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "prefill job not found"})
 			return
 		}
-		log.Printf("prefill get failed id=%d err=%v", id, err)
+		slog.Error("prefill get failed", "job_id", id, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
 		return
 	}
@@ -697,7 +697,7 @@ func (s *Server) handlePrefillDelete(c *gin.Context) {
 		).
 		Exec(ctx)
 	if err != nil {
-		log.Printf("prefill delete failed id=%d err=%v", id, err)
+		slog.Error("prefill delete failed", "job_id", id, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete prefill job failed"})
 		return
 	}
@@ -729,7 +729,7 @@ func (s *Server) handlePrefillCleanup(c *gin.Context) {
 	}
 	n, err := q.Exec(c.Request.Context())
 	if err != nil {
-		log.Printf("prefill cleanup failed: %v", err)
+		slog.Error("prefill cleanup failed", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "cleanup prefill jobs failed"})
 		return
 	}
@@ -759,7 +759,7 @@ func (s *Server) handlePrefillZip(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "prefill job not found"})
 			return
 		}
-		log.Printf("prefill get failed id=%d err=%v", id, err)
+		slog.Error("prefill get failed", "job_id", id, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
 		return
 	}
@@ -781,7 +781,7 @@ func (s *Server) handlePrefillZip(c *gin.Context) {
 		res, err := s.loadOrFetchImage(pageCtx, key, pageURL)
 		pageCancel()
 		if err != nil {
-			log.Printf("prefill zip fetch failed index=%d err=%v", i, err)
+			slog.Error("prefill zip fetch failed", "index", i, "error", err)
 			missing = append(missing, fmt.Sprintf("%d: %s", i+1, err.Error()))
 			continue
 		}
@@ -800,11 +800,11 @@ func (s *Server) handlePrefillZip(c *gin.Context) {
 		entryName := fmt.Sprintf("%03d%s", i+1, prefillImageExt(res.contentType, pageURL))
 		w, err := zw.CreateHeader(&zip.FileHeader{Name: entryName, Method: zip.Store})
 		if err != nil {
-			log.Printf("prefill zip entry failed index=%d err=%v", i, err)
+			slog.Error("prefill zip entry failed", "index", i, "error", err)
 			break
 		}
 		if _, err := w.Write(res.data); err != nil {
-			log.Printf("prefill zip write failed index=%d err=%v", i, err)
+			slog.Error("prefill zip write failed", "index", i, "error", err)
 			break
 		}
 		c.Writer.Flush()
@@ -825,7 +825,7 @@ func (s *Server) handlePrefillZip(c *gin.Context) {
 	}
 
 	if err := zw.Close(); err != nil {
-		log.Printf("prefill zip close failed: %v", err)
+		slog.Error("prefill zip close failed", "error", err)
 	}
 }
 
@@ -850,7 +850,7 @@ func (s *Server) handlePrefillZipHead(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "prefill job not found"})
 			return
 		}
-		log.Printf("prefill zip head get failed id=%d err=%v", id, err)
+		slog.Error("prefill zip head get failed", "job_id", id, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
 		return
 	}

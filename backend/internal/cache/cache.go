@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -92,7 +92,7 @@ func NewMinIOCache(cfg *MinIOConfig) (*MinIOCache, error) {
 		return nil, err
 	}
 
-	log.Printf("minio cache initialized endpoint=%s bucket=%s ssl=%v", cfg.Endpoint, cfg.Bucket, cfg.UseSSL)
+	slog.Info("minio cache initialized", "endpoint", cfg.Endpoint, "bucket", cfg.Bucket, "ssl", cfg.UseSSL)
 	return cache, nil
 }
 
@@ -112,7 +112,7 @@ func (c *MinIOCache) ensureBucket(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("minio make bucket failed: %w", err)
 	}
-	log.Printf("minio bucket created: %s", c.bucket)
+		slog.Info("minio bucket created", "bucket", c.bucket)
 	return nil
 }
 

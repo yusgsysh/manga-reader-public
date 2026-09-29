@@ -1,13 +1,14 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
 
 	"manga-reader/internal/cache"
+	"manga-reader/internal/config"
 	"manga-reader/internal/database"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/handler"
@@ -28,46 +29,84 @@ func CORSMiddleware() gin.HandlerFunc {
 	}
 }
 
+func setupLogger(level string) *slog.Logger {
+	var logLevel slog.Level
+	switch level {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "warn":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	default:
+		logLevel = slog.LevelInfo
+	}
+
+	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: logLevel,
+	})
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+	return logger
+}
+
 func main() {
-	cookieCfg := exhentai.LoadCookieConfig()
-	if !cookieCfg.IsValid() {
-		log.Fatal("missing required cookies: set EHENTAI_COOKIE or EHENTAI_COOKIE_IPB_MEMBER_ID + EHENTAI_COOKIE_IPB_PASS_HASH")
-	}
-
-	client, err := exhentai.CreateHTTPClient(cookieCfg)
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("config load failed", "error", err)
+		os.Exit(1)
 	}
 
-	dbPath := os.Getenv("MANGA_READER_DB_PATH")
-	if dbPath == "" {
-		dbPath = "data/manga-reader.db"
-	}
+	logger := setupLogger(cfg.LogLevel)
+	logger.Info("starting server",
+		"port", cfg.Port,
+		"environment", cfg.Environment,
+		"db_path", cfg.DBPath,
+	)
 
-	db, err := database.NewDB(dbPath)
+	client, err := exhentai.CreateHTTPClient(&exhentai.CookieConfig{
+		IpbMemberID: cfg.Cookie.IpbMemberID,
+		IpbPassHash: cfg.Cookie.IpbPassHash,
+		Igneous:     cfg.Cookie.Igneous,
+		SK:          cfg.Cookie.SK,
+	})
 	if err != nil {
-		log.Fatalf("database init failed: %v", err)
+		logger.Error("http client init failed", "error", err)
+		os.Exit(1)
+	}
+
+	db, err := database.NewDB(cfg.DBPath)
+	if err != nil {
+		logger.Error("database init failed", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
-	cfg := handler.Config{
+	handlerCfg := handler.Config{
 		Client: client,
 		DB:     db,
 	}
 
-	minioCfg := cache.LoadMinIOConfig()
-	if minioCfg.IsValid() {
-		minioCache, err := cache.NewMinIOCache(minioCfg)
+	if cfg.MinIO.IsValid() {
+		minioCache, err := cache.NewMinIOCache(&cache.MinIOConfig{
+			Endpoint:  cfg.MinIO.Endpoint,
+			AccessKey: cfg.MinIO.AccessKey,
+			SecretKey: cfg.MinIO.SecretKey,
+			Bucket:    cfg.MinIO.Bucket,
+			UseSSL:    cfg.MinIO.UseSSL,
+			Region:    cfg.MinIO.Region,
+		})
 		if err != nil {
-			log.Fatalf("minio cache init failed: %v", err)
+			logger.Error("minio cache init failed", "error", err)
+			os.Exit(1)
 		}
-		cfg.Cache = minioCache
-		log.Println("cached-image and cached-thumbnail endpoints enabled")
+		handlerCfg.Cache = minioCache
+		logger.Info("minio cache enabled", "bucket", cfg.MinIO.Bucket)
 	} else {
-		log.Println("minio config not set, cached-image/cached-thumbnail endpoints will return 503")
+		logger.Warn("minio config not set, cached-image/cached-thumbnail endpoints will return 503")
 	}
 
-	srv := handler.New(cfg)
+	srv := handler.New(handlerCfg)
 
 	r := gin.Default()
 	r.Use(CORSMiddleware())
@@ -78,11 +117,13 @@ func main() {
 
 	srv.RegisterRoutes(r)
 
-	port := os.Getenv("EHENTAI_PORT")
-	if port == "" {
-		port = ":8080"
-	} else if port[0] != ':' {
+	port := cfg.Port
+	if port[0] != ':' {
 		port = ":" + port
 	}
-	log.Fatal(r.Run(port))
+	logger.Info("listening", "addr", port)
+	if err := r.Run(port); err != nil {
+		logger.Error("server failed", "error", err)
+		os.Exit(1)
+	}
 }
