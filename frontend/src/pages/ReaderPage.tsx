@@ -47,8 +47,7 @@ export function ReaderPage() {
   );
 
   // 全屏 = 库的 browserFullscreen 布局（跨平台一致、iOS 可用）叠加容器的
-  // 原生全屏（可用时隐藏浏览器 UI）。容器是原生全屏元素，因此悬浮退出按钮
-  // 也在全屏子树内，桌面端无需 Esc 即可退出。
+  // 原生全屏（可用时隐藏浏览器 UI）。退出全屏由库内 dock 的视图切换器负责。
   const toggleFullscreen = useCallback(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
@@ -235,25 +234,11 @@ export function ReaderPage() {
           locale="zh-CN"
           storage={{ enabled: false }}
           settings={viewerSettings}
-          hiddenSettings={["viewMode"]}
           onPageChange={({ pageIndex }) => onPageChange(pageIndex)}
           onLayoutChange={({ layoutMode: mode }) => setLayoutMode(mode)}
           className="h-full w-full"
         />
       </div>
-
-      {/* 悬浮退出按钮：原生全屏下由浏览器隐藏，伪全屏（iOS）时可用 */}
-      {isFullscreen && (
-        <button
-          type="button"
-          aria-label="退出全屏"
-          title="退出全屏"
-          onClick={toggleFullscreen}
-          className="fixed right-4 top-[calc(0.75rem+env(safe-area-inset-top))] z-[1000] flex size-10 items-center justify-center rounded-full border border-kumo-border bg-kumo-elevated text-kumo-default shadow-lg active:scale-95"
-        >
-          <Minimize className="size-5" />
-        </button>
-      )}
     </div>
   );
 }
