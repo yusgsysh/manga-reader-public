@@ -84,15 +84,8 @@ body {
   }
 }
 
-/* 真全屏：顶栏交由 comimi 接管（控件由库内 dock 提供），整屏只留阅读器 */
-.reader-shell:fullscreen > .reader-topbar,
-.reader-shell:-webkit-full-screen > .reader-topbar {
-  display: none;
-}
-
-/* 真全屏：阅读器从 inline 卡片铺满整屏 */
-.reader-shell:fullscreen .comimi-root,
-.reader-shell:-webkit-full-screen .comimi-root {
+/* 非全屏阅读区铺满可用高度（隐藏库默认的 900x636 卡片外观） */
+.reader-shell .comimi-root[data-layout="inline"] {
   width: 100%;
   height: 100%;
   max-width: none;

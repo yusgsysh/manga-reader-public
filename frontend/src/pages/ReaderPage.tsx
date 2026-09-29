@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useNavigate,
   useNavigationType,
@@ -6,7 +6,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { Button, Loader } from "@cloudflare/kumo";
-import { ArrowLeft, Maximize } from "lucide-react";
+import { ArrowLeft, Maximize, Minimize } from "lucide-react";
 import {
   MangaViewer,
   type MangaViewerHandle,
@@ -18,6 +18,8 @@ import { useTheme } from "../hooks/useTheme";
 import { clampPageIndex, galleryPagesToManga } from "../lib/reader";
 import { ErrorState } from "../components/common/ErrorState";
 
+type LayoutMode = ViewerSettings["layoutMode"];
+
 export function ReaderPage() {
   const { id: idParam, token } = useParams<{ id: string; token: string }>();
   const [searchParams] = useSearchParams();
@@ -25,11 +27,13 @@ export function ReaderPage() {
   const navigationType = useNavigationType();
   const { resolvedMode } = useTheme();
   const viewerRef = useRef<MangaViewerHandle>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("inline");
   const id = Number(idParam);
   const restart = searchParams.get("restart") === "1";
 
   const isDark = resolvedMode === "dark";
+  const isFullscreen =
+    layoutMode === "browserFullscreen" || layoutMode === "nativeFullscreen";
 
   // 引用固定：comimi-react 按引用比较 settings，内联对象会导致每次翻页都全量重渲染
   const viewerSettings = useMemo<Partial<ViewerSettings>>(
@@ -41,8 +45,36 @@ export function ReaderPage() {
     [isDark],
   );
 
-  // 真全屏由页面容器持有（comimi 的 layoutMode 由库自理），顶栏在全屏时由
-  // CSS 隐藏、控件交给库内 dock（页码/视图切换器/设置）。此处仅兜底：
+  // 全屏完全交给 comimi：nativeFullscreen 在不支持的浏览器（如 iOS）会自动
+  // 回退 browserFullscreen。进入前不再自定义 requestFullscreen。
+  const toggleFullscreen = useCallback(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const mode = viewer.getState().layout.mode;
+    const isFull =
+      document.fullscreenElement !== null ||
+      mode === "browserFullscreen" ||
+      mode === "nativeFullscreen";
+    void viewer.setLayoutMode(isFull ? "inline" : "nativeFullscreen");
+  }, []);
+
+  // 用户通过浏览器/系统手势退出原生全屏时，库不会自行回到 inline，这里补齐。
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const viewer = viewerRef.current;
+      if (!viewer) return;
+      if (
+        !document.fullscreenElement &&
+        viewer.getState().layout.mode === "nativeFullscreen"
+      ) {
+        void viewer.setLayoutMode("inline");
+      }
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
   // 离开路由时主动退出全屏，不依赖「节点移除浏览器自动退出」的时机
   useEffect(
     () => () => {
@@ -52,29 +84,6 @@ export function ReaderPage() {
     },
     [],
   );
-
-  const toggleFullscreen = () => {
-    const el = containerRef.current;
-    if (document.fullscreenElement === el) {
-      void document.exitFullscreen();
-      return;
-    }
-    if (!el) return;
-    const viewer = viewerRef.current;
-    // 宽屏布局在全屏里会留空隙，进入前静默归一为 inline；
-    // 不 await 以保住用户手势的激活状态
-    if (viewer && viewer.getState().layout.mode !== "inline") {
-      void viewer.updateSettings({ layoutMode: "inline" });
-    }
-    // 老 Safari / iOS 等不支持元素全屏时降级为库内伪全屏，避免静默失败
-    if (typeof el.requestFullscreen !== "function") {
-      void viewer?.setLayoutMode("browserFullscreen");
-      return;
-    }
-    el.requestFullscreen().catch(() => {
-      void viewer?.setLayoutMode("browserFullscreen");
-    });
-  };
 
   const galleryQuery = useGallery(id, token ?? "");
   const pagesQuery = useGalleryPages(id, token ?? "");
@@ -168,12 +177,9 @@ export function ReaderPage() {
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="reader-shell flex h-[100dvh] flex-col bg-kumo-base"
-    >
-      {/* Top bar：真全屏时由 CSS 隐藏，控件交给 comimi dock */}
-      <div className="reader-topbar relative z-10 flex h-12 shrink-0 items-center gap-2 border-b border-kumo-hairline bg-kumo-elevated px-3">
+    <div className="reader-shell flex h-[100dvh] flex-col bg-kumo-base">
+      {/* Top bar：全屏时由 comimi 接管，控件交给库内 dock */}
+      <div className="reader-topbar relative z-10 flex min-h-12 shrink-0 items-center gap-2 border-b border-kumo-hairline bg-kumo-elevated px-3 pt-[env(safe-area-inset-top)]">
         <Button
           variant="ghost"
           size="sm"
@@ -199,10 +205,14 @@ export function ReaderPage() {
           variant="ghost"
           size="sm"
           onClick={toggleFullscreen}
-          aria-label="全屏"
-          title="全屏"
+          aria-label={isFullscreen ? "退出全屏" : "全屏"}
+          title={isFullscreen ? "退出全屏" : "全屏"}
         >
-          <Maximize className="size-4" />
+          {isFullscreen ? (
+            <Minimize className="size-4" />
+          ) : (
+            <Maximize className="size-4" />
+          )}
         </Button>
       </div>
 
@@ -215,10 +225,25 @@ export function ReaderPage() {
           locale="zh-CN"
           storage={{ enabled: false }}
           settings={viewerSettings}
+          hiddenSettings={["viewMode"]}
           onPageChange={({ pageIndex }) => onPageChange(pageIndex)}
+          onLayoutChange={({ layoutMode: mode }) => setLayoutMode(mode)}
           className="h-full w-full"
         />
       </div>
+
+      {/* 悬浮退出按钮：原生全屏下由浏览器隐藏，伪全屏（iOS）时可用 */}
+      {isFullscreen && (
+        <button
+          type="button"
+          aria-label="退出全屏"
+          title="退出全屏"
+          onClick={toggleFullscreen}
+          className="fixed right-4 top-[calc(0.75rem+env(safe-area-inset-top))] z-[1000] flex size-10 items-center justify-center rounded-full border border-kumo-border bg-kumo-elevated text-kumo-default shadow-lg active:scale-95"
+        >
+          <Minimize className="size-5" />
+        </button>
+      )}
     </div>
   );
 }
