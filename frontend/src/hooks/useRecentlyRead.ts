@@ -17,7 +17,6 @@ export function useRecentlyRead() {
     queryKey: ["recently-read"],
     queryFn: fetchRecentlyRead,
     staleTime: RECENTLY_READ_STALE_TIME,
-    placeholderData: (previousData: RecentlyReadResponse | undefined) => previousData,
   });
 
   const items = useMemo(() => listQuery.data?.results ?? [], [listQuery.data]);
