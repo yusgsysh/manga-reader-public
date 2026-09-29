@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RocketLaunch } from "@phosphor-icons/react";
+import { ArrowUp } from "@phosphor-icons/react";
 
 const SHOW_AFTER = 400;
 
@@ -46,7 +46,7 @@ export function BackToTop() {
           : "pointer-events-none translate-y-2 opacity-0"
       }`}
     >
-      <RocketLaunch size={22} weight="duotone" />
+      <ArrowUp size={20} weight="bold" />
     </button>
   );
 }
