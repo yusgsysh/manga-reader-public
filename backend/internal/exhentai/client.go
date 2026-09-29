@@ -59,6 +59,9 @@ func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.ResponseHeaderTimeout = 30 * time.Second
+	transport.MaxIdleConns = 50
+	transport.MaxIdleConnsPerHost = 10
+	transport.MaxConnsPerHost = 20
 	transport.IdleConnTimeout = 90 * time.Second
 
 	slog.Debug("http client created",
