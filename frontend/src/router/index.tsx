@@ -12,6 +12,7 @@ import {
   ReaderPage,
   RecentlyReadPage,
   SearchPage,
+  SettingsPage,
   SubscriptionsPage,
 } from "./pages";
 
@@ -73,6 +74,14 @@ export const router = createBrowserRouter([
         element: (
           <LazyPage>
             <DownloadManagerPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "settings",
+        element: (
+          <LazyPage>
+            <SettingsPage />
           </LazyPage>
         ),
       },

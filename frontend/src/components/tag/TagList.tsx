@@ -1,4 +1,5 @@
 import type { Tag } from "../../types/gallery";
+import { Chip } from "../ui";
 import { TagBadge } from "./TagBadge";
 
 export interface TagListProps {
@@ -17,9 +18,9 @@ export function TagList({ tags, max }: TagListProps) {
         <TagBadge key={`${tag.namespace}:${tag.name}`} tag={tag} />
       ))}
       {remaining > 0 && (
-        <span className="inline-flex items-center rounded bg-kumo-recessed px-2 py-0.5 text-xs text-kumo-inactive">
+        <Chip tone="outline" className="text-kumo-inactive">
           +{remaining}
-        </span>
+        </Chip>
       )}
     </div>
   );

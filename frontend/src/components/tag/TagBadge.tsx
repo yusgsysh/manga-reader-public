@@ -1,5 +1,6 @@
 import type { Tag } from "../../types/gallery";
 import { useTagTranslation } from "../../hooks/useTagTranslation";
+import { Chip } from "../ui";
 
 export interface TagBadgeProps {
   tag: Tag;
@@ -15,9 +16,9 @@ export function TagBadge({ tag, showNamespace = true }: TagBadgeProps) {
     showNamespace && tag.namespace ? translateNamespace(tag.namespace) : "";
 
   return (
-    <span className="inline-flex items-center gap-1 rounded bg-kumo-recessed px-2 py-0.5 text-xs font-bold text-kumo-subtle">
-      {namespaceLabel && <span>[{namespaceLabel}]</span>}
+    <Chip tone="neutral" className="font-normal">
+      {namespaceLabel && <span className="text-kumo-inactive">[{namespaceLabel}]</span>}
       <span>{displayName}</span>
-    </span>
+    </Chip>
   );
 }

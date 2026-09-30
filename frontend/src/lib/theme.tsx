@@ -10,7 +10,7 @@ function getInitialMode(): ThemeMode {
   if (stored === "light" || stored === "dark" || stored === "system") {
     return stored;
   }
-  return "system";
+  return "light";
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

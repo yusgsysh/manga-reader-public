@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from "react";
+import { ClockCounterClockwise, Trash, CircleNotch } from "@phosphor-icons/react";
 import { Button, Dialog } from "@cloudflare/kumo";
-import { Trash, CircleNotch } from "@phosphor-icons/react";
-import { useRecentlyRead, useCleanupReadingProgress } from "../hooks/useRecentlyRead";
-import { BookshelfCard } from "../components/gallery/BookshelfCard";
+import {
+  useRecentlyRead,
+  useCleanupReadingProgress,
+} from "../hooks/useRecentlyRead";
+import { BookshelfGrid } from "../components/gallery/BookshelfGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorState } from "../components/common/ErrorState";
+import { PageHeader } from "../components/ui";
 
 export function RecentlyReadPage() {
   const {
@@ -40,10 +44,30 @@ export function RecentlyReadPage() {
     );
   }
 
+  if (items.length === 0) {
+    return (
+      <div>
+        <PageHeader
+          title="阅读历史"
+          description="最近打开的画廊"
+          icon={<ClockCounterClockwise className="size-5" weight="fill" />}
+        />
+        <EmptyState
+          message="还没有阅读记录"
+          actionLabel="浏览首页"
+          actionTo="/"
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
-      {items.length > 0 && (
-        <div className="mb-4 flex items-center justify-end">
+      <PageHeader
+        title="阅读历史"
+        description="最近打开的画廊"
+        icon={<ClockCounterClockwise className="size-5" weight="fill" />}
+        actions={
           <Button
             variant="ghost"
             size="sm"
@@ -53,31 +77,15 @@ export function RecentlyReadPage() {
             <Trash className="mr-1 size-4" weight="bold" />
             清理记录
           </Button>
-        </div>
-      )}
-
-      {items.length === 0 ? (
-        <EmptyState
-          message="还没有阅读记录"
-          actionLabel="浏览首页"
-          actionTo="/"
-        />
-      ) : (
-        <div className="gallery-grid">
-          {items.map((item) => (
-            <BookshelfCard key={`${item.id}-${item.token}`} item={item} />
-          ))}
-        </div>
-      )}
-
-      {items.length > 0 && (
-        <InfiniteScrollTrigger
-          hasNextPage={!!hasNextPage}
-          isFetchingNextPage={isFetchingNextPage}
-          isFetchNextPageError={isFetchNextPageError}
-          fetchNextPage={() => fetchNextPage()}
-        />
-      )}
+        }
+      />
+      <BookshelfGrid items={items} />
+      <InfiniteScrollTrigger
+        hasNextPage={!!hasNextPage}
+        isFetchingNextPage={isFetchingNextPage}
+        isFetchNextPageError={isFetchNextPageError}
+        fetchNextPage={() => fetchNextPage()}
+      />
 
       <Dialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
         <Dialog className="p-6">

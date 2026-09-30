@@ -24,6 +24,7 @@ import {
 import { formatRelativeTime } from "../lib/time";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorState } from "../components/common/ErrorState";
+import { PageHeader, Section } from "../components/ui";
 import type { PrefillJob, PrefillStatus } from "../types/prefill";
 
 function statusBadgeVariant(
@@ -49,20 +50,12 @@ interface JobRowProps {
   onZipStart: (id: number) => void;
 }
 
-function JobRow({
-  job,
-  zippingIds,
-  onZipStart,
-}: JobRowProps) {
+function JobRow({ job, zippingIds, onZipStart }: JobRowProps) {
   const active = isActivePrefillStatus(job.status);
   const isZipping = zippingIds.has(job.id);
   const cancel = useCancelPrefillJob();
   const remove = useDeletePrefillJob();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-
-  const handleDelete = () => {
-    setDeleteConfirmOpen(true);
-  };
 
   const confirmDelete = () => {
     remove.mutate(job.id);
@@ -70,7 +63,7 @@ function JobRow({
   };
 
   return (
-    <div className="space-y-3 rounded-lg border border-kumo-hairline bg-kumo-elevated p-4">
+    <div className="card-surface space-y-3 p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -88,9 +81,7 @@ function JobRow({
           </div>
           <p className="mt-1 text-xs text-kumo-subtle">
             共 {job.total} 页 · 创建于 {formatRelativeTime(job.created_at)}
-            {job.finished_at && (
-              <> · 结束于 {formatRelativeTime(job.finished_at)}</>
-            )}
+            {job.finished_at && <> · 结束于 {formatRelativeTime(job.finished_at)}</>}
           </p>
         </div>
 
@@ -128,7 +119,7 @@ function JobRow({
                 variant="ghost"
                 size="sm"
                 className="text-kumo-danger"
-                onClick={handleDelete}
+                onClick={() => setDeleteConfirmOpen(true)}
                 disabled={remove.isPending}
                 aria-label="删除记录"
               >
@@ -150,7 +141,7 @@ function JobRow({
       )}
 
       {job.failed_count > 0 && !active && (
-        <p className="text-xs text-kumo-danger flex items-center gap-1">
+        <p className="flex items-center gap-1 text-xs text-kumo-danger">
           <WarningCircle className="size-3.5" weight="fill" />
           下载完成，但有 {job.failed_count} 页缺失（已在 ZIP 中标记为 _missing.txt）
         </p>
@@ -160,7 +151,7 @@ function JobRow({
         {job.gallery_id !== null && job.gallery_token && (
           <Link
             to={`/gallery/${job.gallery_id}/${job.gallery_token}`}
-            className="hover:underline"
+            className="font-medium text-[var(--app-accent)] hover:underline"
           >
             打开画廊
           </Link>
@@ -178,9 +169,7 @@ function JobRow({
 
       <Dialog.Root open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <Dialog className="w-[min(92vw,26rem)] p-6">
-          <Dialog.Title className="text-base font-semibold">
-            删除记录
-          </Dialog.Title>
+          <Dialog.Title className="text-base font-semibold">删除记录</Dialog.Title>
           <Dialog.Description className="mt-1 text-sm text-kumo-subtle">
             确定要删除 "{job.title || "未命名任务"}" 的记录吗？此操作不可恢复。
           </Dialog.Description>
@@ -191,7 +180,9 @@ function JobRow({
               onClick={confirmDelete}
               disabled={remove.isPending}
             >
-              {remove.isPending && <CircleNotch className="mr-1 size-4 animate-spin" />}
+              {remove.isPending && (
+                <CircleNotch className="mr-1 size-4 animate-spin" />
+              )}
               删除
             </Button>
           </div>
@@ -208,6 +199,8 @@ export function DownloadManagerPage() {
   const [zippingIds, setZippingIds] = useState<Set<number>>(new Set());
 
   const jobs = data?.jobs ?? [];
+  const activeJobs = jobs.filter((job) => isActivePrefillStatus(job.status));
+  const finishedJobs = jobs.filter((job) => !isActivePrefillStatus(job.status));
 
   const handleCleanup = () => {
     cleanup.mutate(0);
@@ -229,7 +222,6 @@ export function DownloadManagerPage() {
         anchor.remove();
       })
       .catch((err) => {
-        // Error toast is handled by the component's error boundary or could be added here
         console.error("Download failed:", err);
       })
       .finally(() => {
@@ -259,28 +251,32 @@ export function DownloadManagerPage() {
   }
 
   return (
-    <div>
-      {/* Error banner for transient failures while data is still visible */}
+    <div className="space-y-6">
+      <PageHeader
+        title="下载管理"
+        description="画廊预取与打包下载任务"
+        icon={<DownloadSimple className="size-5" weight="bold" />}
+        actions={
+          jobs.length > 0 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-kumo-danger"
+              onClick={() => setCleanupOpen(true)}
+            >
+              <Trash className="mr-1 size-4" weight="bold" />
+              清理记录
+            </Button>
+          ) : undefined
+        }
+      />
+
       {error && data && (
-        <div className="mb-4 flex items-center gap-2 rounded-md bg-kumo-danger/10 p-3 text-sm text-kumo-danger">
+        <div className="flex items-center gap-2 rounded-xl bg-kumo-danger/10 p-3 text-sm text-kumo-danger">
           <WarningCircle className="size-4 shrink-0" weight="fill" />
           <span>刷新失败，正在重试… ({error.message})</span>
           <Button variant="ghost" size="sm" onClick={() => refetch()}>
             立即重试
-          </Button>
-        </div>
-      )}
-
-      {jobs.length > 0 && (
-        <div className="mb-4 flex items-center justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-kumo-danger"
-            onClick={() => setCleanupOpen(true)}
-          >
-            <Trash className="mr-1 size-4" weight="bold" />
-            清理记录
           </Button>
         </div>
       )}
@@ -292,20 +288,40 @@ export function DownloadManagerPage() {
           actionTo="/"
         />
       ) : (
-        <div className="space-y-3">
-          {jobs.map((job) => (
-            <JobRow
-              key={job.id}
-              job={job}
-              zippingIds={zippingIds}
-              onZipStart={onZipStart}
-            />
-          ))}
+        <div className="space-y-8">
+          {activeJobs.length > 0 && (
+            <Section title="进行中">
+              <div className="space-y-3">
+                {activeJobs.map((job) => (
+                  <JobRow
+                    key={job.id}
+                    job={job}
+                    zippingIds={zippingIds}
+                    onZipStart={onZipStart}
+                  />
+                ))}
+              </div>
+            </Section>
+          )}
+          {finishedJobs.length > 0 && (
+            <Section title="已完成">
+              <div className="space-y-3">
+                {finishedJobs.map((job) => (
+                  <JobRow
+                    key={job.id}
+                    job={job}
+                    zippingIds={zippingIds}
+                    onZipStart={onZipStart}
+                  />
+                ))}
+              </div>
+            </Section>
+          )}
         </div>
       )}
 
       {jobs.length >= 200 && (
-        <p className="mt-4 text-center text-xs text-kumo-subtle">
+        <p className="text-center text-xs text-kumo-subtle">
           仅显示最近 200 条记录
         </p>
       )}
@@ -325,7 +341,9 @@ export function DownloadManagerPage() {
               onClick={handleCleanup}
               disabled={cleanup.isPending}
             >
-              {cleanup.isPending && <CircleNotch className="mr-1 size-4 animate-spin" />}
+              {cleanup.isPending && (
+                <CircleNotch className="mr-1 size-4 animate-spin" />
+              )}
               清理
             </Button>
           </div>

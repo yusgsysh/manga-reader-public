@@ -1,15 +1,18 @@
-import type { BookshelfItem } from "../../types/gallery";
-import { BookshelfCard } from "./BookshelfCard";
+import { GalleryCard } from "./GalleryCard";
+import { readingToCard, type ReadingCardSource } from "./mappers";
 
 interface BookshelfGridProps {
-  items: BookshelfItem[];
+  items: ReadingCardSource[];
 }
 
 export function BookshelfGrid({ items }: BookshelfGridProps) {
   return (
     <div className="gallery-grid">
       {items.map((item) => (
-        <BookshelfCard key={`${item.id}-${item.token}`} item={item} />
+        <GalleryCard
+          key={`${item.id}-${item.token}`}
+          gallery={readingToCard(item)}
+        />
       ))}
     </div>
   );

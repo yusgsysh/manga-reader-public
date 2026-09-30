@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, useKumoToastManager } from "@cloudflare/kumo";
+import { Button, useKumoToastManager, cn } from "@cloudflare/kumo";
 import {
   ArrowLeft,
   BookmarkSimple,
@@ -21,18 +21,19 @@ import { useStartPrefillJob } from "../hooks/usePrefillJobs";
 import { ErrorState } from "../components/common/ErrorState";
 import { TagList } from "../components/tag";
 import { thumbnailUrl } from "../lib/image";
+import { Chip, Section } from "../components/ui";
 
 function DetailSkeleton() {
   return (
-    <div className="flex flex-col gap-6 md:flex-row md:gap-8">
-      <div className="w-full shrink-0 md:w-64">
-        <div className="aspect-[3/4] animate-pulse rounded-lg bg-kumo-recessed" />
+    <div className="flex flex-col gap-8 md:flex-row">
+      <div className="mx-auto w-full max-w-[240px] shrink-0 md:mx-0">
+        <div className="aspect-[3/4] animate-pulse rounded-2xl bg-kumo-recessed" />
       </div>
       <div className="flex-1 space-y-4">
-        <div className="h-7 w-3/4 animate-pulse rounded bg-kumo-recessed" />
+        <div className="h-8 w-3/4 animate-pulse rounded bg-kumo-recessed" />
         <div className="h-5 w-1/2 animate-pulse rounded bg-kumo-recessed" />
         <div className="h-5 w-1/3 animate-pulse rounded bg-kumo-recessed" />
-        <div className="h-10 w-40 animate-pulse rounded bg-kumo-recessed" />
+        <div className="h-10 w-64 animate-pulse rounded bg-kumo-recessed" />
       </div>
     </div>
   );
@@ -131,8 +132,28 @@ export function GalleryDetailPage() {
     }
   };
 
+  const meta: { label: string; value: React.ReactNode }[] = [];
+  if (gallery.uploader) meta.push({ label: "上传者", value: gallery.uploader });
+  if (gallery.posted) meta.push({ label: "上传时间", value: gallery.posted });
+  if (gallery.language)
+    meta.push({
+      label: "语言",
+      value: (
+        <>
+          {gallery.language}
+          {gallery.translated && (
+            <span className="ml-1 text-xs text-kumo-success">(已翻译)</span>
+          )}
+        </>
+      ),
+    });
+  if (gallery.file_size)
+    meta.push({ label: "文件大小", value: gallery.file_size });
+  if (gallery.favorited > 0)
+    meta.push({ label: "收藏数", value: gallery.favorited });
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <Button
         variant="ghost"
         size="sm"
@@ -143,10 +164,10 @@ export function GalleryDetailPage() {
         返回
       </Button>
 
-      <div className="flex flex-col gap-6 md:flex-row md:gap-8">
+      <div className="flex flex-col gap-8 md:flex-row">
         {/* Cover */}
-        <div className="w-full shrink-0 md:w-64">
-          <div className="aspect-[3/4] overflow-hidden rounded-lg bg-kumo-recessed">
+        <div className="mx-auto w-full max-w-[240px] shrink-0 md:mx-0">
+          <div className="aspect-[3/4] overflow-hidden rounded-2xl bg-kumo-recessed shadow-lg ring-1 ring-kumo-hairline">
             <img
               src={thumbnailUrl(gallery.cover)}
               alt={gallery.title}
@@ -157,73 +178,37 @@ export function GalleryDetailPage() {
               }}
             />
             <div className="hidden flex h-full items-center justify-center p-4 text-center text-xs text-kumo-subtle">
-              Image unavailable
+              图片不可用
             </div>
           </div>
         </div>
 
         {/* Info */}
-        <div className="min-w-0 flex-1 space-y-3">
-          <h1 className="text-xl font-bold leading-snug">{gallery.title}</h1>
-          {gallery.title_jpn && (
-            <p className="text-sm text-kumo-subtle">{gallery.title_jpn}</p>
-          )}
+        <div className="min-w-0 flex-1 space-y-4">
+          <div className="space-y-1.5">
+            <h1 className="text-xl font-semibold leading-snug tracking-tight md:text-2xl">
+              {gallery.title}
+            </h1>
+            {gallery.title_jpn && (
+              <p className="text-sm text-kumo-subtle">{gallery.title_jpn}</p>
+            )}
+          </div>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-            <Badge variant="secondary">{gallery.category}</Badge>
-            <span className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Chip tone="accent">{gallery.category}</Chip>
+            <span className="inline-flex items-center gap-1 text-kumo-default">
               <Star className="size-4 text-kumo-warning" weight="fill" />
-              {gallery.rating.toFixed(2)}
+              <span className="tnum font-medium">{gallery.rating.toFixed(2)}</span>
               {gallery.rating_count > 0 && (
                 <span className="text-xs text-kumo-subtle">
                   ({gallery.rating_count})
                 </span>
               )}
             </span>
-            <span className="text-kumo-subtle">{gallery.page_count} 页</span>
+            <span className="tnum text-kumo-subtle">{gallery.page_count} 页</span>
           </div>
 
-          <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-            {gallery.uploader && (
-              <div className="flex gap-2">
-                <dt className="shrink-0 text-kumo-subtle">上传者</dt>
-                <dd className="break-all">{gallery.uploader}</dd>
-              </div>
-            )}
-            {gallery.posted && (
-              <div className="flex gap-2">
-                <dt className="shrink-0 text-kumo-subtle">上传时间</dt>
-                <dd>{gallery.posted}</dd>
-              </div>
-            )}
-            {gallery.language && (
-              <div className="flex gap-2">
-                <dt className="shrink-0 text-kumo-subtle">语言</dt>
-                <dd>
-                  {gallery.language}
-                  {gallery.translated && (
-                    <span className="ml-1 text-xs text-kumo-success">
-                      (已翻译)
-                    </span>
-                  )}
-                </dd>
-              </div>
-            )}
-            {gallery.file_size && (
-              <div className="flex gap-2">
-                <dt className="shrink-0 text-kumo-subtle">文件大小</dt>
-                <dd>{gallery.file_size}</dd>
-              </div>
-            )}
-            {gallery.favorited > 0 && (
-              <div className="flex gap-2">
-                <dt className="shrink-0 text-kumo-subtle">收藏数</dt>
-                <dd>{gallery.favorited}</dd>
-              </div>
-            )}
-          </dl>
-
-          <div className="flex flex-wrap items-center gap-3 pt-1">
+          <div className="flex flex-wrap items-center gap-3">
             <Button
               variant="primary"
               onClick={() =>
@@ -249,12 +234,13 @@ export function GalleryDetailPage() {
             >
               {togglePending ? (
                 <CircleNotch className="mr-1 size-4 animate-spin" />
-              ) : inShelf ? (
-                <BookmarkSimple className="mr-1 size-4" weight="fill" />
               ) : (
-                <BookmarkSimple className="mr-1 size-4" />
+                <BookmarkSimple
+                  className="mr-1 size-4"
+                  weight={inShelf ? "fill" : "regular"}
+                />
               )}
-              {inShelf ? "已收藏 · 点击移除" : "收藏到书架"}
+              {inShelf ? "已收藏" : "收藏"}
             </Button>
             {gallery.page_count > 0 && (
               <Button
@@ -268,19 +254,29 @@ export function GalleryDetailPage() {
                 ) : (
                   <DownloadSimple className="mr-1 size-4" weight="bold" />
                 )}
-                添加下载任务
+                下载
               </Button>
             )}
           </div>
+
+          {meta.length > 0 && (
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-2 pt-2 text-sm sm:grid-cols-2">
+              {meta.map((entry) => (
+                <div key={entry.label} className="flex gap-2">
+                  <dt className="shrink-0 text-kumo-subtle">{entry.label}</dt>
+                  <dd className={cn("min-w-0 break-all")}>{entry.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
         </div>
       </div>
 
       {/* Tags */}
       {gallery.tags.length > 0 && (
-        <section>
-          <h2 className="mb-2 text-sm font-semibold text-kumo-subtle">标签</h2>
+        <Section title="标签">
           <TagList tags={gallery.tags} />
-        </section>
+        </Section>
       )}
     </div>
   );

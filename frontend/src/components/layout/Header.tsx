@@ -1,208 +1,143 @@
-import { Link, useLocation } from "react-router";
-import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
+import { useState } from "react";
+import { DropdownMenu, cn } from "@cloudflare/kumo";
 import {
-  Button,
-  DropdownMenu,
-  LinkButton,
-  useKumoToastManager,
-} from "@cloudflare/kumo";
-import {
-  CircleNotch,
+  CaretDown,
   List,
-  Moon,
-  ArrowsClockwise,
-  Sun,
+  MagnifyingGlass,
   Monitor,
-  X,
+  Moon,
+  Sun,
 } from "@phosphor-icons/react";
 import { useTheme } from "../../hooks/useTheme";
-import { useTagTranslation } from "../../hooks/useTagTranslation";
 import type { ThemeMode } from "../../lib/theme";
-
-const NAV_ITEMS = [
-  { to: "/", label: "首页" },
-  { to: "/watched", label: "订阅" },
-  { to: "/popular", label: "热门" },
-  { to: "/search", label: "搜索" },
-  { to: "/bookshelf", label: "书架" },
-  { to: "/recently-read", label: "最近阅读" },
-  { to: "/downloads", label: "下载管理" },
-];
+import { IconButton, Logo } from "../ui";
+import { PRIMARY_NAV, SECONDARY_NAV, isNavActive } from "./nav";
+import { MobileDrawer } from "./MobileDrawer";
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
-  { mode: "system", label: "跟随系统", icon: Monitor },
   { mode: "light", label: "浅色", icon: Sun },
   { mode: "dark", label: "深色", icon: Moon },
+  { mode: "system", label: "跟随系统", icon: Monitor },
 ];
-
-export function Header() {
-  const location = useLocation();
-  const [menuPath, setMenuPath] = useState<string | null>(null);
-  const mobileOpen = menuPath === location.pathname;
-  const { mode, setMode } = useTheme();
-
-  useEffect(() => {
-    if (!mobileOpen) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, [mobileOpen]);
-
-  return (
-    <header className="sticky top-0 z-50 border-b border-kumo-hairline bg-kumo-elevated/80 pt-[env(safe-area-inset-top)] backdrop-blur-sm">
-      <div className="app-container flex h-14 items-center justify-between">
-        <Link to="/" className="text-lg font-bold">
-          Manga Reader
-        </Link>
-
-        {/* Desktop nav */}
-        <nav className="hidden items-center gap-1 md:flex">
-          {NAV_ITEMS.map((item) => {
-            const isActive =
-              item.to === "/"
-                ? location.pathname === "/"
-                : location.pathname.startsWith(item.to);
-            return (
-              <LinkButton
-                key={item.to}
-                href={item.to}
-                variant={isActive ? "primary" : "ghost"}
-                size="sm"
-                className="text-sm"
-              >
-                {item.label}
-              </LinkButton>
-            );
-          })}
-        </nav>
-
-        <div className="flex items-center gap-1">
-          {/* Tag translation database update */}
-          <TagDbUpdateButton />
-
-          {/* Theme toggle */}
-          <DropdownMenu>
-            <DropdownMenu.Trigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label="切换主题"
-                >
-                  <ThemeIcon mode={mode} />
-                </Button>
-              }
-            />
-            <DropdownMenu.Content align="end">
-              {THEME_OPTIONS.map((option) => (
-                <DropdownMenu.Item
-                  key={option.mode}
-                  icon={option.icon}
-                  selected={mode === option.mode}
-                  onClick={() => setMode(option.mode)}
-                >
-                  {option.label}
-                </DropdownMenu.Item>
-              ))}
-            </DropdownMenu.Content>
-          </DropdownMenu>
-
-          {/* Mobile menu button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="md:hidden"
-            onClick={() => setMenuPath(mobileOpen ? null : location.pathname)}
-            aria-label={mobileOpen ? "关闭菜单" : "打开菜单"}
-          >
-            {mobileOpen ? (
-              <X className="size-5" weight="bold" />
-            ) : (
-              <List className="size-5" weight="bold" />
-            )}
-          </Button>
-        </div>
-      </div>
-
-      {/* Mobile nav */}
-      {mobileOpen && (
-        <nav className="border-t border-kumo-hairline bg-kumo-elevated px-4 pb-4 pt-2 md:hidden">
-          {NAV_ITEMS.map((item) => {
-            const isActive =
-              item.to === "/"
-                ? location.pathname === "/"
-                : location.pathname.startsWith(item.to);
-            return (
-              <LinkButton
-                key={item.to}
-                href={item.to}
-                variant={isActive ? "primary" : "ghost"}
-                size="sm"
-                className="mb-1 w-full justify-start text-sm"
-                onClick={() => setMenuPath(null)}
-              >
-                {item.label}
-              </LinkButton>
-            );
-          })}
-        </nav>
-      )}
-    </header>
-  );
-}
 
 function ThemeIcon({ mode }: { mode: ThemeMode }) {
   const Icon = THEME_OPTIONS.find((o) => o.mode === mode)?.icon ?? Monitor;
-  return <Icon className="size-4" weight="fill" />;
+  return <Icon className="size-5" weight="fill" />;
 }
 
-function TagDbUpdateButton() {
-  const { info, updateStatus, update } = useTagTranslation();
-  const toast = useKumoToastManager();
-  const updating = updateStatus === "loading";
-
-  const handleUpdate = async () => {
-    if (updating) return;
-    try {
-      const result = await update();
-      toast.add({
-        title: result.changed
-          ? "标签翻译数据库已更新"
-          : "翻译数据库已是最新",
-        description: info?.sha ? `版本 ${info.sha.slice(0, 7)}` : undefined,
-        variant: result.changed ? "success" : "info",
-      });
-    } catch (error) {
-      toast.add({
-        title: "更新标签翻译数据库失败",
-        description: error instanceof Error ? error.message : undefined,
-        variant: "error",
-      });
-    }
-  };
-
-  const versionText = info?.sha
-    ? `翻译数据库 ${info.version ?? ""} · ${info.sha.slice(0, 7)}\n更新于 ${new Date(
-        info.loadedAt,
-      ).toLocaleString()}`
-    : "标签翻译数据库未加载";
+export function Header() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const { mode, setMode } = useTheme();
 
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={handleUpdate}
-      disabled={updating}
-      aria-label="更新标签翻译数据库"
-      title={versionText}
-    >
-      {updating ? (
-        <CircleNotch className="size-4 animate-spin" />
-      ) : (
-        <ArrowsClockwise className="size-4" weight="bold" />
-      )}
-    </Button>
+    <>
+      <header className="sticky top-0 z-50 border-b border-kumo-hairline bg-kumo-base/80 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+        <div className="app-container flex h-14 items-center gap-2">
+          <IconButton
+            label="打开菜单"
+            className="md:hidden"
+            onClick={() => setDrawerOpen(true)}
+          >
+            <List className="size-5" weight="bold" />
+          </IconButton>
+
+          <Link
+            to="/"
+            className="flex flex-1 items-center justify-center md:flex-none md:justify-start"
+            aria-label="Manga Reader 首页"
+          >
+            <Logo />
+          </Link>
+
+          {/* Desktop primary nav */}
+          <nav className="ml-3 hidden items-center gap-0.5 md:flex">
+            {PRIMARY_NAV.map((item) => {
+              const active = isNavActive(location.pathname, item.to);
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                    active
+                      ? "bg-kumo-contrast text-kumo-inverse"
+                      : "text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default",
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className="hidden flex-1 md:block" />
+
+          {/* Desktop actions */}
+          <div className="hidden items-center gap-1 md:flex">
+            <DropdownMenu>
+              <DropdownMenu.Trigger
+                render={
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-kumo-subtle transition-colors hover:bg-kumo-tint hover:text-kumo-default"
+                  >
+                    更多
+                    <CaretDown className="size-3.5" weight="bold" />
+                  </button>
+                }
+              />
+              <DropdownMenu.Content align="end">
+                {SECONDARY_NAV.map((item) => (
+                  <DropdownMenu.LinkItem
+                    key={item.to}
+                    href={item.to}
+                    icon={item.icon}
+                  >
+                    {item.label}
+                  </DropdownMenu.LinkItem>
+                ))}
+              </DropdownMenu.Content>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenu.Trigger
+                render={
+                  <IconButton label="切换主题" aria-haspopup="menu">
+                    <ThemeIcon mode={mode} />
+                  </IconButton>
+                }
+              />
+              <DropdownMenu.Content align="end">
+                {THEME_OPTIONS.map((option) => (
+                  <DropdownMenu.Item
+                    key={option.mode}
+                    icon={option.icon}
+                    selected={mode === option.mode}
+                    onClick={() => setMode(option.mode)}
+                  >
+                    {option.label}
+                  </DropdownMenu.Item>
+                ))}
+              </DropdownMenu.Content>
+            </DropdownMenu>
+          </div>
+
+          {/* Mobile search */}
+          <IconButton
+            label="搜索"
+            className="md:hidden"
+            onClick={() => navigate("/search")}
+          >
+            <MagnifyingGlass className="size-5" weight="bold" />
+          </IconButton>
+        </div>
+      </header>
+
+      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+    </>
   );
 }

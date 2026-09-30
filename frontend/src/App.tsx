@@ -8,6 +8,7 @@ import {
   type LinkComponentProps,
 } from "@cloudflare/kumo";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import { MotionProvider } from "./lib/motion";
 import { ThemeProvider } from "./lib/theme";
 import { tagTranslationService } from "./services/tagTranslation";
 import { router } from "./router";
@@ -35,15 +36,17 @@ export default function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
-        <QueryClientProvider client={queryClient}>
-          <LinkProvider component={AppLink}>
-            <TooltipProvider>
-              <Toasty>
-                <RouterProvider router={router} />
-              </Toasty>
-            </TooltipProvider>
-          </LinkProvider>
-        </QueryClientProvider>
+        <MotionProvider>
+          <QueryClientProvider client={queryClient}>
+            <LinkProvider component={AppLink}>
+              <TooltipProvider>
+                <Toasty>
+                  <RouterProvider router={router} />
+                </Toasty>
+              </TooltipProvider>
+            </LinkProvider>
+          </QueryClientProvider>
+        </MotionProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

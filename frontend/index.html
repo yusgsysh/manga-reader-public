@@ -7,7 +7,7 @@
     <title>Manga Reader</title>
     <script>
       (function () {
-        var mode = localStorage.getItem("manga-reader-theme") || "system";
+        var mode = localStorage.getItem("manga-reader-theme") || "light";
         var root = document.documentElement;
         if (mode === "system") {
           mode = window.matchMedia("(prefers-color-scheme: dark)").matches

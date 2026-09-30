@@ -1,0 +1,35 @@
+import type { Icon } from "@phosphor-icons/react";
+import {
+  BookmarkSimple,
+  Books,
+  ClockCounterClockwise,
+  DownloadSimple,
+  Fire,
+  Gear,
+  House,
+  MagnifyingGlass,
+} from "@phosphor-icons/react";
+
+export interface NavItem {
+  to: string;
+  label: string;
+  icon: Icon;
+}
+
+export const PRIMARY_NAV: NavItem[] = [
+  { to: "/", label: "首页", icon: House },
+  { to: "/watched", label: "订阅", icon: BookmarkSimple },
+  { to: "/popular", label: "热门", icon: Fire },
+  { to: "/search", label: "搜索", icon: MagnifyingGlass },
+  { to: "/bookshelf", label: "书架", icon: Books },
+];
+
+export const SECONDARY_NAV: NavItem[] = [
+  { to: "/recently-read", label: "阅读历史", icon: ClockCounterClockwise },
+  { to: "/downloads", label: "下载管理", icon: DownloadSimple },
+  { to: "/settings", label: "设置", icon: Gear },
+];
+
+export function isNavActive(pathname: string, to: string): boolean {
+  return to === "/" ? pathname === "/" : pathname.startsWith(to);
+}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Skeleton } from "../ui";
 
 function columnsForWidth(width: number): number {
   if (width < 480) return 2;
@@ -25,12 +26,11 @@ function useGridColumnCount(): number {
 
 export function GallerySkeleton() {
   return (
-    <div className="animate-pulse">
-      <div className="aspect-[3/4] rounded-lg bg-kumo-recessed" />
+    <div>
+      <Skeleton className="aspect-[3/4] rounded-xl" />
       <div className="mt-2 space-y-2">
-        <div className="h-4 w-3/4 rounded bg-kumo-recessed" />
-        <div className="h-3 w-1/2 rounded bg-kumo-recessed" />
-        <div className="h-3 w-1/3 rounded bg-kumo-recessed" />
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-3 w-1/2" />
       </div>
     </div>
   );

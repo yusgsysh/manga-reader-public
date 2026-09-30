@@ -208,7 +208,7 @@ export function ReaderPage() {
       className="reader-shell flex h-[100dvh] flex-col bg-kumo-base"
     >
       {/* Top bar：全屏时由 comimi 接管，控件交给库内 dock */}
-      <div className="reader-topbar relative z-10 flex min-h-12 shrink-0 items-center gap-2 border-b border-kumo-hairline bg-kumo-elevated px-3 pt-[env(safe-area-inset-top)]">
+      <div className="reader-topbar relative z-10 flex min-h-12 shrink-0 items-center gap-2 border-b border-kumo-hairline bg-kumo-base/85 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <Button
           variant="ghost"
           size="sm"

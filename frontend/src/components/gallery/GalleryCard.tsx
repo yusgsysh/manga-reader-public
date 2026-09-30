@@ -1,12 +1,12 @@
-import { Badge } from "@cloudflare/kumo";
-import type { GalleryListItem } from "../../types/gallery";
+import type { GalleryCategory } from "../../types/gallery";
 import { Link } from "react-router";
 import { thumbnailUrl } from "../../lib/image";
 import { parseTagString } from "../../lib/tag";
 import { useTagTranslation } from "../../hooks/useTagTranslation";
-import { Tag as TagIcon } from "@phosphor-icons/react";
+import { Star, Tag as TagIcon } from "@phosphor-icons/react";
 import { createPortal } from "react-dom";
 import { useState, useRef, useEffect } from "react";
+import { Chip } from "../ui";
 
 const TAG_POPOVER_WIDTH = 224;
 const VIEWPORT_MARGIN = 8;
@@ -23,8 +23,24 @@ function computePopoverPosition(element: HTMLElement) {
   };
 }
 
+export interface GalleryCardData {
+  id: number;
+  token: string;
+  title: string;
+  category?: GalleryCategory;
+  image?: string;
+  rating?: number;
+  pages?: number;
+  posted?: string;
+  tags?: string[];
+  reading?: {
+    progress: number;
+    completed: boolean;
+  };
+}
+
 interface GalleryCardProps {
-  gallery: GalleryListItem;
+  gallery: GalleryCardData;
 }
 
 export function GalleryCard({ gallery }: GalleryCardProps) {
@@ -39,6 +55,7 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
 
   const hasTags = (gallery.tags?.length ?? 0) > 0;
   const galleryHref = `/gallery/${gallery.id}/${gallery.token}`;
+  const image = gallery.image ? thumbnailUrl(gallery.image) : "";
 
   const openTags = () => {
     const el = tagsRef.current;
@@ -99,25 +116,45 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
     return tag.namespace ? `${tag.namespace}:${tag.name}` : tag.name;
   };
 
+  const progress = gallery.reading
+    ? Math.round(gallery.reading.progress * 100)
+    : 0;
+
   return (
     <div className="gallery-card group relative">
       <div className="relative">
         <Link to={galleryHref} aria-label={gallery.title} className="block">
-          <div className="aspect-[3/4] overflow-hidden rounded-lg bg-kumo-recessed">
-            <img
-              src={thumbnailUrl(gallery.cover)}
-              alt={gallery.title}
-              loading="lazy"
-              decoding="async"
-              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-                e.currentTarget.nextElementSibling?.classList.remove("hidden");
-              }}
-            />
-            <div className="hidden flex h-full items-center justify-center p-4 text-center text-xs text-kumo-subtle">
-              Image unavailable
+          <div className="relative aspect-[3/4] overflow-hidden rounded-xl bg-kumo-recessed ring-1 ring-kumo-hairline/70 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-lg">
+            {image ? (
+              <img
+                src={image}
+                alt={gallery.title}
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                  e.currentTarget.nextElementSibling?.classList.remove("hidden");
+                }}
+              />
+            ) : null}
+            <div
+              className={`${
+                image ? "hidden" : "flex"
+              } h-full items-center justify-center p-4 text-center text-xs text-kumo-subtle`}
+            >
+              图片不可用
             </div>
+
+            {/* progress bar */}
+            {gallery.reading && (
+              <div className="absolute inset-x-0 bottom-0 h-1 bg-black/30">
+                <div
+                  className="h-full bg-[var(--app-accent)]"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            )}
           </div>
         </Link>
 
@@ -130,7 +167,7 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
           >
             <button
               type="button"
-              className="flex size-7 items-center justify-center rounded-full bg-black/50 text-white/80 backdrop-blur-sm transition-colors hover:bg-black/70 hover:text-white"
+              className="flex size-7 items-center justify-center rounded-full bg-black/55 text-white/90 backdrop-blur-sm transition-colors hover:bg-black/75 hover:text-white"
               onClick={toggleTags}
               aria-label="查看标签"
               aria-expanded={showTags}
@@ -140,12 +177,20 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
           </div>
         )}
 
+        {gallery.reading && (
+          <div className="pointer-events-none absolute left-2 top-2">
+            <span className="rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white/90 backdrop-blur-sm">
+              {gallery.reading.completed ? "已读完" : `已读 ${progress}%`}
+            </span>
+          </div>
+        )}
+
         {hasTags &&
           showTags &&
           popoverPos &&
           createPortal(
             <div
-              className="fixed z-50 w-56 rounded-lg border border-kumo-border bg-kumo-elevated p-2 shadow-lg"
+              className="fixed z-50 w-56 rounded-xl border border-kumo-hairline bg-kumo-elevated p-2 shadow-lg"
               style={{ left: popoverPos.left, bottom: popoverPos.bottom }}
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
@@ -154,7 +199,7 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
                 {gallery.tags!.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-block rounded bg-kumo-subtle px-1.5 py-0.5 text-[10px]"
+                    className="inline-block rounded-md bg-kumo-recessed px-1.5 py-0.5 text-[11px]"
                   >
                     {formatTag(tag)}
                   </span>
@@ -167,24 +212,25 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
 
       <Link to={galleryHref} className="block">
         <div className="mt-2 space-y-1">
-          <h3 className="line-clamp-2 text-sm font-medium leading-tight">
+          <h3 className="line-clamp-2 text-sm font-medium leading-snug">
             {gallery.title}
           </h3>
 
-          <div className="flex flex-wrap items-center gap-2 text-xs text-kumo-subtle">
-            <Badge
-              variant="secondary"
-              className="text-[10px] [a:hover_&]:ring-0"
-            >
-              {gallery.category}
-            </Badge>
-            <span>★ {gallery.rating.toFixed(1)}</span>
-            <span>{gallery.pages}p</span>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-kumo-subtle">
+            {gallery.category && <Chip tone="accent">{gallery.category}</Chip>}
+            {typeof gallery.rating === "number" && (
+              <span className="inline-flex items-center gap-0.5">
+                <Star className="size-3.5 text-kumo-warning" weight="fill" />
+                {gallery.rating.toFixed(1)}
+              </span>
+            )}
+            {typeof gallery.pages === "number" && gallery.pages > 0 && (
+              <span className="tnum">{gallery.pages}p</span>
+            )}
+            {gallery.posted && (
+              <span className="text-kumo-inactive">{gallery.posted}</span>
+            )}
           </div>
-
-          {gallery.posted && (
-            <p className="text-[10px] text-kumo-inactive">{gallery.posted}</p>
-          )}
         </div>
       </Link>
     </div>
