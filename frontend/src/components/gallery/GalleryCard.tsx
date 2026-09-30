@@ -172,7 +172,10 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
           </h3>
 
           <div className="flex flex-wrap items-center gap-2 text-xs text-kumo-subtle">
-            <Badge variant="secondary" className="text-[10px]">
+            <Badge
+              variant="secondary"
+              className="text-[10px] [a:hover_&]:ring-0"
+            >
               {gallery.category}
             </Badge>
             <span>★ {gallery.rating.toFixed(1)}</span>
