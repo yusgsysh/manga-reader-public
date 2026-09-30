@@ -6,7 +6,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { Button, Loader } from "@cloudflare/kumo";
-import { ArrowLeft, Maximize, Minimize } from "lucide-react";
+import { ArrowLeft, CornersOut, CornersIn } from "@phosphor-icons/react";
 import {
   MangaViewer,
   type MangaViewerHandle,
@@ -195,7 +195,7 @@ export function ReaderPage() {
             navigate(-1);
           }}
         >
-          <ArrowLeft className="mr-1 size-4" />
+          <ArrowLeft className="mr-1 size-4" weight="bold" />
           返回
         </Button>
       </div>
@@ -222,7 +222,7 @@ export function ReaderPage() {
           }}
           aria-label="返回 Gallery"
         >
-          <ArrowLeft className="size-4" />
+          <ArrowLeft className="size-4" weight="bold" />
         </Button>
         <div className="min-w-0 flex-1" />
         <span className="shrink-0 text-xs text-kumo-subtle">
@@ -236,9 +236,9 @@ export function ReaderPage() {
           title={isFullscreen ? "退出全屏" : "全屏"}
         >
           {isFullscreen ? (
-            <Minimize className="size-4" />
+            <CornersIn className="size-4" weight="bold" />
           ) : (
-            <Maximize className="size-4" />
+            <CornersOut className="size-4" weight="bold" />
           )}
         </Button>
       </div>

@@ -48,7 +48,7 @@ export function useStartPrefillJob() {
     onError: (_err: unknown) => {
       // Error toast handled by component-level onError
     },
-    onSettled: (_, ___, _err) => {
+    onSettled: () => {
       invalidate();
     },
   });
@@ -73,7 +73,7 @@ export function useCancelPrefillJob() {
         });
       }
     },
-    onSettled: (_, ___, _err) => {
+    onSettled: () => {
       invalidate();
     },
   });
@@ -102,7 +102,7 @@ export function useDeletePrefillJob() {
         });
       }
     },
-    onSettled: (_, ___, _err) => {
+    onSettled: () => {
       invalidate();
     },
   });
@@ -123,7 +123,7 @@ export function useCleanupPrefillJobs() {
     onError: (_err: unknown) => {
       // Error toast handled by component-level onError
     },
-    onSettled: (_, ___, _err) => {
+    onSettled: () => {
       invalidate();
     },
   });

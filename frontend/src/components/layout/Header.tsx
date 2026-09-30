@@ -6,7 +6,15 @@ import {
   LinkButton,
   useKumoToastManager,
 } from "@cloudflare/kumo";
-import { Loader2, Menu, Moon, RefreshCw, Sun, Monitor, X } from "lucide-react";
+import {
+  CircleNotch,
+  List,
+  Moon,
+  ArrowsClockwise,
+  Sun,
+  Monitor,
+  X,
+} from "@phosphor-icons/react";
 import { useTheme } from "../../hooks/useTheme";
 import { useTagTranslation } from "../../hooks/useTagTranslation";
 import type { ThemeMode } from "../../lib/theme";
@@ -110,9 +118,9 @@ export function Header() {
             aria-label={mobileOpen ? "关闭菜单" : "打开菜单"}
           >
             {mobileOpen ? (
-              <X className="size-5" />
+              <X className="size-5" weight="bold" />
             ) : (
-              <Menu className="size-5" />
+              <List className="size-5" weight="bold" />
             )}
           </Button>
         </div>
@@ -147,7 +155,7 @@ export function Header() {
 
 function ThemeIcon({ mode }: { mode: ThemeMode }) {
   const Icon = THEME_OPTIONS.find((o) => o.mode === mode)?.icon ?? Monitor;
-  return <Icon className="size-4" />;
+  return <Icon className="size-4" weight="fill" />;
 }
 
 function TagDbUpdateButton() {
@@ -191,9 +199,9 @@ function TagDbUpdateButton() {
       title={versionText}
     >
       {updating ? (
-        <Loader2 className="size-4 animate-spin" />
+        <CircleNotch className="size-4 animate-spin" />
       ) : (
-        <RefreshCw className="size-4" />
+        <ArrowsClockwise className="size-4" weight="bold" />
       )}
     </Button>
   );

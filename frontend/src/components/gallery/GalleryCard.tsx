@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { thumbnailUrl } from "../../lib/image";
 import { parseTagString } from "../../lib/tag";
 import { useTagTranslation } from "../../hooks/useTagTranslation";
-import { Tag as TagIcon } from "lucide-react";
+import { Tag as TagIcon } from "@phosphor-icons/react";
 import { createPortal } from "react-dom";
 import { useState, useRef, useEffect } from "react";
 
@@ -135,7 +135,7 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
               aria-label="查看标签"
               aria-expanded={showTags}
             >
-              <TagIcon className="size-3.5" />
+              <TagIcon className="size-3.5" weight="fill" />
             </button>
           </div>
         )}

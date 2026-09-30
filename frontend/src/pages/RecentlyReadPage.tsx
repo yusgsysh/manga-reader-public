@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Dialog } from "@cloudflare/kumo";
-import { Trash2, Loader2 } from "lucide-react";
+import { Trash, CircleNotch } from "@phosphor-icons/react";
 import { useRecentlyRead, useCleanupReadingProgress } from "../hooks/useRecentlyRead";
 import { BookshelfCard } from "../components/gallery/BookshelfCard";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
@@ -50,7 +50,7 @@ export function RecentlyReadPage() {
             className="text-kumo-danger"
             onClick={() => setConfirmOpen(true)}
           >
-            <Trash2 className="mr-1 size-4" />
+            <Trash className="mr-1 size-4" weight="bold" />
             清理记录
           </Button>
         </div>
@@ -98,7 +98,7 @@ export function RecentlyReadPage() {
               disabled={cleanup.isPending}
             >
               {cleanup.isPending && (
-                <Loader2 className="mr-1 size-4 animate-spin" />
+                <CircleNotch className="mr-1 size-4 animate-spin" />
               )}
               删除
             </Button>

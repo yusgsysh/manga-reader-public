@@ -6,7 +6,7 @@ import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
 import { Input, Button, Checkbox, Select } from "@cloudflare/kumo";
-import { Search, ChevronDown, ChevronUp, X } from "lucide-react";
+import { MagnifyingGlass, CaretDown, CaretUp, X } from "@phosphor-icons/react";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";
 import type { AdvancedSearchOptions } from "../types/gallery";
@@ -261,7 +261,7 @@ export function SearchPage() {
           />
         </div>
         <Button onClick={handleSearch} aria-label="搜索">
-          <Search className="size-4" />
+          <MagnifyingGlass className="size-4" weight="bold" />
         </Button>
       </div>
 
@@ -303,7 +303,11 @@ export function SearchPage() {
             onClick={() => setShowAdvanced(!showAdvanced)}
             className="flex items-center gap-2 text-sm text-kumo-subtle hover:text-kumo-text transition-colors"
           >
-            {showAdvanced ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+            {showAdvanced ? (
+              <CaretUp className="size-4" weight="bold" />
+            ) : (
+              <CaretDown className="size-4" weight="bold" />
+            )}
             高级搜索
             {activeFilterCount > 0 && (
               <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-kumo-accent text-white">
@@ -378,7 +382,7 @@ export function SearchPage() {
                           className="hover:text-kumo-text"
                           aria-label={`移除标签 ${tag}`}
                         >
-                          <X className="size-3" />
+                          <X className="size-3" weight="bold" />
                         </button>
                       </span>
                     ))}
@@ -403,7 +407,7 @@ export function SearchPage() {
                           className="text-kumo-subtle hover:text-kumo-text"
                           aria-label={`移除标签 ${tag}`}
                         >
-                          <X className="size-3" />
+                          <X className="size-3" weight="bold" />
                         </button>
                       </span>
                     ))}

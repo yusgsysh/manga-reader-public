@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { Badge, Button, Dialog, Loader, Meter } from "@cloudflare/kumo";
-import { Download, Loader2, Trash2, X, AlertCircle } from "lucide-react";
+import {
+  DownloadSimple,
+  CircleNotch,
+  Trash,
+  X,
+  WarningCircle,
+} from "@phosphor-icons/react";
 import {
   useCancelPrefillJob,
   useCleanupPrefillJobs,
@@ -97,7 +103,7 @@ function JobRow({
               disabled={cancel.isPending}
               aria-label="取消任务"
             >
-              <X className="mr-1 size-3.5" />
+              <X className="mr-1 size-3.5" weight="bold" />
               取消
             </Button>
           ) : (
@@ -111,9 +117,9 @@ function JobRow({
                   aria-label="下载为 ZIP"
                 >
                   {isZipping ? (
-                    <Loader2 className="mr-1 size-3.5 animate-spin" />
+                    <CircleNotch className="mr-1 size-3.5 animate-spin" />
                   ) : (
-                    <Download className="mr-1 size-3.5" />
+                    <DownloadSimple className="mr-1 size-3.5" weight="bold" />
                   )}
                   ZIP
                 </Button>
@@ -126,7 +132,7 @@ function JobRow({
                 disabled={remove.isPending}
                 aria-label="删除记录"
               >
-                <Trash2 className="mr-1 size-3.5" />
+                <Trash className="mr-1 size-3.5" weight="bold" />
                 删除
               </Button>
             </>
@@ -145,7 +151,7 @@ function JobRow({
 
       {job.failed_count > 0 && !active && (
         <p className="text-xs text-kumo-danger flex items-center gap-1">
-          <AlertCircle className="size-3.5" />
+          <WarningCircle className="size-3.5" weight="fill" />
           下载完成，但有 {job.failed_count} 页缺失（已在 ZIP 中标记为 _missing.txt）
         </p>
       )}
@@ -185,7 +191,7 @@ function JobRow({
               onClick={confirmDelete}
               disabled={remove.isPending}
             >
-              {remove.isPending && <Loader2 className="mr-1 size-4 animate-spin" />}
+              {remove.isPending && <CircleNotch className="mr-1 size-4 animate-spin" />}
               删除
             </Button>
           </div>
@@ -257,7 +263,7 @@ export function DownloadManagerPage() {
       {/* Error banner for transient failures while data is still visible */}
       {error && data && (
         <div className="mb-4 flex items-center gap-2 rounded-md bg-kumo-danger/10 p-3 text-sm text-kumo-danger">
-          <AlertCircle className="size-4 shrink-0" />
+          <WarningCircle className="size-4 shrink-0" weight="fill" />
           <span>刷新失败，正在重试… ({error.message})</span>
           <Button variant="ghost" size="sm" onClick={() => refetch()}>
             立即重试
@@ -273,7 +279,7 @@ export function DownloadManagerPage() {
             className="text-kumo-danger"
             onClick={() => setCleanupOpen(true)}
           >
-            <Trash2 className="mr-1 size-4" />
+            <Trash className="mr-1 size-4" weight="bold" />
             清理记录
           </Button>
         </div>
@@ -298,7 +304,7 @@ export function DownloadManagerPage() {
         </div>
       )}
 
-      {jobs.length > 0 && jobs.length >= 200 && (
+      {jobs.length >= 200 && (
         <p className="mt-4 text-center text-xs text-kumo-subtle">
           仅显示最近 200 条记录
         </p>
@@ -319,7 +325,7 @@ export function DownloadManagerPage() {
               onClick={handleCleanup}
               disabled={cleanup.isPending}
             >
-              {cleanup.isPending && <Loader2 className="mr-1 size-4 animate-spin" />}
+              {cleanup.isPending && <CircleNotch className="mr-1 size-4 animate-spin" />}
               清理
             </Button>
           </div>

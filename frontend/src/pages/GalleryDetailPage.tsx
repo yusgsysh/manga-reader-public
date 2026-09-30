@@ -4,13 +4,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Badge, Button, useKumoToastManager } from "@cloudflare/kumo";
 import {
   ArrowLeft,
-  Bookmark,
-  BookmarkCheck,
-  Book,
-  Download,
+  BookmarkSimple,
+  BookOpen,
+  DownloadSimple,
   Star,
-  Loader2,
-} from "lucide-react";
+  CircleNotch,
+} from "@phosphor-icons/react";
 import {
   useBookshelfStatus,
   useBookshelfToggle,
@@ -140,7 +139,7 @@ export function GalleryDetailPage() {
         onClick={() => navigate(-1)}
         className="w-fit"
       >
-        <ArrowLeft className="mr-1 size-4" />
+        <ArrowLeft className="mr-1 size-4" weight="bold" />
         返回
       </Button>
 
@@ -173,7 +172,7 @@ export function GalleryDetailPage() {
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
             <Badge variant="secondary">{gallery.category}</Badge>
             <span className="flex items-center gap-1">
-              <Star className="size-4 fill-current text-kumo-warning" />
+              <Star className="size-4 text-kumo-warning" weight="fill" />
               {gallery.rating.toFixed(2)}
               {gallery.rating_count > 0 && (
                 <span className="text-xs text-kumo-subtle">
@@ -235,7 +234,7 @@ export function GalleryDetailPage() {
                 )
               }
             >
-              <Book className="mr-1 size-4" />
+              <BookOpen className="mr-1 size-4" weight="fill" />
               {progress?.completed
                 ? "重新阅读"
                 : hasProgress
@@ -249,11 +248,11 @@ export function GalleryDetailPage() {
               aria-label={inShelf ? "从书架移除" : "加入书架"}
             >
               {togglePending ? (
-                <Loader2 className="mr-1 size-4 animate-spin" />
+                <CircleNotch className="mr-1 size-4 animate-spin" />
               ) : inShelf ? (
-                <BookmarkCheck className="mr-1 size-4" />
+                <BookmarkSimple className="mr-1 size-4" weight="fill" />
               ) : (
-                <Bookmark className="mr-1 size-4" />
+                <BookmarkSimple className="mr-1 size-4" />
               )}
               {inShelf ? "已收藏 · 点击移除" : "收藏到书架"}
             </Button>
@@ -265,9 +264,9 @@ export function GalleryDetailPage() {
                 aria-label="添加下载任务"
               >
                 {downloadPending ? (
-                  <Loader2 className="mr-1 size-4 animate-spin" />
+                  <CircleNotch className="mr-1 size-4 animate-spin" />
                 ) : (
-                  <Download className="mr-1 size-4" />
+                  <DownloadSimple className="mr-1 size-4" weight="bold" />
                 )}
                 添加下载任务
               </Button>

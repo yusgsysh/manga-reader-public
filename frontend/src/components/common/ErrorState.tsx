@@ -1,5 +1,5 @@
 import { Button } from "@cloudflare/kumo";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "@phosphor-icons/react";
 
 interface ErrorStateProps {
   message?: string;
@@ -14,7 +14,7 @@ export function ErrorState({ message, onRetry }: ErrorStateProps) {
       </p>
       {onRetry && (
         <Button onClick={onRetry} variant="secondary" size="sm">
-          <ArrowLeft className="mr-1 size-3" />
+          <ArrowLeft className="mr-1 size-3" weight="bold" />
           重新加载
         </Button>
       )}

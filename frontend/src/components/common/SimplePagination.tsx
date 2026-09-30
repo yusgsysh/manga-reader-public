@@ -1,5 +1,5 @@
 import { Button } from "@cloudflare/kumo";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 
 interface SimplePaginationProps {
   page: number;
@@ -25,7 +25,7 @@ export function SimplePagination({
         disabled={page === 0}
         onClick={() => onPageChange(page - 1)}
       >
-        <ChevronLeft className="mr-1 size-4" />
+        <CaretLeft className="mr-1 size-4" weight="bold" />
         上一页
       </Button>
       <span className="px-4 text-sm text-kumo-subtle">
@@ -40,7 +40,7 @@ export function SimplePagination({
         onClick={() => onPageChange(page + 1)}
       >
         下一页
-        <ChevronRight className="ml-1 size-4" />
+        <CaretRight className="ml-1 size-4" weight="bold" />
       </Button>
     </div>
   );
