@@ -39,6 +39,18 @@ runtime:
           });
         });
 
+        test("exposes sprite thumbnail geometry when available", function () {
+          res.body.pages
+            .filter(function (page) {
+              return page.thumbnail;
+            })
+            .forEach(function (page) {
+              expect(page.thumbnail.sprite_url).to.include("http");
+              expect(page.thumbnail.width).to.be.a("number");
+              expect(page.thumbnail.height).to.be.a("number");
+            });
+        });
+
 settings:
   encodeUrl: true
   timeout: 0

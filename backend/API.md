@@ -62,6 +62,36 @@ Search / Homepage / Watched 支持上游 ExHentai 的 Jump/Seek 定位，通过�
 }
 ```
 
+### ListingNav（Jump/Seek 元数据）
+
+由 Search / Homepage / Watched 的响应 `nav` 字段返回，用于构建 Jump/Seek UI。
+
+```json
+{
+  "prev": "1814200",
+  "next": "1813761",
+  "min_date": "2007-03-20",
+  "max_date": "2026-10-01",
+  "range_min": 74,
+  "range_max": 74,
+  "range_span": 2
+}
+```
+
+### GalleryPageThumb（页面缩略图精灵图坐标）
+
+由 `/api/gallery/:id/:token/pages` 每页的 `thumbnail` 字段返回；用 `sprite_url` + `x/y/width/height` 调用 `/api/page-thumbnail` 获取单张缩略图。
+
+```json
+{
+  "sprite_url": "https://cdn.hath.network/c2/hash/123456-0.webp",
+  "x": 0,
+  "y": 0,
+  "width": 200,
+  "height": 282
+}
+```
+
 ---
 
 ## Endpoints

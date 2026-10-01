@@ -14,6 +14,8 @@ variables:
     value: https://exhentai.org/s/abc/3138775-1
   - name: thumbnailUrl
     value: https://s.exhentai.org/w/00/999/15582-3owak8q3.webp
+  - name: spriteUrl
+    value: https://zoycbewnml.hath.network/c2/nu85b6ladjhz2v196v/3138775-0.webp
   - name: prefillId
     value: "1"
   - name: cleanupDays
