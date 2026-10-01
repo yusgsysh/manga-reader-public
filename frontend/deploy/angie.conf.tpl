@@ -165,10 +165,10 @@ http {
         # Streamed image proxies (Angie does not cache; backend uses MinIO)
         #
         # GET /api/thumbnail | /api/cached-thumbnail
-        #     | /api/cached-image | /api/page-image
+        #     | /api/cached-image | /api/page-image | /api/page-thumbnail
         # ========================================================
 
-        location ~ ^/api/(thumbnail|cached-thumbnail|cached-image|page-image)$ {
+        location ~ ^/api/(thumbnail|cached-thumbnail|cached-image|page-image|page-thumbnail)$ {
             proxy_pass http://backend;
 
             proxy_buffering off;

@@ -2,10 +2,22 @@ package model
 
 import "time"
 
+// GalleryPageThumb describes where a page thumbnail lives inside the gallery's
+// sprite image. The site renders thumbnails with a CSS background-position, so
+// the visible cell is (X, Y) with size (Width, Height) in sprite pixels.
+type GalleryPageThumb struct {
+	SpriteURL string `json:"sprite_url"`
+	X         int    `json:"x"`
+	Y         int    `json:"y"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+}
+
 // CachedPage is a single gallery page reference stored in the gallery cache.
 type CachedPage struct {
-	PageURL string `json:"page_url"`
-	Index   int    `json:"index"`
+	PageURL   string            `json:"page_url"`
+	Index     int               `json:"index"`
+	Thumbnail *GalleryPageThumb `json:"thumbnail,omitempty"`
 }
 
 // GalleryCacheSnapshot is the metadata written into gallery_cache. Sources

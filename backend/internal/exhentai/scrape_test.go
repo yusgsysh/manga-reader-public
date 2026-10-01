@@ -589,6 +589,68 @@ func TestScrapeSearch_ForwardsNavParams(t *testing.T) {
 	}
 }
 
+func TestExtractGalleryPages_ThumbnailSprite(t *testing.T) {
+	const html = `<html><body><div id="gdt" class="gt200">
+	<a href="https://exhentai.org/s/aaa/1-1"><div><div title="Page 1: 01.png" style="width:200px;height:282px;background:transparent url(https://cdn.hath.network/x/1-0.webp) -0px 0 no-repeat"></div><div>Page 1</div></div></a>
+	<a href="https://exhentai.org/s/bbb/1-2"><div><div title="Page 2: 02.png" style="width:200px;height:282px;background:transparent url(https://cdn.hath.network/x/1-0.webp) -200px 0 no-repeat"></div><div>Page 2</div></div></a>
+	<a href="https://exhentai.org/s/ccc/1-3"><div><div>Page 3</div></div></a>
+	</div></body></html>`
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pages := extractGalleryPages(doc)
+
+	if len(pages) != 3 {
+		t.Fatalf("pages = %d, want 3", len(pages))
+	}
+	if pages[0].PageURL != "https://exhentai.org/s/aaa/1-1" {
+		t.Errorf("page[0].PageURL = %q", pages[0].PageURL)
+	}
+	thumb := pages[1].Thumbnail
+	if thumb == nil {
+		t.Fatal("page[1].Thumbnail is nil, want sprite geometry")
+	}
+	if thumb.SpriteURL != "https://cdn.hath.network/x/1-0.webp" {
+		t.Errorf("sprite = %q", thumb.SpriteURL)
+	}
+	if thumb.X != 200 || thumb.Y != 0 || thumb.Width != 200 || thumb.Height != 282 {
+		t.Errorf("thumb = %+v, want x=200 y=0 w=200 h=282", *thumb)
+	}
+	if pages[2].Thumbnail != nil {
+		t.Errorf("page without sprite should have nil thumbnail, got %+v", pages[2].Thumbnail)
+	}
+}
+
+func TestValidatePageThumbnailURL(t *testing.T) {
+	valid := []string{
+		"https://zoycbewnml.hath.network/c2/nu/1-0.webp",
+		"https://ehgt.org/a.webp",
+		"https://sub.e-hentai.org/a.webp",
+		"https://exhentai.org/a.webp",
+	}
+	for _, u := range valid {
+		if err := ValidatePageThumbnailURL(u); err != nil {
+			t.Errorf("ValidatePageThumbnailURL(%q) = %v, want nil", u, err)
+		}
+	}
+
+	invalid := []string{
+		"",
+		"http://cdn.hath.network/a.webp",
+		"https://evil.example.com/a.webp",
+		"https://evilhath.network/a.webp",
+		"https://localhost/a.webp",
+		"https://192.168.1.1/a.webp",
+	}
+	for _, u := range invalid {
+		if err := ValidatePageThumbnailURL(u); err == nil {
+			t.Errorf("ValidatePageThumbnailURL(%q) = nil, want error", u)
+		}
+	}
+}
+
 func TestScrapeGalleryList_ForwardsNavParams(t *testing.T) {
 	var srv *httptest.Server
 	var gotJump string

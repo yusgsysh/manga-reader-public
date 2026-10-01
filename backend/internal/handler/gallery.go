@@ -213,16 +213,12 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 	u := exhentai.GalleryURL(c.Param("id"), token)
 	ctx := c.Request.Context()
 
-	pageUrls, err := exhentai.ScrapeGalleryPageURLs(ctx, s.Client, u)
+	pages, err := exhentai.ScrapeGalleryPages(ctx, s.Client, u)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery pages failed: %v", err)})
 		return
 	}
 
-	pages := make([]model.CachedPage, len(pageUrls))
-	for i, p := range pageUrls {
-		pages[i] = model.CachedPage{PageURL: p, Index: i}
-	}
 	if db := s.cacheDB(); db != nil {
 		if cacheErr := gallerycache.UpsertPages(ctx, db, galleryID, token, pages); cacheErr != nil {
 			slog.Warn("gallery cache pages upsert failed", "id", galleryID, "error", cacheErr)

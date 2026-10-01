@@ -282,21 +282,39 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
   "pages": [
     {
       "page_url": "https://exhentai.org/s/abcdef1234/123456-1",
-      "index": 0
+      "index": 0,
+      "thumbnail": {
+        "sprite_url": "https://cdn.hath.network/c2/hash/123456-0.webp",
+        "x": 0,
+        "y": 0,
+        "width": 200,
+        "height": 282
+      }
     },
     {
       "page_url": "https://exhentai.org/s/abcdef1234/123456-2",
-      "index": 1
+      "index": 1,
+      "thumbnail": {
+        "sprite_url": "https://cdn.hath.network/c2/hash/123456-0.webp",
+        "x": 200,
+        "y": 0,
+        "width": 200,
+        "height": 282
+      }
     }
   ]
 }
 ```
 
+> `thumbnail` 描述该页缩略图在精灵图中的位置（源站用一张大图 + CSS `background-position` 切割）。用 `sprite_url` + `x/y/width/height` 调用 `/api/page-thumbnail` 获取单张缩略图。无缩略图元数据时该字段省略。
+>
 > 在线成功后会把页面列表写入 `gallery_cache`；本接口不做缓存回退。
 
 ---
 
-### 5. Page Image
+### 5. Page Image & Page Thumbnail
+
+#### Page Image
 
 `GET /api/page-image`
 
@@ -318,6 +336,42 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 ```json
 {
   "error": "download image failed: ..."
+}
+```
+
+#### Page Thumbnail
+
+`GET /api/page-thumbnail`
+
+从 ExHentai 页面缩略图精灵图中裁出单张缩略图并返回 WebP。源站用一张大图（精灵图）承载多页缩略图，本接口在服务端解码、裁剪、重新编码，前端只需按 `pages[].thumbnail` 提供的矩形请求。
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| url | string | yes | 精灵图 URL (`pages[].thumbnail.sprite_url`) |
+| x | int | yes | 裁剪起点 X（`pages[].thumbnail.x`，>= 0） |
+| y | int | yes | 裁剪起点 Y（`pages[].thumbnail.y`，>= 0） |
+| w | int | yes | 裁剪宽度（`pages[].thumbnail.width`，1..4096） |
+| h | int | yes | 裁剪高度（`pages[].thumbnail.height`，1..4096） |
+
+**Response (200):**
+
+- `Content-Type: image/webp`，`Cache-Control: public, max-age=31536000, immutable`
+- 精灵图与裁剪结果按 `page-sprite/<sha256(url)>`、`page-thumb/<sha256(url|x|y|w|h)>` 缓存在 MinIO（未配置缓存时直连上游）。
+
+**Security:**
+
+- 仅允许 `https`，主机白名单后缀: `hath.network`、`e-hentai.org`、`exhentai.org`、`ehgt.org`；阻止内网地址。
+
+**Error Response:**
+
+- `400`: 参数缺失/非法、URL 不在白名单、裁剪矩形超出精灵图范围
+- `502`: 上游下载或裁剪失败
+
+```json
+{
+  "error": "crop rectangle out of bounds: ..."
 }
 ```
 

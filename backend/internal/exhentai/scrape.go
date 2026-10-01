@@ -51,6 +51,11 @@ var (
 	rangeSpanReg = regexp.MustCompile(`var rangespan=(\d+)`)
 )
 
+// pageThumbStyleReg parses the inline style ExHentai uses to place a page
+// thumbnail inside its sprite, e.g.
+// "width:200px;height:282px;background:transparent url(https://...webp) -0px 0 no-repeat".
+var pageThumbStyleReg = regexp.MustCompile(`width:(\d+)px;height:(\d+)px;background:[^;]*url\(([^)]+)\)\s*(-?\d+)px\s*(-?\d+)`)
+
 func httpGet(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -812,16 +817,34 @@ func ScrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL s
 	}, nil
 }
 
-// extractPageURLs collects gallery page links from a gallery document.
-func extractPageURLs(doc *goquery.Document) []string {
-	var urls []string
+// extractGalleryPages collects gallery page links and their sprite thumbnail
+// geometry from a gallery document.
+func extractGalleryPages(doc *goquery.Document) []model.CachedPage {
+	var pages []model.CachedPage
 	doc.Find("#gdt > a").Each(func(i int, s *goquery.Selection) {
 		href, _ := s.Attr("href")
-		if href != "" {
-			urls = append(urls, href)
+		if href == "" {
+			return
 		}
+		page := model.CachedPage{PageURL: href}
+		if style, ok := s.Find("div[style]").First().Attr("style"); ok {
+			if m := pageThumbStyleReg.FindStringSubmatch(style); len(m) == 6 {
+				w, _ := strconv.Atoi(m[1])
+				h, _ := strconv.Atoi(m[2])
+				posX, _ := strconv.Atoi(m[4])
+				posY, _ := strconv.Atoi(m[5])
+				page.Thumbnail = &model.GalleryPageThumb{
+					SpriteURL: m[3],
+					X:         -posX,
+					Y:         -posY,
+					Width:     w,
+					Height:    h,
+				}
+			}
+		}
+		pages = append(pages, page)
 	})
-	return urls
+	return pages
 }
 
 // galleryTotalImages parses the total image count from the ".gpc" counter.
@@ -835,36 +858,39 @@ func galleryTotalImages(doc *goquery.Document) int {
 	return total
 }
 
-// ScrapeGalleryPageURLs fetches the full list of gallery page URLs,
-// walking the paginated thumbnail list when the gallery has more pages
-// than fit on the first thumbnail page.
-func ScrapeGalleryPageURLs(ctx context.Context, client *http.Client, galleryURL string) ([]string, error) {
+// ScrapeGalleryPages fetches the full list of gallery pages (page URL plus
+// sprite thumbnail geometry), walking the paginated thumbnail list when the
+// gallery has more pages than fit on the first thumbnail page.
+func ScrapeGalleryPages(ctx context.Context, client *http.Client, galleryURL string) ([]model.CachedPage, error) {
 	doc, err := httpGetDoc(ctx, client, galleryURL)
 	if err != nil {
 		return nil, err
 	}
 
-	pageUrls := extractPageURLs(doc)
+	pages := extractGalleryPages(doc)
 	total := galleryTotalImages(doc)
 
-	if total > len(pageUrls) && len(pageUrls) > 0 {
-		end := len(pageUrls)
-		pages := total / end
+	if total > len(pages) && len(pages) > 0 {
+		end := len(pages)
+		pageCount := total / end
 		if total%end != 0 {
-			pages++
+			pageCount++
 		}
-		for p := 1; p < pages; p++ {
+		for p := 1; p < pageCount; p++ {
 			u, _ := url.Parse(galleryURL)
 			u.RawQuery = fmt.Sprintf("p=%d", p)
 			pageDoc, err := httpGetDoc(ctx, client, u.String())
 			if err != nil {
 				break
 			}
-			pageUrls = append(pageUrls, extractPageURLs(pageDoc)...)
+			pages = append(pages, extractGalleryPages(pageDoc)...)
 		}
 	}
 
-	return pageUrls, nil
+	for i := range pages {
+		pages[i].Index = i
+	}
+	return pages, nil
 }
 
 func ScrapePageImageURL(ctx context.Context, client *http.Client, pageURL string) (imgURL string, fallbackURL string, err error) {
@@ -1202,6 +1228,13 @@ func ValidatePageURL(rawURL string) error {
 	return validatePageURL(rawURL)
 }
 
+// ValidatePageThumbnailURL validates a sprite image URL used by the page
+// thumbnail crop API. Sprites are served from the e-hentai image CDN, which is
+// a different host set than the gallery cover thumbnails.
+func ValidatePageThumbnailURL(rawURL string) error {
+	return validatePageThumbnailURL(rawURL)
+}
+
 func IsBlockedInternalHost(host string) bool {
 	return isBlockedInternalHost(host)
 }
@@ -1240,6 +1273,46 @@ func validateThumbnailURL(rawURL string) error {
 	}
 
 	return nil
+}
+
+// allowedPageThumbnailHosts lists the image CDN hosts that may serve gallery
+// thumbnail sprites. Matching is by exact host or as a dot-suffixed subdomain.
+var allowedPageThumbnailHosts = []string{
+	"hath.network",
+	"e-hentai.org",
+	"exhentai.org",
+	"ehgt.org",
+}
+
+func validatePageThumbnailURL(rawURL string) error {
+	if rawURL == "" {
+		return fmt.Errorf("missing url parameter")
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid url")
+	}
+
+	if u.Scheme != "https" {
+		return fmt.Errorf("unsupported URL scheme: %s", u.Scheme)
+	}
+
+	host := u.Hostname()
+	if host == "" {
+		return fmt.Errorf("invalid url: missing host")
+	}
+
+	if isBlockedInternalHost(host) {
+		return fmt.Errorf("unsupported URL: internal address not allowed")
+	}
+
+	for _, allowed := range allowedPageThumbnailHosts {
+		if host == allowed || strings.HasSuffix(host, "."+allowed) {
+			return nil
+		}
+	}
+	return fmt.Errorf("unsupported URL: domain not allowed")
 }
 
 func validatePageURL(rawURL string) error {

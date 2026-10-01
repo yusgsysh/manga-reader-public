@@ -46,13 +46,9 @@ func (s *Server) prefetchGallery(galleryID int64, token string, seed *model.Gall
 
 		u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
 
-		if urls, err := exhentai.ScrapeGalleryPageURLs(ctx, s.Client, u); err != nil {
+		if pages, err := exhentai.ScrapeGalleryPages(ctx, s.Client, u); err != nil {
 			slog.Debug("gallery prefetch pages failed", "id", galleryID, "error", err)
 		} else if db != nil {
-			pages := make([]model.CachedPage, len(urls))
-			for i, p := range urls {
-				pages[i] = model.CachedPage{PageURL: p, Index: i}
-			}
 			if err := gallerycache.UpsertPages(ctx, db, galleryID, token, pages); err != nil {
 				slog.Warn("gallery prefetch pages upsert failed", "id", galleryID, "error", err)
 			}

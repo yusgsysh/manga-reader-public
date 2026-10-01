@@ -49,6 +49,10 @@ docs: |-
   Return the ordered list of page URLs for a gallery. Feed a `page_url` into
   **Page Image**, **Cached Image** or **Start Prefill**.
 
+  Each entry may also carry a `thumbnail` object (`sprite_url`, `x`, `y`,
+  `width`, `height`) describing where the page thumbnail lives inside the
+  gallery sprite; feed it into **Page Thumbnail**.
+
   On success the list is written to `gallery_cache`. This endpoint never
   falls back; the offline fallback lives in the **Gallery Cache** folder
   (`GET /api/gallery-cache/:id/:token/pages`).

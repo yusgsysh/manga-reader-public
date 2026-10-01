@@ -1,0 +1,62 @@
+info:
+  name: Page Thumbnail
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/page-thumbnail"
+  params:
+    - name: url
+      value: "{{spriteUrl}}"
+      type: query
+      description: Sprite image URL (pages[].thumbnail.sprite_url)
+    - name: x
+      value: "0"
+      type: query
+      description: Crop origin X (pages[].thumbnail.x, >= 0)
+    - name: y
+      value: "0"
+      type: query
+      description: Crop origin Y (pages[].thumbnail.y, >= 0)
+    - name: w
+      value: "200"
+      type: query
+      description: Crop width (pages[].thumbnail.width, 1..4096)
+    - name: h
+      value: "282"
+      type: query
+      description: Crop height (pages[].thumbnail.height, 1..4096)
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+  scripts:
+    - type: tests
+      code: |-
+        test("responds with a webp image", function () {
+          expect(res.getHeader("content-type")).to.equal("image/webp");
+        });
+
+        test("is immutably cacheable", function () {
+          expect(res.getHeader("cache-control")).to.include("max-age=31536000");
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Crop a single page thumbnail out of the ExHentai sprite image. The sprite URL
+  and rectangle come from `pages[].thumbnail` in **Gallery Pages**.
+
+  The sprite is cached under `page-sprite/<sha256(url)>` and the crop under
+  `page-thumb/<sha256(url|x|y|w|h)>` in MinIO.
+
+  Errors: 400 missing/invalid parameters, disallowed URL or out-of-bounds crop;
+  502 upstream failure. Requires `https://` and a whitelisted CDN host
+  (`hath.network`, `e-hentai.org`, `exhentai.org`, `ehgt.org`).
