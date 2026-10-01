@@ -181,18 +181,3 @@ func (c *MinIOCache) PutWithMeta(ctx context.Context, key string, data []byte, c
 func (c *MinIOCache) Head(ctx context.Context, key string) (minio.ObjectInfo, error) {
 	return c.client.StatObject(ctx, c.bucket, key, minio.StatObjectOptions{})
 }
-
-// Open returns a streamable handle to the cached object together with its
-// metadata. The caller is responsible for closing the returned reader.
-func (c *MinIOCache) Open(ctx context.Context, key string) (io.ReadCloser, minio.ObjectInfo, error) {
-	obj, err := c.client.GetObject(ctx, c.bucket, key, minio.GetObjectOptions{})
-	if err != nil {
-		return nil, minio.ObjectInfo{}, fmt.Errorf("minio get object: %w", err)
-	}
-	info, err := obj.Stat()
-	if err != nil {
-		obj.Close()
-		return nil, minio.ObjectInfo{}, fmt.Errorf("minio stat object: %w", err)
-	}
-	return obj, info, nil
-}

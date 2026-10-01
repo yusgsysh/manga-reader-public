@@ -32,26 +32,6 @@ type imageResult struct {
 
 var cachedImageGroup singleflight.Group
 
-// streamCached writes a cache hit straight to the client without buffering the
-// whole object in memory. It returns false when the cache backend does not
-// support streaming, the object is missing, or opening failed, in which case
-// the caller falls back to the buffered load-or-fetch path.
-func (s *Server) streamCached(c *gin.Context, key string) bool {
-	sc, ok := s.Cache.(streamCache)
-	if !ok {
-		return false
-	}
-	rc, info, err := sc.Open(c.Request.Context(), key)
-	if err != nil {
-		return false
-	}
-	defer rc.Close()
-
-	c.Header("Cache-Control", cacheControlHeader)
-	c.DataFromReader(http.StatusOK, info.Size, info.ContentType, rc, nil)
-	return true
-}
-
 func ThumbnailCacheKey(rawURL string) string {
 	sum := sha256.Sum256([]byte(rawURL))
 	return thumbnailCachePrefix + hex.EncodeToString(sum[:])
@@ -126,10 +106,6 @@ func (s *Server) handleCachedThumbnail(c *gin.Context) {
 		return
 	}
 
-	if s.streamCached(c, key) {
-		return
-	}
-
 	result, err := s.loadOrFetchThumbnail(ctx, key, rawURL)
 	if err != nil {
 		if cache.IsNotFound(err) {
@@ -162,10 +138,6 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 
 	if s.Cache == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
-		return
-	}
-
-	if s.streamCached(c, key) {
 		return
 	}
 
