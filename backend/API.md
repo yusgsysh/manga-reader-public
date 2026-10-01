@@ -389,6 +389,7 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 
 - `Content-Type: image/webp`，`Cache-Control: public, max-age=31536000, immutable`
 - 精灵图与裁剪结果按 `page-sprite/<sha256(url)>`、`page-thumb/<sha256(url|x|y|w|h)>` 缓存在 MinIO（未配置缓存时直连上游）。
+- 裁剪后会去掉四周完全透明的内边距（源站把页面缩略图居中放入精灵图单元，留有透明边），返回的图片尺寸因此可能小于请求的 `w`/`h`，避免显示时出现白边。
 
 **Security:**
 

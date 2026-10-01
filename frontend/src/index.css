@@ -231,3 +231,14 @@ body {
   border-radius: 0;
   box-shadow: none;
 }
+
+/*
+ * Page thumbnails: comimi frames them at a fixed 100/141 ratio with
+ * `object-fit: contain` over a white panel background. When a page's crop is
+ * not exactly that ratio this shows as a white border. Fill the frame instead.
+ */
+.reader-shell .comimi-page-list-thumb img,
+.reader-shell .comimi-page-list-cover img,
+.reader-shell .comimi-seek-preview-thumb img {
+  object-fit: cover;
+}

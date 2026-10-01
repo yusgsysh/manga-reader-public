@@ -59,6 +59,32 @@ func TestCropWEBP(t *testing.T) {
 	}
 }
 
+func TestCropWEBP_TrimsTransparentPadding(t *testing.T) {
+	src := image.NewNRGBA(image.Rect(0, 0, 10, 10))
+	for y := 2; y < 8; y++ {
+		for x := 2; x < 8; x++ {
+			src.SetNRGBA(x, y, color.NRGBA{R: 200, G: 50, B: 50, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := webp.Encode(&buf, src, webp.Options{Lossless: true}); err != nil {
+		t.Fatalf("encode sprite: %v", err)
+	}
+
+	out, err := CropWEBP(buf.Bytes(), image.Rect(0, 0, 10, 10))
+	if err != nil {
+		t.Fatalf("CropWEBP: %v", err)
+	}
+
+	img, err := webp.Decode(bytes.NewReader(out))
+	if err != nil {
+		t.Fatalf("decode cropped: %v", err)
+	}
+	if got := img.Bounds().Size(); got.X != 6 || got.Y != 6 {
+		t.Errorf("trimmed size = %v, want 6x6", got)
+	}
+}
+
 func TestCropWEBP_OutOfBounds(t *testing.T) {
 	sprite := makeSprite(t)
 
