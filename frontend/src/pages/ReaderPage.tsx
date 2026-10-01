@@ -163,20 +163,20 @@ export function ReaderPage() {
     currentPageRef.current = initialPage;
   }, [initialPage]);
 
-  // Freeze the page list handed to the viewer: take the first snapshot once
-  // the target page is available, then refresh it exactly once when the full
-  // list has arrived. The short delay lets a whole upstream batch settle so
-  // the snapshot is never a single half-rendered page. Feeding every batch
-  // would make comimi reset to page 0 on each update.
-  useEffect(() => {
-    if (!pages || !targetReady) return;
-    const needsSnapshot =
-      viewerPages === null ||
-      (listComplete && viewerPages.length < pages.length);
-    if (!needsSnapshot) return;
-    const timer = window.setTimeout(() => setViewerPages(pages), 120);
-    return () => window.clearTimeout(timer);
-  }, [pages, targetReady, listComplete, viewerPages]);
+  // Freeze the page list handed to the viewer: mount immediately on the first
+  // snapshot that covers the target page so the first image shows without
+  // waiting for the whole scrape, then refresh it exactly once when the full
+  // list has arrived. Debouncing on every streamed batch would keep pushing
+  // the snapshot back until the stream ended. Feeding every batch would make
+  // comimi reset to page 0 on each update; this render-phase state adjustment
+  // re-renders at most twice (first snapshot + completion).
+  if (pages && targetReady) {
+    if (viewerPages === null) {
+      setViewerPages(pages);
+    } else if (listComplete && viewerPages.length < pages.length) {
+      setViewerPages(pages);
+    }
+  }
 
   const handlePageChange = useCallback(
     ({ pageIndex }: { pageIndex: number }) => {

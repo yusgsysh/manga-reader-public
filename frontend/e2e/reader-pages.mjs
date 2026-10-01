@@ -89,6 +89,18 @@ try {
     await page.close();
   }
 
+  console.log("scenario 1004: cache miss, continuous stream (no batch pause)");
+  {
+    const { page, livePages, mountedMs } = await openReader(browser, 1004);
+    check(
+      "mounts from the first pages before the stream completes",
+      mountedMs < 2500,
+      `${mountedMs}ms`,
+    );
+    check("streams from the live endpoint", livePages === 1, `${livePages} requests`);
+    await page.close();
+  }
+
   console.log("scenario 1003: cache present, upstream down");
   {
     const { page, livePages, mountedMs } = await openReader(browser, 1003);

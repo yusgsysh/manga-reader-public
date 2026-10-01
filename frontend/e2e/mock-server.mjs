@@ -13,6 +13,9 @@
 //   1003  complete cache; every online endpoint returns 502 (simulated
 //         ExHentai outage). The reader and gallery detail must render from the
 //         cache, and the download button must queue from the cached pages.
+//   1004  cache miss; the live /pages stream drips pages every 100ms with no
+//         long pause — the reader must still mount from the first pages well
+//         before the whole stream completes.
 //
 // Usage: E2E_PORT=4188 bun e2e/mock-server.mjs
 
@@ -126,6 +129,7 @@ function ndjsonStream(id) {
         if (cancelled) return;
         send({ type: "page", ...page(i) });
         if (id === "1002" && i === 39) await sleep(8000);
+        if (id === "1004") await sleep(100);
       }
       if (!cancelled) {
         send({ type: "done", total: PAGES });
@@ -166,19 +170,20 @@ const server = Bun.serve({
     }
 
     // ---- Cached (offline fallback) endpoints -----------------------------
+    const noCache = (id) => id === "1002" || id === "1004";
     let m = path.match(/^\/api\/gallery-cache\/(\d+)\/tok\/pages$/);
     if (m) {
-      if (m[1] === "1002") return json({ error: "no cached pages" }, 404);
+      if (noCache(m[1])) return json({ error: "no cached pages" }, 404);
       return json(fullList(m[1]));
     }
     m = path.match(/^\/api\/gallery-cache\/(\d+)\/tok\/details$/);
     if (m) {
-      if (m[1] === "1002") return json({ error: "no cached details" }, 404);
+      if (noCache(m[1])) return json({ error: "no cached details" }, 404);
       return json(galleryDetail(m[1]));
     }
     m = path.match(/^\/api\/gallery-cache\/(\d+)\/tok$/);
     if (m) {
-      if (m[1] === "1002") return json({ error: "no cached gallery" }, 404);
+      if (noCache(m[1])) return json({ error: "no cached gallery" }, 404);
       return json(galleryMeta(m[1]));
     }
 
