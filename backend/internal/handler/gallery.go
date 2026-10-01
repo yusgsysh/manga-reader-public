@@ -8,12 +8,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	json "encoding/json/v2"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/sync/singleflight"
 
 	"manga-reader/internal/ent"
 	"manga-reader/internal/exhentai"
@@ -25,10 +26,13 @@ import (
 // background work that continues after a client disconnects).
 const galleryPagesHardCap = 10 * time.Minute
 
-// galleryPagesGroup coalesces concurrent page-list scrapes for the same
-// gallery so upstream is hit at most once while a scrape is in flight. Shared
-// by the streaming handler and the bookshelf prefetch.
-var galleryPagesGroup singleflight.Group
+// galleryPagesHub coalesces concurrent page-list scrapes for the same gallery
+// into a single upstream walk. Unlike a plain singleflight, subscribers receive
+// the batches already scraped as they arrive instead of blocking until the
+// whole list is ready, so opening a gallery while another scan of it is still
+// running streams progressively instead of stalling on the loading skeleton.
+// Shared by the streaming handler and the bookshelf prefetch.
+var galleryPagesHub = newPagesHub()
 
 // galleryCacheTTL bounds how long the online endpoints may serve a cached
 // metadata / details / pages row before re-fetching upstream. Short enough to
@@ -265,67 +269,173 @@ type galleryPagesLine struct {
 	Error string `json:"error,omitempty"`
 }
 
-// galleryPagesScrape is the shared result of one page-list scrape.
-type galleryPagesScrape struct {
-	pages []model.CachedPage
-	total int
-	err   error
+// galleryPagesStream is one in-flight page-list scrape that any number of
+// requests can subscribe to. The leader appends batches under the lock and
+// broadcasts; subscribers drain the accumulated log and then follow it live.
+// A late subscriber is replayed the already-scraped prefix, so it never blocks
+// until the whole list is ready.
+type galleryPagesStream struct {
+	mu       sync.Mutex
+	cond     *sync.Cond
+	pages    []model.CachedPage
+	total    int
+	done     bool
+	err      error
+	finished atomic.Bool
 }
 
-// scrapeGalleryPagesOnce runs the page-list scrape for (galleryID, token) at
-// most once across concurrent callers. The first caller (leader) drives the
-// scrape and, when emit is non-nil, receives each batch as it is scraped;
-// followers block until the leader finishes and receive the aggregated result.
-// A complete scrape is written to gallery_cache before the result is shared.
-// The returned bool reports whether this caller was the leader.
-func (s *Server) scrapeGalleryPagesOnce(
-	ctx context.Context,
+func newGalleryPagesStream() *galleryPagesStream {
+	s := &galleryPagesStream{}
+	s.cond = sync.NewCond(&s.mu)
+	return s
+}
+
+func (s *galleryPagesStream) append(total int, batch []model.CachedPage) {
+	s.mu.Lock()
+	if total > 0 {
+		s.total = total
+	}
+	s.pages = append(s.pages, batch...)
+	s.mu.Unlock()
+	s.cond.Broadcast()
+}
+
+func (s *galleryPagesStream) finish(err error) {
+	s.mu.Lock()
+	s.done = true
+	s.err = err
+	s.mu.Unlock()
+	s.finished.Store(true)
+	s.cond.Broadcast()
+}
+
+// drain calls emit for every page appended after cursor, blocking until the
+// scrape finishes. It returns the number of pages the request received and the
+// terminal error. emit must not call back into the stream.
+func (s *galleryPagesStream) drain(
+	cursor int,
+	emit func(total int, batch []model.CachedPage) error,
+) (int, error) {
+	for {
+		s.mu.Lock()
+		for cursor >= len(s.pages) && !s.done {
+			s.cond.Wait()
+		}
+		if cursor >= len(s.pages) {
+			err := s.err
+			s.mu.Unlock()
+			return cursor, err
+		}
+		batch := append([]model.CachedPage(nil), s.pages[cursor:]...)
+		cursor = len(s.pages)
+		total := s.total
+		s.mu.Unlock()
+
+		if emit != nil {
+			if err := emit(total, batch); err != nil {
+				return cursor, err
+			}
+		}
+	}
+}
+
+// pagesHub maps a gallery key to its in-flight scrape.
+type pagesHub struct {
+	mu      sync.Mutex
+	streams map[string]*galleryPagesStream
+}
+
+func newPagesHub() *pagesHub {
+	return &pagesHub{streams: make(map[string]*galleryPagesStream)}
+}
+
+// acquire returns the in-flight stream for key and whether this caller created
+// it (the leader, which must start the upstream scrape). A finished stream is
+// never handed out: a new request starts a fresh scrape instead of replaying a
+// completed one that is about to be released.
+func (h *pagesHub) acquire(key string) (*galleryPagesStream, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if s, ok := h.streams[key]; ok && !s.finished.Load() {
+		return s, false
+	}
+	s := newGalleryPagesStream()
+	h.streams[key] = s
+	return s, true
+}
+
+// release drops key once its scrape finished. A stream replaced by a newer one
+// is left alone (only the current entry is removed).
+func (h *pagesHub) release(key string, s *galleryPagesStream) {
+	h.mu.Lock()
+	if h.streams[key] == s {
+		delete(h.streams, key)
+	}
+	h.mu.Unlock()
+}
+
+// scrapeGalleryPages publishes the page-list scrape for (galleryID, token) to
+// the hub and streams it to the caller through emit. The first caller (leader)
+// starts a detached background walk that appends every batch to the shared
+// stream and caches the verified list; concurrent callers subscribe to the same
+// stream and immediately receive the already-scraped pages. It returns the
+// number of pages streamed and the terminal error.
+func (s *Server) scrapeGalleryPages(
 	galleryID int64,
 	token string,
 	emit func(total int, batch []model.CachedPage) error,
-) (galleryPagesScrape, bool) {
+) (int, error) {
 	key := fmt.Sprintf("%d:%s", galleryID, token)
-	ranLeader := false
+	stream, leader := galleryPagesHub.acquire(key)
+	if leader {
+		s.runGalleryPagesScrape(key, stream, galleryID, token)
+	}
+	return stream.drain(0, emit)
+}
 
-	v, _, _ := galleryPagesGroup.Do(key, func() (any, error) {
-		ranLeader = true
+// runGalleryPagesScrape drives one detached page-list walk and publishes it to
+// stream. The walk is never aborted by an emit failure so it continues after
+// every subscriber disconnects, letting the verified list still reach the
+// cache. A complete scrape is the only thing ever persisted.
+func (s *Server) runGalleryPagesScrape(
+	key string,
+	stream *galleryPagesStream,
+	galleryID int64,
+	token string,
+) {
+	go func() {
+		defer galleryPagesHub.release(key, stream)
+
+		ctx, cancel := context.WithTimeout(context.Background(), galleryPagesHardCap)
+		defer cancel()
+
 		u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
 		var pages []model.CachedPage
 		total := 0
 		err := exhentai.StreamGalleryPages(ctx, s.Client, u, func(t int, batch []model.CachedPage) error {
 			total = t
-			if emit != nil {
-				if emitErr := emit(t, batch); emitErr != nil {
-					return emitErr
-				}
-			}
 			pages = append(pages, batch...)
+			stream.append(t, batch)
 			return nil
 		})
-		if err != nil {
-			// Failures are reported to every caller; nothing is cached.
-			return galleryPagesScrape{err: err}, nil
+		if err == nil && (total <= 0 || len(pages) != total) {
+			// StreamGalleryPages only returns nil once the received count equals
+			// the ".gpc" total; re-check at the cache boundary so only a
+			// verified, complete list is ever persisted.
+			err = fmt.Errorf("incomplete page list: got %d pages, want %d", len(pages), total)
 		}
-		// StreamGalleryPages only returns nil once the received count equals the
-		// ".gpc" total; re-check at the cache boundary so only a verified,
-		// complete list is ever persisted (no intermediate state, all-or-nothing).
-		if total <= 0 || len(pages) != total {
-			return galleryPagesScrape{
-				err: fmt.Errorf("incomplete page list: got %d pages, want %d", len(pages), total),
-			}, nil
-		}
-		// UpsertPages stores the whole list in a single row write, so this is
-		// the one and only cache write for the scrape: it either commits in
-		// full or leaves the previous value untouched.
-		if db := s.cacheDB(); db != nil {
-			if cacheErr := gallerycache.UpsertPages(ctx, db, galleryID, token, pages); cacheErr != nil {
-				slog.Warn("gallery cache pages upsert failed", "id", galleryID, "error", cacheErr)
+		if err == nil {
+			// UpsertPages stores the whole list in a single row write, so this
+			// is the one and only cache write for the scrape: it either commits
+			// in full or leaves the previous value untouched.
+			if db := s.cacheDB(); db != nil {
+				if cacheErr := gallerycache.UpsertPages(ctx, db, galleryID, token, pages); cacheErr != nil {
+					slog.Warn("gallery cache pages upsert failed", "id", galleryID, "error", cacheErr)
+				}
 			}
 		}
-		return galleryPagesScrape{pages: pages, total: total}, nil
-	})
-
-	return v.(galleryPagesScrape), ranLeader
+		stream.finish(err)
+	}()
 }
 
 // writeNDJSONLine marshal line and writes it followed by a newline.
@@ -377,7 +487,8 @@ func replayGalleryPages(c *gin.Context, id, token string, total int, pages []mod
 // The scrape is detached from the request context and given a hard cap, so a
 // client disconnect no longer aborts the upstream work or loses an otherwise
 // complete cache write. Concurrent requests for the same gallery share one
-// scrape via singleflight; followers replay the finished list.
+// scrape and each streams the already-scraped prefix immediately, so a request
+// that joins mid-scrape renders progressively instead of blocking.
 func (s *Server) handleGalleryPages(c *gin.Context) {
 	galleryID, token, ok := parseGalleryIDToken(c)
 	if !ok {
@@ -385,13 +496,11 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 	}
 
 	idParam := c.Param("id")
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), galleryPagesHardCap)
-	defer cancel()
 
 	// Serve a recently verified cached list immediately instead of re-scraping
 	// every page. Stale or missing rows fall through to the live stream.
 	if db := s.cacheDB(); db != nil {
-		if row, found, err := gallerycache.Get(ctx, db, galleryID, token); err != nil {
+		if row, found, err := gallerycache.Get(c.Request.Context(), db, galleryID, token); err != nil {
 			slog.Warn("gallery cache read failed", "id", galleryID, "error", err)
 		} else if found && len(row.Pages) > 0 && cacheFresh(row.PagesFetchedAt, galleryCacheTTL) {
 			if replayErr := replayGalleryPages(c, idParam, token, len(row.Pages), row.Pages); replayErr != nil {
@@ -409,7 +518,8 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 			return nil
 		}
 		if err := writeNDJSONLine(c, line); err != nil {
-			// The client went away; the scrape (and cache write) continues.
+			// The client went away; the shared scrape (and cache write)
+			// continues for the other subscribers.
 			clientGone = true
 			return nil
 		}
@@ -449,35 +559,25 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 		return nil
 	}
 
-	result, ranLeader := s.scrapeGalleryPagesOnce(ctx, galleryID, token, emit)
-
-	if !ranLeader {
-		if result.err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery pages failed: %v", result.err)})
-			return
-		}
-		// A concurrent scrape already produced the full list; replay it.
-		if replayErr := replayGalleryPages(c, idParam, token, result.total, result.pages); replayErr != nil {
-			slog.Warn("gallery pages replay failed", "id", galleryID, "error", replayErr)
-		}
-		return
-	}
+	count, err := s.scrapeGalleryPages(galleryID, token, emit)
 
 	if !started {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery pages failed: %v", result.err)})
+		// Nothing was streamed. Surface the scrape failure as a plain 502 so
+		// the frontend can fall back to the cached endpoint.
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery pages failed: %v", err)})
 		return
 	}
-	if result.err != nil {
+	if err != nil {
 		// Headers are already on the wire: report the failure as a terminal
 		// error line (the client discards what it received) and cache nothing.
-		slog.Warn("gallery pages stream failed", "id", galleryID, "error", result.err)
-		_ = writeLine(galleryPagesLine{Type: "error", Error: fmt.Sprintf("fetch gallery pages failed: %v", result.err)})
+		slog.Warn("gallery pages stream failed", "id", galleryID, "error", err)
+		_ = writeLine(galleryPagesLine{Type: "error", Error: fmt.Sprintf("fetch gallery pages failed: %v", err)})
 		return
 	}
 
-	// A complete scrape has already been cached in scrapeGalleryPagesOnce;
-	// the terminal line is written last so callers finalize immediately.
-	total := len(result.pages)
+	// The complete list has already been cached by the detached scrape; the
+	// terminal line is written last so callers finalize immediately.
+	total := count
 	if writeErr := writeLine(galleryPagesLine{Type: "done", Total: &total}); writeErr != nil {
 		slog.Warn("gallery pages done write failed", "id", galleryID, "error", writeErr)
 	}

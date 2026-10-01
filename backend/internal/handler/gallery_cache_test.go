@@ -476,6 +476,176 @@ func TestGalleryPages_ConcurrentScrapesShareSingleflight(t *testing.T) {
 	}
 }
 
+// signalOnWrite closes ch the first time a write contains marker.
+type signalOnWrite struct {
+	http.ResponseWriter
+	marker string
+	ch     chan struct{}
+	once   sync.Once
+}
+
+func (w *signalOnWrite) Write(p []byte) (int, error) {
+	if strings.Contains(string(p), w.marker) {
+		w.once.Do(func() { close(w.ch) })
+	}
+	return w.ResponseWriter.Write(p)
+}
+
+func (w *signalOnWrite) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+// A request that joins an in-flight scrape must stream the already-scraped
+// prefix immediately, before the scrape finishes. Before the shared-stream
+// hub, followers blocked until the entire upstream walk completed, leaving the
+// gallery page stuck on its loading skeleton.
+func TestGalleryPages_FollowerStreamsBeforeScrapeCompletes(t *testing.T) {
+	firstServed := make(chan struct{})
+	var firstOnce sync.Once
+	release := make(chan struct{})
+
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("p") == "" {
+			firstOnce.Do(func() { close(firstServed) })
+			mockPaginatedGalleryHandler(91003, "Slow", 65)(w, r)
+			return
+		}
+		// Hold the second batch so the scrape cannot finish while the follower
+		// is expected to stream the replayed first batch.
+		<-release
+		mockPaginatedGalleryHandler(91003, "Slow", 65)(w, r)
+	})
+	defer mockServer.Close()
+
+	client := newTestDB(t)
+	server := &Server{
+		Client: newMockClient(mockServer.URL),
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	var wg sync.WaitGroup
+	leaderW := httptest.NewRecorder()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		req := httptest.NewRequest("GET", "/api/gallery/91003/tok91003/pages", nil)
+		r.ServeHTTP(leaderW, req)
+	}()
+
+	select {
+	case <-firstServed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("leader never fetched the first upstream document")
+	}
+	// Let the leader publish the first batch to the shared stream.
+	time.Sleep(50 * time.Millisecond)
+
+	followerGotPage := make(chan struct{})
+	followerW := httptest.NewRecorder()
+	fw := &signalOnWrite{ResponseWriter: followerW, marker: `"index":0`, ch: followerGotPage}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		req := httptest.NewRequest("GET", "/api/gallery/91003/tok91003/pages", nil)
+		r.ServeHTTP(fw, req)
+	}()
+
+	select {
+	case <-followerGotPage:
+	case <-time.After(2 * time.Second):
+		t.Fatal("follower blocked on the in-flight scrape instead of streaming its prefix")
+	}
+
+	close(release)
+	wg.Wait()
+
+	for name, body := range map[string]string{
+		"leader":   leaderW.Body.String(),
+		"follower": followerW.Body.String(),
+	} {
+		stream := parsePagesStream(t, []byte(body))
+		if !stream.Done || len(stream.Pages) != 65 {
+			t.Errorf("%s: done=%v pages=%d, want done with 65", name, stream.Done, len(stream.Pages))
+		}
+	}
+}
+
+// A request that joins an in-flight scrape must receive the batches already
+// scraped immediately, then follow the live scrape. Before the shared-stream
+// hub, followers blocked until the whole scrape finished.
+func TestGalleryPagesStream_ReplaysPrefixToLateSubscriber(t *testing.T) {
+	stream := newGalleryPagesStream()
+	stream.append(3, []model.CachedPage{{Index: 0, PageURL: "p0"}, {Index: 1, PageURL: "p1"}})
+
+	batches := make(chan int, 4)
+	drainErr := make(chan error, 1)
+	go func() {
+		_, err := stream.drain(0, func(_ int, batch []model.CachedPage) error {
+			batches <- len(batch)
+			return nil
+		})
+		drainErr <- err
+	}()
+
+	select {
+	case n := <-batches:
+		if n != 2 {
+			t.Fatalf("replayed batch = %d pages, want 2", n)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("late subscriber did not receive the already-scraped prefix")
+	}
+
+	stream.append(3, []model.CachedPage{{Index: 2, PageURL: "p2"}})
+	stream.finish(nil)
+
+	select {
+	case n := <-batches:
+		if n != 1 {
+			t.Fatalf("live batch = %d pages, want 1", n)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("subscriber did not follow the live scrape")
+	}
+
+	if err := <-drainErr; err != nil {
+		t.Fatalf("drain error = %v, want nil", err)
+	}
+}
+
+// A finished (but not-yet-released) stream must never be handed to a new
+// request, otherwise a later scrape would replay stale data instead of hitting
+// upstream again.
+func TestPagesHub_AcquireAfterFinishStartsFresh(t *testing.T) {
+	hub := newPagesHub()
+
+	first, leader := hub.acquire("k")
+	if !leader {
+		t.Fatal("first acquire should be the leader")
+	}
+
+	same, leader := hub.acquire("k")
+	if leader {
+		t.Fatal("second acquire while in flight must not be the leader")
+	}
+	if same != first {
+		t.Fatal("second acquire should share the in-flight stream")
+	}
+
+	first.finish(nil)
+
+	fresh, leader := hub.acquire("k")
+	if !leader {
+		t.Fatal("acquire after finish should start a fresh scrape")
+	}
+	if fresh == first {
+		t.Fatal("expected a fresh stream after the previous one finished")
+	}
+}
+
 func TestGetGallery_FreshCacheServedWithoutUpstream(t *testing.T) {
 	client := newTestDB(t)
 	seedGalleryCache(t, client, 12345, "tok12345")
