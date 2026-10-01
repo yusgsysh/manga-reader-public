@@ -62,6 +62,9 @@ type BookshelfStatus struct {
 type BookshelfMutationResponse struct {
 	Success     bool `json:"success"`
 	InBookshelf bool `json:"in_bookshelf"`
+	// Offline is true when an add was satisfied from cached metadata because
+	// the upstream ExHentai API was unreachable.
+	Offline bool `json:"offline,omitempty"`
 }
 
 // UpdateReadingProgressRequest is the request body for updating reading progress.

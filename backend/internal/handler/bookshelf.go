@@ -195,13 +195,12 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 		return
 	}
 
-	meta, err := exhentai.PostGalleryMetadata(ctx, s.Client, id, token)
+	gallery, offline, err := s.galleryForBookshelf(ctx, id, token)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
 	}
 
-	gallery := model.ConvertMetadataToGallery(meta)
 	bookshelfModel := model.GalleryToBookshelf(gallery)
 	if bookshelfModel == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "convert gallery to bookshelf failed"})
@@ -225,7 +224,36 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 	// Warm the offline cache in the background (metadata + pages).
 	go s.prefetchGallery(id, token, gallery)
 
-	c.JSON(http.StatusOK, model.BookshelfMutationResponse{Success: true, InBookshelf: true})
+	c.JSON(http.StatusOK, model.BookshelfMutationResponse{
+		Success:     true,
+		InBookshelf: true,
+		Offline:     offline,
+	})
+}
+
+// galleryForBookshelf resolves gallery metadata for a bookshelf snapshot. When
+// the upstream ExHentai API is unreachable it falls back to the cached snapshot
+// so collecting a gallery keeps working offline. The returned bool reports
+// whether the cache fallback was used.
+func (s *Server) galleryForBookshelf(ctx context.Context, id int64, token string) (*model.Gallery, bool, error) {
+	meta, err := exhentai.PostGalleryMetadata(ctx, s.Client, id, token)
+	if err == nil {
+		return model.ConvertMetadataToGallery(meta), false, nil
+	}
+
+	db := s.cacheDB()
+	if db == nil {
+		return nil, false, err
+	}
+
+	row, found, cacheErr := gallerycache.Get(ctx, db, id, token)
+	if cacheErr != nil {
+		return nil, false, fmt.Errorf("%w (cache read failed: %v)", err, cacheErr)
+	}
+	if !found || row.Title == "" {
+		return nil, false, err
+	}
+	return galleryFromCache(row), true, nil
 }
 
 func (s *Server) handleBookshelfRemove(c *gin.Context) {

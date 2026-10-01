@@ -16,7 +16,7 @@ import {
   useBookshelfToggle,
   useGalleryDetail,
 } from "../hooks/useGalleryDetail";
-import { fetchGalleryPages } from "../api/gallery";
+import { fetchGalleryPagesWithFallback } from "../api/gallery";
 import { useReadingProgress } from "../hooks/useReaderData";
 import { useStartPrefillJob } from "../hooks/usePrefillJobs";
 import { ErrorState } from "../components/common/ErrorState";
@@ -82,9 +82,27 @@ export function GalleryDetailPage() {
   const handleToggle = () => {
     if (inShelf) {
       remove.mutate();
-    } else {
-      add.mutate();
+      return;
     }
+    add.mutate(undefined, {
+      onSuccess: (result) => {
+        if (result.offline) {
+          toast.add({
+            title: "已离线加入书架",
+            description: "书籍信息来自本地缓存",
+            variant: "success",
+          });
+        }
+      },
+      onError: (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        toast.add({
+          title: "加入书架失败",
+          description: message,
+          variant: "error",
+        });
+      },
+    });
   };
 
   const downloadPending = preparingDownload || startPrefill.isPending;
@@ -94,8 +112,8 @@ export function GalleryDetailPage() {
     setPreparingDownload(true);
     try {
       const pagesData = await queryClient.fetchQuery({
-        queryKey: ["gallery-pages", id, token ?? ""],
-        queryFn: () => fetchGalleryPages(id, token ?? ""),
+        queryKey: ["download-pages", id, token ?? ""],
+        queryFn: () => fetchGalleryPagesWithFallback(id, token ?? ""),
         staleTime: 5 * 60_000,
       });
       startPrefill.mutate(

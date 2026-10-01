@@ -143,6 +143,66 @@ func TestHandleBookshelfAdd_Idempotent(t *testing.T) {
 	}
 }
 
+func TestHandleBookshelfAdd_OfflineUsesCachedMetadata(t *testing.T) {
+	client := newTestDB(t)
+	seedGalleryCache(t, client, 123456, "abcdef1234")
+
+	r := setupTestRouter()
+	server := &Server{Client: errorClient(), DB: &database.DB{Client: client}}
+	r.POST("/api/bookshelf/:id/:token", server.handleBookshelfAdd)
+
+	req := httptest.NewRequest("POST", "/api/bookshelf/123456/abcdef1234", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp model.BookshelfMutationResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !resp.Success || !resp.InBookshelf {
+		t.Errorf("success=%v in_bookshelf=%v, want both true", resp.Success, resp.InBookshelf)
+	}
+	if !resp.Offline {
+		t.Error("offline flag should be true when falling back to cache")
+	}
+
+	b, err := client.Bookshelf.Query().Only(t.Context())
+	if err != nil {
+		t.Fatalf("bookshelf query: %v", err)
+	}
+	if b.Title != "Cached Gallery" {
+		t.Errorf("title = %q, want %q", b.Title, "Cached Gallery")
+	}
+	if b.PageCount != 2 {
+		t.Errorf("page_count = %d, want 2", b.PageCount)
+	}
+}
+
+func TestHandleBookshelfAdd_OfflineNoCacheFails(t *testing.T) {
+	client := newTestDB(t)
+
+	r := setupTestRouter()
+	server := &Server{Client: errorClient(), DB: &database.DB{Client: client}}
+	r.POST("/api/bookshelf/:id/:token", server.handleBookshelfAdd)
+
+	req := httptest.NewRequest("POST", "/api/bookshelf/123456/abcdef1234", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadGateway)
+	}
+
+	count, _ := client.Bookshelf.Query().Count(t.Context())
+	if count != 0 {
+		t.Errorf("bookshelf count = %d, want 0", count)
+	}
+}
+
 func TestHandleBookshelfRemove_Success(t *testing.T) {
 	client := newTestDB(t)
 	b := newTestBookshelf()

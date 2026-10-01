@@ -96,3 +96,20 @@ export function fetchGalleryPagesCached(
     `/api/gallery-cache/${id}/${token}/pages`,
   );
 }
+
+// Fetches the page list preferring the live endpoint, falling back to the
+// cached page list when the browser is offline or ExHentai is unreachable. Used
+// by the download flow so a job can still be queued from cached pages.
+export async function fetchGalleryPagesWithFallback(
+  id: number,
+  token: string,
+): Promise<GalleryPagesResponse> {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return fetchGalleryPagesCached(id, token);
+  }
+  try {
+    return await fetchGalleryPages(id, token);
+  } catch {
+    return fetchGalleryPagesCached(id, token);
+  }
+}

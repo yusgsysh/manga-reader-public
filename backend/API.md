@@ -587,6 +587,8 @@ Cache-Control: public, max-age=31536000, immutable
 
 将 Gallery 加入书架。首次添加时会从 ExHentai 获取 Gallery 基本信息并保存快照。重复添加幂等，不会产生重复数据。
 
+支持离线收藏：当 ExHentai 不可达时，若 `gallery_cache` 中已有该 Gallery 的快照（例如之前浏览/下拉过），则使用缓存元数据完成添加，响应中 `offline` 为 `true`；若既无法访问 ExHentai 也没有缓存，则返回 502。
+
 **Path Parameters:**
 
 | Name | Type | Description |
@@ -599,16 +601,19 @@ Cache-Control: public, max-age=31536000, immutable
 ```json
 {
   "success": true,
-  "in_bookshelf": true
+  "in_bookshelf": true,
+  "offline": true
 }
 ```
+
+> `offline` 仅在离线回退成功时出现（`omitempty`）。
 
 **Error Responses:**
 
 | Status Code | Description |
 |-------------|-------------|
 | 400 | Gallery ID 或 token 无效 |
-| 502 | ExHentai API 请求失败 |
+| 502 | ExHentai API 请求失败且无可用缓存快照 |
 
 ---
 
@@ -907,6 +912,8 @@ POST /api/reading-progress/cleanup?days=0
 | title | string | no | 任务显示标题 |
 
 去重规则：相同 `gallery_id` + `gallery_token` 已存在 `queued`/`running` 任务时，直接返回该任务（`200`），不重复创建；否则创建新任务（`202`）。
+
+离线下载：前端获取页面列表时会优先请求在线接口，失败或浏览器离线时回退到 `GET /api/gallery-cache/:id/:token/pages`，因此只要本地缓存过页面列表即可在 ExHentai 不可达时排队下载任务。任务按顺序重试抓取；已在 MinIO 缓存的页面直接命中，未缓存的页面抓取失败会计入 `errors`。
 
 **示例:**
 
