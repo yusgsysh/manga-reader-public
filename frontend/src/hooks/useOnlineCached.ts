@@ -95,12 +95,18 @@ export function useOnlineThenCached<T>({
     void onlineQuery.refetch();
   };
 
+  // Only surface an error when neither source produced data; a successful
+  // cache fallback must not leak the (expected) online failure to callers.
+  const error = isError
+    ? ((onlineQuery.error ?? cacheQuery.error) as Error | null)
+    : null;
+
   return {
     data,
     source,
     isLoading,
     isError,
-    error: (onlineQuery.error ?? cacheQuery.error) as Error | null,
+    error,
     refetch,
   };
 }
