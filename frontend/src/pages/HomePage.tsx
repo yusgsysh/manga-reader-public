@@ -8,10 +8,9 @@ import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { GalleryCard } from "../components/gallery/GalleryCard";
 import { readingToCard } from "../components/gallery/mappers";
 import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";
-import { JumpSeekPanel } from "../components/common/JumpSeekPanel";
+import { JumpSeekMenu } from "../components/common/JumpSeekMenu";
 import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
-import { ListingLayout } from "../components/layout/ListingLayout";
 import { PageHeader, Section } from "../components/ui";
 import type { ListingNavOptions } from "../types/gallery";
 
@@ -63,37 +62,34 @@ export function HomePage() {
         <PageHeader
           title="最新"
           icon={<Sparkle className="size-5" weight="fill" />}
-        />
-        <ListingLayout
-          sidebar={
-            <JumpSeekPanel
+          actions={
+            <JumpSeekMenu
               nav={data?.pages[0]?.nav}
               value={nav}
               onChange={setNav}
             />
           }
-        >
-          {isLoading ? (
-            <GalleryGridSkeleton />
-          ) : error ? (
-            <ErrorState
-              message={error.message || "无法加载 Gallery"}
-              onRetry={() => refetch()}
+        />
+        {isLoading ? (
+          <GalleryGridSkeleton />
+        ) : error ? (
+          <ErrorState
+            message={error.message || "无法加载 Gallery"}
+            onRetry={() => refetch()}
+          />
+        ) : galleries.length === 0 ? (
+          <EmptyState message="暂无 Gallery" />
+        ) : (
+          <>
+            <GalleryGrid galleries={galleries} />
+            <InfiniteScrollTrigger
+              hasNextPage={!!hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+              isFetchNextPageError={isFetchNextPageError}
+              fetchNextPage={() => fetchNextPage()}
             />
-          ) : galleries.length === 0 ? (
-            <EmptyState message="暂无 Gallery" />
-          ) : (
-            <>
-              <GalleryGrid galleries={galleries} />
-              <InfiniteScrollTrigger
-                hasNextPage={!!hasNextPage}
-                isFetchingNextPage={isFetchingNextPage}
-                isFetchNextPageError={isFetchNextPageError}
-                fetchNextPage={() => fetchNextPage()}
-              />
-            </>
-          )}
-        </ListingLayout>
+          </>
+        )}
       </div>
     </div>
   );
