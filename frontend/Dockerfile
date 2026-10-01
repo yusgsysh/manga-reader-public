@@ -21,7 +21,10 @@ FROM oven/bun:1 AS build
 WORKDIR /app
 
 # 依赖层（利用 Docker 层缓存）
+# patches/ 必须先于 install 就位：package.json 的 patchedDependencies 指向它，
+# 否则 `bun install --frozen-lockfile` 会因找不到补丁文件而失败。
 COPY package.json bun.lock ./
+COPY patches ./patches
 RUN bun install --frozen-lockfile
 
 # 源码
