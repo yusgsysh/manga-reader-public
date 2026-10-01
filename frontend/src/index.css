@@ -168,8 +168,15 @@ body {
 /* Gallery detail: page thumbnail grid (mirrors ExHentai's #gdt layout). */
 .page-thumb-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+@media (min-width: 640px) {
+  .page-thumb-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
 }
 
 .page-thumb-item {
