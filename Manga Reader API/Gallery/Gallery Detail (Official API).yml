@@ -50,3 +50,7 @@ settings:
 
 docs: |-
   Fetch gallery metadata from the official ExHentai API.
+
+  On success the result is written to `gallery_cache`. This endpoint never
+  falls back; the offline fallback lives in the **Gallery Cache** folder
+  (`GET /api/gallery-cache/:id/:token`).

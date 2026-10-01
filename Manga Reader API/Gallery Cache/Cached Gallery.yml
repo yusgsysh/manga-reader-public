@@ -1,0 +1,48 @@
+info:
+  name: Cached Gallery
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/gallery-cache/:id/:token"
+  params:
+    - name: id
+      value: "{{galleryId}}"
+      type: path
+      description: Gallery ID
+    - name: token
+      value: "{{galleryToken}}"
+      type: path
+      description: Gallery token
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: in
+      value: ["200", "404"]
+  scripts:
+    - type: tests
+      code: |-
+        test("returns cached metadata or 404 when not cached", function () {
+          if (res.status === 200) {
+            expect(res.body).to.have.property("title");
+            expect(res.body).to.have.property("thumbnail");
+            expect(res.getHeader("cache-control")).to.equal("no-store");
+          } else {
+            expect(res.status).to.equal(404);
+          }
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Read-only `gallery_cache` metadata snapshot. Same shape as
+  **Gallery Detail (Official API)**. Never touches the upstream; returns
+  `404` when nothing is cached. Used by the frontend as the offline fallback.
+
+  Errors: 404 not cached, 503 cache database not configured.

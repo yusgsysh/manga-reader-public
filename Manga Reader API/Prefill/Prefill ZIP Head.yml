@@ -1,0 +1,36 @@
+info:
+  name: Prefill ZIP Head
+  type: http
+  seq: 8
+
+http:
+  method: HEAD
+  url: "{{baseUrl}}/api/prefill/:id/zip"
+  params:
+    - name: id
+      value: "{{prefillId}}"
+      type: path
+      description: Prefill job ID
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: in
+      value: ["200", "404"]
+  scripts:
+    - type: tests
+      code: |-
+        test("reports readiness without a body", function () {
+          expect(res.body === undefined || res.body === "" || res.body === null).to.equal(true);
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Probe whether the ZIP is ready without downloading it. Same status codes as
+  **Prefill ZIP** (200 ready, 404 not found / not ready, 400 invalid id,
+  503 database or cache not configured). Used by the frontend before download.

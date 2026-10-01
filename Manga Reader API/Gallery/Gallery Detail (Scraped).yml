@@ -45,3 +45,7 @@ settings:
 docs: |-
   Scrape the gallery detail page. A single upstream request returns the first
   gallery page; use **Gallery Pages** for the full page URL list.
+
+  On success the result is written to `gallery_cache`. This endpoint never
+  falls back; the offline fallback lives in the **Gallery Cache** folder
+  (`GET /api/gallery-cache/:id/:token/details`).

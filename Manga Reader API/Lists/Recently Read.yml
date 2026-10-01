@@ -50,3 +50,7 @@ settings:
 docs: |-
   Recently read galleries, newest first, 25 per page. Independent of the
   bookshelf; an invalid `page` returns HTTP 400 with `{"error": "invalid page"}`.
+
+  The reading record only stores progress. Per-entry metadata (`title`,
+  `title_jpn`, `category`, `thumbnail`, `pages`) comes from `gallery_cache`;
+  entries without a cache row come back empty/zero.
