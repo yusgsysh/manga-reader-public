@@ -12,7 +12,7 @@ Search / Homepage / Watched / Popular 的上游（ExHentai）使用 `next=<galle
 
 - 滚动接近底部时自动按 `page=0,1,2...` 递增请求并追加结果，不再提供上一页 / 下一页按钮。
 - 通过 `IntersectionObserver`（`rootMargin: 0px 0px 200% 0px`，约提前 2 屏）预取下一页，期间不显示加载动画，即“提前加载”。
-- 缩略图使用 `loading="lazy"` 懒加载，接近视口时才请求 `/api/cached-thumbnail`。
+- 缩略图使用 `loading="lazy"` 懒加载，接近视口时才请求 `/api/image-cache/thumbnail`。
 
 是否还有下一页按端点元信息判断：Search / Bookshelf / Recently Read 使用 `total` / `total_pages`；Homepage / Watched / Popular 按上游每页 25 条的固定页大小判断。
 
@@ -80,7 +80,7 @@ Search / Homepage / Watched 支持上游 ExHentai 的 Jump/Seek 定位，通过�
 
 ### GalleryPageThumb（页面缩略图精灵图坐标）
 
-由 `/api/gallery/:id/:token/pages` 每页的 `thumbnail` 字段返回；用 `sprite_url` + `x/y/width/height` 调用 `/api/page-thumbnail` 获取单张缩略图。
+由 `/api/gallery/:id/:token/pages` 每页的 `thumbnail` 字段返回；用 `sprite_url` + `x/y/width/height` 调用 `/api/image-cache/page-thumbnail` 获取单张缩略图。
 
 ```json
 {
@@ -336,17 +336,19 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 }
 ```
 
-> `thumbnail` 描述该页缩略图在精灵图中的位置（源站用一张大图 + CSS `background-position` 切割）。用 `sprite_url` + `x/y/width/height` 调用 `/api/page-thumbnail` 获取单张缩略图。无缩略图元数据时该字段省略。
+> `thumbnail` 描述该页缩略图在精灵图中的位置（源站用一张大图 + CSS `background-position` 切割）。用 `sprite_url` + `x/y/width/height` 调用 `/api/image-cache/page-thumbnail` 获取单张缩略图。无缩略图元数据时该字段省略。
 >
 > 在线成功后会把页面列表写入 `gallery_cache`；本接口不做缓存回退。
 
 ---
 
-### 5. Page Image & Page Thumbnail
+### 5. Image (live)
+
+图片源站代理，**不依赖 MinIO**，每次请求都从上游获取。缓存版本见第 9-11 节（`/api/image-cache/*`）。
 
 #### Page Image
 
-`GET /api/page-image`
+`GET /api/image/page`
 
 代理 ExHentai 图片，返回原始图片字节。
 
@@ -354,14 +356,18 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| url | string | yes | 页面 URL (来自 `pages` 数组) |
+| url | string | yes | 页面 URL (来自 `pages` 数组的 `page_url`) |
 
 **Response:**
 
-- 成功: 原始图片数据 (`Content-Type: image/jpeg` 或 `image/png`)
+- 成功: 原始图片数据 (`Content-Type: image/jpeg` / `image/png` / `image/webp` / `image/gif`)
 - NL 重试: 初次下载失败时自动重试最多 2 次
+- Headers: `Cache-Control: public, max-age=3600`
 
-**Error Response (502):**
+**Error Response:**
+
+- `400`: 参数缺失/非法
+- `502`: 上游下载失败
 
 ```json
 {
@@ -369,35 +375,61 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 }
 ```
 
-#### Page Thumbnail
+#### Thumbnail
 
-`GET /api/page-thumbnail`
+`GET /api/image/thumbnail`
 
-从 ExHentai 页面缩略图精灵图中裁出单张缩略图并返回 WebP。源站用一张大图（精灵图）承载多页缩略图，本接口在服务端解码、裁剪、重新编码，前端只需按 `pages[].thumbnail` 提供的矩形请求。
+代理 ExHentai 封面缩略图，返回原始图片字节。**不依赖 MinIO**。
 
 **Query Parameters:**
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| url | string | yes | 精灵图 URL (`pages[].thumbnail.sprite_url`) |
-| x | int | yes | 裁剪起点 X（`pages[].thumbnail.x`，>= 0） |
-| y | int | yes | 裁剪起点 Y（`pages[].thumbnail.y`，>= 0） |
-| w | int | yes | 裁剪宽度（`pages[].thumbnail.width`，1..4096） |
-| h | int | yes | 裁剪高度（`pages[].thumbnail.height`，1..4096） |
+| url | string | yes | 缩略图 URL (来自 `cover` / `thumbnail` 字段) |
+
+**Response:**
+
+- 成功: 原始图片数据，按源站实际 `Content-Type` 返回，不强制转换
+- 失败时自动重试最多 2 次
+- Headers: `Cache-Control: public, max-age=3600`
+
+**URL 安全限制:** 仅允许 `https://`，主机白名单 `s.exhentai.org`、`ehgt.org`、`ul.e-hentai.org`；阻止内网地址。
+
+**Error Response:** `400` 参数/URL 非法；`502` 上游失败。
+
+#### Page Thumbnail
+
+`GET /api/image/page-thumbnail`
+
+从 ExHentai 页面缩略图精灵图中裁出单张缩略图并返回 WebP。源站用一张大图（精灵图）承载多页缩略图，本接口在服务端解码、裁剪、重新编码。支持两种寻址方式：
+
+- **直接裁剪**：`url` + `x`/`y`/`w`/`h`（前端从 `pages[].thumbnail` 取矩形）。
+- **按索引**：`id` + `token` + `index`（服务端抓取该页所属精灵图并裁剪，无需先请求 `/pages`）。
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| url | string | 二选一 | 精灵图 URL（直接裁剪模式） |
+| x | int | 二选一 | 裁剪起点 X（>= 0） |
+| y | int | 二选一 | 裁剪起点 Y（>= 0） |
+| w | int | 二选一 | 裁剪宽度（1..4096） |
+| h | int | 二选一 | 裁剪高度（1..4096） |
+| id | int | 二选一 | Gallery ID（索引模式） |
+| token | string | 二选一 | Gallery token（索引模式） |
+| index | int | 二选一 | 页索引 (0-indexed)（索引模式） |
 
 **Response (200):**
 
-- `Content-Type: image/webp`，`Cache-Control: public, max-age=31536000, immutable`
-- 精灵图与裁剪结果按 `page-sprite/<sha256(url)>`、`page-thumb/<sha256(url|x|y|w|h)>` 缓存在 MinIO（未配置缓存时直连上游）。
+- `Content-Type: image/webp`，`Cache-Control: public, max-age=3600`
 - 裁剪后会去掉四周完全透明的内边距（源站把页面缩略图居中放入精灵图单元，留有透明边），返回的图片尺寸因此可能小于请求的 `w`/`h`，避免显示时出现白边。
 
-**Security:**
-
-- 仅允许 `https`，主机白名单后缀: `hath.network`、`e-hentai.org`、`exhentai.org`、`ehgt.org`；阻止内网地址。
+**URL 安全限制（直接裁剪）:** 仅允许 `https`，主机后缀白名单 `hath.network`、`e-hentai.org`、`exhentai.org`、`ehgt.org`；阻止内网地址。
 
 **Error Response:**
 
-- `400`: 参数缺失/非法、URL 不在白名单、裁剪矩形超出精灵图范围
+- `400`: 参数缺失/非法、URL 不在白名单、裁剪矩形超出精灵图范围、未提供 `url` 或 `id`+`token`
+- `404`: 索引超出范围或该页无缩略图元数据
 - `502`: 上游下载或裁剪失败
 
 ```json
@@ -405,31 +437,6 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
   "error": "crop rectangle out of bounds: ..."
 }
 ```
-
-#### Gallery Page Thumbnail (by index)
-
-`GET /api/gallery/:id/:token/page-thumbnail?index=N`
-
-按画廊 + 页索引直接获取单张缩略图（无需先请求 `/pages`）。服务端定位该页所属精灵图并裁剪，返回格式与 `/api/page-thumbnail` 相同。
-
-**Path / Query Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| id | int | yes | Gallery ID |
-| token | string | yes | Gallery token |
-| index | int | yes | 页索引 (0-indexed) |
-
-**行为:**
-
-- 优先使用 `gallery_cache` 中已存的 `pages[].thumbnail`；未命中则抓取上游（只抓该索引所在的那一页缩略图）。
-- 裁剪结果复用 `/api/page-thumbnail` 的 MinIO 缓存。
-
-**Error Response:**
-
-- `400`: `index` 缺失或非法
-- `404`: 索引超出范围或该页无缩略图元数据
-- `502`: 上游抓取或裁剪失败
 
 ---
 
@@ -551,17 +558,17 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 
 ---
 
-### 9. Cached Image
+### 9. Cached Page Image
 
-`GET /api/cached-image`
+`GET /api/image-cache/page`
 
-带 MinIO 缓存的图片代理。首次请求从 ExHentai 获取图片并缓存到 MinIO，后续相同 URL 直接从 MinIO 返回。
+带 MinIO 缓存的阅读页图片代理。首次请求从 ExHentai 获取图片并缓存到 MinIO，后续相同 URL 直接从 MinIO 返回。live 版本见第 5 节 `/api/image/page`。
 
 **Query Parameters:**
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| url | string | yes | 页面 URL (来自 `pages` 数组) |
+| url | string | yes | 页面 URL (来自 `pages` 数组的 `page_url`) |
 
 **Response:**
 
@@ -576,13 +583,12 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 Cache-Control: public, max-age=31536000, immutable
 ```
 
-**Error Responses:**
+**MinIO Cache:**
 
-```json
-{
-  "error": "missing url parameter"
-}
-```
+- Object Prefix: `images/`
+- Cache Key: `images/<sha256(完整页面 URL)>`
+
+**Error Responses:**
 
 | Status Code | Description |
 |-------------|-------------|
@@ -596,58 +602,11 @@ Cache-Control: public, max-age=31536000, immutable
 
 ---
 
-### 10. Thumbnail Image
+### 10. Cached Thumbnail Image
 
-`GET /api/thumbnail`
+`GET /api/image-cache/thumbnail`
 
-代理 ExHentai Thumbnail 源站图片，返回原始图片字节。**不依赖 MinIO**。
-
-**Query Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| url | string | yes | 缩略图 URL (来自 `cover` / `thumbnail` 字段) |
-
-**Response:**
-
-- 成功: 原始图片数据 (`Content-Type: image/webp`, `image/jpeg`, `image/png`, `image/gif`)
-- 根据源站实际 Content-Type 返回，不强制转换
-- 失败时自动重试最多 2 次
-
-**Headers:**
-
-```
-Cache-Control: public, max-age=3600
-```
-
-**Error Responses:**
-
-```json
-{
-  "error": "invalid thumbnail url"
-}
-```
-
-| Status Code | Description |
-|-------------|-------------|
-| 400 | URL 缺失或 URL 非法 |
-| 502 | ExHentai Thumbnail 获取失败 |
-
-**URL 安全限制:**
-
-- 仅允许 `https://` 协议，拒绝 `http://`
-- 仅允许缩略图域名白名单: `s.exhentai.org`、`ehgt.org`、`ul.e-hentai.org`
-- 阻止 localhost、RFC1918 私网地址、Link-local、云 Metadata Service 等内部地址 (SSRF 防护)
-
-> 该 API 仅做源站代理，不负责 MinIO 持久化缓存。
-
----
-
-### 11. Cached Thumbnail
-
-`GET /api/cached-thumbnail`
-
-带 MinIO 缓存的 Thumbnail 代理。首次请求从 ExHentai 获取并缓存到 MinIO，后续相同 URL 直接从 MinIO 返回。
+带 MinIO 缓存的封面缩略图代理。首次请求从 ExHentai 获取并缓存到 MinIO，后续相同 URL 直接从 MinIO 返回。live 版本见第 5 节 `/api/image/thumbnail`。
 
 **Query Parameters:**
 
@@ -673,15 +632,8 @@ Cache-Control: public, max-age=31536000, immutable
 - Object Prefix: `thumbnail/`
 - Cache Key: `thumbnail/<sha256(完整缩略图 URL)>`
 - 保存 Metadata: `Content-Type`、`Content-Length`、`x-amz-meta-source-url` (原始 URL)
-- Cache Key 基于完整 URL，URL 变化会生成新的 Object Key，不会污染旧缓存
 
 **Error Responses:**
-
-```json
-{
-  "error": "missing url parameter"
-}
-```
 
 | Status Code | Description |
 |-------------|-------------|
@@ -691,13 +643,41 @@ Cache-Control: public, max-age=31536000, immutable
 
 **URL 安全限制:**
 
-与 `/api/thumbnail` 相同，仅允许 `https://` 及缩略图域名白名单，阻止内网地址。
+与 `/api/image/thumbnail` 相同，仅允许 `https://` 及缩略图域名白名单，阻止内网地址。
 
 **前端使用方式:**
 
 ```html
-<img src="/api/cached-thumbnail?url=https%3A%2F%2Fs.exhentai.org%2Fw%2F00%2F999%2F15582-3owak8q3.webp" />
+<img src="/api/image-cache/thumbnail?url=https%3A%2F%2Fs.exhentai.org%2Fw%2F00%2F999%2F15582-3owak8q3.webp" />
 ```
+
+---
+
+### 11. Cached Page Thumbnail
+
+`GET /api/image-cache/page-thumbnail`
+
+带 MinIO 缓存的页面缩略图裁剪，寻址方式与 `/api/image/page-thumbnail` 相同（`url`+矩形 或 `id`+`token`+`index`）。
+
+**行为:**
+
+- **直接裁剪**：MinIO read-through，精灵图 `page-sprite/<sha256(url)>`、裁剪结果 `page-thumb/<sha256(url|x|y|w|h)>`。
+- **按索引**：几何优先取 `gallery_cache` 的 `pages[].thumbnail`，未命中则回源抓取；图片走 MinIO read-through。
+
+**Headers:**
+
+```
+Cache-Control: public, max-age=31536000, immutable
+```
+
+**Error Responses:**
+
+| Status Code | Description |
+|-------------|-------------|
+| 400 | 参数缺失/非法、URL 不在白名单、裁剪越界 |
+| 404 | 索引超出范围或该页无缩略图元数据 |
+| 502 | 上游抓取或裁剪失败 |
+| 503 | Cache 未配置 (MinIO 环境变量缺失) |
 
 ---
 
@@ -1288,7 +1268,7 @@ Cache-Control: no-store
 
 缓存采用「首次写入优先」策略：已存在的非空字段不会被覆盖（上游元数据变动不频繁）。
 
-图片本身由 `page-image`/`thumbnail` 等图片代理提供（MinIO 缓存，见对应小节），离线可读的前提是对应页面图片此前已被浏览或下载过。
+图片本身由 `/api/image-cache/*` 图片代理提供（MinIO 缓存，见第 9-11 节），离线可读的前提是对应页面图片此前已被浏览或下载过。
 
 清理：当某条缓存既不在书架也不在阅读记录中时，会随「书架移除」「清理阅读记录」以及服务启动时被删除。
 

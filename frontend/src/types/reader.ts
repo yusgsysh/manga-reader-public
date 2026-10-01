@@ -1,6 +1,15 @@
+export interface GalleryPageThumb {
+  sprite_url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface GalleryPage {
   page_url: string;
   index: number;
+  thumbnail?: GalleryPageThumb;
 }
 
 export interface Gallery {

@@ -898,7 +898,7 @@ func TestMockPageImage_MissingURL(t *testing.T) {
 	server := &Server{Client: &http.Client{}}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/page-image", nil)
+	req := httptest.NewRequest("GET", "/api/image/page", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -921,7 +921,7 @@ func TestMockPageImage_ScrapeFailure(t *testing.T) {
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/page-image?url=https://exhentai.org/s/abc/123-1", nil)
+	req := httptest.NewRequest("GET", "/api/image/page?url=https://exhentai.org/s/abc/123-1", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -948,7 +948,7 @@ func TestMockPageImage_Success(t *testing.T) {
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
+	req := httptest.NewRequest("GET", "/api/image/page?url="+url.QueryEscape(pageURL), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -995,7 +995,7 @@ func TestMockPageImage_RetryOnImageDownloadFailure(t *testing.T) {
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
+	req := httptest.NewRequest("GET", "/api/image/page?url="+url.QueryEscape(pageURL), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -1026,7 +1026,7 @@ func TestMockPageImage_RetryExhausted(t *testing.T) {
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
+	req := httptest.NewRequest("GET", "/api/image/page?url="+url.QueryEscape(pageURL), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -1053,7 +1053,7 @@ func TestMockPageImage_NoFallbackNoRetry(t *testing.T) {
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
+	req := httptest.NewRequest("GET", "/api/image/page?url="+url.QueryEscape(pageURL), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -1093,7 +1093,7 @@ func TestMockPageImage_RetryWithMultipleFailures(t *testing.T) {
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
+	req := httptest.NewRequest("GET", "/api/image/page?url="+url.QueryEscape(pageURL), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -1122,7 +1122,7 @@ func TestMockPageImage_RetryCancelledByContext(t *testing.T) {
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/page-image?url="+url.QueryEscape(pageURL), nil)
+	req := httptest.NewRequest("GET", "/api/image/page?url="+url.QueryEscape(pageURL), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

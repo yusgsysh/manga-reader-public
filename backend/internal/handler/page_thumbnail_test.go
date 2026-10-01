@@ -13,9 +13,21 @@ import (
 	"testing"
 
 	"github.com/gen2brain/webp"
+
+	"manga-reader/internal/database"
+	"manga-reader/internal/gallerycache"
+	"manga-reader/internal/model"
 )
 
-const testSpriteURL = "https://cdn.hath.network/c2/hash/123-0.webp"
+const (
+	testSpriteURL    = "https://cdn.hath.network/c2/hash/123-0.webp"
+	testSpriteURLTwo = "https://cdn.hath.network/c2/hash/1-0.webp"
+	liveThumbPath    = "/api/image/page-thumbnail"
+	cachedThumbPath  = "/api/image-cache/page-thumbnail"
+	testGalleryIDStr = "123456"
+	thumbToken       = "abcdef"
+	testGalleryIDInt = 123456
+)
 
 // makeTestSprite builds a small WebP sprite (two 4x4 cells).
 func makeTestSprite(t *testing.T) []byte {
@@ -39,25 +51,46 @@ func makeTestSprite(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-func pageThumbRequest(t *testing.T, rawURL string) *http.Request {
-	t.Helper()
-	return httptest.NewRequest("GET", "/api/page-thumbnail?url="+url.QueryEscape(rawURL)+"&x=0&y=0&w=4&h=4", nil)
+func directThumbPath(base, rawURL string) string {
+	return base + "?url=" + url.QueryEscape(rawURL) + "&x=0&y=0&w=4&h=4"
 }
 
-func TestPageThumbnail_Success(t *testing.T) {
+func indexThumbPath(base string, index int) string {
+	return fmt.Sprintf("%s?id=%s&token=%s&index=%d", base, testGalleryIDStr, thumbToken, index)
+}
+
+func decodeSize(t *testing.T, body []byte) image.Point {
+	t.Helper()
+	img, err := webp.Decode(bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	return img.Bounds().Size()
+}
+
+func spriteServer(t *testing.T, requests *atomic.Int32) *httptest.Server {
+	t.Helper()
 	sprite := makeTestSprite(t)
-	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+	srv := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if requests != nil {
+			requests.Add(1)
+		}
 		w.Header().Set("Content-Type", "image/webp")
 		_, _ = w.Write(sprite)
 	})
-	defer mockServer.Close()
+	t.Cleanup(srv.Close)
+	return srv
+}
 
-	server := &Server{Client: newMockClient(mockServer.URL)}
+// ==================== live endpoint ====================
+
+func TestPageThumbnail_Live_Success(t *testing.T) {
+	srv := spriteServer(t, nil)
+	server := &Server{Client: newMockClient(srv.URL)}
 	r := setupMockRouter(server)
 
-	req := pageThumbRequest(t, testSpriteURL)
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
+	r.ServeHTTP(w, httptest.NewRequest("GET", directThumbPath(liveThumbPath, testSpriteURL), nil))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
@@ -65,63 +98,45 @@ func TestPageThumbnail_Success(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); ct != "image/webp" {
 		t.Errorf("content-type = %q, want image/webp", ct)
 	}
-
-	img, err := webp.Decode(bytes.NewReader(w.Body.Bytes()))
-	if err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if got := img.Bounds().Size(); got.X != 4 || got.Y != 4 {
+	if got := decodeSize(t, w.Body.Bytes()); got.X != 4 || got.Y != 4 {
 		t.Errorf("cropped size = %v, want 4x4", got)
 	}
 }
 
-func TestPageThumbnail_CacheHitAvoidsUpstream(t *testing.T) {
-	sprite := makeTestSprite(t)
+func TestPageThumbnail_Live_DoesNotCache(t *testing.T) {
 	var requests atomic.Int32
-	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
-		requests.Add(1)
-		w.Header().Set("Content-Type", "image/webp")
-		_, _ = w.Write(sprite)
-	})
-	defer mockServer.Close()
-
-	server := &Server{Client: newMockClient(mockServer.URL), Cache: newMockImageCache()}
+	srv := spriteServer(t, &requests)
+	// Cache is configured, but the live endpoint must not use it.
+	server := &Server{Client: newMockClient(srv.URL), Cache: newMockImageCache()}
 	r := setupMockRouter(server)
 
 	for range 2 {
 		w := httptest.NewRecorder()
-		r.ServeHTTP(w, pageThumbRequest(t, testSpriteURL))
+		r.ServeHTTP(w, httptest.NewRequest("GET", directThumbPath(liveThumbPath, testSpriteURL), nil))
 		if w.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 		}
 	}
-
-	if got := requests.Load(); got != 1 {
-		t.Errorf("upstream requests = %d, want 1 (sprite cached)", got)
+	if got := requests.Load(); got != 2 {
+		t.Errorf("upstream requests = %d, want 2 (live does not cache)", got)
 	}
 }
 
-func TestPageThumbnail_OutOfBounds(t *testing.T) {
-	sprite := makeTestSprite(t)
-	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/webp")
-		_, _ = w.Write(sprite)
-	})
-	defer mockServer.Close()
-
-	server := &Server{Client: newMockClient(mockServer.URL)}
+func TestPageThumbnail_Live_OutOfBounds(t *testing.T) {
+	srv := spriteServer(t, nil)
+	server := &Server{Client: newMockClient(srv.URL)}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/page-thumbnail?url="+url.QueryEscape(testSpriteURL)+"&x=0&y=0&w=100&h=4", nil)
+	path := liveThumbPath + "?url=" + url.QueryEscape(testSpriteURL) + "&x=0&y=0&w=100&h=4"
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
+	r.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
 	}
 }
 
-func TestPageThumbnail_UpstreamFailure(t *testing.T) {
+func TestPageThumbnail_Live_UpstreamFailure(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	})
@@ -131,12 +146,62 @@ func TestPageThumbnail_UpstreamFailure(t *testing.T) {
 	r := setupMockRouter(server)
 
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, pageThumbRequest(t, testSpriteURL))
+	r.ServeHTTP(w, httptest.NewRequest("GET", directThumbPath(liveThumbPath, testSpriteURL), nil))
 
 	if w.Code != http.StatusBadGateway {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusBadGateway)
 	}
 }
+
+// ==================== cached endpoint ====================
+
+func TestCachedPageThumbnail_Success(t *testing.T) {
+	srv := spriteServer(t, nil)
+	server := &Server{Client: newMockClient(srv.URL), Cache: newMockImageCache()}
+	r := setupMockRouter(server)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("GET", directThumbPath(cachedThumbPath, testSpriteURL), nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := decodeSize(t, w.Body.Bytes()); got.X != 4 || got.Y != 4 {
+		t.Errorf("cropped size = %v, want 4x4", got)
+	}
+}
+
+func TestCachedPageThumbnail_CacheHitAvoidsUpstream(t *testing.T) {
+	var requests atomic.Int32
+	srv := spriteServer(t, &requests)
+	server := &Server{Client: newMockClient(srv.URL), Cache: newMockImageCache()}
+	r := setupMockRouter(server)
+
+	for range 2 {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest("GET", directThumbPath(cachedThumbPath, testSpriteURL), nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+	}
+	if got := requests.Load(); got != 1 {
+		t.Errorf("upstream requests = %d, want 1 (sprite cached)", got)
+	}
+}
+
+func TestCachedPageThumbnail_NoCache(t *testing.T) {
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("GET", directThumbPath(cachedThumbPath, testSpriteURL), nil))
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
+// ==================== gallery-index addressing ====================
 
 const testGalleryThumbHTML = `<html><body>
 <div class="gpc">Showing 1 - 2 of 2 images</div>
@@ -161,57 +226,81 @@ func newGallerySpriteServer(t *testing.T) *httptest.Server {
 	return srv
 }
 
-func TestGalleryPageThumbnail_Success(t *testing.T) {
+func TestPageThumbnail_Live_ByIndex(t *testing.T) {
 	srv := newGallerySpriteServer(t)
 	server := &Server{Client: newMockClient(srv.URL)}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/gallery/123456/abcdef/page-thumbnail?index=1", nil)
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
+	r.ServeHTTP(w, httptest.NewRequest("GET", indexThumbPath(liveThumbPath, 1), nil))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
-	if ct := w.Header().Get("Content-Type"); ct != "image/webp" {
-		t.Errorf("content-type = %q, want image/webp", ct)
-	}
-
-	img, err := webp.Decode(bytes.NewReader(w.Body.Bytes()))
-	if err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if got := img.Bounds().Size(); got.X != 4 || got.Y != 4 {
+	if got := decodeSize(t, w.Body.Bytes()); got.X != 4 || got.Y != 4 {
 		t.Errorf("cropped size = %v, want 4x4", got)
 	}
 }
 
-func TestGalleryPageThumbnail_OutOfRange(t *testing.T) {
+func TestPageThumbnail_Live_ByIndexOutOfRange(t *testing.T) {
 	srv := newGallerySpriteServer(t)
 	server := &Server{Client: newMockClient(srv.URL)}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/gallery/123456/abcdef/page-thumbnail?index=5", nil)
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
+	r.ServeHTTP(w, httptest.NewRequest("GET", indexThumbPath(liveThumbPath, 5), nil))
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
 	}
 }
 
-func TestGalleryPageThumbnail_InvalidIndex(t *testing.T) {
-	server := &Server{Client: &http.Client{}}
+func TestCachedPageThumbnail_ByIndexUsesCachedGeometry(t *testing.T) {
+	client := newTestDB(t)
+	if err := gallerycache.UpsertPages(t.Context(), client, testGalleryIDInt, thumbToken, []model.CachedPage{
+		{
+			PageURL: "https://exhentai.org/s/a/1-1",
+			Index:   0,
+			Thumbnail: &model.GalleryPageThumb{
+				SpriteURL: testSpriteURLTwo,
+				X:         0, Y: 0, Width: 4, Height: 4,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("seed pages: %v", err)
+	}
+
+	sprite := makeTestSprite(t)
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/g/") {
+			t.Errorf("cached index request must not scrape the gallery page")
+			http.Error(w, "unexpected gallery scrape", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "image/webp")
+		_, _ = w.Write(sprite)
+	})
+	defer mockServer.Close()
+
+	server := &Server{
+		Client: newMockClient(mockServer.URL),
+		DB:     &database.DB{Client: client},
+		Cache:  newMockImageCache(),
+	}
 	r := setupMockRouter(server)
 
-	for _, idx := range []string{"", "abc", "-1"} {
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, httptest.NewRequest("GET", "/api/gallery/123456/abcdef/page-thumbnail?index="+idx, nil))
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("index=%q: status = %d, want %d", idx, w.Code, http.StatusBadRequest)
-		}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("GET", indexThumbPath(cachedThumbPath, 0), nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := decodeSize(t, w.Body.Bytes()); got.X != 4 || got.Y != 4 {
+		t.Errorf("cropped size = %v, want 4x4", got)
 	}
 }
+
+// ==================== validation ====================
 
 func TestPageThumbnail_InvalidRequests(t *testing.T) {
 	server := &Server{Client: &http.Client{}}
@@ -221,21 +310,26 @@ func TestPageThumbnail_InvalidRequests(t *testing.T) {
 		name string
 		path string
 	}{
-		{"missing url", "/api/page-thumbnail?x=0&y=0&w=4&h=4"},
-		{"disallowed host", "/api/page-thumbnail?url=" + url.QueryEscape("https://evil.example.com/a.webp") + "&x=0&y=0&w=4&h=4"},
-		{"internal host", "/api/page-thumbnail?url=" + url.QueryEscape("https://127.0.0.1/a.webp") + "&x=0&y=0&w=4&h=4"},
-		{"http scheme", "/api/page-thumbnail?url=" + url.QueryEscape("http://cdn.hath.network/a.webp") + "&x=0&y=0&w=4&h=4"},
-		{"missing x", "/api/page-thumbnail?url=" + url.QueryEscape(testSpriteURL) + "&y=0&w=4&h=4"},
-		{"zero width", "/api/page-thumbnail?url=" + url.QueryEscape(testSpriteURL) + "&x=0&y=0&w=0&h=4"},
-		{"negative y", "/api/page-thumbnail?url=" + url.QueryEscape(testSpriteURL) + "&x=0&y=-1&w=4&h=4"},
-		{"oversized", "/api/page-thumbnail?url=" + url.QueryEscape(testSpriteURL) + "&x=0&y=0&w=5000&h=4"},
+		{"no addressing", liveThumbPath},
+		{"missing rect", liveThumbPath + "?url=" + url.QueryEscape(testSpriteURL)},
+		{"disallowed host", liveThumbPath + "?url=" + url.QueryEscape("https://evil.example.com/a.webp") + "&x=0&y=0&w=4&h=4"},
+		{"internal host", liveThumbPath + "?url=" + url.QueryEscape("https://127.0.0.1/a.webp") + "&x=0&y=0&w=4&h=4"},
+		{"http scheme", liveThumbPath + "?url=" + url.QueryEscape("http://cdn.hath.network/a.webp") + "&x=0&y=0&w=4&h=4"},
+		{"missing x", liveThumbPath + "?url=" + url.QueryEscape(testSpriteURL) + "&y=0&w=4&h=4"},
+		{"zero width", liveThumbPath + "?url=" + url.QueryEscape(testSpriteURL) + "&x=0&y=0&w=0&h=4"},
+		{"negative y", liveThumbPath + "?url=" + url.QueryEscape(testSpriteURL) + "&x=0&y=-1&w=4&h=4"},
+		{"oversized", liveThumbPath + "?url=" + url.QueryEscape(testSpriteURL) + "&x=0&y=0&w=5000&h=4"},
+		{"index missing", liveThumbPath + "?id=1&token=t"},
+		{"index invalid", liveThumbPath + "?id=1&token=t&index=abc"},
+		{"id invalid", liveThumbPath + "?id=abc&token=t&index=0"},
+		{"token missing", liveThumbPath + "?id=1&index=0"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, httptest.NewRequest("GET", tt.path, nil))
 			if w.Code != http.StatusBadRequest {
-				t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+				t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
 			}
 		})
 	}

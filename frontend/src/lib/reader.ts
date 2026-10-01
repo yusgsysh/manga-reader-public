@@ -1,19 +1,9 @@
 import type { ReactManga } from "@yui540/comimi-react";
-import { buildApiUrl } from "../api/client";
+import { pageImageUrl, pageThumbnailUrl } from "./image";
 import type { GalleryPage } from "../types/reader";
 
 export function getReaderImageURL(pageURL: string): string {
-  return buildApiUrl("/api/cached-image", { url: pageURL });
-}
-
-// comimi 的页面缩略图走按索引裁剪的接口，每页显示自己的缩略图，
-// 而不是整本画廊都用同一张封面。
-export function getPageThumbnailURL(
-  id: string,
-  token: string,
-  index: number,
-): string {
-  return buildApiUrl(`/api/gallery/${id}/${token}/page-thumbnail`, { index });
+  return pageImageUrl(pageURL);
 }
 
 export function galleryPagesToManga(
@@ -29,7 +19,7 @@ export function galleryPagesToManga(
       id: `${page.index}`,
       type: "image" as const,
       src: getReaderImageURL(page.page_url),
-      thumbnailSrc: getPageThumbnailURL(id, token, page.index),
+      thumbnailSrc: page.thumbnail ? pageThumbnailUrl(page.thumbnail) : undefined,
       alt: `${title} - ${page.index + 1}`,
     })),
   };

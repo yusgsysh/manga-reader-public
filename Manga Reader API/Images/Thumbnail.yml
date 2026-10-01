@@ -5,7 +5,7 @@ info:
 
 http:
   method: GET
-  url: "{{baseUrl}}/api/thumbnail"
+  url: "{{baseUrl}}/api/image/thumbnail"
   params:
     - name: url
       value: "{{thumbnailUrl}}"
@@ -35,9 +35,11 @@ settings:
   maxRedirects: 5
 
 docs: |-
-  Proxy the upstream thumbnail bytes without touching MinIO. Retries up to 2
+  Live proxy for cover thumbnail bytes without touching MinIO. Retries up to 2
   times on failure.
 
   Errors: 400 missing/invalid url, 502 upstream failure.
   Requires `https://` and a whitelisted thumbnail host
   (`s.exhentai.org`, `ehgt.org`, `ul.e-hentai.org`); internal addresses are blocked.
+
+  Cached variant: **Cached Thumbnail** (`/api/image-cache/thumbnail`).

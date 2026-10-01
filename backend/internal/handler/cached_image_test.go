@@ -199,9 +199,9 @@ func TestCachedImage_MissingURL(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	app := &Server{Client: &http.Client{}}
-	r.GET("/api/cached-image", app.handleCachedImage)
+	r.GET("/api/image-cache/page", app.handleCachedImage)
 
-	req := httptest.NewRequest("GET", "/api/cached-image", nil)
+	req := httptest.NewRequest("GET", "/api/image-cache/page", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -214,7 +214,7 @@ func TestCachedImage_InvalidURL(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	app := &Server{Client: &http.Client{}}
-	r.GET("/api/cached-image", app.handleCachedImage)
+	r.GET("/api/image-cache/page", app.handleCachedImage)
 
 	tests := []struct {
 		name string
@@ -229,7 +229,7 @@ func TestCachedImage_InvalidURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", "/api/cached-image?url="+url.QueryEscape(tt.url), nil)
+			req := httptest.NewRequest("GET", "/api/image-cache/page?url="+url.QueryEscape(tt.url), nil)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)
 
@@ -244,10 +244,10 @@ func TestCachedImage_MissingMinIO(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	app := &Server{Client: &http.Client{}}
-	r.GET("/api/cached-image", app.handleCachedImage)
+	r.GET("/api/image-cache/page", app.handleCachedImage)
 
 	pageURL := "https://exhentai.org/s/abc/123-1"
-	req := httptest.NewRequest("GET", "/api/cached-image?url="+url.QueryEscape(pageURL), nil)
+	req := httptest.NewRequest("GET", "/api/image-cache/page?url="+url.QueryEscape(pageURL), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

@@ -1,11 +1,11 @@
 info:
   name: Cached Thumbnail
   type: http
-  seq: 3
+  seq: 5
 
 http:
   method: GET
-  url: "{{baseUrl}}/api/cached-thumbnail"
+  url: "{{baseUrl}}/api/image-cache/thumbnail"
   params:
     - name: url
       value: "{{thumbnailUrl}}"
@@ -35,9 +35,9 @@ settings:
   maxRedirects: 5
 
 docs: |-
-  Thumbnail proxy backed by a MinIO cache. Objects are stored under the
+  Cover thumbnail proxy backed by a MinIO cache. Objects are stored under the
   `thumbnail/` prefix keyed by `sha256(full thumbnail URL)`, so changing the URL
   never pollutes old entries. Concurrent misses are de-duplicated (singleflight).
 
   Errors: 400 invalid/missing url, 502 upstream failure, 503 cache not configured.
-  Same URL whitelist and SSRF protection as **Thumbnail**.
+  Live variant: **Thumbnail** (`/api/image/thumbnail`).

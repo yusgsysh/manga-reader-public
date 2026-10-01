@@ -365,9 +365,9 @@ func TestAPI_PageImage(t *testing.T) {
 	}
 
 	r := setupRouter()
-	r.GET("/api/page-image", app.handlePageImage)
+	r.GET("/api/image/page", app.handlePageImage)
 
-	req := httptest.NewRequest("GET", "/api/page-image?url="+testPageURL, nil)
+	req := httptest.NewRequest("GET", "/api/image/page?url="+testPageURL, nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -388,9 +388,9 @@ func TestAPI_PageImage(t *testing.T) {
 func TestAPI_PageImage_MissingURL(t *testing.T) {
 	r := setupRouter()
 	app := &Server{Client: &http.Client{}}
-	r.GET("/api/page-image", app.handlePageImage)
+	r.GET("/api/image/page", app.handlePageImage)
 
-	req := httptest.NewRequest("GET", "/api/page-image", nil)
+	req := httptest.NewRequest("GET", "/api/image/page", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

@@ -3,7 +3,6 @@ import {
   calculateProgress,
   clampPageIndex,
   galleryPagesToManga,
-  getPageThumbnailURL,
   getReaderImageURL,
 } from "./reader";
 
@@ -52,52 +51,43 @@ describe("calculateProgress", () => {
 });
 
 describe("getReaderImageURL", () => {
-  it("builds a cached-image url with the page url encoded", () => {
+  it("builds the cached page image url with the page url encoded", () => {
     const url = getReaderImageURL("https://exhentai.org/s/abc/1");
-    expect(url).toContain("/api/cached-image?url=");
+    expect(url).toContain("/api/image-cache/page?url=");
     expect(url).toContain(encodeURIComponent("https://exhentai.org/s/abc/1"));
   });
 });
 
-describe("getPageThumbnailURL", () => {
-  it("builds the index-based page thumbnail url", () => {
-    const url = getPageThumbnailURL("123", "token", 5);
-    expect(url).toBe(
-      "http://localhost:8080/api/gallery/123/token/page-thumbnail?index=5",
-    );
-  });
-});
-
 describe("galleryPagesToManga", () => {
+  const thumb = {
+    sprite_url: "https://cdn.hath.network/c2/hash/1-0.webp",
+    x: 200,
+    y: 0,
+    width: 200,
+    height: 282,
+  };
+
   it("converts backend pages to comimi image pages", () => {
     const manga = galleryPagesToManga("123", "token", "Title", [
-      { page_url: "https://e.org/s/1", index: 0 },
+      { page_url: "https://e.org/s/1", index: 0, thumbnail: thumb },
       { page_url: "https://e.org/s/2", index: 1 },
     ]);
     expect(manga.id).toBe("123:token");
     expect(manga.title).toBe("Title");
     expect(manga.pages).toHaveLength(2);
-    expect(manga.pages[0]).toMatchObject({
-      id: "0",
-      type: "image",
-    });
+    expect(manga.pages[0]).toMatchObject({ id: "0", type: "image" });
+
     const first = manga.pages[0];
-    if (first.type === "image") {
-      expect(first.src).toContain("/api/cached-image?url=");
-      expect(first.thumbnailSrc).toContain(
-        "/api/gallery/123/token/page-thumbnail?index=0",
-      );
-    } else {
-      throw new Error("expected image page");
-    }
+    if (first.type !== "image") throw new Error("expected image page");
+    expect(first.src).toContain("/api/image-cache/page?url=");
+    expect(first.thumbnailSrc).toContain("/api/image-cache/page-thumbnail?");
+    expect(first.thumbnailSrc).toContain(
+      encodeURIComponent("https://cdn.hath.network/c2/hash/1-0.webp"),
+    );
+    expect(first.thumbnailSrc).toContain("x=200");
 
     const second = manga.pages[1];
-    if (second.type === "image") {
-      expect(second.thumbnailSrc).toContain(
-        "/api/gallery/123/token/page-thumbnail?index=1",
-      );
-    } else {
-      throw new Error("expected image page");
-    }
+    if (second.type !== "image") throw new Error("expected image page");
+    expect(second.thumbnailSrc).toBeUndefined();
   });
 });

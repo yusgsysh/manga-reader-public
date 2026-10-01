@@ -1,11 +1,11 @@
 info:
-  name: Page Thumbnail
+  name: Cached Page Thumbnail
   type: http
-  seq: 3
+  seq: 6
 
 http:
   method: GET
-  url: "{{baseUrl}}/api/image/page-thumbnail"
+  url: "{{baseUrl}}/api/image-cache/page-thumbnail"
   params:
     - name: url
       value: "{{spriteUrl}}"
@@ -55,8 +55,8 @@ runtime:
           expect(res.getHeader("content-type")).to.equal("image/webp");
         });
 
-        test("uses a short cache window", function () {
-          expect(res.getHeader("cache-control")).to.include("max-age=3600");
+        test("is immutably cacheable", function () {
+          expect(res.getHeader("cache-control")).to.include("max-age=31536000");
         });
 
 settings:
@@ -66,13 +66,13 @@ settings:
   maxRedirects: 5
 
 docs: |-
-  Live crop of a single page thumbnail from the ExHentai sprite image (no
-  MinIO). Two addressing modes:
+  MinIO-backed page thumbnail crop (read-through). Same addressing as
+  **Page Thumbnail**:
 
-  - `url` + `x`/`y`/`w`/`h` from `pages[].thumbnail`.
-  - `id` + `token` + `index` (server scrapes the sprite geometry).
+  - `url` + `x`/`y`/`w`/`h`: sprite cached under `page-sprite/<sha256(url)>`,
+    crop under `page-thumb/<sha256(url|x|y|w|h)>`.
+  - `id` + `token` + `index`: geometry from `gallery_cache`, scraping upstream
+    on a miss.
 
-  Errors: 400 missing/invalid parameters, disallowed URL or out-of-bounds crop;
-  404 index out of range; 502 upstream failure.
-
-  Cached variant: **Cached Page Thumbnail** (`/api/image-cache/page-thumbnail`).
+  Errors: 400 invalid parameters; 404 not found; 502 upstream failure; 503 cache
+  not configured.

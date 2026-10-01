@@ -151,13 +151,14 @@ Schema 文件：
 
 | API | 数据来源 | MinIO | 用途 |
 |-----|----------|:-----:|------|
-| `/api/page-image` | ExHentai | ❌ | 阅读页图片代理 |
-| `/api/cached-image` | MinIO / ExHentai | ✅ | 阅读页图片缓存 |
-| `/api/thumbnail` | ExHentai | ❌ | 缩略图源站代理 |
-| `/api/cached-thumbnail` | MinIO / ExHentai | ✅ | 缩略图缓存（前端使用） |
-| `/api/page-thumbnail` | MinIO / ExHentai | ✅ | 页面缩略图精灵图裁剪（WebP） |
+| `/api/image/page` | ExHentai | ❌ | 阅读页图片代理（live） |
+| `/api/image/thumbnail` | ExHentai | ❌ | 封面缩略图代理（live） |
+| `/api/image/page-thumbnail` | ExHentai | ❌ | 页面缩略图裁剪（live） |
+| `/api/image-cache/page` | MinIO / ExHentai | ✅ | 阅读页图片缓存 |
+| `/api/image-cache/thumbnail` | MinIO / ExHentai | ✅ | 封面缩略图缓存（前端使用） |
+| `/api/image-cache/page-thumbnail` | MinIO / ExHentai | ✅ | 页面缩略图裁剪缓存（前端使用） |
 
-缩略图缓存 Key 为 `thumbnail/<sha256(完整 URL)>`，与页面图片缓存（`images/`）相互独立。`/api/page-thumbnail` 从 `/api/gallery/:id/:token/pages` 返回的精灵图矩形裁剪，缓存 Key 为 `page-sprite/<sha256(精灵图 URL)>` 与 `page-thumb/<sha256(URL+矩形)>`。
+缩略图缓存 Key 为 `thumbnail/<sha256(完整 URL)>`，与页面图片缓存（`images/`）相互独立。`/api/image/page-thumbnail` 与 `/api/image-cache/page-thumbnail` 支持两种寻址：`url`+`x/y/w/h`，或 `id`+`token`+`index`；裁剪缓存 Key 为 `page-sprite/<sha256(精灵图 URL)>` 与 `page-thumb/<sha256(URL+矩形)>`。
 
 ### 阅读记录清理
 

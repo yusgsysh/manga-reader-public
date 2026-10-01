@@ -1,11 +1,11 @@
 info:
   name: Page Image
   type: http
-  seq: 4
+  seq: 1
 
 http:
   method: GET
-  url: "{{baseUrl}}/api/page-image"
+  url: "{{baseUrl}}/api/image/page"
   params:
     - name: url
       value: "{{pageUrl}}"
@@ -21,7 +21,11 @@ runtime:
     - type: tests
       code: |-
         test("responds with an image content type", function () {
-          expect(res.headers["content-type"]).to.match(/^image\//);
+          expect(res.getHeader("content-type")).to.match(/^image\//);
+        });
+
+        test("uses a short cache window", function () {
+          expect(res.getHeader("cache-control")).to.include("max-age=3600");
         });
 
 settings:
@@ -31,5 +35,7 @@ settings:
   maxRedirects: 5
 
 docs: |-
-  Proxy the raw ExHentai page image bytes. Retries up to 2 times on upstream
-  failure; a failed download returns HTTP 502.
+  Live proxy for the raw ExHentai page image bytes (no MinIO). Retries up to 2
+  times on upstream failure; a failed download returns HTTP 502.
+
+  Cached variant: **Cached Page Image** (`/api/image-cache/page`).

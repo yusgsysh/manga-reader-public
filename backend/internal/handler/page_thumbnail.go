@@ -40,6 +40,51 @@ func pageThumbCacheKey(spriteURL string, rect image.Rectangle) string {
 	return pageThumbCachePrefix + hex.EncodeToString(sum[:])
 }
 
+// pageThumbRequest addresses a page thumbnail either directly (sprite URL +
+// crop rectangle) or by gallery page index.
+type pageThumbRequest struct {
+	spriteURL string
+	rect      image.Rectangle
+
+	galleryID int64
+	token     string
+	index     int
+
+	byIndex bool
+}
+
+func parsePageThumbRequest(c *gin.Context) (pageThumbRequest, error) {
+	if rawURL := c.Query("url"); rawURL != "" {
+		if err := exhentai.ValidatePageThumbnailURL(rawURL); err != nil {
+			return pageThumbRequest{}, err
+		}
+		rect, err := parseCropRect(c)
+		if err != nil {
+			return pageThumbRequest{}, err
+		}
+		return pageThumbRequest{spriteURL: rawURL, rect: rect}, nil
+	}
+
+	idRaw := c.Query("id")
+	token := c.Query("token")
+	if idRaw == "" || token == "" {
+		return pageThumbRequest{}, fmt.Errorf("provide url+x+y+w+h or id+token+index")
+	}
+	galleryID, err := strconv.ParseInt(idRaw, 10, 64)
+	if err != nil {
+		return pageThumbRequest{}, fmt.Errorf("invalid id parameter")
+	}
+	indexRaw := c.Query("index")
+	if indexRaw == "" {
+		return pageThumbRequest{}, fmt.Errorf("missing index parameter")
+	}
+	index, err := strconv.Atoi(indexRaw)
+	if err != nil || index < 0 {
+		return pageThumbRequest{}, fmt.Errorf("invalid index parameter")
+	}
+	return pageThumbRequest{galleryID: galleryID, token: token, index: index, byIndex: true}, nil
+}
+
 // parseCropRect reads x/y/w/h query parameters and returns the crop rectangle.
 func parseCropRect(c *gin.Context) (image.Rectangle, error) {
 	x, err := queryCoord(c, "x")
@@ -84,61 +129,37 @@ func queryDimension(c *gin.Context, key string) (int, error) {
 	return v, nil
 }
 
-// handlePageThumbnail crops a single page thumbnail out of an ExHentai sprite
-// image. The sprite URL and the cell rectangle come from the gallery pages
-// response (see GalleryPageThumb).
-func (s *Server) handlePageThumbnail(c *gin.Context) {
-	rawURL := c.Query("url")
-	if err := exhentai.ValidatePageThumbnailURL(rawURL); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+// resolveLiveRect resolves a request to a sprite + rectangle, scraping upstream
+// for the gallery-index form. Live resolution never reads local caches.
+func (s *Server) resolveLiveRect(ctx context.Context, req pageThumbRequest) (string, image.Rectangle, bool, error) {
+	if !req.byIndex {
+		return req.spriteURL, req.rect, true, nil
 	}
-
-	rect, err := parseCropRect(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	u := exhentai.GalleryURL(strconv.FormatInt(req.galleryID, 10), req.token)
+	thumb, found, err := exhentai.ScrapeGalleryPageThumb(ctx, s.Client, u, req.index)
+	if err != nil || !found {
+		return "", image.Rectangle{}, false, err
 	}
-
-	data, err := s.loadOrCropThumbnail(c.Request.Context(), rawURL, rect)
-	if err != nil {
-		if errors.Is(err, imageproc.ErrOutOfBounds) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		slog.Error("page-thumbnail error", "url", rawURL, "error", err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("crop page thumbnail failed: %v", err)})
-		return
-	}
-
-	c.Header("Cache-Control", cacheControlHeader)
-	c.Data(http.StatusOK, "image/webp", data)
+	return thumb.SpriteURL, thumbRect(thumb), true, nil
 }
 
-// handleGalleryPageThumbnail resolves the sprite geometry for a single page
-// index of a gallery and returns the cropped WebP. It lets clients request a
-// thumbnail without first calling /pages.
-func (s *Server) handleGalleryPageThumbnail(c *gin.Context) {
-	galleryID, token, ok := parseGalleryIDToken(c)
-	if !ok {
-		return
-	}
+func thumbRect(thumb model.GalleryPageThumb) image.Rectangle {
+	return image.Rect(thumb.X, thumb.Y, thumb.X+thumb.Width, thumb.Y+thumb.Height)
+}
 
-	indexRaw := c.Query("index")
-	if indexRaw == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing index parameter"})
-		return
-	}
-	index, err := strconv.Atoi(indexRaw)
-	if err != nil || index < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid index parameter"})
+// handlePageThumbnail is the live page-thumbnail endpoint: it always fetches
+// the sprite from upstream and crops it, without touching any cache.
+func (s *Server) handlePageThumbnail(c *gin.Context) {
+	req, err := parsePageThumbRequest(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	ctx := c.Request.Context()
-	thumb, found, err := s.resolveGalleryPageThumb(ctx, c.Param("id"), token, galleryID, index)
+	spriteURL, rect, found, err := s.resolveLiveRect(ctx, req)
 	if err != nil {
-		slog.Error("gallery page-thumbnail resolve failed", "id", galleryID, "index", index, "error", err)
+		slog.Error("page-thumbnail resolve failed", "index", req.byIndex, "error", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("resolve page thumbnail failed: %v", err)})
 		return
 	}
@@ -147,10 +168,59 @@ func (s *Server) handleGalleryPageThumbnail(c *gin.Context) {
 		return
 	}
 
-	rect := image.Rect(thumb.X, thumb.Y, thumb.X+thumb.Width, thumb.Y+thumb.Height)
-	data, err := s.loadOrCropThumbnail(ctx, thumb.SpriteURL, rect)
+	data, err := s.cropLive(ctx, spriteURL, rect)
 	if err != nil {
-		slog.Error("gallery page-thumbnail crop failed", "id", galleryID, "index", index, "error", err)
+		if errors.Is(err, imageproc.ErrOutOfBounds) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		slog.Error("page-thumbnail crop failed", "url", spriteURL, "error", err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("crop page thumbnail failed: %v", err)})
+		return
+	}
+
+	c.Header("Cache-Control", thumbnailCacheControl)
+	c.Data(http.StatusOK, "image/webp", data)
+}
+
+// handleCachedPageThumbnail is the MinIO-backed page-thumbnail endpoint. It
+// reads through the cache (sprite + crop) and resolves gallery-index requests
+// from gallery_cache first, scraping upstream on a miss.
+func (s *Server) handleCachedPageThumbnail(c *gin.Context) {
+	if s.Cache == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
+		return
+	}
+
+	req, err := parsePageThumbRequest(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := c.Request.Context()
+	spriteURL, rect := req.spriteURL, req.rect
+	if req.byIndex {
+		thumb, found, err := s.resolveGalleryPageThumb(ctx, req.galleryID, req.token, req.index)
+		if err != nil {
+			slog.Error("cached page-thumbnail resolve failed", "id", req.galleryID, "index", req.index, "error", err)
+			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("resolve page thumbnail failed: %v", err)})
+			return
+		}
+		if !found {
+			c.JSON(http.StatusNotFound, gin.H{"error": "page thumbnail not found"})
+			return
+		}
+		spriteURL, rect = thumb.SpriteURL, thumbRect(thumb)
+	}
+
+	data, err := s.loadOrCropThumbnail(ctx, spriteURL, rect)
+	if err != nil {
+		if errors.Is(err, imageproc.ErrOutOfBounds) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		slog.Error("cached page-thumbnail crop failed", "url", spriteURL, "error", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("crop page thumbnail failed: %v", err)})
 		return
 	}
@@ -160,9 +230,9 @@ func (s *Server) handleGalleryPageThumbnail(c *gin.Context) {
 }
 
 // resolveGalleryPageThumb returns the sprite geometry for a page index, using
-// the gallery cache when it already holds the thumbnail metadata and scraping
-// upstream otherwise.
-func (s *Server) resolveGalleryPageThumb(ctx context.Context, idParam, token string, galleryID int64, index int) (model.GalleryPageThumb, bool, error) {
+// the gallery cache when it holds the thumbnail metadata and scraping upstream
+// otherwise.
+func (s *Server) resolveGalleryPageThumb(ctx context.Context, galleryID int64, token string, index int) (model.GalleryPageThumb, bool, error) {
 	if db := s.cacheDB(); db != nil {
 		row, found, err := gallerycache.Get(ctx, db, galleryID, token)
 		if err != nil {
@@ -176,8 +246,29 @@ func (s *Server) resolveGalleryPageThumb(ctx context.Context, idParam, token str
 		}
 	}
 
-	u := exhentai.GalleryURL(idParam, token)
+	u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
 	return exhentai.ScrapeGalleryPageThumb(ctx, s.Client, u, index)
+}
+
+// cropLive fetches the sprite from upstream and crops it, without touching
+// MinIO. Concurrent identical requests are coalesced.
+func (s *Server) cropLive(ctx context.Context, spriteURL string, rect image.Rectangle) ([]byte, error) {
+	key := "live:" + pageThumbCacheKey(spriteURL, rect)
+	v, sfErr, _ := cachedImageGroup.Do(key, func() (any, error) {
+		fetchCtx := context.WithoutCancel(ctx)
+		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
+		defer cancel()
+
+		sprite, _, err := fetchThumbnail(fetchCtx, s.Client, spriteURL)
+		if err != nil {
+			return nil, err
+		}
+		return imageproc.CropWEBP(sprite, rect)
+	})
+	if sfErr != nil {
+		return nil, sfErr
+	}
+	return v.([]byte), nil
 }
 
 // loadOrCropThumbnail returns the cropped thumbnail, fetching the sprite and

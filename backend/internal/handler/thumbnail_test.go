@@ -140,9 +140,9 @@ func TestValidateThumbnailURL_Invalid(t *testing.T) {
 func TestThumbnail_MissingURL(t *testing.T) {
 	r := setupRouter()
 	app := &Server{Client: &http.Client{}}
-	r.GET("/api/thumbnail", app.handleThumbnail)
+	r.GET("/api/image/thumbnail", app.handleThumbnail)
 
-	req := httptest.NewRequest("GET", "/api/thumbnail", nil)
+	req := httptest.NewRequest("GET", "/api/image/thumbnail", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -161,7 +161,7 @@ func TestThumbnail_MissingURL(t *testing.T) {
 func TestThumbnail_InvalidURL(t *testing.T) {
 	r := setupRouter()
 	app := &Server{Client: &http.Client{}}
-	r.GET("/api/thumbnail", app.handleThumbnail)
+	r.GET("/api/image/thumbnail", app.handleThumbnail)
 
 	tests := []string{
 		"",
@@ -175,7 +175,7 @@ func TestThumbnail_InvalidURL(t *testing.T) {
 	}
 
 	for _, u := range tests {
-		req := httptest.NewRequest("GET", "/api/thumbnail?url="+url.QueryEscape(u), nil)
+		req := httptest.NewRequest("GET", "/api/image/thumbnail?url="+url.QueryEscape(u), nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
@@ -198,9 +198,9 @@ func TestThumbnail_Success(t *testing.T) {
 
 	r := setupRouter()
 	app := &Server{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/thumbnail", app.handleThumbnail)
+	r.GET("/api/image/thumbnail", app.handleThumbnail)
 
-	req := httptest.NewRequest("GET", "/api/thumbnail?url="+url.QueryEscape(testThumbURL), nil)
+	req := httptest.NewRequest("GET", "/api/image/thumbnail?url="+url.QueryEscape(testThumbURL), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -229,9 +229,9 @@ func TestThumbnail_SourceFailure(t *testing.T) {
 
 	r := setupRouter()
 	app := &Server{Client: newMockClient(mockServer.URL)}
-	r.GET("/api/thumbnail", app.handleThumbnail)
+	r.GET("/api/image/thumbnail", app.handleThumbnail)
 
-	req := httptest.NewRequest("GET", "/api/thumbnail?url="+url.QueryEscape(testThumbURL), nil)
+	req := httptest.NewRequest("GET", "/api/image/thumbnail?url="+url.QueryEscape(testThumbURL), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -286,9 +286,9 @@ func (m *mockImageCache) PutWithMeta(_ context.Context, key string, data []byte,
 func TestCachedThumbnail_MissingURL(t *testing.T) {
 	r := setupRouter()
 	app := &Server{Client: &http.Client{}}
-	r.GET("/api/cached-thumbnail", app.handleCachedThumbnail)
+	r.GET("/api/image-cache/thumbnail", app.handleCachedThumbnail)
 
-	req := httptest.NewRequest("GET", "/api/cached-thumbnail", nil)
+	req := httptest.NewRequest("GET", "/api/image-cache/thumbnail", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -300,7 +300,7 @@ func TestCachedThumbnail_MissingURL(t *testing.T) {
 func TestCachedThumbnail_InvalidURL(t *testing.T) {
 	r := setupRouter()
 	app := &Server{Client: &http.Client{}}
-	r.GET("/api/cached-thumbnail", app.handleCachedThumbnail)
+	r.GET("/api/image-cache/thumbnail", app.handleCachedThumbnail)
 
 	tests := []string{
 		"https://",
@@ -311,7 +311,7 @@ func TestCachedThumbnail_InvalidURL(t *testing.T) {
 	}
 
 	for _, u := range tests {
-		req := httptest.NewRequest("GET", "/api/cached-thumbnail?url="+url.QueryEscape(u), nil)
+		req := httptest.NewRequest("GET", "/api/image-cache/thumbnail?url="+url.QueryEscape(u), nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
@@ -324,9 +324,9 @@ func TestCachedThumbnail_InvalidURL(t *testing.T) {
 func TestCachedThumbnail_MissingMinIO(t *testing.T) {
 	r := setupRouter()
 	app := &Server{Client: &http.Client{}}
-	r.GET("/api/cached-thumbnail", app.handleCachedThumbnail)
+	r.GET("/api/image-cache/thumbnail", app.handleCachedThumbnail)
 
-	req := httptest.NewRequest("GET", "/api/cached-thumbnail?url="+url.QueryEscape(testThumbURL), nil)
+	req := httptest.NewRequest("GET", "/api/image-cache/thumbnail?url="+url.QueryEscape(testThumbURL), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -348,14 +348,14 @@ func TestCachedThumbnail_MissThenHit(t *testing.T) {
 	cache := newMockImageCache()
 	r := setupRouter()
 	app := &Server{Client: newMockClient(mockServer.URL), Cache: cache}
-	r.GET("/api/cached-thumbnail", app.handleCachedThumbnail)
+	r.GET("/api/image-cache/thumbnail", app.handleCachedThumbnail)
 
 	escaped := url.QueryEscape(testThumbURL)
 	expectedKey := ThumbnailCacheKey(testThumbURL)
 
 	// First request: MISS → ExHentai → MinIO PUT → 200
 	w1 := httptest.NewRecorder()
-	r.ServeHTTP(w1, httptest.NewRequest("GET", "/api/cached-thumbnail?url="+escaped, nil))
+	r.ServeHTTP(w1, httptest.NewRequest("GET", "/api/image-cache/thumbnail?url="+escaped, nil))
 
 	if w1.Code != http.StatusOK {
 		t.Fatalf("first status = %d, want %d. body: %s", w1.Code, http.StatusOK, w1.Body.String())
@@ -378,7 +378,7 @@ func TestCachedThumbnail_MissThenHit(t *testing.T) {
 
 	// Second request: HIT → MinIO only, no ExHentai access
 	w2 := httptest.NewRecorder()
-	r.ServeHTTP(w2, httptest.NewRequest("GET", "/api/cached-thumbnail?url="+escaped, nil))
+	r.ServeHTTP(w2, httptest.NewRequest("GET", "/api/image-cache/thumbnail?url="+escaped, nil))
 
 	if w2.Code != http.StatusOK {
 		t.Fatalf("second status = %d, want %d. body: %s", w2.Code, http.StatusOK, w2.Body.String())
@@ -406,7 +406,7 @@ func TestCachedThumbnail_ConcurrentMissSingleFetch(t *testing.T) {
 	cache := newMockImageCache()
 	r := setupRouter()
 	app := &Server{Client: newMockClient(mockServer.URL), Cache: cache}
-	r.GET("/api/cached-thumbnail", app.handleCachedThumbnail)
+	r.GET("/api/image-cache/thumbnail", app.handleCachedThumbnail)
 
 	escaped := url.QueryEscape(testThumbURL)
 
@@ -419,7 +419,7 @@ func TestCachedThumbnail_ConcurrentMissSingleFetch(t *testing.T) {
 		wg.Go(func() {
 			<-start
 			w := httptest.NewRecorder()
-			r.ServeHTTP(w, httptest.NewRequest("GET", "/api/cached-thumbnail?url="+escaped, nil))
+			r.ServeHTTP(w, httptest.NewRequest("GET", "/api/image-cache/thumbnail?url="+escaped, nil))
 			if w.Code != http.StatusOK {
 				errCount.Add(1)
 			}

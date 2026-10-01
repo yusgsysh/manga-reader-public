@@ -53,15 +53,12 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 	r.GET("/api/gallery/:id/:token", s.handleGetGallery)
 	r.GET("/api/gallery/:id/:token/details", s.handleGalleryDetails)
 	r.GET("/api/gallery/:id/:token/pages", s.handleGalleryPages)
-	r.GET("/api/gallery/:id/:token/page-thumbnail", s.handleGalleryPageThumbnail)
 
 	// Offline cache (read-only fallback; the frontend decides when to use it).
 	r.GET("/api/gallery-cache/:id/:token", s.handleCachedGallery)
 	r.GET("/api/gallery-cache/:id/:token/details", s.handleCachedGalleryDetails)
 	r.GET("/api/gallery-cache/:id/:token/pages", s.handleCachedGalleryPages)
 	r.GET("/api/search", s.handleSearch)
-	r.GET("/api/page-image", s.handlePageImage)
-	r.GET("/api/page-thumbnail", s.handlePageThumbnail)
 	r.GET("/api/galleries", s.handleGalleries)
 	r.GET("/api/watched", s.handleWatched)
 	r.GET("/api/popular", s.handlePopular)
@@ -75,9 +72,15 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 	r.GET("/api/recently-read", s.handleRecentlyRead)
 	r.POST("/api/reading-progress/cleanup", s.handleReadingProgressCleanup)
 
-	r.GET("/api/thumbnail", s.handleThumbnail)
-	r.GET("/api/cached-thumbnail", s.handleCachedThumbnail)
-	r.GET("/api/cached-image", s.handleCachedImage)
+	// Image proxies (live): fetched straight from upstream, no caching.
+	r.GET("/api/image/page", s.handlePageImage)
+	r.GET("/api/image/thumbnail", s.handleThumbnail)
+	r.GET("/api/image/page-thumbnail", s.handlePageThumbnail)
+
+	// Image proxy caches (MinIO read-through).
+	r.GET("/api/image-cache/page", s.handleCachedImage)
+	r.GET("/api/image-cache/thumbnail", s.handleCachedThumbnail)
+	r.GET("/api/image-cache/page-thumbnail", s.handleCachedPageThumbnail)
 
 	r.POST("/api/prefill", s.handlePrefillStart)
 	r.GET("/api/prefill", s.handlePrefillList)

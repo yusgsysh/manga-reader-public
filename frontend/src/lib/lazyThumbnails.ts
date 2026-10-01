@@ -1,5 +1,5 @@
 // comimi renders every page-list / seek-preview thumbnail eagerly, so a large
-// gallery fires hundreds of `/page-thumbnail?index=N` requests at once. This
+// gallery fires hundreds of `/image-cache/page-thumbnail` requests at once. This
 // module defers those images and feeds them through a small concurrency-limited
 // queue, loading only what is (nearly) on screen.
 
@@ -15,7 +15,7 @@ export function isPageThumbnailURL(url: string): boolean {
     const parsed = new URL(url, base);
     return (
       parsed.pathname.endsWith("/page-thumbnail") &&
-      parsed.searchParams.has("index")
+      (parsed.searchParams.has("url") || parsed.searchParams.has("index"))
     );
   } catch {
     return false;

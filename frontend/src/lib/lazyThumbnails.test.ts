@@ -5,20 +5,28 @@ import {
 } from "./lazyThumbnails";
 
 describe("isPageThumbnailURL", () => {
+  it("matches the cached page thumbnail endpoint", () => {
+    expect(
+      isPageThumbnailURL(
+        "http://localhost:8080/api/image-cache/page-thumbnail?url=x&x=0&y=0&w=4&h=4",
+      ),
+    ).toBe(true);
+  });
+
   it("matches the index-based page thumbnail endpoint", () => {
     expect(
       isPageThumbnailURL(
-        "http://localhost:8080/api/gallery/1/tok/page-thumbnail?index=0",
+        "http://localhost:8080/api/image/page-thumbnail?id=1&token=tok&index=0",
       ),
     ).toBe(true);
   });
 
   it("rejects unrelated image endpoints", () => {
     expect(
-      isPageThumbnailURL("http://localhost:8080/api/cached-thumbnail?url=x"),
+      isPageThumbnailURL("http://localhost:8080/api/image-cache/thumbnail?url=x"),
     ).toBe(false);
     expect(
-      isPageThumbnailURL("http://localhost:8080/api/cached-image?url=x"),
+      isPageThumbnailURL("http://localhost:8080/api/image-cache/page?url=x"),
     ).toBe(false);
     expect(isPageThumbnailURL("not a url")).toBe(false);
   });
