@@ -6,7 +6,8 @@ import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
 import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";
-import { JumpSeekBar } from "../components/common/JumpSeekBar";
+import { JumpSeekPanel } from "../components/common/JumpSeekPanel";
+import { ListingLayout } from "../components/layout/ListingLayout";
 import { Input, Button, Checkbox, Select, cn } from "@cloudflare/kumo";
 import {
   MagnifyingGlass,
@@ -370,320 +371,326 @@ export function SearchPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="card-surface space-y-4 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="w-40">
-            <Select
-              value={site}
-              onValueChange={(v) => setSite(v ?? "exhentai")}
-              aria-label="Site"
-              items={[
-                { label: "ExHentai", value: "exhentai" },
-                { label: "E-Hentai", value: "ehentai" },
-              ]}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className="flex items-center gap-2 text-sm font-medium text-kumo-subtle transition-colors hover:text-kumo-default"
-          >
-            {showAdvanced ? (
-              <CaretUp className="size-4" weight="bold" />
-            ) : (
-              <CaretDown className="size-4" weight="bold" />
-            )}
-            高级搜索
-            {activeFilterCount > 0 && (
-              <span className="inline-flex items-center justify-center rounded-full bg-[var(--app-accent)] px-2 py-0.5 text-xs font-medium text-[var(--app-accent-contrast)]">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {CATEGORIES.map((cat) => {
-            const active = activeCategories.includes(cat.value);
-            return (
-              <button
-                key={cat.value}
-                type="button"
-                onClick={() => toggleCategory(cat.value)}
-                aria-pressed={active}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                  active
-                    ? "border-transparent bg-[var(--app-accent)] text-[var(--app-accent-contrast)]"
-                    : "border-kumo-hairline text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default",
-                )}
-              >
-                {cat.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <JumpSeekBar
-        nav={data?.pages[0]?.nav}
-        value={appliedNav}
-        onChange={handleNavChange}
-        disabled={!fullQuery.trim()}
-      />
-
-      {/* Advanced panel */}
-      {showAdvanced && (
-        <div className="card-surface space-y-6 p-4">
-          <Section title="标签">
-            <div className="relative">
-              <Input
-                ref={tagInputRef}
-                placeholder="输入标签搜索（例如：yuri, 无修正）"
-                aria-label="搜索标签"
-                aria-autocomplete="list"
-                aria-expanded={showSuggestions}
-                value={tagInput}
-                onChange={handleTagInputChange}
-                onKeyDown={handleTagKeyDown}
-                onFocus={() => {
-                  if (suggestions.length > 0) setShowSuggestions(true);
-                }}
-              />
-              {showSuggestions && suggestions.length > 0 && (
-                <div
-                  ref={suggestionsRef}
-                  className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-xl border border-kumo-hairline bg-kumo-elevated shadow-lg"
-                  role="listbox"
-                >
-                  {suggestions.map((s, index) => (
-                    <button
-                      key={`${s.namespace}:${s.tag}`}
-                      type="button"
-                      role="option"
-                      aria-selected={index === selectedIndex}
-                      className={cn(
-                        "flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-kumo-tint",
-                        index === selectedIndex ? "bg-kumo-tint" : "",
-                      )}
-                      onClick={() => addPendingTag(`${s.namespace}:${s.tag}`)}
-                      onMouseEnter={() => setSelectedIndex(index)}
-                    >
-                      <span className="font-mono text-[11px] text-kumo-subtle">
-                        {s.namespace}:{s.tag}
-                      </span>
-                      <span className="text-[11px]">{s.translation}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {(appliedTags.length > 0 || pendingTags.length > 0) && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {appliedTags.map((tag) => (
-                  <FilterChip
-                    key={`applied-${tag}`}
-                    label={tag}
-                    onRemove={() => removeAppliedTag(tag)}
-                  />
-                ))}
-                {pendingTags.map((tag) => (
-                  <span
-                    key={`pending-${tag}`}
-                    className="inline-flex items-center gap-1 rounded-full bg-kumo-recessed px-2.5 py-1 text-xs font-medium text-kumo-subtle"
-                  >
-                    {tag}
-                    <button
-                      type="button"
-                      onClick={() => removePendingTag(tag)}
-                      aria-label={`移除标签 ${tag}`}
-                      className="transition-opacity hover:opacity-70"
-                    >
-                      <X className="size-3" weight="bold" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-
-            <p className="mt-2 text-xs text-kumo-subtle">
-              支持 ExHentai 标签语法：普通标签（yuri）、命名空间标签（female:sole_female）
-            </p>
-          </Section>
-
-          <Section title="范围">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-kumo-subtle">页数范围</label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    placeholder="最小"
-                    aria-label="最小页数"
-                    value={pendingAdvancedOptions.min_pages ?? ""}
-                    onChange={(e) => {
-                      const value = e.target.value ? Number(e.target.value) : undefined;
-                      updateAdvancedFilter("min_pages", value);
-                    }}
-                    min="0"
-                  />
-                  <span className="text-kumo-subtle">-</span>
-                  <Input
-                    type="number"
-                    placeholder="最大"
-                    aria-label="最大页数"
-                    value={pendingAdvancedOptions.max_pages ?? ""}
-                    onChange={(e) => {
-                      const value = e.target.value ? Number(e.target.value) : undefined;
-                      updateAdvancedFilter("max_pages", value);
-                    }}
-                    min="0"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-kumo-subtle">最低评分</label>
-                <Select
-                  value={pendingAdvancedOptions.min_rating?.toString() ?? ""}
-                  onValueChange={(value) => {
-                    updateAdvancedFilter("min_rating", value ? Number(value) : undefined);
-                  }}
-                  aria-label="最低评分"
-                  items={MIN_RATING_OPTIONS}
-                />
-              </div>
-            </div>
-          </Section>
-
-          <Section title="筛选选项">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={pendingAdvancedOptions.has_torrent ?? false}
-                  onCheckedChange={(checked) => updateAdvancedFilter("has_torrent", checked)}
-                />
-                有种子
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={pendingAdvancedOptions.include_expunged ?? false}
-                  onCheckedChange={(checked) => updateAdvancedFilter("include_expunged", checked)}
-                />
-                包含已删除的 Gallery
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={pendingAdvancedOptions.search_tags ?? false}
-                  onCheckedChange={(checked) => updateAdvancedFilter("search_tags", checked)}
-                />
-                搜索标签
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={pendingAdvancedOptions.search_name ?? false}
-                  onCheckedChange={(checked) => updateAdvancedFilter("search_name", checked)}
-                />
-                搜索标题
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={pendingAdvancedOptions.search_description ?? false}
-                  onCheckedChange={(checked) => updateAdvancedFilter("search_description", checked)}
-                />
-                搜索描述
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={pendingAdvancedOptions.include_low_power_tags ?? false}
-                  onCheckedChange={(checked) => updateAdvancedFilter("include_low_power_tags", checked)}
-                />
-                包含低权重标签
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={pendingAdvancedOptions.include_downvoted_tags ?? false}
-                  onCheckedChange={(checked) => updateAdvancedFilter("include_downvoted_tags", checked)}
-                />
-                包含被降权的标签
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={pendingAdvancedOptions.disable_language_filter ?? false}
-                  onCheckedChange={(checked) => updateAdvancedFilter("disable_language_filter", checked)}
-                />
-                禁用语言过滤
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={pendingAdvancedOptions.disable_uploader_filter ?? false}
-                  onCheckedChange={(checked) => updateAdvancedFilter("disable_uploader_filter", checked)}
-                />
-                禁用上传者过滤
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={pendingAdvancedOptions.disable_tag_filter ?? false}
-                  onCheckedChange={(checked) => updateAdvancedFilter("disable_tag_filter", checked)}
-                />
-                禁用标签过滤
-              </label>
-            </div>
-          </Section>
-
-          <div className="flex justify-end">
-            <Button
-              variant="secondary"
-              onClick={resetAdvancedFilters}
-              disabled={activeFilterCount === 0}
-            >
-              重置筛选器
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Active filter chips */}
-      {activeChips.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-kumo-subtle">已选筛选：</span>
-          {activeChips.map((chip) => (
-            <FilterChip
-              key={chip.key}
-              label={chip.label}
-              onRemove={chip.onRemove}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Results */}
-      {isLoading && <GalleryGridSkeleton />}
-
-      {error && (
-        <ErrorState
-          message={error.message || "搜索失败"}
-          onRetry={() => refetch()}
-        />
-      )}
-
-      {!isLoading && !error && data && galleries.length === 0 && (
-        <EmptyState message="没有找到相关 Gallery，请修改搜索条件" />
-      )}
-
-      {!isLoading && !error && galleries.length > 0 && (
-        <div>
-          <p className="mb-3 text-sm text-kumo-subtle">共找到 {total} 个结果</p>
-          <GalleryGrid galleries={galleries} />
-          <InfiniteScrollTrigger
-            hasNextPage={!!hasNextPage}
-            isFetchingNextPage={isFetchingNextPage}
-            isFetchNextPageError={isFetchNextPageError}
-            fetchNextPage={() => fetchNextPage()}
+      <ListingLayout
+        sidebar={
+          <JumpSeekPanel
+            nav={data?.pages[0]?.nav}
+            value={appliedNav}
+            onChange={handleNavChange}
+            disabled={!fullQuery.trim()}
           />
+        }
+      >
+        <div className="space-y-5">
+          {/* Filters */}
+          <div className="card-surface space-y-4 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="w-40">
+                <Select
+                  value={site}
+                  onValueChange={(v) => setSite(v ?? "exhentai")}
+                  aria-label="Site"
+                  items={[
+                    { label: "ExHentai", value: "exhentai" },
+                    { label: "E-Hentai", value: "ehentai" },
+                  ]}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="flex items-center gap-2 text-sm font-medium text-kumo-subtle transition-colors hover:text-kumo-default"
+              >
+                {showAdvanced ? (
+                  <CaretUp className="size-4" weight="bold" />
+                ) : (
+                  <CaretDown className="size-4" weight="bold" />
+                )}
+                高级搜索
+                {activeFilterCount > 0 && (
+                  <span className="inline-flex items-center justify-center rounded-full bg-[var(--app-accent)] px-2 py-0.5 text-xs font-medium text-[var(--app-accent-contrast)]">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {CATEGORIES.map((cat) => {
+                const active = activeCategories.includes(cat.value);
+                return (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    onClick={() => toggleCategory(cat.value)}
+                    aria-pressed={active}
+                    className={cn(
+                      "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                      active
+                        ? "border-transparent bg-[var(--app-accent)] text-[var(--app-accent-contrast)]"
+                        : "border-kumo-hairline text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default",
+                    )}
+                  >
+                    {cat.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Advanced panel */}
+          {showAdvanced && (
+            <div className="card-surface space-y-6 p-4">
+              <Section title="标签">
+                <div className="relative">
+                  <Input
+                    ref={tagInputRef}
+                    placeholder="输入标签搜索（例如：yuri, 无修正）"
+                    aria-label="搜索标签"
+                    aria-autocomplete="list"
+                    aria-expanded={showSuggestions}
+                    value={tagInput}
+                    onChange={handleTagInputChange}
+                    onKeyDown={handleTagKeyDown}
+                    onFocus={() => {
+                      if (suggestions.length > 0) setShowSuggestions(true);
+                    }}
+                  />
+                  {showSuggestions && suggestions.length > 0 && (
+                    <div
+                      ref={suggestionsRef}
+                      className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-xl border border-kumo-hairline bg-kumo-elevated shadow-lg"
+                      role="listbox"
+                    >
+                      {suggestions.map((s, index) => (
+                        <button
+                          key={`${s.namespace}:${s.tag}`}
+                          type="button"
+                          role="option"
+                          aria-selected={index === selectedIndex}
+                          className={cn(
+                            "flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-kumo-tint",
+                            index === selectedIndex ? "bg-kumo-tint" : "",
+                          )}
+                          onClick={() => addPendingTag(`${s.namespace}:${s.tag}`)}
+                          onMouseEnter={() => setSelectedIndex(index)}
+                        >
+                          <span className="font-mono text-[11px] text-kumo-subtle">
+                            {s.namespace}:{s.tag}
+                          </span>
+                          <span className="text-[11px]">{s.translation}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {(appliedTags.length > 0 || pendingTags.length > 0) && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {appliedTags.map((tag) => (
+                      <FilterChip
+                        key={`applied-${tag}`}
+                        label={tag}
+                        onRemove={() => removeAppliedTag(tag)}
+                      />
+                    ))}
+                    {pendingTags.map((tag) => (
+                      <span
+                        key={`pending-${tag}`}
+                        className="inline-flex items-center gap-1 rounded-full bg-kumo-recessed px-2.5 py-1 text-xs font-medium text-kumo-subtle"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() => removePendingTag(tag)}
+                          aria-label={`移除标签 ${tag}`}
+                          className="transition-opacity hover:opacity-70"
+                        >
+                          <X className="size-3" weight="bold" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <p className="mt-2 text-xs text-kumo-subtle">
+                  支持 ExHentai 标签语法：普通标签（yuri）、命名空间标签（female:sole_female）
+                </p>
+              </Section>
+
+              <Section title="范围">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-kumo-subtle">页数范围</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        placeholder="最小"
+                        aria-label="最小页数"
+                        value={pendingAdvancedOptions.min_pages ?? ""}
+                        onChange={(e) => {
+                          const value = e.target.value ? Number(e.target.value) : undefined;
+                          updateAdvancedFilter("min_pages", value);
+                        }}
+                        min="0"
+                      />
+                      <span className="text-kumo-subtle">-</span>
+                      <Input
+                        type="number"
+                        placeholder="最大"
+                        aria-label="最大页数"
+                        value={pendingAdvancedOptions.max_pages ?? ""}
+                        onChange={(e) => {
+                          const value = e.target.value ? Number(e.target.value) : undefined;
+                          updateAdvancedFilter("max_pages", value);
+                        }}
+                        min="0"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-kumo-subtle">最低评分</label>
+                    <Select
+                      value={pendingAdvancedOptions.min_rating?.toString() ?? ""}
+                      onValueChange={(value) => {
+                        updateAdvancedFilter("min_rating", value ? Number(value) : undefined);
+                      }}
+                      aria-label="最低评分"
+                      items={MIN_RATING_OPTIONS}
+                    />
+                  </div>
+                </div>
+              </Section>
+
+              <Section title="筛选选项">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={pendingAdvancedOptions.has_torrent ?? false}
+                      onCheckedChange={(checked) => updateAdvancedFilter("has_torrent", checked)}
+                    />
+                    有种子
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={pendingAdvancedOptions.include_expunged ?? false}
+                      onCheckedChange={(checked) => updateAdvancedFilter("include_expunged", checked)}
+                    />
+                    包含已删除的 Gallery
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={pendingAdvancedOptions.search_tags ?? false}
+                      onCheckedChange={(checked) => updateAdvancedFilter("search_tags", checked)}
+                    />
+                    搜索标签
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={pendingAdvancedOptions.search_name ?? false}
+                      onCheckedChange={(checked) => updateAdvancedFilter("search_name", checked)}
+                    />
+                    搜索标题
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={pendingAdvancedOptions.search_description ?? false}
+                      onCheckedChange={(checked) => updateAdvancedFilter("search_description", checked)}
+                    />
+                    搜索描述
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={pendingAdvancedOptions.include_low_power_tags ?? false}
+                      onCheckedChange={(checked) => updateAdvancedFilter("include_low_power_tags", checked)}
+                    />
+                    包含低权重标签
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={pendingAdvancedOptions.include_downvoted_tags ?? false}
+                      onCheckedChange={(checked) => updateAdvancedFilter("include_downvoted_tags", checked)}
+                    />
+                    包含被降权的标签
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={pendingAdvancedOptions.disable_language_filter ?? false}
+                      onCheckedChange={(checked) => updateAdvancedFilter("disable_language_filter", checked)}
+                    />
+                    禁用语言过滤
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={pendingAdvancedOptions.disable_uploader_filter ?? false}
+                      onCheckedChange={(checked) => updateAdvancedFilter("disable_uploader_filter", checked)}
+                    />
+                    禁用上传者过滤
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={pendingAdvancedOptions.disable_tag_filter ?? false}
+                      onCheckedChange={(checked) => updateAdvancedFilter("disable_tag_filter", checked)}
+                    />
+                    禁用标签过滤
+                  </label>
+                </div>
+              </Section>
+
+              <div className="flex justify-end">
+                <Button
+                  variant="secondary"
+                  onClick={resetAdvancedFilters}
+                  disabled={activeFilterCount === 0}
+                >
+                  重置筛选器
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Active filter chips */}
+          {activeChips.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-kumo-subtle">已选筛选：</span>
+              {activeChips.map((chip) => (
+                <FilterChip
+                  key={chip.key}
+                  label={chip.label}
+                  onRemove={chip.onRemove}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Results */}
+          {isLoading && <GalleryGridSkeleton />}
+
+          {error && (
+            <ErrorState
+              message={error.message || "搜索失败"}
+              onRetry={() => refetch()}
+            />
+          )}
+
+          {!isLoading && !error && data && galleries.length === 0 && (
+            <EmptyState message="没有找到相关 Gallery，请修改搜索条件" />
+          )}
+
+          {!isLoading && !error && galleries.length > 0 && (
+            <div>
+              <p className="mb-3 text-sm text-kumo-subtle">共找到 {total} 个结果</p>
+              <GalleryGrid galleries={galleries} />
+              <InfiniteScrollTrigger
+                hasNextPage={!!hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                isFetchNextPageError={isFetchNextPageError}
+                fetchNextPage={() => fetchNextPage()}
+              />
+            </div>
+          )}
         </div>
-      )}
+      </ListingLayout>
     </div>
   );
 }

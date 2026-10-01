@@ -4,9 +4,10 @@ import { useWatched } from "../hooks/useGalleryList";
 import { GalleryGrid } from "../components/gallery/GalleryGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";
-import { JumpSeekBar } from "../components/common/JumpSeekBar";
+import { JumpSeekPanel } from "../components/common/JumpSeekPanel";
 import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
+import { ListingLayout } from "../components/layout/ListingLayout";
 import { PageHeader } from "../components/ui";
 import type { ListingNavOptions } from "../types/gallery";
 
@@ -31,33 +32,40 @@ export function SubscriptionsPage() {
         title="订阅"
         icon={<BookmarkSimple className="size-5" weight="fill" />}
       />
-      <JumpSeekBar nav={data?.pages[0]?.nav} value={nav} onChange={setNav} />
-      {isLoading ? (
-        <div className="mt-4">
-          <GalleryGridSkeleton />
-        </div>
-      ) : error ? (
-        <ErrorState
-          message={error.message || "无法加载订阅内容"}
-          onRetry={() => refetch()}
-        />
-      ) : galleries.length === 0 ? (
-        <EmptyState
-          message="暂无订阅内容"
-          actionLabel="浏览首页"
-          actionTo="/"
-        />
-      ) : (
-        <>
-          <GalleryGrid galleries={galleries} />
-          <InfiniteScrollTrigger
-            hasNextPage={!!hasNextPage}
-            isFetchingNextPage={isFetchingNextPage}
-            isFetchNextPageError={isFetchNextPageError}
-            fetchNextPage={() => fetchNextPage()}
+      <ListingLayout
+        sidebar={
+          <JumpSeekPanel
+            nav={data?.pages[0]?.nav}
+            value={nav}
+            onChange={setNav}
           />
-        </>
-      )}
+        }
+      >
+        {isLoading ? (
+          <GalleryGridSkeleton />
+        ) : error ? (
+          <ErrorState
+            message={error.message || "无法加载订阅内容"}
+            onRetry={() => refetch()}
+          />
+        ) : galleries.length === 0 ? (
+          <EmptyState
+            message="暂无订阅内容"
+            actionLabel="浏览首页"
+            actionTo="/"
+          />
+        ) : (
+          <>
+            <GalleryGrid galleries={galleries} />
+            <InfiniteScrollTrigger
+              hasNextPage={!!hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+              isFetchNextPageError={isFetchNextPageError}
+              fetchNextPage={() => fetchNextPage()}
+            />
+          </>
+        )}
+      </ListingLayout>
     </div>
   );
 }
