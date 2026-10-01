@@ -21,9 +21,14 @@ import { useGallery, useGalleryPages, useReadingProgress } from "../hooks/useRea
 import { useReadingProgressSync } from "../hooks/useReadingProgressSync";
 import { useTheme } from "../hooks/useTheme";
 import { clampPageIndex, galleryPagesToManga } from "../lib/reader";
+import { observeLazyThumbnails } from "../lib/lazyThumbnails";
 import { ErrorState } from "../components/common/ErrorState";
 
 type LayoutMode = ViewerSettings["layoutMode"];
+
+// Max concurrent page-thumbnail loads; keeps large galleries from firing
+// hundreds of requests at once.
+const THUMBNAIL_CONCURRENCY = 6;
 
 export function ReaderPage() {
   const { id: idParam, token } = useParams<{ id: string; token: string }>();
@@ -133,6 +138,14 @@ export function ReaderPage() {
     galleryQuery.isLoading || pagesQuery.isLoading || progressQuery.isLoading;
   const error =
     galleryQuery.error ?? pagesQuery.error ?? progressQuery.error;
+
+  // Throttle comimi's page-list / seek-preview thumbnails: load them lazily
+  // through a bounded queue instead of requesting every page at once.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    return observeLazyThumbnails(el, { concurrency: THUMBNAIL_CONCURRENCY });
+  }, [manga]);
 
   useEffect(() => {
     if (gallery?.title) {
