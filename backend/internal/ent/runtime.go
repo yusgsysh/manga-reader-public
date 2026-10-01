@@ -86,7 +86,7 @@ func init() {
 	// gallerycache.DefaultExpunged holds the default value on creation for the expunged field.
 	gallerycache.DefaultExpunged = gallerycacheDescExpunged.Default.(bool)
 	// gallerycacheDescUpdatedAt is the schema descriptor for updated_at field.
-	gallerycacheDescUpdatedAt := gallerycacheFields[21].Descriptor()
+	gallerycacheDescUpdatedAt := gallerycacheFields[22].Descriptor()
 	// gallerycache.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	gallerycache.DefaultUpdatedAt = gallerycacheDescUpdatedAt.Default.(func() time.Time)
 	// gallerycache.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

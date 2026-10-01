@@ -53,6 +53,8 @@ const (
 	FieldPages = "pages"
 	// FieldMetaFetchedAt holds the string denoting the meta_fetched_at field in the database.
 	FieldMetaFetchedAt = "meta_fetched_at"
+	// FieldDetailsFetchedAt holds the string denoting the details_fetched_at field in the database.
+	FieldDetailsFetchedAt = "details_fetched_at"
 	// FieldPagesFetchedAt holds the string denoting the pages_fetched_at field in the database.
 	FieldPagesFetchedAt = "pages_fetched_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -84,6 +86,7 @@ var Columns = []string{
 	FieldTags,
 	FieldPages,
 	FieldMetaFetchedAt,
+	FieldDetailsFetchedAt,
 	FieldPagesFetchedAt,
 	FieldUpdatedAt,
 }
@@ -229,6 +232,11 @@ func ByExpunged(opts ...sql.OrderTermOption) OrderOption {
 // ByMetaFetchedAt orders the results by the meta_fetched_at field.
 func ByMetaFetchedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldMetaFetchedAt, opts...).ToFunc()
+}
+
+// ByDetailsFetchedAt orders the results by the details_fetched_at field.
+func ByDetailsFetchedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDetailsFetchedAt, opts...).ToFunc()
 }
 
 // ByPagesFetchedAt orders the results by the pages_fetched_at field.

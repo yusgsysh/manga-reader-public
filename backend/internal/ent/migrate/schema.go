@@ -53,6 +53,7 @@ var (
 		{Name: "tags", Type: field.TypeJSON, Nullable: true},
 		{Name: "pages", Type: field.TypeJSON, Nullable: true},
 		{Name: "meta_fetched_at", Type: field.TypeTime, Nullable: true},
+		{Name: "details_fetched_at", Type: field.TypeTime, Nullable: true},
 		{Name: "pages_fetched_at", Type: field.TypeTime, Nullable: true},
 		{Name: "updated_at", Type: field.TypeTime},
 	}

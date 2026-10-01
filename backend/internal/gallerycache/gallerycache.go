@@ -70,8 +70,20 @@ func GetMany(ctx context.Context, client *ent.Client, refs []Ref) (map[Ref]*ent.
 // favorited / posted-relative fields that details provides), so a later
 // metadata write must not blank out richer detail fields. The cache is the
 // single source of truth for bookshelf and history metadata, so it tracks the
-// latest upstream response rather than freezing the first one seen.
+// latest upstream response rather than freezing the first one seen. The
+// fetched-at timestamp is always refreshed, even when no field changed, so the
+// online endpoints can treat a recent row as fresh.
 func UpsertMeta(ctx context.Context, client *ent.Client, galleryID int64, token string, snap model.GalleryCacheSnapshot) error {
+	return upsertMeta(ctx, client, galleryID, token, snap, false)
+}
+
+// UpsertDetails is UpsertMeta for a details scrape: it additionally stamps
+// details_fetched_at so the details endpoint can serve the row within its TTL.
+func UpsertDetails(ctx context.Context, client *ent.Client, galleryID int64, token string, snap model.GalleryCacheSnapshot) error {
+	return upsertMeta(ctx, client, galleryID, token, snap, true)
+}
+
+func upsertMeta(ctx context.Context, client *ent.Client, galleryID int64, token string, snap model.GalleryCacheSnapshot, details bool) error {
 	existing, found, err := Get(ctx, client, galleryID, token)
 	if err != nil {
 		return err
@@ -83,6 +95,9 @@ func UpsertMeta(ctx context.Context, client *ent.Client, galleryID int64, token 
 			SetGalleryID(galleryID).
 			SetToken(token).
 			SetMetaFetchedAt(now)
+		if details {
+			create.SetDetailsFetchedAt(now)
+		}
 		if snap.Title != "" {
 			create.SetTitle(snap.Title)
 		}
@@ -135,77 +150,61 @@ func UpsertMeta(ctx context.Context, client *ent.Client, galleryID int64, token 
 	}
 
 	update := client.GalleryCache.UpdateOneID(existing.ID)
-	changed := false
 
 	if snap.Title != "" {
 		update.SetTitle(snap.Title)
-		changed = true
 	}
 	if snap.TitleJPN != "" {
 		update.SetTitleJpn(snap.TitleJPN)
-		changed = true
 	}
 	if snap.Category != "" {
 		update.SetCategory(snap.Category)
-		changed = true
 	}
 	if snap.Thumbnail != "" {
 		update.SetThumbnail(snap.Thumbnail)
-		changed = true
 	}
 	if snap.PageCount != 0 {
 		update.SetPageCount(snap.PageCount)
-		changed = true
 	}
 	if snap.Rating != 0 {
 		update.SetRating(snap.Rating)
-		changed = true
 	}
 	if snap.RatingCount != 0 {
 		update.SetRatingCount(snap.RatingCount)
-		changed = true
 	}
 	if snap.Uploader != "" {
 		update.SetUploader(snap.Uploader)
-		changed = true
 	}
 	if snap.Posted != "" {
 		update.SetPosted(snap.Posted)
-		changed = true
 	}
 	if snap.PostedAt != nil {
 		update.SetPostedAt(*snap.PostedAt)
-		changed = true
 	}
 	if snap.Language != "" {
 		update.SetLanguage(snap.Language)
-		changed = true
 	}
 	if snap.Translated {
 		update.SetTranslated(true)
-		changed = true
 	}
 	if snap.FileSize != "" {
 		update.SetFileSize(snap.FileSize)
-		changed = true
 	}
 	if snap.Favorited != 0 {
 		update.SetFavorited(snap.Favorited)
-		changed = true
 	}
 	if snap.Expunged {
 		update.SetExpunged(true)
-		changed = true
 	}
 	if len(snap.Tags) > 0 {
 		update.SetTags(snap.Tags)
-		changed = true
 	}
 
-	if !changed {
-		return nil
+	update.SetMetaFetchedAt(now)
+	if details {
+		update.SetDetailsFetchedAt(now)
 	}
-	return update.SetMetaFetchedAt(now).Exec(ctx)
+	return update.Exec(ctx)
 }
 
 func countPageThumbnails(pages []model.CachedPage) int {
@@ -224,7 +223,8 @@ func countPageThumbnails(pages []model.CachedPage) int {
 // added later, so rows cached before it existed (and locked in by the original
 // first-write-wins rule) are refreshed here as soon as a scrape supplies the
 // richer data. A list with equal or fewer thumbnails never overwrites, so
-// existing data is not downgraded.
+// existing data is not downgraded. pages_fetched_at is always refreshed so the
+// online endpoint can treat a recently verified list as fresh.
 func UpsertPages(ctx context.Context, client *ent.Client, galleryID int64, token string, pages []model.CachedPage) error {
 	existing, found, err := Get(ctx, client, galleryID, token)
 	if err != nil {
@@ -243,7 +243,10 @@ func UpsertPages(ctx context.Context, client *ent.Client, galleryID int64, token
 
 	if len(existing.Pages) > 0 &&
 		countPageThumbnails(pages) <= countPageThumbnails(existing.Pages) {
-		return nil
+		// Keep the stored list but mark this scrape as freshly verified.
+		return client.GalleryCache.UpdateOneID(existing.ID).
+			SetPagesFetchedAt(now).
+			Exec(ctx)
 	}
 
 	return client.GalleryCache.UpdateOneID(existing.ID).

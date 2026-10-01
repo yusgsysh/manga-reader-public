@@ -59,6 +59,8 @@ type GalleryCache struct {
 	Pages []model.CachedPage `json:"pages,omitempty"`
 	// MetaFetchedAt holds the value of the "meta_fetched_at" field.
 	MetaFetchedAt *time.Time `json:"meta_fetched_at,omitempty"`
+	// DetailsFetchedAt holds the value of the "details_fetched_at" field.
+	DetailsFetchedAt *time.Time `json:"details_fetched_at,omitempty"`
 	// PagesFetchedAt holds the value of the "pages_fetched_at" field.
 	PagesFetchedAt *time.Time `json:"pages_fetched_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -81,7 +83,7 @@ func (*GalleryCache) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case gallerycache.FieldToken, gallerycache.FieldTitle, gallerycache.FieldTitleJpn, gallerycache.FieldCategory, gallerycache.FieldThumbnail, gallerycache.FieldUploader, gallerycache.FieldPosted, gallerycache.FieldLanguage, gallerycache.FieldFileSize:
 			values[i] = new(sql.NullString)
-		case gallerycache.FieldPostedAt, gallerycache.FieldMetaFetchedAt, gallerycache.FieldPagesFetchedAt, gallerycache.FieldUpdatedAt:
+		case gallerycache.FieldPostedAt, gallerycache.FieldMetaFetchedAt, gallerycache.FieldDetailsFetchedAt, gallerycache.FieldPagesFetchedAt, gallerycache.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -230,6 +232,13 @@ func (_m *GalleryCache) assignValues(columns []string, values []any) error {
 				_m.MetaFetchedAt = new(time.Time)
 				*_m.MetaFetchedAt = value.Time
 			}
+		case gallerycache.FieldDetailsFetchedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field details_fetched_at", values[i])
+			} else if value.Valid {
+				_m.DetailsFetchedAt = new(time.Time)
+				*_m.DetailsFetchedAt = value.Time
+			}
 		case gallerycache.FieldPagesFetchedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field pages_fetched_at", values[i])
@@ -340,6 +349,11 @@ func (_m *GalleryCache) String() string {
 	builder.WriteString(", ")
 	if v := _m.MetaFetchedAt; v != nil {
 		builder.WriteString("meta_fetched_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.DetailsFetchedAt; v != nil {
+		builder.WriteString("details_fetched_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")

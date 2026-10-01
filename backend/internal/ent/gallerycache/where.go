@@ -144,6 +144,11 @@ func MetaFetchedAt(v time.Time) predicate.GalleryCache {
 	return predicate.GalleryCache(sql.FieldEQ(FieldMetaFetchedAt, v))
 }
 
+// DetailsFetchedAt applies equality check predicate on the "details_fetched_at" field. It's identical to DetailsFetchedAtEQ.
+func DetailsFetchedAt(v time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldEQ(FieldDetailsFetchedAt, v))
+}
+
 // PagesFetchedAt applies equality check predicate on the "pages_fetched_at" field. It's identical to PagesFetchedAtEQ.
 func PagesFetchedAt(v time.Time) predicate.GalleryCache {
 	return predicate.GalleryCache(sql.FieldEQ(FieldPagesFetchedAt, v))
@@ -1077,6 +1082,56 @@ func MetaFetchedAtIsNil() predicate.GalleryCache {
 // MetaFetchedAtNotNil applies the NotNil predicate on the "meta_fetched_at" field.
 func MetaFetchedAtNotNil() predicate.GalleryCache {
 	return predicate.GalleryCache(sql.FieldNotNull(FieldMetaFetchedAt))
+}
+
+// DetailsFetchedAtEQ applies the EQ predicate on the "details_fetched_at" field.
+func DetailsFetchedAtEQ(v time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldEQ(FieldDetailsFetchedAt, v))
+}
+
+// DetailsFetchedAtNEQ applies the NEQ predicate on the "details_fetched_at" field.
+func DetailsFetchedAtNEQ(v time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldNEQ(FieldDetailsFetchedAt, v))
+}
+
+// DetailsFetchedAtIn applies the In predicate on the "details_fetched_at" field.
+func DetailsFetchedAtIn(vs ...time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldIn(FieldDetailsFetchedAt, vs...))
+}
+
+// DetailsFetchedAtNotIn applies the NotIn predicate on the "details_fetched_at" field.
+func DetailsFetchedAtNotIn(vs ...time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldNotIn(FieldDetailsFetchedAt, vs...))
+}
+
+// DetailsFetchedAtGT applies the GT predicate on the "details_fetched_at" field.
+func DetailsFetchedAtGT(v time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldGT(FieldDetailsFetchedAt, v))
+}
+
+// DetailsFetchedAtGTE applies the GTE predicate on the "details_fetched_at" field.
+func DetailsFetchedAtGTE(v time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldGTE(FieldDetailsFetchedAt, v))
+}
+
+// DetailsFetchedAtLT applies the LT predicate on the "details_fetched_at" field.
+func DetailsFetchedAtLT(v time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldLT(FieldDetailsFetchedAt, v))
+}
+
+// DetailsFetchedAtLTE applies the LTE predicate on the "details_fetched_at" field.
+func DetailsFetchedAtLTE(v time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldLTE(FieldDetailsFetchedAt, v))
+}
+
+// DetailsFetchedAtIsNil applies the IsNil predicate on the "details_fetched_at" field.
+func DetailsFetchedAtIsNil() predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldIsNull(FieldDetailsFetchedAt))
+}
+
+// DetailsFetchedAtNotNil applies the NotNil predicate on the "details_fetched_at" field.
+func DetailsFetchedAtNotNil() predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldNotNull(FieldDetailsFetchedAt))
 }
 
 // PagesFetchedAtEQ applies the EQ predicate on the "pages_fetched_at" field.

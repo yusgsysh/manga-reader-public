@@ -365,6 +365,26 @@ func (_u *GalleryCacheUpdate) ClearMetaFetchedAt() *GalleryCacheUpdate {
 	return _u
 }
 
+// SetDetailsFetchedAt sets the "details_fetched_at" field.
+func (_u *GalleryCacheUpdate) SetDetailsFetchedAt(v time.Time) *GalleryCacheUpdate {
+	_u.mutation.SetDetailsFetchedAt(v)
+	return _u
+}
+
+// SetNillableDetailsFetchedAt sets the "details_fetched_at" field if the given value is not nil.
+func (_u *GalleryCacheUpdate) SetNillableDetailsFetchedAt(v *time.Time) *GalleryCacheUpdate {
+	if v != nil {
+		_u.SetDetailsFetchedAt(*v)
+	}
+	return _u
+}
+
+// ClearDetailsFetchedAt clears the value of the "details_fetched_at" field.
+func (_u *GalleryCacheUpdate) ClearDetailsFetchedAt() *GalleryCacheUpdate {
+	_u.mutation.ClearDetailsFetchedAt()
+	return _u
+}
+
 // SetPagesFetchedAt sets the "pages_fetched_at" field.
 func (_u *GalleryCacheUpdate) SetPagesFetchedAt(v time.Time) *GalleryCacheUpdate {
 	_u.mutation.SetPagesFetchedAt(v)
@@ -537,6 +557,12 @@ func (_u *GalleryCacheUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if _u.mutation.MetaFetchedAtCleared() {
 		_spec.ClearField(gallerycache.FieldMetaFetchedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.DetailsFetchedAt(); ok {
+		_spec.SetField(gallerycache.FieldDetailsFetchedAt, field.TypeTime, value)
+	}
+	if _u.mutation.DetailsFetchedAtCleared() {
+		_spec.ClearField(gallerycache.FieldDetailsFetchedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.PagesFetchedAt(); ok {
 		_spec.SetField(gallerycache.FieldPagesFetchedAt, field.TypeTime, value)
@@ -902,6 +928,26 @@ func (_u *GalleryCacheUpdateOne) ClearMetaFetchedAt() *GalleryCacheUpdateOne {
 	return _u
 }
 
+// SetDetailsFetchedAt sets the "details_fetched_at" field.
+func (_u *GalleryCacheUpdateOne) SetDetailsFetchedAt(v time.Time) *GalleryCacheUpdateOne {
+	_u.mutation.SetDetailsFetchedAt(v)
+	return _u
+}
+
+// SetNillableDetailsFetchedAt sets the "details_fetched_at" field if the given value is not nil.
+func (_u *GalleryCacheUpdateOne) SetNillableDetailsFetchedAt(v *time.Time) *GalleryCacheUpdateOne {
+	if v != nil {
+		_u.SetDetailsFetchedAt(*v)
+	}
+	return _u
+}
+
+// ClearDetailsFetchedAt clears the value of the "details_fetched_at" field.
+func (_u *GalleryCacheUpdateOne) ClearDetailsFetchedAt() *GalleryCacheUpdateOne {
+	_u.mutation.ClearDetailsFetchedAt()
+	return _u
+}
+
 // SetPagesFetchedAt sets the "pages_fetched_at" field.
 func (_u *GalleryCacheUpdateOne) SetPagesFetchedAt(v time.Time) *GalleryCacheUpdateOne {
 	_u.mutation.SetPagesFetchedAt(v)
@@ -1104,6 +1150,12 @@ func (_u *GalleryCacheUpdateOne) sqlSave(ctx context.Context) (_node *GalleryCac
 	}
 	if _u.mutation.MetaFetchedAtCleared() {
 		_spec.ClearField(gallerycache.FieldMetaFetchedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.DetailsFetchedAt(); ok {
+		_spec.SetField(gallerycache.FieldDetailsFetchedAt, field.TypeTime, value)
+	}
+	if _u.mutation.DetailsFetchedAtCleared() {
+		_spec.ClearField(gallerycache.FieldDetailsFetchedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.PagesFetchedAt(); ok {
 		_spec.SetField(gallerycache.FieldPagesFetchedAt, field.TypeTime, value)

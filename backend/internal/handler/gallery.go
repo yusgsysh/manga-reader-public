@@ -30,6 +30,15 @@ const galleryPagesHardCap = 10 * time.Minute
 // by the streaming handler and the bookshelf prefetch.
 var galleryPagesGroup singleflight.Group
 
+// galleryCacheTTL bounds how long the online endpoints may serve a cached
+// metadata / details / pages row before re-fetching upstream. Short enough to
+// stay fresh, long enough that repeated views do not scrape ExHentai.
+const galleryCacheTTL = 30 * time.Minute
+
+func cacheFresh(at *time.Time, ttl time.Duration) bool {
+	return at != nil && time.Since(*at) < ttl
+}
+
 // cacheDB returns the ent client when a database is configured. Some tests
 // construct a Server without a DB; callers must tolerate a nil result.
 func (s *Server) cacheDB() *ent.Client {
@@ -154,6 +163,18 @@ func (s *Server) handleGetGallery(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
+	// Serve recent cache without touching upstream; stale/missing rows fall
+	// through to the live fetch (and a failed fetch still returns 502 so the
+	// frontend falls back to the cache endpoint).
+	if db := s.cacheDB(); db != nil {
+		if row, found, err := gallerycache.Get(ctx, db, id, token); err != nil {
+			slog.Warn("gallery cache read failed", "id", id, "error", err)
+		} else if found && row.Title != "" && cacheFresh(row.MetaFetchedAt, galleryCacheTTL) {
+			c.JSON(http.StatusOK, galleryFromCache(row))
+			return
+		}
+	}
+
 	meta, err := exhentai.PostGalleryMetadata(ctx, s.Client, id, token)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
@@ -178,6 +199,17 @@ func (s *Server) handleGalleryDetails(c *gin.Context) {
 	u := exhentai.GalleryURL(c.Param("id"), token)
 	ctx := c.Request.Context()
 
+	// Serve recent details cache; only rows written by a details scrape count
+	// (details_fetched_at), so metadata-only rows still trigger the scrape.
+	if db := s.cacheDB(); db != nil {
+		if row, found, err := gallerycache.Get(ctx, db, galleryID, token); err != nil {
+			slog.Warn("gallery cache read failed", "id", galleryID, "error", err)
+		} else if found && row.Title != "" && cacheFresh(row.DetailsFetchedAt, galleryCacheTTL) {
+			c.JSON(http.StatusOK, galleryDetailsFromCache(row))
+			return
+		}
+	}
+
 	details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
@@ -190,7 +222,7 @@ func (s *Server) handleGalleryDetails(c *gin.Context) {
 	}
 
 	if db := s.cacheDB(); db != nil {
-		if cacheErr := gallerycache.UpsertMeta(ctx, db, galleryID, token, cacheMetaFromDetails(details)); cacheErr != nil {
+		if cacheErr := gallerycache.UpsertDetails(ctx, db, galleryID, token, cacheMetaFromDetails(details)); cacheErr != nil {
 			slog.Warn("gallery cache details upsert failed", "id", galleryID, "error", cacheErr)
 		}
 	}
@@ -355,6 +387,19 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 	idParam := c.Param("id")
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), galleryPagesHardCap)
 	defer cancel()
+
+	// Serve a recently verified cached list immediately instead of re-scraping
+	// every page. Stale or missing rows fall through to the live stream.
+	if db := s.cacheDB(); db != nil {
+		if row, found, err := gallerycache.Get(ctx, db, galleryID, token); err != nil {
+			slog.Warn("gallery cache read failed", "id", galleryID, "error", err)
+		} else if found && len(row.Pages) > 0 && cacheFresh(row.PagesFetchedAt, galleryCacheTTL) {
+			if replayErr := replayGalleryPages(c, idParam, token, len(row.Pages), row.Pages); replayErr != nil {
+				slog.Warn("gallery pages cache replay failed", "id", galleryID, "error", replayErr)
+			}
+			return
+		}
+	}
 
 	started := false
 	clientGone := false

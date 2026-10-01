@@ -55,7 +55,7 @@ func (s *Server) prefetchGallery(galleryID int64, token string, seed *model.Gall
 		if details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u); err != nil {
 			slog.Debug("gallery prefetch details failed", "id", galleryID, "error", err)
 		} else if db != nil {
-			if err := gallerycache.UpsertMeta(ctx, db, galleryID, token, cacheMetaFromDetails(details)); err != nil {
+			if err := gallerycache.UpsertDetails(ctx, db, galleryID, token, cacheMetaFromDetails(details)); err != nil {
 				slog.Warn("gallery prefetch details upsert failed", "id", galleryID, "error", err)
 			}
 		}

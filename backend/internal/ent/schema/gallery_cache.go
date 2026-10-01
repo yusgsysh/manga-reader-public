@@ -48,6 +48,7 @@ func (GalleryCache) Fields() []ent.Field {
 		field.JSON("tags", []model.Tag{}).Optional(),
 		field.JSON("pages", []model.CachedPage{}).Optional(),
 		field.Time("meta_fetched_at").Optional().Nillable(),
+		field.Time("details_fetched_at").Optional().Nillable(),
 		field.Time("pages_fetched_at").Optional().Nillable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}

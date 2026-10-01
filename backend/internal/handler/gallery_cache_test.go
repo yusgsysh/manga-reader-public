@@ -16,9 +16,25 @@ import (
 
 	"manga-reader/internal/database"
 	"manga-reader/internal/ent"
+	entgallerycache "manga-reader/internal/ent/gallerycache"
 	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/model"
 )
+
+// ageGalleryCache backdates the fetched-at timestamps so the online endpoints
+// treat the cached row as stale and re-fetch from upstream.
+func ageGalleryCache(t *testing.T, client *ent.Client, id int64, token string, age time.Duration) {
+	t.Helper()
+	old := time.Now().UTC().Add(-age)
+	if err := client.GalleryCache.Update().
+		Where(entgallerycache.GalleryID(id), entgallerycache.Token(token)).
+		SetMetaFetchedAt(old).
+		SetDetailsFetchedAt(old).
+		SetPagesFetchedAt(old).
+		Exec(t.Context()); err != nil {
+		t.Fatalf("age gallery cache: %v", err)
+	}
+}
 
 // errorTransport makes every upstream request fail, simulating ExHentai being
 // unreachable.
@@ -108,9 +124,35 @@ func TestGalleryPages_WritesCache(t *testing.T) {
 	}
 }
 
-func TestGalleryPages_UpstreamFailure(t *testing.T) {
+func TestGalleryPages_FreshCacheServedWithoutUpstream(t *testing.T) {
 	client := newTestDB(t)
 	seedGalleryCache(t, client, 12345, "tok12345")
+
+	// errorClient makes any upstream call fail; a fresh cached list must still
+	// be served.
+	server := &Server{
+		Client: errorClient(),
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345/pages", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (fresh cache). body: %s", w.Code, w.Body.String())
+	}
+	stream := parsePagesStream(t, w.Body.Bytes())
+	if !stream.Done || len(stream.Pages) != 2 {
+		t.Fatalf("stream should replay the cached 2 pages: done=%v pages=%d", stream.Done, len(stream.Pages))
+	}
+}
+
+func TestGalleryPages_StaleCacheUpstreamFailure(t *testing.T) {
+	client := newTestDB(t)
+	seedGalleryCache(t, client, 12345, "tok12345")
+	ageGalleryCache(t, client, 12345, "tok12345", 2*time.Hour)
 
 	server := &Server{
 		Client: errorClient(),
@@ -122,8 +164,8 @@ func TestGalleryPages_UpstreamFailure(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// Online endpoint must NOT fall back to cache; the frontend does that via
-	// the gallery-cache endpoint instead.
+	// A stale list is not served; upstream failure returns 502 so the frontend
+	// falls back to the gallery-cache endpoint (and shows the offline badge).
 	if w.Code != http.StatusBadGateway {
 		t.Fatalf("status = %d, want 502", w.Code)
 	}
@@ -434,9 +476,36 @@ func TestGalleryPages_ConcurrentScrapesShareSingleflight(t *testing.T) {
 	}
 }
 
-func TestGetGallery_UpstreamFailure(t *testing.T) {
+func TestGetGallery_FreshCacheServedWithoutUpstream(t *testing.T) {
 	client := newTestDB(t)
 	seedGalleryCache(t, client, 12345, "tok12345")
+
+	server := &Server{
+		Client: errorClient(),
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (fresh cache). body: %s", w.Code, w.Body.String())
+	}
+	var gallery model.Gallery
+	if err := json.Unmarshal(w.Body.Bytes(), &gallery); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if gallery.Title != "Cached Gallery" {
+		t.Errorf("title = %q, want Cached Gallery", gallery.Title)
+	}
+}
+
+func TestGetGallery_StaleCacheUpstreamFailure(t *testing.T) {
+	client := newTestDB(t)
+	seedGalleryCache(t, client, 12345, "tok12345")
+	ageGalleryCache(t, client, 12345, "tok12345", 2*time.Hour)
 
 	server := &Server{
 		Client: errorClient(),

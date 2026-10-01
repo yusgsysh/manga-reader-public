@@ -269,6 +269,20 @@ func (_c *GalleryCacheCreate) SetNillableMetaFetchedAt(v *time.Time) *GalleryCac
 	return _c
 }
 
+// SetDetailsFetchedAt sets the "details_fetched_at" field.
+func (_c *GalleryCacheCreate) SetDetailsFetchedAt(v time.Time) *GalleryCacheCreate {
+	_c.mutation.SetDetailsFetchedAt(v)
+	return _c
+}
+
+// SetNillableDetailsFetchedAt sets the "details_fetched_at" field if the given value is not nil.
+func (_c *GalleryCacheCreate) SetNillableDetailsFetchedAt(v *time.Time) *GalleryCacheCreate {
+	if v != nil {
+		_c.SetDetailsFetchedAt(*v)
+	}
+	return _c
+}
+
 // SetPagesFetchedAt sets the "pages_fetched_at" field.
 func (_c *GalleryCacheCreate) SetPagesFetchedAt(v time.Time) *GalleryCacheCreate {
 	_c.mutation.SetPagesFetchedAt(v)
@@ -552,6 +566,10 @@ func (_c *GalleryCacheCreate) createSpec() (*GalleryCache, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.MetaFetchedAt(); ok {
 		_spec.SetField(gallerycache.FieldMetaFetchedAt, field.TypeTime, value)
 		_node.MetaFetchedAt = &value
+	}
+	if value, ok := _c.mutation.DetailsFetchedAt(); ok {
+		_spec.SetField(gallerycache.FieldDetailsFetchedAt, field.TypeTime, value)
+		_node.DetailsFetchedAt = &value
 	}
 	if value, ok := _c.mutation.PagesFetchedAt(); ok {
 		_spec.SetField(gallerycache.FieldPagesFetchedAt, field.TypeTime, value)
