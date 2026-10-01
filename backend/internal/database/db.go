@@ -4,25 +4,51 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/migrate"
-
-	entsql "entgo.io/ent/dialect/sql"
 )
+
+// Driver identifies a supported database backend.
+type Driver string
+
+const (
+	DriverSQLite   Driver = "sqlite"
+	DriverPostgres Driver = "postgres"
+)
+
+// Options configures the database connection. DSN is a SQLite file path when
+// Driver is sqlite, or a libpq/pgx connection string when Driver is postgres.
+type Options struct {
+	Driver Driver
+	DSN    string
+}
 
 type DB struct {
 	Client *ent.Client
 	Conn   *sql.DB
 }
 
-func NewDB(dataSourceName string) (*DB, error) {
+func NewDB(opts Options) (*DB, error) {
+	switch opts.Driver {
+	case "", DriverSQLite:
+		return newSQLiteDB(opts.DSN)
+	case DriverPostgres:
+		return newPostgresDB(opts.DSN)
+	default:
+		return nil, fmt.Errorf("unsupported database driver %q", opts.Driver)
+	}
+}
+
+func newSQLiteDB(dataSourceName string) (*DB, error) {
 	dir := filepath.Dir(dataSourceName)
 	if dir != "." && dir != "" {
 		if err := os.MkdirAll(dir, 0755); err != nil {
@@ -49,7 +75,20 @@ func NewDB(dataSourceName string) (*DB, error) {
 	// SQLite handles one writer at a time; limit connections to avoid contention.
 	conn.SetMaxOpenConns(1)
 
-	drv := entsql.OpenDB("sqlite3", conn)
+	return initClient(conn, dialect.SQLite)
+}
+
+func newPostgresDB(dsn string) (*DB, error) {
+	conn, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open database: %w", err)
+	}
+	return initClient(conn, dialect.Postgres)
+}
+
+// initClient wires an ent client to an opened *sql.DB and runs migrations.
+func initClient(conn *sql.DB, dialectName string) (*DB, error) {
+	drv := entsql.OpenDB(dialectName, conn)
 	client := ent.NewClient(ent.Driver(drv))
 
 	if err := client.Schema.Create(context.Background(),
@@ -60,14 +99,6 @@ func NewDB(dataSourceName string) (*DB, error) {
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
 
-	// Backfill total for existing prefill_job rows where total=0.
-	// Use raw SQL to avoid loading the full urls JSON.
-	if err := backfillPrefillTotal(context.Background(), conn); err != nil {
-		client.Close()
-		return nil, fmt.Errorf("backfill prefill total: %w", err)
-	}
-
-	slog.Info("database initialized", "path", dataSourceName)
 	return &DB{Client: client, Conn: conn}, nil
 }
 
@@ -97,25 +128,6 @@ func (db *DB) CleanupGalleryCache(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("cleanup gallery cache rows affected: %w", err)
 	}
 	return int(affected), nil
-}
-
-func backfillPrefillTotal(ctx context.Context, conn *sql.DB) error {
-	// First check if the prefill_job table exists and has the total column.
-	var count int
-	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='prefill_job'`).Scan(&count); err != nil {
-		return err
-	}
-	if count == 0 {
-		return nil
-	}
-
-	// Use JSON1 extension to get array length of urls column.
-	_, err := conn.ExecContext(ctx, `
-		UPDATE prefill_job
-		SET total = json_array_length(urls)
-		WHERE total = 0 AND urls IS NOT NULL
-	`)
-	return err
 }
 
 func (db *DB) Close() error {

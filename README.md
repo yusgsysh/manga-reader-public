@@ -2,7 +2,7 @@
 
 单用户、自托管的 ExHentai Web 漫画客户端。
 
-- Backend：Go / Gin / Ent (ORM) / SQLite / MinIO (S3)
+- Backend：Go / Gin / Ent (ORM) / SQLite 或 PostgreSQL / MinIO (S3)
 - Frontend：Bun / React / Vite / TypeScript
 
 ## 功能
@@ -97,7 +97,10 @@ backend/
 | `EHENTAI_COOKIE_IGNEOUS` | 否 | - | 仅 ExHentai 需要 |
 | `EHENTAI_COOKIE_SK` | 否 | - | 可选 |
 | `EHENTAI_PORT` | 否 | `8080` | 后端监听端口 |
+| `MANGA_READER_DB_DRIVER` | 否 | `sqlite` | 数据库类型：`sqlite` 或 `postgres` |
 | `MANGA_READER_DB_PATH` | 否 | `data/manga-reader.db` | SQLite 路径（Docker 内 `/app/data/manga-reader.db`） |
+| `MANGA_READER_DB_DSN` | 否 | - | PostgreSQL 连接串（`postgres` 驱动时必填） |
+| `DATABASE_URL` | 否 | - | 同 `MANGA_READER_DB_DSN`，作为回退 |
 | `MINIO_ENDPOINT` | 否 | - | 配置后启用图片缓存 API |
 | `MINIO_ACCESS_KEY` | 否 | - | MinIO 访问密钥 |
 | `MINIO_SECRET_KEY` | 否 | - | MinIO 密钥 |

@@ -77,7 +77,7 @@ func run() error {
 	logger.Info("starting server",
 		"port", cfg.Port,
 		"environment", cfg.Environment,
-		"db_path", cfg.DBPath,
+		"db_driver", cfg.Database.Driver,
 	)
 
 	client, err := exhentai.CreateHTTPClient(&exhentai.CookieConfig{
@@ -91,7 +91,13 @@ func run() error {
 		return err
 	}
 
-	db, err := database.NewDB(cfg.DBPath)
+	dbDriver := database.DriverSQLite
+	dbDSN := cfg.Database.Path
+	if cfg.Database.IsPostgres() {
+		dbDriver = database.DriverPostgres
+		dbDSN = cfg.Database.DSN
+	}
+	db, err := database.NewDB(database.Options{Driver: dbDriver, DSN: dbDSN})
 	if err != nil {
 		logger.Error("database init failed", "error", err)
 		return err

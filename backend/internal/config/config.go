@@ -4,15 +4,30 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
 	Port        string
-	DBPath      string
+	Database    DatabaseConfig
 	Cookie      CookieConfig
 	MinIO       MinIOConfig
 	LogLevel    string
 	Environment string
+}
+
+// DatabaseConfig selects the database backend. Driver defaults to "sqlite";
+// "postgres" (alias "postgresql"/"pg") switches to PostgreSQL.
+type DatabaseConfig struct {
+	Driver string
+	// Path is the SQLite database file path (used when Driver is sqlite).
+	Path string
+	// DSN is the PostgreSQL connection string (used when Driver is postgres).
+	DSN string
+}
+
+func (c DatabaseConfig) IsPostgres() bool {
+	return c.Driver == "postgres" || c.Driver == "postgresql" || c.Driver == "pg"
 }
 
 type CookieConfig struct {
@@ -40,9 +55,18 @@ func (c MinIOConfig) IsValid() bool {
 }
 
 func Load() (*Config, error) {
+	dbDSN := getEnv("MANGA_READER_DB_DSN", "")
+	if dbDSN == "" {
+		dbDSN = getEnv("DATABASE_URL", "")
+	}
+
 	cfg := &Config{
-		Port:        getEnv("EHENTAI_PORT", ":8080"),
-		DBPath:      getEnv("MANGA_READER_DB_PATH", "data/manga-reader.db"),
+		Port: getEnv("EHENTAI_PORT", ":8080"),
+		Database: DatabaseConfig{
+			Driver: strings.ToLower(strings.TrimSpace(getEnv("MANGA_READER_DB_DRIVER", "sqlite"))),
+			Path:   getEnv("MANGA_READER_DB_PATH", "data/manga-reader.db"),
+			DSN:    dbDSN,
+		},
 		LogLevel:    getEnv("LOG_LEVEL", "warn"),
 		Environment: getEnv("ENVIRONMENT", "production"),
 		Cookie: CookieConfig{
@@ -67,6 +91,16 @@ func Load() (*Config, error) {
 
 	if !cfg.Cookie.IsValid() {
 		return nil, fmt.Errorf("missing required cookies: set EHENTAI_COOKIE or EHENTAI_COOKIE_IPB_MEMBER_ID + EHENTAI_COOKIE_IPB_PASS_HASH")
+	}
+
+	switch {
+	case cfg.Database.IsPostgres():
+		if cfg.Database.DSN == "" {
+			return nil, fmt.Errorf("missing postgres DSN: set MANGA_READER_DB_DSN or DATABASE_URL")
+		}
+	case cfg.Database.Driver == "" || cfg.Database.Driver == "sqlite":
+	default:
+		return nil, fmt.Errorf("unsupported MANGA_READER_DB_DRIVER %q: use sqlite or postgres", cfg.Database.Driver)
 	}
 
 	return cfg, nil
