@@ -46,6 +46,7 @@ interface GalleryCardProps {
 
 export function GalleryCard({ gallery }: GalleryCardProps) {
   const [showTags, setShowTags] = useState(false);
+  const [loadedImage, setLoadedImage] = useState<string | null>(null);
   const [popoverPos, setPopoverPos] = useState<{
     left: number;
     bottom: number;
@@ -57,6 +58,7 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
   const hasTags = (gallery.tags?.length ?? 0) > 0;
   const galleryHref = `/gallery/${gallery.id}/${gallery.token}`;
   const image = gallery.image ? thumbnailUrl(gallery.image) : "";
+  const imageLoaded = image !== "" && loadedImage === image;
 
   const openTags = () => {
     const el = tagsRef.current;
@@ -133,7 +135,9 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
                 loading="lazy"
                 decoding="async"
                 className="app-image h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                onLoad={() => setLoadedImage(image)}
                 onError={(e) => {
+                  setLoadedImage(image);
                   e.currentTarget.style.display = "none";
                   e.currentTarget.nextElementSibling?.classList.remove("hidden");
                 }}
@@ -146,6 +150,13 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
             >
               图片不可用
             </div>
+
+            {/* image loading placeholder */}
+            {image && !imageLoaded && (
+              <div className="absolute inset-0 overflow-hidden">
+                <div className="skeleton-shimmer h-full w-full bg-kumo-recessed" />
+              </div>
+            )}
 
             {/* progress bar */}
             {gallery.reading && (
