@@ -459,6 +459,7 @@ export function GalleryDetailPage() {
             id={id}
             token={token ?? ""}
             pages={pagesQuery.data.pages}
+            total={pagesQuery.data.total ?? gallery.page_count}
           />
         ) : (
           <p className="text-sm text-kumo-subtle">

@@ -10,6 +10,7 @@ interface PageThumbnailGridProps {
   id: number;
   token: string;
   pages: GalleryPage[];
+  total: number;
 }
 
 function PageThumbnail({
@@ -57,10 +58,18 @@ function PageThumbnail({
   );
 }
 
-export function PageThumbnailGrid({ id, token, pages }: PageThumbnailGridProps) {
+export function PageThumbnailGrid({
+  id,
+  token,
+  pages,
+  total,
+}: PageThumbnailGridProps) {
   const [gridPage, setGridPage] = useState(0);
 
-  const totalPages = Math.max(1, Math.ceil(pages.length / PER_PAGE));
+  // Derive the page count from the gallery total, not from how many pages have
+  // loaded, so pagination is fixed from the start and does not grow as the
+  // list streams in.
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
   const current = Math.min(gridPage, totalPages - 1);
   const slice = pages.slice(current * PER_PAGE, current * PER_PAGE + PER_PAGE);
 
