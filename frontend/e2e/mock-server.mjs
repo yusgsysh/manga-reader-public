@@ -41,6 +41,9 @@ const json = (body, status = 200) =>
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const isDown = (id) => id === "1003";
 
+// Runtime state for the mocked /api/dev/upstream-down dev-tools endpoint.
+let devDown = false;
+
 function page(i) {
   return { page_url: `https://exhentai.org/s/tok/${i + 1}-${i + 1}`, index: i };
 }
@@ -141,6 +144,15 @@ const server = Bun.serve({
     }
     if (path === "/healthz") {
       return new Response("ok", { headers: CORS });
+    }
+
+    // Mocked dev-tools switch (the settings page toggles this).
+    if (path === "/api/dev/upstream-down") {
+      if (req.method === "PUT") {
+        const body = await req.json().catch(() => ({}));
+        devDown = !!body.down;
+      }
+      return json({ down: devDown });
     }
 
     // ---- Cached (offline fallback) endpoints -----------------------------

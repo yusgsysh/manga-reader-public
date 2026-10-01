@@ -114,6 +114,38 @@ try {
     await page.close();
   }
 
+  console.log("settings: dev tools section");
+  {
+    // Enabled backend: the switch is shown.
+    const page = await browser.newPage();
+    await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("text=调试工具", { timeout: 30000 });
+    await page.waitForSelector("text=模拟 ExHentai 不可用", { timeout: 30000 });
+    const hint = await page.getByText("调试接口未开启").count();
+    check("shows the toggle when dev tools are enabled", hint === 0, `${hint} hint`);
+
+    const toggled = page.waitForRequest(
+      (req) => req.url().endsWith("/api/dev/upstream-down") && req.method() === "PUT",
+      { timeout: 10000 },
+    );
+    await page.getByRole("switch").click();
+    const body = (await toggled).postDataJSON();
+    check("toggle requests the outage switch", body?.down === true, JSON.stringify(body));
+    await page.close();
+  }
+  {
+    // Disabled backend: the endpoint 404s, so the section shows a hint.
+    const page = await browser.newPage();
+    await page.route("**/api/dev/upstream-down", (route) =>
+      route.fulfill({ status: 404, contentType: "application/json", body: '{"error":"not found"}' }),
+    );
+    await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("text=调试接口未开启", { timeout: 30000 });
+    const toggle = await page.getByText("模拟 ExHentai 不可用").count();
+    check("shows a not-enabled hint when dev tools are off", toggle === 0, `${toggle} toggle`);
+    await page.close();
+  }
+
   await browser.close();
 } catch (error) {
   failures++;

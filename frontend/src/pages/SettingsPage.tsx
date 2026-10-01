@@ -6,7 +6,15 @@ import {
   Moon,
   Sun,
 } from "@phosphor-icons/react";
-import { Button, useKumoToastManager, cn } from "@cloudflare/kumo";
+import {
+  Button,
+  Switch,
+  useKumoToastManager,
+  cn,
+} from "@cloudflare/kumo";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchUpstreamDown, setUpstreamDown } from "../api/dev";
+import { ApiRequestError } from "../api/client";
 import { useTheme } from "../hooks/useTheme";
 import { useTagTranslation } from "../hooks/useTagTranslation";
 import { formatDateTime } from "../lib/time";
@@ -112,6 +120,75 @@ function TagDatabaseSection() {
   );
 }
 
+function DevToolsSection() {
+  const toast = useKumoToastManager();
+  const queryClient = useQueryClient();
+
+  const stateQuery = useQuery({
+    queryKey: ["dev-upstream-down"],
+    queryFn: fetchUpstreamDown,
+    retry: false,
+    staleTime: 0,
+  });
+
+  const mutation = useMutation({
+    mutationFn: (down: boolean) => setUpstreamDown(down),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["dev-upstream-down"], data);
+      toast.add({
+        title: data.down ? "已模拟 ExHentai 不可用" : "已恢复正常",
+        variant: data.down ? "info" : "success",
+      });
+    },
+    onError: (error) => {
+      toast.add({
+        title: "切换失败",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "error",
+      });
+    },
+  });
+
+  const notEnabled =
+    stateQuery.error instanceof ApiRequestError &&
+    stateQuery.error.status === 404;
+
+  return (
+    <Section title="调试工具">
+      <div className="card-surface p-4 text-sm">
+        {notEnabled ? (
+          <p className="text-kumo-subtle">
+            调试接口未开启。设置{" "}
+            <code className="rounded bg-kumo-recessed px-1 py-0.5 font-mono text-xs">
+              MANGA_READER_DEV_TOOLS=true
+            </code>{" "}
+            并重启后端后可用。
+          </p>
+        ) : stateQuery.isLoading ? (
+          <div className="flex items-center gap-2 text-kumo-subtle">
+            <CircleNotch className="size-4 animate-spin" />
+            正在读取…
+          </div>
+        ) : stateQuery.isError ? (
+          <p className="text-kumo-subtle">无法读取调试接口状态。</p>
+        ) : (
+          <div className="space-y-3">
+            <Switch
+              label="模拟 ExHentai 不可用"
+              checked={stateQuery.data?.down ?? false}
+              disabled={mutation.isPending}
+              onCheckedChange={(checked) => mutation.mutate(checked)}
+            />
+            <p className="text-xs text-kumo-subtle">
+              仅用于验证离线回退：开启后所有在线端点返回 502，缓存与本地数据端点不受影响。
+            </p>
+          </div>
+        )}
+      </div>
+    </Section>
+  );
+}
+
 export function SettingsPage() {
   return (
     <div className="max-w-3xl">
@@ -122,6 +199,7 @@ export function SettingsPage() {
       <div className="space-y-8">
         <AppearanceSection />
         <TagDatabaseSection />
+        <DevToolsSection />
       </div>
     </div>
   );
