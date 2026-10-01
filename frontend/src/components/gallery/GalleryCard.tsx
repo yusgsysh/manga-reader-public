@@ -2,6 +2,7 @@ import type { GalleryCategory } from "../../types/gallery";
 import { Link } from "react-router";
 import { thumbnailUrl } from "../../lib/image";
 import { parseTagString } from "../../lib/tag";
+import { formatPosted } from "../../lib/time";
 import { useTagTranslation } from "../../hooks/useTagTranslation";
 import { Star, Tag as TagIcon } from "@phosphor-icons/react";
 import { createPortal } from "react-dom";
@@ -228,7 +229,9 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
               <span className="tnum">{gallery.pages}p</span>
             )}
             {gallery.posted && (
-              <span className="text-kumo-inactive">{gallery.posted}</span>
+              <span className="text-kumo-inactive">
+                {formatPosted(gallery.posted)}
+              </span>
             )}
           </div>
         </div>

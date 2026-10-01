@@ -21,6 +21,7 @@ import { useStartPrefillJob } from "../hooks/usePrefillJobs";
 import { ErrorState } from "../components/common/ErrorState";
 import { TagList } from "../components/tag";
 import { thumbnailUrl } from "../lib/image";
+import { formatPosted } from "../lib/time";
 import { Chip, Section } from "../components/ui";
 
 function DetailSkeleton() {
@@ -134,7 +135,8 @@ export function GalleryDetailPage() {
 
   const meta: { label: string; value: React.ReactNode }[] = [];
   if (gallery.uploader) meta.push({ label: "上传者", value: gallery.uploader });
-  if (gallery.posted) meta.push({ label: "上传时间", value: gallery.posted });
+  if (gallery.posted)
+    meta.push({ label: "上传时间", value: formatPosted(gallery.posted) });
   if (gallery.language)
     meta.push({
       label: "语言",

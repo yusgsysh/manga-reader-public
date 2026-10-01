@@ -11,6 +11,7 @@ import {
 import { Button, useKumoToastManager, cn } from "@cloudflare/kumo";
 import { useTheme } from "../hooks/useTheme";
 import { useTagTranslation } from "../hooks/useTagTranslation";
+import { formatDateTime } from "../lib/time";
 import type { ThemeMode } from "../lib/theme";
 import { PageHeader, Section } from "../components/ui";
 
@@ -103,7 +104,7 @@ function TagDatabaseSection() {
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-kumo-subtle">加载时间</dt>
-              <dd>{new Date(info.loadedAt).toLocaleString()}</dd>
+              <dd>{formatDateTime(info.loadedAt)}</dd>
             </div>
           </dl>
         ) : (

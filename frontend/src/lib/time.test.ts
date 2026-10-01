@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatRelativeTime } from "./time";
+import {
+  formatDate,
+  formatDateTime,
+  formatPosted,
+  formatRelativeTime,
+} from "./time";
 
 describe("formatRelativeTime", () => {
   const now = Date.now();
@@ -38,5 +43,30 @@ describe("formatRelativeTime", () => {
     expect(
       formatRelativeTime(new Date(now - 5 * 86_400_000).toISOString()),
     ).toBe("5 天前");
+  });
+});
+
+describe("formatPosted", () => {
+  it("passes date-only values through unchanged", () => {
+    expect(formatPosted("2024-01-01")).toBe("2024-01-01");
+  });
+
+  it("converts a UTC datetime to the local timezone", () => {
+    const utc = new Date(Date.UTC(2026, 7, 29, 10, 0));
+    const expected = formatDateTime(utc);
+    expect(formatPosted("2026-08-29 10:00")).toBe(expected);
+  });
+
+  it("handles empty/invalid input", () => {
+    expect(formatPosted()).toBe("");
+    expect(formatPosted(null)).toBe("");
+    expect(formatPosted("not a date")).toBe("not a date");
+  });
+});
+
+describe("local date formatting", () => {
+  it("returns empty for invalid input", () => {
+    expect(formatDate("nope")).toBe("");
+    expect(formatDateTime(null)).toBe("");
   });
 });
