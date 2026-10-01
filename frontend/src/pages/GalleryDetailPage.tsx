@@ -198,7 +198,13 @@ export function GalleryDetailPage() {
         返回
       </Button>
 
-      <div className="flex flex-col gap-8 md:flex-row">
+      <div
+        className={cn(
+          "grid gap-8",
+          gallery.tags.length > 0 && "lg:grid-cols-[minmax(0,1fr)_18rem]",
+        )}
+      >
+        <div className="flex flex-col gap-8 md:flex-row">
         {/* Cover */}
         <div className="mx-auto w-full max-w-[240px] shrink-0 md:mx-0">
           <div className="aspect-[3/4] overflow-hidden rounded-2xl bg-kumo-recessed shadow-lg ring-1 ring-kumo-hairline">
@@ -310,6 +316,15 @@ export function GalleryDetailPage() {
             </dl>
           )}
         </div>
+        </div>
+
+        {gallery.tags.length > 0 && (
+          <aside>
+            <Section title="标签">
+              <TagList tags={gallery.tags} />
+            </Section>
+          </aside>
+        )}
       </div>
 
       {/* Page thumbnails */}
@@ -326,13 +341,6 @@ export function GalleryDetailPage() {
           <p className="text-sm text-kumo-subtle">暂无页面数据</p>
         )}
       </Section>
-
-      {/* Tags */}
-      {gallery.tags.length > 0 && (
-        <Section title="标签">
-          <TagList tags={gallery.tags} />
-        </Section>
-      )}
     </div>
   );
 }
