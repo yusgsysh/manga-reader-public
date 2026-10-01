@@ -317,7 +317,9 @@ func (s *Server) loadOrCropThumbnail(ctx context.Context, spriteURL string, rect
 
 // loadOrFetchSprite returns the sprite bytes, reading through the cache when
 // configured. The original sprite is cached separately from the crops so a
-// single download can serve every page in the sprite.
+// single download can serve every page in the sprite. Concurrent misses for
+// the same sprite are coalesced on the sprite key, so a cold cache downloads
+// each sheet once even when many crop (or index) requests arrive together.
 func (s *Server) loadOrFetchSprite(ctx context.Context, spriteURL string) ([]byte, error) {
 	key := pageSpriteCacheKey(spriteURL)
 
@@ -329,17 +331,35 @@ func (s *Server) loadOrFetchSprite(ctx context.Context, spriteURL string) ([]byt
 		}
 	}
 
-	data, contentType, err := fetchThumbnail(ctx, s.Client, spriteURL)
-	if err != nil {
-		return nil, err
-	}
+	v, sfErr, _ := cachedImageGroup.Do("sprite:"+key, func() (any, error) {
+		fetchCtx := context.WithoutCancel(ctx)
+		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
+		defer cancel()
 
-	if s.Cache != nil {
-		if putErr := s.Cache.PutWithMeta(ctx, key, data, contentType, map[string]string{
-			"source-url": spriteURL,
-		}, cacheControlHeader); putErr != nil {
-			slog.Error("page-sprite store failed", "key", key[:16], "error", putErr)
+		if s.Cache != nil {
+			if data, _, getErr := s.Cache.Get(fetchCtx, key); getErr == nil {
+				return data, nil
+			} else if !cache.IsNotFound(getErr) {
+				return nil, getErr
+			}
 		}
+
+		data, contentType, err := fetchThumbnail(fetchCtx, s.Client, spriteURL)
+		if err != nil {
+			return nil, err
+		}
+
+		if s.Cache != nil {
+			if putErr := s.Cache.PutWithMeta(fetchCtx, key, data, contentType, map[string]string{
+				"source-url": spriteURL,
+			}, cacheControlHeader); putErr != nil {
+				slog.Error("page-sprite store failed", "key", key[:16], "error", putErr)
+			}
+		}
+		return data, nil
+	})
+	if sfErr != nil {
+		return nil, sfErr
 	}
-	return data, nil
+	return v.([]byte), nil
 }

@@ -9,8 +9,10 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/gen2brain/webp"
 
@@ -186,6 +188,45 @@ func TestCachedPageThumbnail_CacheHitAvoidsUpstream(t *testing.T) {
 	}
 	if got := requests.Load(); got != 1 {
 		t.Errorf("upstream requests = %d, want 1 (sprite cached)", got)
+	}
+}
+
+func TestCachedPageThumbnail_ConcurrentCropsShareSpriteDownload(t *testing.T) {
+	var requests atomic.Int32
+	sprite := makeTestSprite(t)
+	// A slow sprite server keeps every concurrent request in flight until the
+	// first download completes, exposing any missing coalescing.
+	srv := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		time.Sleep(100 * time.Millisecond)
+		w.Header().Set("Content-Type", "image/webp")
+		_, _ = w.Write(sprite)
+	})
+	defer srv.Close()
+
+	server := &Server{Client: newMockClient(srv.URL), Cache: newMockImageCache()}
+	r := setupMockRouter(server)
+
+	const n = 8
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			// Distinct crop rects => distinct tile cache keys, so only the
+			// shared sprite fetch can be coalesced.
+			path := fmt.Sprintf("%s?url=%s&x=%d&y=0&w=1&h=1", cachedThumbPath, url.QueryEscape(testSpriteURL), i)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+			if w.Code != http.StatusOK {
+				t.Errorf("request %d: status = %d, want 200", i, w.Code)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	if got := requests.Load(); got != 1 {
+		t.Errorf("upstream sprite requests = %d, want 1 (coalesced)", got)
 	}
 }
 
