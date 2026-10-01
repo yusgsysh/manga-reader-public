@@ -36,6 +36,11 @@ export function useTagTranslation() {
     [],
   );
 
+  const getTagInfo = useCallback(
+    (tag: Tag) => tagTranslationService.lookup(tag),
+    [],
+  );
+
   const searchTags = useCallback(
     (query: string, limit?: number) => tagTranslationService.searchTags(query, limit),
     [],
@@ -54,6 +59,7 @@ export function useTagTranslation() {
     translateTag,
     translateNamespace,
     hasTranslation,
+    getTagInfo,
     searchTags,
     update,
   };
