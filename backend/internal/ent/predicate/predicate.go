@@ -9,6 +9,9 @@ import (
 // Bookshelf is the predicate function for bookshelf builders.
 type Bookshelf func(*sql.Selector)
 
+// GalleryCache is the predicate function for gallerycache builders.
+type GalleryCache func(*sql.Selector)
+
 // PrefillJob is the predicate function for prefilljob builders.
 type PrefillJob func(*sql.Selector)
 

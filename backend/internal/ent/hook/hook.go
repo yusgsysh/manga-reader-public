@@ -20,6 +20,18 @@ func (f BookshelfFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, e
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BookshelfMutation", m)
 }
 
+// The GalleryCacheFunc type is an adapter to allow the use of ordinary
+// function as GalleryCache mutator.
+type GalleryCacheFunc func(context.Context, *ent.GalleryCacheMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GalleryCacheFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GalleryCacheMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GalleryCacheMutation", m)
+}
+
 // The PrefillJobFunc type is an adapter to allow the use of ordinary
 // function as PrefillJob mutator.
 type PrefillJobFunc func(context.Context, *ent.PrefillJobMutation) (ent.Value, error)

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"manga-reader/internal/database"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/model"
 
@@ -20,7 +21,7 @@ func setupTestRouter() *gin.Engine {
 	return r
 }
 
-func newTestDB(t *testing.T) *ent.Client {
+func newTestDBConn(t *testing.T) (*ent.Client, *sql.DB) {
 	t.Helper()
 	conn, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
@@ -44,7 +45,19 @@ func newTestDB(t *testing.T) *ent.Client {
 		t.Fatalf("run migrations: %v", err)
 	}
 	t.Cleanup(func() { client.Close() })
+	return client, conn
+}
+
+func newTestDB(t *testing.T) *ent.Client {
+	client, _ := newTestDBConn(t)
 	return client
+}
+
+// newTestDatabase returns a database.DB with both the ent client and the raw
+// connection, so methods that use raw SQL (e.g. CleanupGalleryCache) can run.
+func newTestDatabase(t *testing.T) *database.DB {
+	client, conn := newTestDBConn(t)
+	return &database.DB{Client: client, Conn: conn}
 }
 
 func newTestBookshelf() *model.Bookshelf {

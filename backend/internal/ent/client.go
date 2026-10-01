@@ -12,6 +12,7 @@ import (
 	"manga-reader/internal/ent/migrate"
 
 	"manga-reader/internal/ent/bookshelf"
+	"manga-reader/internal/ent/gallerycache"
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/readingprogress"
 
@@ -27,6 +28,8 @@ type Client struct {
 	Schema *migrate.Schema
 	// Bookshelf is the client for interacting with the Bookshelf builders.
 	Bookshelf *BookshelfClient
+	// GalleryCache is the client for interacting with the GalleryCache builders.
+	GalleryCache *GalleryCacheClient
 	// PrefillJob is the client for interacting with the PrefillJob builders.
 	PrefillJob *PrefillJobClient
 	// ReadingProgress is the client for interacting with the ReadingProgress builders.
@@ -43,6 +46,7 @@ func NewClient(opts ...Option) *Client {
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.Bookshelf = NewBookshelfClient(c.config)
+	c.GalleryCache = NewGalleryCacheClient(c.config)
 	c.PrefillJob = NewPrefillJobClient(c.config)
 	c.ReadingProgress = NewReadingProgressClient(c.config)
 }
@@ -138,6 +142,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ctx:             ctx,
 		config:          cfg,
 		Bookshelf:       NewBookshelfClient(cfg),
+		GalleryCache:    NewGalleryCacheClient(cfg),
 		PrefillJob:      NewPrefillJobClient(cfg),
 		ReadingProgress: NewReadingProgressClient(cfg),
 	}, nil
@@ -160,6 +165,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ctx:             ctx,
 		config:          cfg,
 		Bookshelf:       NewBookshelfClient(cfg),
+		GalleryCache:    NewGalleryCacheClient(cfg),
 		PrefillJob:      NewPrefillJobClient(cfg),
 		ReadingProgress: NewReadingProgressClient(cfg),
 	}, nil
@@ -191,6 +197,7 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	c.Bookshelf.Use(hooks...)
+	c.GalleryCache.Use(hooks...)
 	c.PrefillJob.Use(hooks...)
 	c.ReadingProgress.Use(hooks...)
 }
@@ -199,6 +206,7 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	c.Bookshelf.Intercept(interceptors...)
+	c.GalleryCache.Intercept(interceptors...)
 	c.PrefillJob.Intercept(interceptors...)
 	c.ReadingProgress.Intercept(interceptors...)
 }
@@ -208,6 +216,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
 	case *BookshelfMutation:
 		return c.Bookshelf.mutate(ctx, m)
+	case *GalleryCacheMutation:
+		return c.GalleryCache.mutate(ctx, m)
 	case *PrefillJobMutation:
 		return c.PrefillJob.mutate(ctx, m)
 	case *ReadingProgressMutation:
@@ -347,6 +357,139 @@ func (c *BookshelfClient) mutate(ctx context.Context, m *BookshelfMutation) (Val
 		return (&BookshelfDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Bookshelf mutation op: %q", m.Op())
+	}
+}
+
+// GalleryCacheClient is a client for the GalleryCache schema.
+type GalleryCacheClient struct {
+	config
+}
+
+// NewGalleryCacheClient returns a client for the GalleryCache from the given config.
+func NewGalleryCacheClient(c config) *GalleryCacheClient {
+	return &GalleryCacheClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `gallerycache.Hooks(f(g(h())))`.
+func (c *GalleryCacheClient) Use(hooks ...Hook) {
+	c.hooks.GalleryCache = append(c.hooks.GalleryCache, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `gallerycache.Intercept(f(g(h())))`.
+func (c *GalleryCacheClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GalleryCache = append(c.inters.GalleryCache, interceptors...)
+}
+
+// Create returns a builder for creating a GalleryCache entity.
+func (c *GalleryCacheClient) Create() *GalleryCacheCreate {
+	mutation := newGalleryCacheMutation(c.config, OpCreate)
+	return &GalleryCacheCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GalleryCache entities.
+func (c *GalleryCacheClient) CreateBulk(builders ...*GalleryCacheCreate) *GalleryCacheCreateBulk {
+	return &GalleryCacheCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GalleryCacheClient) MapCreateBulk(slice any, setFunc func(*GalleryCacheCreate, int)) *GalleryCacheCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GalleryCacheCreateBulk{err: fmt.Errorf("calling to GalleryCacheClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GalleryCacheCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GalleryCacheCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GalleryCache.
+func (c *GalleryCacheClient) Update() *GalleryCacheUpdate {
+	mutation := newGalleryCacheMutation(c.config, OpUpdate)
+	return &GalleryCacheUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GalleryCacheClient) UpdateOne(_m *GalleryCache) *GalleryCacheUpdateOne {
+	mutation := newGalleryCacheMutation(c.config, OpUpdateOne, withGalleryCache(_m))
+	return &GalleryCacheUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GalleryCacheClient) UpdateOneID(id int) *GalleryCacheUpdateOne {
+	mutation := newGalleryCacheMutation(c.config, OpUpdateOne, withGalleryCacheID(id))
+	return &GalleryCacheUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GalleryCache.
+func (c *GalleryCacheClient) Delete() *GalleryCacheDelete {
+	mutation := newGalleryCacheMutation(c.config, OpDelete)
+	return &GalleryCacheDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GalleryCacheClient) DeleteOne(_m *GalleryCache) *GalleryCacheDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GalleryCacheClient) DeleteOneID(id int) *GalleryCacheDeleteOne {
+	builder := c.Delete().Where(gallerycache.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GalleryCacheDeleteOne{builder}
+}
+
+// Query returns a query builder for GalleryCache.
+func (c *GalleryCacheClient) Query() *GalleryCacheQuery {
+	return &GalleryCacheQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGalleryCache},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GalleryCache entity by its id.
+func (c *GalleryCacheClient) Get(ctx context.Context, id int) (*GalleryCache, error) {
+	return c.Query().Where(gallerycache.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GalleryCacheClient) GetX(ctx context.Context, id int) *GalleryCache {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *GalleryCacheClient) Hooks() []Hook {
+	return c.hooks.GalleryCache
+}
+
+// Interceptors returns the client interceptors.
+func (c *GalleryCacheClient) Interceptors() []Interceptor {
+	return c.inters.GalleryCache
+}
+
+func (c *GalleryCacheClient) mutate(ctx context.Context, m *GalleryCacheMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GalleryCacheCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GalleryCacheUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GalleryCacheUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GalleryCacheDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GalleryCache mutation op: %q", m.Op())
 	}
 }
 
@@ -619,9 +762,9 @@ func (c *ReadingProgressClient) mutate(ctx context.Context, m *ReadingProgressMu
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Bookshelf, PrefillJob, ReadingProgress []ent.Hook
+		Bookshelf, GalleryCache, PrefillJob, ReadingProgress []ent.Hook
 	}
 	inters struct {
-		Bookshelf, PrefillJob, ReadingProgress []ent.Interceptor
+		Bookshelf, GalleryCache, PrefillJob, ReadingProgress []ent.Interceptor
 	}
 )

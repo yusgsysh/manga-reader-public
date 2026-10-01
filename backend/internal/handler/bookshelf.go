@@ -1,18 +1,73 @@
 package handler
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/singleflight"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/readingprogress"
 
 	"manga-reader/internal/exhentai"
+	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/model"
 )
+
+// galleryPrefetchGroup coalesces concurrent background prefetches for the same
+// gallery (e.g. repeated add-to-bookshelf requests).
+var galleryPrefetchGroup singleflight.Group
+
+const galleryPrefetchTimeout = 60 * time.Second
+
+// prefetchGallery fills the gallery cache (metadata + pages) in the background
+// so the item stays usable offline. Failures are logged and otherwise ignored.
+func (s *Server) prefetchGallery(galleryID int64, token string, seed *model.Gallery) {
+	if s.Client == nil {
+		return
+	}
+
+	key := fmt.Sprintf("%d:%s", galleryID, token)
+	galleryPrefetchGroup.Do(key, func() (any, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), galleryPrefetchTimeout)
+		defer cancel()
+
+		db := s.cacheDB()
+		if db != nil && seed != nil {
+			if err := gallerycache.UpsertMeta(ctx, db, galleryID, token, cacheMetaFromGallery(seed)); err != nil {
+				slog.Warn("gallery prefetch meta failed", "id", galleryID, "error", err)
+			}
+		}
+
+		u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
+
+		if urls, err := exhentai.ScrapeGalleryPageURLs(ctx, s.Client, u); err != nil {
+			slog.Debug("gallery prefetch pages failed", "id", galleryID, "error", err)
+		} else if db != nil {
+			pages := make([]model.CachedPage, len(urls))
+			for i, p := range urls {
+				pages[i] = model.CachedPage{PageURL: p, Index: i}
+			}
+			if err := gallerycache.UpsertPages(ctx, db, galleryID, token, pages); err != nil {
+				slog.Warn("gallery prefetch pages upsert failed", "id", galleryID, "error", err)
+			}
+		}
+
+		if details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u); err != nil {
+			slog.Debug("gallery prefetch details failed", "id", galleryID, "error", err)
+		} else if db != nil {
+			if err := gallerycache.UpsertMeta(ctx, db, galleryID, token, cacheMetaFromDetails(details)); err != nil {
+				slog.Warn("gallery prefetch details upsert failed", "id", galleryID, "error", err)
+			}
+		}
+		return nil, nil
+	})
+}
 
 // galleryRef identifies a gallery by its id/token pair.
 type galleryRef struct {
@@ -167,6 +222,9 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 		return
 	}
 
+	// Warm the offline cache in the background (metadata + pages).
+	go s.prefetchGallery(id, token, gallery)
+
 	c.JSON(http.StatusOK, model.BookshelfMutationResponse{Success: true, InBookshelf: true})
 }
 
@@ -184,15 +242,24 @@ func (s *Server) handleBookshelfRemove(c *gin.Context) {
 		return
 	}
 
+	ctx := c.Request.Context()
 	_, err = s.DB.Client.Bookshelf.Delete().
 		Where(
 			bookshelf.GalleryID(id),
 			bookshelf.Token(token),
 		).
-		Exec(c.Request.Context())
+		Exec(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("remove bookshelf failed: %v", err)})
 		return
+	}
+
+	if s.DB != nil {
+		if n, cleanErr := s.DB.CleanupGalleryCache(ctx); cleanErr != nil {
+			slog.Warn("gallery cache cleanup failed", "error", cleanErr)
+		} else if n > 0 {
+			slog.Debug("gallery cache cleanup", "deleted", n)
+		}
 	}
 
 	c.JSON(http.StatusOK, model.BookshelfMutationResponse{Success: true, InBookshelf: false})

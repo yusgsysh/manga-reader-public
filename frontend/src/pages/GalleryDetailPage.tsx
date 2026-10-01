@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   BookmarkSimple,
   BookOpen,
+  CloudSlash,
   DownloadSimple,
   Star,
   CircleNotch,
@@ -197,6 +198,12 @@ export function GalleryDetailPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-sm">
+            {gallery.cached && (
+              <Chip tone="outline" className="gap-1 text-kumo-subtle">
+                <CloudSlash className="size-3.5" weight="bold" />
+                离线数据
+              </Chip>
+            )}
             <Chip tone="solid">{gallery.category}</Chip>
             <span className="inline-flex items-center gap-1 text-kumo-default">
               <Star className="size-4 text-kumo-warning" weight="fill" />

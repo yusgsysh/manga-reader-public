@@ -19,6 +19,7 @@ import (
 
 type DB struct {
 	Client *ent.Client
+	Conn   *sql.DB
 }
 
 func NewDB(dataSourceName string) (*DB, error) {
@@ -67,7 +68,35 @@ func NewDB(dataSourceName string) (*DB, error) {
 	}
 
 	slog.Info("database initialized", "path", dataSourceName)
-	return &DB{Client: client}, nil
+	return &DB{Client: client, Conn: conn}, nil
+}
+
+// CleanupGalleryCache deletes cached gallery metadata/pages that are no longer
+// referenced by either the bookshelf or the reading history.
+func (db *DB) CleanupGalleryCache(ctx context.Context) (int, error) {
+	if db.Conn == nil {
+		return 0, nil
+	}
+
+	res, err := db.Conn.ExecContext(ctx, `
+		DELETE FROM gallery_cache
+		WHERE NOT EXISTS (
+			SELECT 1 FROM bookshelf b
+			WHERE b.gallery_id = gallery_cache.gallery_id
+			  AND b.token = gallery_cache.token
+		) AND NOT EXISTS (
+			SELECT 1 FROM reading_progress r
+			WHERE r.gallery_id = gallery_cache.gallery_id
+			  AND r.token = gallery_cache.token
+		)`)
+	if err != nil {
+		return 0, fmt.Errorf("cleanup gallery cache: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("cleanup gallery cache rows affected: %w", err)
+	}
+	return int(affected), nil
 }
 
 func backfillPrefillTotal(ctx context.Context, conn *sql.DB) error {

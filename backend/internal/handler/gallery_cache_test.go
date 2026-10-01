@@ -1,0 +1,323 @@
+package handler
+
+import (
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	json "encoding/json/v2"
+
+	"manga-reader/internal/database"
+	"manga-reader/internal/ent"
+	"manga-reader/internal/gallerycache"
+	"manga-reader/internal/model"
+)
+
+// errorTransport makes every upstream request fail, simulating ExHentai being
+// unreachable.
+type errorTransport struct{}
+
+func (errorTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("upstream unreachable")
+}
+
+func errorClient() *http.Client {
+	return &http.Client{Transport: errorTransport{}}
+}
+
+func seedGalleryCache(t *testing.T, client *ent.Client, id int64, token string) {
+	t.Helper()
+	if err := gallerycache.UpsertMeta(t.Context(), client, id, token, model.GalleryCacheSnapshot{
+		Title:       "Cached Gallery",
+		TitleJPN:    "キャッシュ",
+		Category:    string(model.CategoryManga),
+		Thumbnail:   "https://example.com/thumb.webp",
+		PageCount:   2,
+		Rating:      4.5,
+		RatingCount: 10,
+		Uploader:    "cached_uploader",
+		Posted:      "2024-01-01",
+		Language:    "Chinese",
+		FileSize:    "15 MB",
+		Tags:        []model.Tag{{Namespace: "female", Name: "yuri"}},
+	}); err != nil {
+		t.Fatalf("seed cache meta: %v", err)
+	}
+	if err := gallerycache.UpsertPages(t.Context(), client, id, token, []model.CachedPage{
+		{PageURL: "https://exhentai.org/s/abc/1", Index: 0},
+		{PageURL: "https://exhentai.org/s/abc/2", Index: 1},
+	}); err != nil {
+		t.Fatalf("seed cache pages: %v", err)
+	}
+}
+
+func TestGalleryPages_FallbackToCache(t *testing.T) {
+	client := newTestDB(t)
+	seedGalleryCache(t, client, 12345, "tok12345")
+
+	server := &Server{
+		Client: errorClient(),
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345/pages", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Total  int                `json:"total"`
+		Cached bool               `json:"cached"`
+		Pages  []model.CachedPage `json:"pages"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !resp.Cached {
+		t.Error("cached = false, want true")
+	}
+	if resp.Total != 2 || len(resp.Pages) != 2 {
+		t.Errorf("pages = %d (total %d), want 2", len(resp.Pages), resp.Total)
+	}
+}
+
+func TestGalleryPages_WritesCache(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryDetailHTML(12345, "Pages Test", 3))
+	})
+	defer mockServer.Close()
+
+	client := newTestDB(t)
+	server := &Server{
+		Client: newMockClient(mockServer.URL),
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345/pages", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+
+	row, found, err := gallerycache.Get(t.Context(), client, 12345, "tok12345")
+	if err != nil || !found {
+		t.Fatalf("cache lookup: found=%v err=%v", found, err)
+	}
+	if len(row.Pages) != 3 {
+		t.Errorf("cached pages = %d, want 3", len(row.Pages))
+	}
+	if row.PagesFetchedAt == nil {
+		t.Error("pages_fetched_at should be set")
+	}
+}
+
+func TestGetGallery_FallbackToCache(t *testing.T) {
+	client := newTestDB(t)
+	seedGalleryCache(t, client, 12345, "tok12345")
+
+	server := &Server{
+		Client: errorClient(),
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+
+	var gallery model.Gallery
+	if err := json.Unmarshal(w.Body.Bytes(), &gallery); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !gallery.Cached {
+		t.Error("cached = false, want true")
+	}
+	if gallery.Title != "Cached Gallery" {
+		t.Errorf("title = %q, want %q", gallery.Title, "Cached Gallery")
+	}
+	if gallery.PageCount != 2 || gallery.Rating != 4.5 {
+		t.Errorf("page_count=%d rating=%v, want 2 / 4.5", gallery.PageCount, gallery.Rating)
+	}
+	if len(gallery.Tags) != 1 {
+		t.Errorf("tags = %d, want 1", len(gallery.Tags))
+	}
+}
+
+func TestGalleryDetails_FallbackToCache(t *testing.T) {
+	client := newTestDB(t)
+	seedGalleryCache(t, client, 12345, "tok12345")
+
+	server := &Server{
+		Client: errorClient(),
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345/details", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+
+	var details struct {
+		ID       int         `json:"id"`
+		Title    string      `json:"title"`
+		Uploader string      `json:"uploader"`
+		Cover    string      `json:"cover"`
+		Cached   bool        `json:"cached"`
+		Tags     []model.Tag `json:"tags"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &details); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !details.Cached {
+		t.Error("cached = false, want true")
+	}
+	if details.ID != 12345 || details.Title != "Cached Gallery" {
+		t.Errorf("id=%d title=%q, want 12345 / Cached Gallery", details.ID, details.Title)
+	}
+	if details.Uploader != "cached_uploader" || details.Cover == "" {
+		t.Errorf("uploader=%q cover=%q, want cached values", details.Uploader, details.Cover)
+	}
+}
+
+func TestPrefetchGallery_WritesCache(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryDetailHTML(55555, "Prefetch Test", 4))
+	})
+	defer mockServer.Close()
+
+	client := newTestDB(t)
+	server := &Server{
+		Client: newMockClient(mockServer.URL),
+		DB:     &database.DB{Client: client},
+	}
+
+	seed := &model.Gallery{
+		ID:        55555,
+		Token:     "pf55555",
+		Title:     "Prefetch Test",
+		Category:  model.CategoryManga,
+		Thumbnail: "https://example.com/pf.webp",
+		PageCount: 4,
+	}
+	server.prefetchGallery(55555, "pf55555", seed)
+
+	row, found, err := gallerycache.Get(t.Context(), client, 55555, "pf55555")
+	if err != nil || !found {
+		t.Fatalf("cache lookup: found=%v err=%v", found, err)
+	}
+	if row.Title != "Prefetch Test" {
+		t.Errorf("title = %q, want %q", row.Title, "Prefetch Test")
+	}
+	if len(row.Pages) != 4 {
+		t.Errorf("cached pages = %d, want 4", len(row.Pages))
+	}
+}
+
+func TestGalleryCache_FirstValueWins(t *testing.T) {
+	client := newTestDB(t)
+	ctx := t.Context()
+
+	if err := gallerycache.UpsertMeta(ctx, client, 9001, "tok", model.GalleryCacheSnapshot{
+		Title:  "First",
+		Rating: 4.0,
+	}); err != nil {
+		t.Fatalf("first meta write: %v", err)
+	}
+	// Second write must not overwrite existing fields, but should fill the
+	// still-empty uploader.
+	if err := gallerycache.UpsertMeta(ctx, client, 9001, "tok", model.GalleryCacheSnapshot{
+		Title:    "Second",
+		Rating:   5.0,
+		Uploader: "uploader",
+	}); err != nil {
+		t.Fatalf("second meta write: %v", err)
+	}
+
+	row, found, err := gallerycache.Get(ctx, client, 9001, "tok")
+	if err != nil || !found {
+		t.Fatalf("cache lookup: found=%v err=%v", found, err)
+	}
+	if row.Title != "First" {
+		t.Errorf("title = %q, want First (no overwrite)", row.Title)
+	}
+	if row.Rating != 4.0 {
+		t.Errorf("rating = %v, want 4.0 (no overwrite)", row.Rating)
+	}
+	if row.Uploader != "uploader" {
+		t.Errorf("uploader = %q, want uploader (fill empty)", row.Uploader)
+	}
+
+	// Pages are stored first-write only.
+	if err := gallerycache.UpsertPages(ctx, client, 9001, "tok", []model.CachedPage{
+		{PageURL: "a", Index: 0},
+	}); err != nil {
+		t.Fatalf("first pages write: %v", err)
+	}
+	if err := gallerycache.UpsertPages(ctx, client, 9001, "tok", []model.CachedPage{
+		{PageURL: "a", Index: 0},
+		{PageURL: "b", Index: 1},
+		{PageURL: "c", Index: 2},
+	}); err != nil {
+		t.Fatalf("second pages write: %v", err)
+	}
+	row, _, _ = gallerycache.Get(ctx, client, 9001, "tok")
+	if len(row.Pages) != 1 {
+		t.Errorf("pages = %d, want 1 (no overwrite)", len(row.Pages))
+	}
+}
+
+func TestCleanupGalleryCache_RemovesOrphans(t *testing.T) {
+	db := newTestDatabase(t)
+	ctx := t.Context()
+
+	// A: referenced by bookshelf. B: referenced by reading progress. C: orphan.
+	seedGalleryCache(t, db.Client, 1001, "tokA")
+	seedGalleryCache(t, db.Client, 1002, "tokB")
+	seedGalleryCache(t, db.Client, 1003, "tokC")
+
+	if _, err := db.Client.Bookshelf.Create().
+		SetGalleryID(1001).SetToken("tokA").SetTitle("A").Save(ctx); err != nil {
+		t.Fatalf("insert bookshelf: %v", err)
+	}
+	if _, err := db.Client.ReadingProgress.Create().
+		SetGalleryID(1002).SetToken("tokB").Save(ctx); err != nil {
+		t.Fatalf("insert progress: %v", err)
+	}
+
+	deleted, err := db.CleanupGalleryCache(ctx)
+	if err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("deleted = %d, want 1", deleted)
+	}
+
+	if _, found, _ := gallerycache.Get(ctx, db.Client, 1001, "tokA"); !found {
+		t.Error("bookshelf-referenced cache should be kept")
+	}
+	if _, found, _ := gallerycache.Get(ctx, db.Client, 1002, "tokB"); !found {
+		t.Error("progress-referenced cache should be kept")
+	}
+	if _, found, _ := gallerycache.Get(ctx, db.Client, 1003, "tokC"); found {
+		t.Error("orphan cache should be deleted")
+	}
+}

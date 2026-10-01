@@ -4,6 +4,7 @@ package ent
 
 import (
 	"manga-reader/internal/ent/bookshelf"
+	"manga-reader/internal/ent/gallerycache"
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/readingprogress"
 	"manga-reader/internal/ent/schema"
@@ -46,6 +47,70 @@ func init() {
 	bookshelf.DefaultUpdatedAt = bookshelfDescUpdatedAt.Default.(func() time.Time)
 	// bookshelf.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	bookshelf.UpdateDefaultUpdatedAt = bookshelfDescUpdatedAt.UpdateDefault.(func() time.Time)
+	gallerycacheFields := schema.GalleryCache{}.Fields()
+	_ = gallerycacheFields
+	// gallerycacheDescTitle is the schema descriptor for title field.
+	gallerycacheDescTitle := gallerycacheFields[2].Descriptor()
+	// gallerycache.DefaultTitle holds the default value on creation for the title field.
+	gallerycache.DefaultTitle = gallerycacheDescTitle.Default.(string)
+	// gallerycacheDescTitleJpn is the schema descriptor for title_jpn field.
+	gallerycacheDescTitleJpn := gallerycacheFields[3].Descriptor()
+	// gallerycache.DefaultTitleJpn holds the default value on creation for the title_jpn field.
+	gallerycache.DefaultTitleJpn = gallerycacheDescTitleJpn.Default.(string)
+	// gallerycacheDescCategory is the schema descriptor for category field.
+	gallerycacheDescCategory := gallerycacheFields[4].Descriptor()
+	// gallerycache.DefaultCategory holds the default value on creation for the category field.
+	gallerycache.DefaultCategory = gallerycacheDescCategory.Default.(string)
+	// gallerycacheDescThumbnail is the schema descriptor for thumbnail field.
+	gallerycacheDescThumbnail := gallerycacheFields[5].Descriptor()
+	// gallerycache.DefaultThumbnail holds the default value on creation for the thumbnail field.
+	gallerycache.DefaultThumbnail = gallerycacheDescThumbnail.Default.(string)
+	// gallerycacheDescPageCount is the schema descriptor for page_count field.
+	gallerycacheDescPageCount := gallerycacheFields[6].Descriptor()
+	// gallerycache.DefaultPageCount holds the default value on creation for the page_count field.
+	gallerycache.DefaultPageCount = gallerycacheDescPageCount.Default.(int)
+	// gallerycacheDescRating is the schema descriptor for rating field.
+	gallerycacheDescRating := gallerycacheFields[7].Descriptor()
+	// gallerycache.DefaultRating holds the default value on creation for the rating field.
+	gallerycache.DefaultRating = gallerycacheDescRating.Default.(float64)
+	// gallerycacheDescRatingCount is the schema descriptor for rating_count field.
+	gallerycacheDescRatingCount := gallerycacheFields[8].Descriptor()
+	// gallerycache.DefaultRatingCount holds the default value on creation for the rating_count field.
+	gallerycache.DefaultRatingCount = gallerycacheDescRatingCount.Default.(int)
+	// gallerycacheDescUploader is the schema descriptor for uploader field.
+	gallerycacheDescUploader := gallerycacheFields[9].Descriptor()
+	// gallerycache.DefaultUploader holds the default value on creation for the uploader field.
+	gallerycache.DefaultUploader = gallerycacheDescUploader.Default.(string)
+	// gallerycacheDescPosted is the schema descriptor for posted field.
+	gallerycacheDescPosted := gallerycacheFields[10].Descriptor()
+	// gallerycache.DefaultPosted holds the default value on creation for the posted field.
+	gallerycache.DefaultPosted = gallerycacheDescPosted.Default.(string)
+	// gallerycacheDescLanguage is the schema descriptor for language field.
+	gallerycacheDescLanguage := gallerycacheFields[12].Descriptor()
+	// gallerycache.DefaultLanguage holds the default value on creation for the language field.
+	gallerycache.DefaultLanguage = gallerycacheDescLanguage.Default.(string)
+	// gallerycacheDescTranslated is the schema descriptor for translated field.
+	gallerycacheDescTranslated := gallerycacheFields[13].Descriptor()
+	// gallerycache.DefaultTranslated holds the default value on creation for the translated field.
+	gallerycache.DefaultTranslated = gallerycacheDescTranslated.Default.(bool)
+	// gallerycacheDescFileSize is the schema descriptor for file_size field.
+	gallerycacheDescFileSize := gallerycacheFields[14].Descriptor()
+	// gallerycache.DefaultFileSize holds the default value on creation for the file_size field.
+	gallerycache.DefaultFileSize = gallerycacheDescFileSize.Default.(string)
+	// gallerycacheDescFavorited is the schema descriptor for favorited field.
+	gallerycacheDescFavorited := gallerycacheFields[15].Descriptor()
+	// gallerycache.DefaultFavorited holds the default value on creation for the favorited field.
+	gallerycache.DefaultFavorited = gallerycacheDescFavorited.Default.(int)
+	// gallerycacheDescExpunged is the schema descriptor for expunged field.
+	gallerycacheDescExpunged := gallerycacheFields[16].Descriptor()
+	// gallerycache.DefaultExpunged holds the default value on creation for the expunged field.
+	gallerycache.DefaultExpunged = gallerycacheDescExpunged.Default.(bool)
+	// gallerycacheDescUpdatedAt is the schema descriptor for updated_at field.
+	gallerycacheDescUpdatedAt := gallerycacheFields[21].Descriptor()
+	// gallerycache.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	gallerycache.DefaultUpdatedAt = gallerycacheDescUpdatedAt.Default.(func() time.Time)
+	// gallerycache.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	gallerycache.UpdateDefaultUpdatedAt = gallerycacheDescUpdatedAt.UpdateDefault.(func() time.Time)
 	prefilljobFields := schema.PrefillJob{}.Fields()
 	_ = prefilljobFields
 	// prefilljobDescGalleryToken is the schema descriptor for gallery_token field.

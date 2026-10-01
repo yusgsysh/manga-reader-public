@@ -6,7 +6,12 @@ import {
   useSearchParams,
 } from "react-router";
 import { Button, Loader } from "@cloudflare/kumo";
-import { ArrowLeft, CornersOut, CornersIn } from "@phosphor-icons/react";
+import {
+  ArrowLeft,
+  CloudSlash,
+  CornersOut,
+  CornersIn,
+} from "@phosphor-icons/react";
 import {
   MangaViewer,
   type MangaViewerHandle,
@@ -101,6 +106,8 @@ export function ReaderPage() {
   const gallery = galleryQuery.data;
   const pages = pagesQuery.data?.pages;
   const total = pagesQuery.data?.total ?? 0;
+  const offline =
+    galleryQuery.data?.cached === true || pagesQuery.data?.cached === true;
 
   const initialPage = useMemo(() => {
     if (total <= 0) return 0;
@@ -225,6 +232,12 @@ export function ReaderPage() {
           <ArrowLeft className="size-4" weight="bold" />
         </Button>
         <div className="min-w-0 flex-1" />
+        {offline && (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-kumo-recessed px-2 py-0.5 text-[11px] text-kumo-subtle">
+            <CloudSlash className="size-3" weight="bold" />
+            离线数据
+          </span>
+        )}
         <span className="shrink-0 text-xs text-kumo-subtle">
           {currentPage + 1} / {total}
         </span>

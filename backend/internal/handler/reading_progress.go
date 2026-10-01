@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/readingprogress"
 
+	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/model"
 )
 
@@ -157,6 +159,21 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 		return
 	}
 
+	if req.Title != "" || req.TitleJPN != "" || req.Category != "" || req.Thumbnail != "" || req.PageCount != 0 {
+		if db := s.cacheDB(); db != nil {
+			snap := model.GalleryCacheSnapshot{
+				Title:     req.Title,
+				TitleJPN:  req.TitleJPN,
+				Category:  req.Category,
+				Thumbnail: req.Thumbnail,
+				PageCount: req.PageCount,
+			}
+			if cacheErr := gallerycache.UpsertMeta(ctx, db, id, token, snap); cacheErr != nil {
+				slog.Warn("gallery cache progress meta upsert failed", "id", id, "error", cacheErr)
+			}
+		}
+	}
+
 	p, err := s.DB.Client.ReadingProgress.Query().
 		Where(
 			readingprogress.GalleryID(id),
@@ -202,6 +219,14 @@ func (s *Server) handleReadingProgressCleanup(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to cleanup reading progress"})
 		return
+	}
+
+	if s.DB != nil {
+		if n, cleanErr := s.DB.CleanupGalleryCache(ctx); cleanErr != nil {
+			slog.Warn("gallery cache cleanup failed", "error", cleanErr)
+		} else if n > 0 {
+			slog.Debug("gallery cache cleanup", "deleted", n)
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{

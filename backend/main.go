@@ -98,6 +98,12 @@ func run() error {
 	}
 	defer db.Close()
 
+	if n, cleanErr := db.CleanupGalleryCache(context.Background()); cleanErr != nil {
+		logger.Warn("gallery cache startup cleanup failed", "error", cleanErr)
+	} else if n > 0 {
+		logger.Info("gallery cache startup cleanup", "deleted", n)
+	}
+
 	handlerCfg := handler.Config{
 		Client: client,
 		DB:     db,

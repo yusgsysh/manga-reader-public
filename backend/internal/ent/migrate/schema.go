@@ -35,6 +35,45 @@ var (
 			},
 		},
 	}
+	// GalleryCacheColumns holds the columns for the "gallery_cache" table.
+	GalleryCacheColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "gallery_id", Type: field.TypeInt64},
+		{Name: "token", Type: field.TypeString},
+		{Name: "title", Type: field.TypeString, Default: ""},
+		{Name: "title_jpn", Type: field.TypeString, Default: ""},
+		{Name: "category", Type: field.TypeString, Default: ""},
+		{Name: "thumbnail", Type: field.TypeString, Default: ""},
+		{Name: "page_count", Type: field.TypeInt, Default: 0},
+		{Name: "rating", Type: field.TypeFloat64, Default: 0},
+		{Name: "rating_count", Type: field.TypeInt, Default: 0},
+		{Name: "uploader", Type: field.TypeString, Default: ""},
+		{Name: "posted", Type: field.TypeString, Default: ""},
+		{Name: "posted_at", Type: field.TypeTime, Nullable: true},
+		{Name: "language", Type: field.TypeString, Default: ""},
+		{Name: "translated", Type: field.TypeBool, Default: false},
+		{Name: "file_size", Type: field.TypeString, Default: ""},
+		{Name: "favorited", Type: field.TypeInt, Default: 0},
+		{Name: "expunged", Type: field.TypeBool, Default: false},
+		{Name: "tags", Type: field.TypeJSON, Nullable: true},
+		{Name: "pages", Type: field.TypeJSON, Nullable: true},
+		{Name: "meta_fetched_at", Type: field.TypeTime, Nullable: true},
+		{Name: "pages_fetched_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// GalleryCacheTable holds the schema information for the "gallery_cache" table.
+	GalleryCacheTable = &schema.Table{
+		Name:       "gallery_cache",
+		Columns:    GalleryCacheColumns,
+		PrimaryKey: []*schema.Column{GalleryCacheColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "gallerycache_gallery_id_token",
+				Unique:  true,
+				Columns: []*schema.Column{GalleryCacheColumns[1], GalleryCacheColumns[2]},
+			},
+		},
+	}
 	// PrefillJobColumns holds the columns for the "prefill_job" table.
 	PrefillJobColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -95,6 +134,7 @@ var (
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		BookshelfTable,
+		GalleryCacheTable,
 		PrefillJobTable,
 		ReadingProgressTable,
 	}
@@ -103,6 +143,9 @@ var (
 func init() {
 	BookshelfTable.Annotation = &entsql.Annotation{
 		Table: "bookshelf",
+	}
+	GalleryCacheTable.Annotation = &entsql.Annotation{
+		Table: "gallery_cache",
 	}
 	PrefillJobTable.Annotation = &entsql.Annotation{
 		Table: "prefill_job",

@@ -165,9 +165,12 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
     { "namespace": "female", "name": "yuri" }
   ],
   "file_size": "15 MB",
-  "expunged": false
+  "expunged": false,
+  "cached": false
 }
 ```
+
+> `cached` 为 `true` 时表示上游不可达，返回的是 `gallery_cache` 中最近一次在线快照（见文末「离线回退」）。
 
 ---
 
@@ -206,11 +209,13 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
   "rating": 4.5,
   "tags": [
     { "namespace": "female", "name": "yuri" }
-  ]
+  ],
+  "cached": false
 }
 ```
 
 > 完整的页面 URL 列表请使用 `/pages` 接口（见第 4 节）。`details` 只抓取 gallery 首页，单次上游请求即可返回。
+> `cached` 为 `true` 时表示上游不可达，返回缓存快照；`domain`/`parent`/`visible` 等未缓存字段返回零值。
 
 ---
 
@@ -241,9 +246,12 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
       "page_url": "https://exhentai.org/s/abcdef1234/123456-2",
       "index": 1
     }
-  ]
+  ],
+  "cached": false
 }
 ```
+
+> `cached` 为 `true` 时表示上游不可达，返回的是缓存的页面列表。
 
 ---
 
@@ -1078,6 +1086,28 @@ Cache-Control: no-store
 ```
 
 **Error Responses:** `404` 不存在、`400` 非法 id、`503` 数据库或缓存未配置。
+
+---
+
+## 离线回退（Upstream Unreachable）
+
+当上游 ExHentai 不可达时，以下接口会回退到 `gallery_cache` 中的最近一次在线快照，并在响应中带上 `"cached": true`：
+
+- `GET /api/gallery/:id/:token`
+- `GET /api/gallery/:id/:token/details`
+- `GET /api/gallery/:id/:token/pages`
+
+缓存写入时机：
+
+- 上述接口在线成功时
+- `POST /api/bookshelf/:id/:token` 成功后会在后台异步预取元数据与页面列表
+- `PUT /api/progress/:id/:token` 会写入标题/缩略图等元数据快照
+
+缓存采用「首次写入优先」策略：已存在的非空字段不会被覆盖（上游元数据变动不频繁）。
+
+图片本身由 `/api/cached-image` 提供（MinIO 缓存），离线可读的前提是对应页面图片此前已被浏览或下载过。
+
+清理：当某条缓存既不在书架也不在阅读记录中时，会随「书架移除」「清理阅读记录」以及服务启动时被删除。
 
 ---
 

@@ -18,6 +18,7 @@ export interface Gallery {
   tags: { namespace: string; name: string }[];
   file_size?: string;
   expunged?: boolean;
+  cached?: boolean;
 }
 
 export interface GalleryPagesResponse {
@@ -25,6 +26,7 @@ export interface GalleryPagesResponse {
   token: string;
   total: number;
   pages: GalleryPage[];
+  cached?: boolean;
 }
 
 export interface ReadingProgress {

@@ -2,15 +2,87 @@ package handler
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"manga-reader/internal/ent"
 	"manga-reader/internal/exhentai"
+	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/model"
 )
+
+// cacheDB returns the ent client when a database is configured. Some tests
+// construct a Server without a DB; callers must tolerate a nil result.
+func (s *Server) cacheDB() *ent.Client {
+	if s.DB == nil {
+		return nil
+	}
+	return s.DB.Client
+}
+
+func cacheMetaFromGallery(g *model.Gallery) model.GalleryCacheSnapshot {
+	return model.GalleryCacheSnapshot{
+		Title:       g.Title,
+		TitleJPN:    g.TitleJPN,
+		Category:    string(g.Category),
+		Thumbnail:   g.Thumbnail,
+		PageCount:   g.PageCount,
+		Rating:      g.Rating,
+		RatingCount: g.RatingCount,
+		Uploader:    g.Uploader,
+		PostedAt:    g.PostedAt,
+		FileSize:    g.FileSize,
+		Expunged:    g.Expunged,
+		Tags:        g.Tags,
+	}
+}
+
+func cacheMetaFromDetails(d model.GalleryDetail) model.GalleryCacheSnapshot {
+	tags := make([]model.Tag, len(d.Tags))
+	for i, t := range d.Tags {
+		tags[i] = model.Tag{Namespace: t.Namespace, Name: t.Name}
+	}
+	return model.GalleryCacheSnapshot{
+		Title:       d.Title,
+		TitleJPN:    d.TitleJpn,
+		Category:    string(model.MapCategory(d.Cat)),
+		Thumbnail:   d.Cover,
+		PageCount:   d.Length,
+		Rating:      d.Rating,
+		RatingCount: d.RatingCount,
+		Uploader:    d.Uploader,
+		Posted:      d.Posted,
+		Language:    d.Language,
+		Translated:  d.Translated == "TR",
+		FileSize:    d.FileSize,
+		Favorited:   d.Favorited,
+		Tags:        tags,
+	}
+}
+
+func galleryFromCache(row *ent.GalleryCache) *model.Gallery {
+	return &model.Gallery{
+		ID:          row.GalleryID,
+		Token:       row.Token,
+		Title:       row.Title,
+		TitleJPN:    row.TitleJpn,
+		Category:    model.GalleryCategory(row.Category),
+		Thumbnail:   row.Thumbnail,
+		PageCount:   row.PageCount,
+		Rating:      row.Rating,
+		RatingCount: row.RatingCount,
+		Uploader:    row.Uploader,
+		PostedAt:    row.PostedAt,
+		Tags:        row.Tags,
+		FileSize:    row.FileSize,
+		Expunged:    row.Expunged,
+		Cached:      true,
+	}
+}
 
 func (s *Server) handleGetGallery(c *gin.Context) {
 	idStr := c.Param("id")
@@ -30,11 +102,22 @@ func (s *Server) handleGetGallery(c *gin.Context) {
 
 	meta, err := exhentai.PostGalleryMetadata(ctx, s.Client, id, token)
 	if err != nil {
+		if db := s.cacheDB(); db != nil {
+			if row, found, getErr := gallerycache.Get(ctx, db, id, token); getErr == nil && found && row.Title != "" {
+				c.JSON(http.StatusOK, galleryFromCache(row))
+				return
+			}
+		}
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
 	}
 
 	gallery := model.ConvertMetadataToGallery(meta)
+	if db := s.cacheDB(); db != nil {
+		if cacheErr := gallerycache.UpsertMeta(ctx, db, id, token, cacheMetaFromGallery(gallery)); cacheErr != nil {
+			slog.Warn("gallery cache meta upsert failed", "id", id, "error", cacheErr)
+		}
+	}
 	c.JSON(http.StatusOK, gallery)
 }
 
@@ -48,9 +131,37 @@ func (s *Server) handleGalleryDetails(c *gin.Context) {
 
 	u := exhentai.GalleryURL(id, token)
 	ctx := c.Request.Context()
+	galleryID, _ := strconv.ParseInt(id, 10, 64)
 
 	details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u)
 	if err != nil {
+		if db := s.cacheDB(); db != nil {
+			if row, found, getErr := gallerycache.Get(ctx, db, galleryID, token); getErr == nil && found && row.Title != "" {
+				c.JSON(http.StatusOK, gin.H{
+					"id":           row.GalleryID,
+					"token":        row.Token,
+					"domain":       "",
+					"title":        row.Title,
+					"title_jpn":    row.TitleJpn,
+					"cover":        row.Thumbnail,
+					"category":     model.GalleryCategory(row.Category),
+					"uploader":     row.Uploader,
+					"posted":       row.Posted,
+					"parent":       0,
+					"visible":      "",
+					"language":     row.Language,
+					"translated":   row.Translated,
+					"file_size":    row.FileSize,
+					"page_count":   row.PageCount,
+					"favorited":    row.Favorited,
+					"rating_count": row.RatingCount,
+					"rating":       row.Rating,
+					"tags":         row.Tags,
+					"cached":       true,
+				})
+				return
+			}
+		}
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
 		return
 	}
@@ -58,6 +169,12 @@ func (s *Server) handleGalleryDetails(c *gin.Context) {
 	tags := make([]model.Tag, len(details.Tags))
 	for i, t := range details.Tags {
 		tags[i] = model.Tag{Namespace: t.Namespace, Name: t.Name}
+	}
+
+	if db := s.cacheDB(); db != nil {
+		if cacheErr := gallerycache.UpsertMeta(ctx, db, galleryID, token, cacheMetaFromDetails(details)); cacheErr != nil {
+			slog.Warn("gallery cache details upsert failed", "id", galleryID, "error", cacheErr)
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -80,6 +197,7 @@ func (s *Server) handleGalleryDetails(c *gin.Context) {
 		"rating_count": details.RatingCount,
 		"rating":       details.Rating,
 		"tags":         tags,
+		"cached":       false,
 	})
 }
 
@@ -93,32 +211,43 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 
 	u := exhentai.GalleryURL(id, token)
 	ctx := c.Request.Context()
+	galleryID, _ := strconv.ParseInt(id, 10, 64)
 
 	pageUrls, err := exhentai.ScrapeGalleryPageURLs(ctx, s.Client, u)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery pages failed: %v", err)})
+	if err == nil {
+		pages := make([]model.CachedPage, len(pageUrls))
+		for i, p := range pageUrls {
+			pages[i] = model.CachedPage{PageURL: p, Index: i}
+		}
+		if db := s.cacheDB(); db != nil {
+			if cacheErr := gallerycache.UpsertPages(ctx, db, galleryID, token, pages); cacheErr != nil {
+				slog.Warn("gallery cache pages upsert failed", "id", galleryID, "error", cacheErr)
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"id":     id,
+			"token":  token,
+			"total":  len(pages),
+			"pages":  pages,
+			"cached": false,
+		})
 		return
 	}
 
-	type pageInfo struct {
-		PageURL string `json:"page_url"`
-		Index   int    `json:"index"`
-	}
-
-	pages := make([]pageInfo, len(pageUrls))
-	for i, p := range pageUrls {
-		pages[i] = pageInfo{
-			PageURL: p,
-			Index:   i,
+	if db := s.cacheDB(); db != nil {
+		if row, found, getErr := gallerycache.Get(ctx, db, galleryID, token); getErr == nil && found && len(row.Pages) > 0 {
+			c.JSON(http.StatusOK, gin.H{
+				"id":     id,
+				"token":  token,
+				"total":  len(row.Pages),
+				"pages":  row.Pages,
+				"cached": true,
+			})
+			return
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"id":    id,
-		"token": token,
-		"total": len(pages),
-		"pages": pages,
-	})
+	c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery pages failed: %v", err)})
 }
 
 func (s *Server) handleSearch(c *gin.Context) {

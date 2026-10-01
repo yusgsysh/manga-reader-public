@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"manga-reader/internal/ent/bookshelf"
+	"manga-reader/internal/ent/gallerycache"
 	"manga-reader/internal/ent/predicate"
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/readingprogress"
@@ -28,6 +29,7 @@ const (
 
 	// Node types.
 	TypeBookshelf       = "Bookshelf"
+	TypeGalleryCache    = "GalleryCache"
 	TypePrefillJob      = "PrefillJob"
 	TypeReadingProgress = "ReadingProgress"
 )
@@ -857,6 +859,1766 @@ func (m *BookshelfMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *BookshelfMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown Bookshelf edge %s", name)
+}
+
+// GalleryCacheMutation represents an operation that mutates the GalleryCache nodes in the graph.
+type GalleryCacheMutation struct {
+	config
+	op               Op
+	typ              string
+	id               *int
+	gallery_id       *int64
+	addgallery_id    *int64
+	token            *string
+	title            *string
+	title_jpn        *string
+	category         *string
+	thumbnail        *string
+	page_count       *int
+	addpage_count    *int
+	rating           *float64
+	addrating        *float64
+	rating_count     *int
+	addrating_count  *int
+	uploader         *string
+	posted           *string
+	posted_at        *time.Time
+	language         *string
+	translated       *bool
+	file_size        *string
+	favorited        *int
+	addfavorited     *int
+	expunged         *bool
+	tags             *[]model.Tag
+	appendtags       []model.Tag
+	pages            *[]model.CachedPage
+	appendpages      []model.CachedPage
+	meta_fetched_at  *time.Time
+	pages_fetched_at *time.Time
+	updated_at       *time.Time
+	clearedFields    map[string]struct{}
+	done             bool
+	oldValue         func(context.Context) (*GalleryCache, error)
+	predicates       []predicate.GalleryCache
+}
+
+var _ ent.Mutation = (*GalleryCacheMutation)(nil)
+
+// gallerycacheOption allows management of the mutation configuration using functional options.
+type gallerycacheOption func(*GalleryCacheMutation)
+
+// newGalleryCacheMutation creates new mutation for the GalleryCache entity.
+func newGalleryCacheMutation(c config, op Op, opts ...gallerycacheOption) *GalleryCacheMutation {
+	m := &GalleryCacheMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeGalleryCache,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withGalleryCacheID sets the ID field of the mutation.
+func withGalleryCacheID(id int) gallerycacheOption {
+	return func(m *GalleryCacheMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *GalleryCache
+		)
+		m.oldValue = func(ctx context.Context) (*GalleryCache, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().GalleryCache.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withGalleryCache sets the old GalleryCache of the mutation.
+func withGalleryCache(node *GalleryCache) gallerycacheOption {
+	return func(m *GalleryCacheMutation) {
+		m.oldValue = func(context.Context) (*GalleryCache, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m GalleryCacheMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m GalleryCacheMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *GalleryCacheMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *GalleryCacheMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().GalleryCache.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetGalleryID sets the "gallery_id" field.
+func (m *GalleryCacheMutation) SetGalleryID(i int64) {
+	m.gallery_id = &i
+	m.addgallery_id = nil
+}
+
+// GalleryID returns the value of the "gallery_id" field in the mutation.
+func (m *GalleryCacheMutation) GalleryID() (r int64, exists bool) {
+	v := m.gallery_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGalleryID returns the old "gallery_id" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldGalleryID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGalleryID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGalleryID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGalleryID: %w", err)
+	}
+	return oldValue.GalleryID, nil
+}
+
+// AddGalleryID adds i to the "gallery_id" field.
+func (m *GalleryCacheMutation) AddGalleryID(i int64) {
+	if m.addgallery_id != nil {
+		*m.addgallery_id += i
+	} else {
+		m.addgallery_id = &i
+	}
+}
+
+// AddedGalleryID returns the value that was added to the "gallery_id" field in this mutation.
+func (m *GalleryCacheMutation) AddedGalleryID() (r int64, exists bool) {
+	v := m.addgallery_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGalleryID resets all changes to the "gallery_id" field.
+func (m *GalleryCacheMutation) ResetGalleryID() {
+	m.gallery_id = nil
+	m.addgallery_id = nil
+}
+
+// SetToken sets the "token" field.
+func (m *GalleryCacheMutation) SetToken(s string) {
+	m.token = &s
+}
+
+// Token returns the value of the "token" field in the mutation.
+func (m *GalleryCacheMutation) Token() (r string, exists bool) {
+	v := m.token
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldToken returns the old "token" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldToken(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldToken is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldToken requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldToken: %w", err)
+	}
+	return oldValue.Token, nil
+}
+
+// ResetToken resets all changes to the "token" field.
+func (m *GalleryCacheMutation) ResetToken() {
+	m.token = nil
+}
+
+// SetTitle sets the "title" field.
+func (m *GalleryCacheMutation) SetTitle(s string) {
+	m.title = &s
+}
+
+// Title returns the value of the "title" field in the mutation.
+func (m *GalleryCacheMutation) Title() (r string, exists bool) {
+	v := m.title
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTitle returns the old "title" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldTitle(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTitle is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTitle requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTitle: %w", err)
+	}
+	return oldValue.Title, nil
+}
+
+// ResetTitle resets all changes to the "title" field.
+func (m *GalleryCacheMutation) ResetTitle() {
+	m.title = nil
+}
+
+// SetTitleJpn sets the "title_jpn" field.
+func (m *GalleryCacheMutation) SetTitleJpn(s string) {
+	m.title_jpn = &s
+}
+
+// TitleJpn returns the value of the "title_jpn" field in the mutation.
+func (m *GalleryCacheMutation) TitleJpn() (r string, exists bool) {
+	v := m.title_jpn
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTitleJpn returns the old "title_jpn" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldTitleJpn(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTitleJpn is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTitleJpn requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTitleJpn: %w", err)
+	}
+	return oldValue.TitleJpn, nil
+}
+
+// ResetTitleJpn resets all changes to the "title_jpn" field.
+func (m *GalleryCacheMutation) ResetTitleJpn() {
+	m.title_jpn = nil
+}
+
+// SetCategory sets the "category" field.
+func (m *GalleryCacheMutation) SetCategory(s string) {
+	m.category = &s
+}
+
+// Category returns the value of the "category" field in the mutation.
+func (m *GalleryCacheMutation) Category() (r string, exists bool) {
+	v := m.category
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCategory returns the old "category" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldCategory(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCategory is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCategory requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCategory: %w", err)
+	}
+	return oldValue.Category, nil
+}
+
+// ResetCategory resets all changes to the "category" field.
+func (m *GalleryCacheMutation) ResetCategory() {
+	m.category = nil
+}
+
+// SetThumbnail sets the "thumbnail" field.
+func (m *GalleryCacheMutation) SetThumbnail(s string) {
+	m.thumbnail = &s
+}
+
+// Thumbnail returns the value of the "thumbnail" field in the mutation.
+func (m *GalleryCacheMutation) Thumbnail() (r string, exists bool) {
+	v := m.thumbnail
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldThumbnail returns the old "thumbnail" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldThumbnail(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldThumbnail is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldThumbnail requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldThumbnail: %w", err)
+	}
+	return oldValue.Thumbnail, nil
+}
+
+// ResetThumbnail resets all changes to the "thumbnail" field.
+func (m *GalleryCacheMutation) ResetThumbnail() {
+	m.thumbnail = nil
+}
+
+// SetPageCount sets the "page_count" field.
+func (m *GalleryCacheMutation) SetPageCount(i int) {
+	m.page_count = &i
+	m.addpage_count = nil
+}
+
+// PageCount returns the value of the "page_count" field in the mutation.
+func (m *GalleryCacheMutation) PageCount() (r int, exists bool) {
+	v := m.page_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPageCount returns the old "page_count" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldPageCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPageCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPageCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPageCount: %w", err)
+	}
+	return oldValue.PageCount, nil
+}
+
+// AddPageCount adds i to the "page_count" field.
+func (m *GalleryCacheMutation) AddPageCount(i int) {
+	if m.addpage_count != nil {
+		*m.addpage_count += i
+	} else {
+		m.addpage_count = &i
+	}
+}
+
+// AddedPageCount returns the value that was added to the "page_count" field in this mutation.
+func (m *GalleryCacheMutation) AddedPageCount() (r int, exists bool) {
+	v := m.addpage_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPageCount resets all changes to the "page_count" field.
+func (m *GalleryCacheMutation) ResetPageCount() {
+	m.page_count = nil
+	m.addpage_count = nil
+}
+
+// SetRating sets the "rating" field.
+func (m *GalleryCacheMutation) SetRating(f float64) {
+	m.rating = &f
+	m.addrating = nil
+}
+
+// Rating returns the value of the "rating" field in the mutation.
+func (m *GalleryCacheMutation) Rating() (r float64, exists bool) {
+	v := m.rating
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRating returns the old "rating" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldRating(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRating is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRating requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRating: %w", err)
+	}
+	return oldValue.Rating, nil
+}
+
+// AddRating adds f to the "rating" field.
+func (m *GalleryCacheMutation) AddRating(f float64) {
+	if m.addrating != nil {
+		*m.addrating += f
+	} else {
+		m.addrating = &f
+	}
+}
+
+// AddedRating returns the value that was added to the "rating" field in this mutation.
+func (m *GalleryCacheMutation) AddedRating() (r float64, exists bool) {
+	v := m.addrating
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRating resets all changes to the "rating" field.
+func (m *GalleryCacheMutation) ResetRating() {
+	m.rating = nil
+	m.addrating = nil
+}
+
+// SetRatingCount sets the "rating_count" field.
+func (m *GalleryCacheMutation) SetRatingCount(i int) {
+	m.rating_count = &i
+	m.addrating_count = nil
+}
+
+// RatingCount returns the value of the "rating_count" field in the mutation.
+func (m *GalleryCacheMutation) RatingCount() (r int, exists bool) {
+	v := m.rating_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRatingCount returns the old "rating_count" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldRatingCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRatingCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRatingCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRatingCount: %w", err)
+	}
+	return oldValue.RatingCount, nil
+}
+
+// AddRatingCount adds i to the "rating_count" field.
+func (m *GalleryCacheMutation) AddRatingCount(i int) {
+	if m.addrating_count != nil {
+		*m.addrating_count += i
+	} else {
+		m.addrating_count = &i
+	}
+}
+
+// AddedRatingCount returns the value that was added to the "rating_count" field in this mutation.
+func (m *GalleryCacheMutation) AddedRatingCount() (r int, exists bool) {
+	v := m.addrating_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRatingCount resets all changes to the "rating_count" field.
+func (m *GalleryCacheMutation) ResetRatingCount() {
+	m.rating_count = nil
+	m.addrating_count = nil
+}
+
+// SetUploader sets the "uploader" field.
+func (m *GalleryCacheMutation) SetUploader(s string) {
+	m.uploader = &s
+}
+
+// Uploader returns the value of the "uploader" field in the mutation.
+func (m *GalleryCacheMutation) Uploader() (r string, exists bool) {
+	v := m.uploader
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUploader returns the old "uploader" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldUploader(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUploader is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUploader requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUploader: %w", err)
+	}
+	return oldValue.Uploader, nil
+}
+
+// ResetUploader resets all changes to the "uploader" field.
+func (m *GalleryCacheMutation) ResetUploader() {
+	m.uploader = nil
+}
+
+// SetPosted sets the "posted" field.
+func (m *GalleryCacheMutation) SetPosted(s string) {
+	m.posted = &s
+}
+
+// Posted returns the value of the "posted" field in the mutation.
+func (m *GalleryCacheMutation) Posted() (r string, exists bool) {
+	v := m.posted
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPosted returns the old "posted" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldPosted(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPosted is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPosted requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPosted: %w", err)
+	}
+	return oldValue.Posted, nil
+}
+
+// ResetPosted resets all changes to the "posted" field.
+func (m *GalleryCacheMutation) ResetPosted() {
+	m.posted = nil
+}
+
+// SetPostedAt sets the "posted_at" field.
+func (m *GalleryCacheMutation) SetPostedAt(t time.Time) {
+	m.posted_at = &t
+}
+
+// PostedAt returns the value of the "posted_at" field in the mutation.
+func (m *GalleryCacheMutation) PostedAt() (r time.Time, exists bool) {
+	v := m.posted_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPostedAt returns the old "posted_at" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldPostedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPostedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPostedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPostedAt: %w", err)
+	}
+	return oldValue.PostedAt, nil
+}
+
+// ClearPostedAt clears the value of the "posted_at" field.
+func (m *GalleryCacheMutation) ClearPostedAt() {
+	m.posted_at = nil
+	m.clearedFields[gallerycache.FieldPostedAt] = struct{}{}
+}
+
+// PostedAtCleared returns if the "posted_at" field was cleared in this mutation.
+func (m *GalleryCacheMutation) PostedAtCleared() bool {
+	_, ok := m.clearedFields[gallerycache.FieldPostedAt]
+	return ok
+}
+
+// ResetPostedAt resets all changes to the "posted_at" field.
+func (m *GalleryCacheMutation) ResetPostedAt() {
+	m.posted_at = nil
+	delete(m.clearedFields, gallerycache.FieldPostedAt)
+}
+
+// SetLanguage sets the "language" field.
+func (m *GalleryCacheMutation) SetLanguage(s string) {
+	m.language = &s
+}
+
+// Language returns the value of the "language" field in the mutation.
+func (m *GalleryCacheMutation) Language() (r string, exists bool) {
+	v := m.language
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLanguage returns the old "language" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldLanguage(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLanguage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLanguage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLanguage: %w", err)
+	}
+	return oldValue.Language, nil
+}
+
+// ResetLanguage resets all changes to the "language" field.
+func (m *GalleryCacheMutation) ResetLanguage() {
+	m.language = nil
+}
+
+// SetTranslated sets the "translated" field.
+func (m *GalleryCacheMutation) SetTranslated(b bool) {
+	m.translated = &b
+}
+
+// Translated returns the value of the "translated" field in the mutation.
+func (m *GalleryCacheMutation) Translated() (r bool, exists bool) {
+	v := m.translated
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTranslated returns the old "translated" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldTranslated(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTranslated is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTranslated requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTranslated: %w", err)
+	}
+	return oldValue.Translated, nil
+}
+
+// ResetTranslated resets all changes to the "translated" field.
+func (m *GalleryCacheMutation) ResetTranslated() {
+	m.translated = nil
+}
+
+// SetFileSize sets the "file_size" field.
+func (m *GalleryCacheMutation) SetFileSize(s string) {
+	m.file_size = &s
+}
+
+// FileSize returns the value of the "file_size" field in the mutation.
+func (m *GalleryCacheMutation) FileSize() (r string, exists bool) {
+	v := m.file_size
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFileSize returns the old "file_size" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldFileSize(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFileSize is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFileSize requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFileSize: %w", err)
+	}
+	return oldValue.FileSize, nil
+}
+
+// ResetFileSize resets all changes to the "file_size" field.
+func (m *GalleryCacheMutation) ResetFileSize() {
+	m.file_size = nil
+}
+
+// SetFavorited sets the "favorited" field.
+func (m *GalleryCacheMutation) SetFavorited(i int) {
+	m.favorited = &i
+	m.addfavorited = nil
+}
+
+// Favorited returns the value of the "favorited" field in the mutation.
+func (m *GalleryCacheMutation) Favorited() (r int, exists bool) {
+	v := m.favorited
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFavorited returns the old "favorited" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldFavorited(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFavorited is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFavorited requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFavorited: %w", err)
+	}
+	return oldValue.Favorited, nil
+}
+
+// AddFavorited adds i to the "favorited" field.
+func (m *GalleryCacheMutation) AddFavorited(i int) {
+	if m.addfavorited != nil {
+		*m.addfavorited += i
+	} else {
+		m.addfavorited = &i
+	}
+}
+
+// AddedFavorited returns the value that was added to the "favorited" field in this mutation.
+func (m *GalleryCacheMutation) AddedFavorited() (r int, exists bool) {
+	v := m.addfavorited
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFavorited resets all changes to the "favorited" field.
+func (m *GalleryCacheMutation) ResetFavorited() {
+	m.favorited = nil
+	m.addfavorited = nil
+}
+
+// SetExpunged sets the "expunged" field.
+func (m *GalleryCacheMutation) SetExpunged(b bool) {
+	m.expunged = &b
+}
+
+// Expunged returns the value of the "expunged" field in the mutation.
+func (m *GalleryCacheMutation) Expunged() (r bool, exists bool) {
+	v := m.expunged
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpunged returns the old "expunged" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldExpunged(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpunged is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpunged requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpunged: %w", err)
+	}
+	return oldValue.Expunged, nil
+}
+
+// ResetExpunged resets all changes to the "expunged" field.
+func (m *GalleryCacheMutation) ResetExpunged() {
+	m.expunged = nil
+}
+
+// SetTags sets the "tags" field.
+func (m *GalleryCacheMutation) SetTags(value []model.Tag) {
+	m.tags = &value
+	m.appendtags = nil
+}
+
+// Tags returns the value of the "tags" field in the mutation.
+func (m *GalleryCacheMutation) Tags() (r []model.Tag, exists bool) {
+	v := m.tags
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTags returns the old "tags" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldTags(ctx context.Context) (v []model.Tag, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTags is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTags requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTags: %w", err)
+	}
+	return oldValue.Tags, nil
+}
+
+// AppendTags adds value to the "tags" field.
+func (m *GalleryCacheMutation) AppendTags(value []model.Tag) {
+	m.appendtags = append(m.appendtags, value...)
+}
+
+// AppendedTags returns the list of values that were appended to the "tags" field in this mutation.
+func (m *GalleryCacheMutation) AppendedTags() ([]model.Tag, bool) {
+	if len(m.appendtags) == 0 {
+		return nil, false
+	}
+	return m.appendtags, true
+}
+
+// ClearTags clears the value of the "tags" field.
+func (m *GalleryCacheMutation) ClearTags() {
+	m.tags = nil
+	m.appendtags = nil
+	m.clearedFields[gallerycache.FieldTags] = struct{}{}
+}
+
+// TagsCleared returns if the "tags" field was cleared in this mutation.
+func (m *GalleryCacheMutation) TagsCleared() bool {
+	_, ok := m.clearedFields[gallerycache.FieldTags]
+	return ok
+}
+
+// ResetTags resets all changes to the "tags" field.
+func (m *GalleryCacheMutation) ResetTags() {
+	m.tags = nil
+	m.appendtags = nil
+	delete(m.clearedFields, gallerycache.FieldTags)
+}
+
+// SetPages sets the "pages" field.
+func (m *GalleryCacheMutation) SetPages(mp []model.CachedPage) {
+	m.pages = &mp
+	m.appendpages = nil
+}
+
+// Pages returns the value of the "pages" field in the mutation.
+func (m *GalleryCacheMutation) Pages() (r []model.CachedPage, exists bool) {
+	v := m.pages
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPages returns the old "pages" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldPages(ctx context.Context) (v []model.CachedPage, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPages is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPages requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPages: %w", err)
+	}
+	return oldValue.Pages, nil
+}
+
+// AppendPages adds mp to the "pages" field.
+func (m *GalleryCacheMutation) AppendPages(mp []model.CachedPage) {
+	m.appendpages = append(m.appendpages, mp...)
+}
+
+// AppendedPages returns the list of values that were appended to the "pages" field in this mutation.
+func (m *GalleryCacheMutation) AppendedPages() ([]model.CachedPage, bool) {
+	if len(m.appendpages) == 0 {
+		return nil, false
+	}
+	return m.appendpages, true
+}
+
+// ClearPages clears the value of the "pages" field.
+func (m *GalleryCacheMutation) ClearPages() {
+	m.pages = nil
+	m.appendpages = nil
+	m.clearedFields[gallerycache.FieldPages] = struct{}{}
+}
+
+// PagesCleared returns if the "pages" field was cleared in this mutation.
+func (m *GalleryCacheMutation) PagesCleared() bool {
+	_, ok := m.clearedFields[gallerycache.FieldPages]
+	return ok
+}
+
+// ResetPages resets all changes to the "pages" field.
+func (m *GalleryCacheMutation) ResetPages() {
+	m.pages = nil
+	m.appendpages = nil
+	delete(m.clearedFields, gallerycache.FieldPages)
+}
+
+// SetMetaFetchedAt sets the "meta_fetched_at" field.
+func (m *GalleryCacheMutation) SetMetaFetchedAt(t time.Time) {
+	m.meta_fetched_at = &t
+}
+
+// MetaFetchedAt returns the value of the "meta_fetched_at" field in the mutation.
+func (m *GalleryCacheMutation) MetaFetchedAt() (r time.Time, exists bool) {
+	v := m.meta_fetched_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMetaFetchedAt returns the old "meta_fetched_at" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldMetaFetchedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMetaFetchedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMetaFetchedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMetaFetchedAt: %w", err)
+	}
+	return oldValue.MetaFetchedAt, nil
+}
+
+// ClearMetaFetchedAt clears the value of the "meta_fetched_at" field.
+func (m *GalleryCacheMutation) ClearMetaFetchedAt() {
+	m.meta_fetched_at = nil
+	m.clearedFields[gallerycache.FieldMetaFetchedAt] = struct{}{}
+}
+
+// MetaFetchedAtCleared returns if the "meta_fetched_at" field was cleared in this mutation.
+func (m *GalleryCacheMutation) MetaFetchedAtCleared() bool {
+	_, ok := m.clearedFields[gallerycache.FieldMetaFetchedAt]
+	return ok
+}
+
+// ResetMetaFetchedAt resets all changes to the "meta_fetched_at" field.
+func (m *GalleryCacheMutation) ResetMetaFetchedAt() {
+	m.meta_fetched_at = nil
+	delete(m.clearedFields, gallerycache.FieldMetaFetchedAt)
+}
+
+// SetPagesFetchedAt sets the "pages_fetched_at" field.
+func (m *GalleryCacheMutation) SetPagesFetchedAt(t time.Time) {
+	m.pages_fetched_at = &t
+}
+
+// PagesFetchedAt returns the value of the "pages_fetched_at" field in the mutation.
+func (m *GalleryCacheMutation) PagesFetchedAt() (r time.Time, exists bool) {
+	v := m.pages_fetched_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPagesFetchedAt returns the old "pages_fetched_at" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldPagesFetchedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPagesFetchedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPagesFetchedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPagesFetchedAt: %w", err)
+	}
+	return oldValue.PagesFetchedAt, nil
+}
+
+// ClearPagesFetchedAt clears the value of the "pages_fetched_at" field.
+func (m *GalleryCacheMutation) ClearPagesFetchedAt() {
+	m.pages_fetched_at = nil
+	m.clearedFields[gallerycache.FieldPagesFetchedAt] = struct{}{}
+}
+
+// PagesFetchedAtCleared returns if the "pages_fetched_at" field was cleared in this mutation.
+func (m *GalleryCacheMutation) PagesFetchedAtCleared() bool {
+	_, ok := m.clearedFields[gallerycache.FieldPagesFetchedAt]
+	return ok
+}
+
+// ResetPagesFetchedAt resets all changes to the "pages_fetched_at" field.
+func (m *GalleryCacheMutation) ResetPagesFetchedAt() {
+	m.pages_fetched_at = nil
+	delete(m.clearedFields, gallerycache.FieldPagesFetchedAt)
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *GalleryCacheMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *GalleryCacheMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *GalleryCacheMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the GalleryCacheMutation builder.
+func (m *GalleryCacheMutation) Where(ps ...predicate.GalleryCache) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the GalleryCacheMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *GalleryCacheMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.GalleryCache, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *GalleryCacheMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *GalleryCacheMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (GalleryCache).
+func (m *GalleryCacheMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *GalleryCacheMutation) Fields() []string {
+	fields := make([]string, 0, 22)
+	if m.gallery_id != nil {
+		fields = append(fields, gallerycache.FieldGalleryID)
+	}
+	if m.token != nil {
+		fields = append(fields, gallerycache.FieldToken)
+	}
+	if m.title != nil {
+		fields = append(fields, gallerycache.FieldTitle)
+	}
+	if m.title_jpn != nil {
+		fields = append(fields, gallerycache.FieldTitleJpn)
+	}
+	if m.category != nil {
+		fields = append(fields, gallerycache.FieldCategory)
+	}
+	if m.thumbnail != nil {
+		fields = append(fields, gallerycache.FieldThumbnail)
+	}
+	if m.page_count != nil {
+		fields = append(fields, gallerycache.FieldPageCount)
+	}
+	if m.rating != nil {
+		fields = append(fields, gallerycache.FieldRating)
+	}
+	if m.rating_count != nil {
+		fields = append(fields, gallerycache.FieldRatingCount)
+	}
+	if m.uploader != nil {
+		fields = append(fields, gallerycache.FieldUploader)
+	}
+	if m.posted != nil {
+		fields = append(fields, gallerycache.FieldPosted)
+	}
+	if m.posted_at != nil {
+		fields = append(fields, gallerycache.FieldPostedAt)
+	}
+	if m.language != nil {
+		fields = append(fields, gallerycache.FieldLanguage)
+	}
+	if m.translated != nil {
+		fields = append(fields, gallerycache.FieldTranslated)
+	}
+	if m.file_size != nil {
+		fields = append(fields, gallerycache.FieldFileSize)
+	}
+	if m.favorited != nil {
+		fields = append(fields, gallerycache.FieldFavorited)
+	}
+	if m.expunged != nil {
+		fields = append(fields, gallerycache.FieldExpunged)
+	}
+	if m.tags != nil {
+		fields = append(fields, gallerycache.FieldTags)
+	}
+	if m.pages != nil {
+		fields = append(fields, gallerycache.FieldPages)
+	}
+	if m.meta_fetched_at != nil {
+		fields = append(fields, gallerycache.FieldMetaFetchedAt)
+	}
+	if m.pages_fetched_at != nil {
+		fields = append(fields, gallerycache.FieldPagesFetchedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, gallerycache.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *GalleryCacheMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case gallerycache.FieldGalleryID:
+		return m.GalleryID()
+	case gallerycache.FieldToken:
+		return m.Token()
+	case gallerycache.FieldTitle:
+		return m.Title()
+	case gallerycache.FieldTitleJpn:
+		return m.TitleJpn()
+	case gallerycache.FieldCategory:
+		return m.Category()
+	case gallerycache.FieldThumbnail:
+		return m.Thumbnail()
+	case gallerycache.FieldPageCount:
+		return m.PageCount()
+	case gallerycache.FieldRating:
+		return m.Rating()
+	case gallerycache.FieldRatingCount:
+		return m.RatingCount()
+	case gallerycache.FieldUploader:
+		return m.Uploader()
+	case gallerycache.FieldPosted:
+		return m.Posted()
+	case gallerycache.FieldPostedAt:
+		return m.PostedAt()
+	case gallerycache.FieldLanguage:
+		return m.Language()
+	case gallerycache.FieldTranslated:
+		return m.Translated()
+	case gallerycache.FieldFileSize:
+		return m.FileSize()
+	case gallerycache.FieldFavorited:
+		return m.Favorited()
+	case gallerycache.FieldExpunged:
+		return m.Expunged()
+	case gallerycache.FieldTags:
+		return m.Tags()
+	case gallerycache.FieldPages:
+		return m.Pages()
+	case gallerycache.FieldMetaFetchedAt:
+		return m.MetaFetchedAt()
+	case gallerycache.FieldPagesFetchedAt:
+		return m.PagesFetchedAt()
+	case gallerycache.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *GalleryCacheMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case gallerycache.FieldGalleryID:
+		return m.OldGalleryID(ctx)
+	case gallerycache.FieldToken:
+		return m.OldToken(ctx)
+	case gallerycache.FieldTitle:
+		return m.OldTitle(ctx)
+	case gallerycache.FieldTitleJpn:
+		return m.OldTitleJpn(ctx)
+	case gallerycache.FieldCategory:
+		return m.OldCategory(ctx)
+	case gallerycache.FieldThumbnail:
+		return m.OldThumbnail(ctx)
+	case gallerycache.FieldPageCount:
+		return m.OldPageCount(ctx)
+	case gallerycache.FieldRating:
+		return m.OldRating(ctx)
+	case gallerycache.FieldRatingCount:
+		return m.OldRatingCount(ctx)
+	case gallerycache.FieldUploader:
+		return m.OldUploader(ctx)
+	case gallerycache.FieldPosted:
+		return m.OldPosted(ctx)
+	case gallerycache.FieldPostedAt:
+		return m.OldPostedAt(ctx)
+	case gallerycache.FieldLanguage:
+		return m.OldLanguage(ctx)
+	case gallerycache.FieldTranslated:
+		return m.OldTranslated(ctx)
+	case gallerycache.FieldFileSize:
+		return m.OldFileSize(ctx)
+	case gallerycache.FieldFavorited:
+		return m.OldFavorited(ctx)
+	case gallerycache.FieldExpunged:
+		return m.OldExpunged(ctx)
+	case gallerycache.FieldTags:
+		return m.OldTags(ctx)
+	case gallerycache.FieldPages:
+		return m.OldPages(ctx)
+	case gallerycache.FieldMetaFetchedAt:
+		return m.OldMetaFetchedAt(ctx)
+	case gallerycache.FieldPagesFetchedAt:
+		return m.OldPagesFetchedAt(ctx)
+	case gallerycache.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown GalleryCache field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GalleryCacheMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case gallerycache.FieldGalleryID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGalleryID(v)
+		return nil
+	case gallerycache.FieldToken:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetToken(v)
+		return nil
+	case gallerycache.FieldTitle:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTitle(v)
+		return nil
+	case gallerycache.FieldTitleJpn:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTitleJpn(v)
+		return nil
+	case gallerycache.FieldCategory:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCategory(v)
+		return nil
+	case gallerycache.FieldThumbnail:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetThumbnail(v)
+		return nil
+	case gallerycache.FieldPageCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPageCount(v)
+		return nil
+	case gallerycache.FieldRating:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRating(v)
+		return nil
+	case gallerycache.FieldRatingCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRatingCount(v)
+		return nil
+	case gallerycache.FieldUploader:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUploader(v)
+		return nil
+	case gallerycache.FieldPosted:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPosted(v)
+		return nil
+	case gallerycache.FieldPostedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPostedAt(v)
+		return nil
+	case gallerycache.FieldLanguage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLanguage(v)
+		return nil
+	case gallerycache.FieldTranslated:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTranslated(v)
+		return nil
+	case gallerycache.FieldFileSize:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFileSize(v)
+		return nil
+	case gallerycache.FieldFavorited:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFavorited(v)
+		return nil
+	case gallerycache.FieldExpunged:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpunged(v)
+		return nil
+	case gallerycache.FieldTags:
+		v, ok := value.([]model.Tag)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTags(v)
+		return nil
+	case gallerycache.FieldPages:
+		v, ok := value.([]model.CachedPage)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPages(v)
+		return nil
+	case gallerycache.FieldMetaFetchedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMetaFetchedAt(v)
+		return nil
+	case gallerycache.FieldPagesFetchedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPagesFetchedAt(v)
+		return nil
+	case gallerycache.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GalleryCache field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *GalleryCacheMutation) AddedFields() []string {
+	var fields []string
+	if m.addgallery_id != nil {
+		fields = append(fields, gallerycache.FieldGalleryID)
+	}
+	if m.addpage_count != nil {
+		fields = append(fields, gallerycache.FieldPageCount)
+	}
+	if m.addrating != nil {
+		fields = append(fields, gallerycache.FieldRating)
+	}
+	if m.addrating_count != nil {
+		fields = append(fields, gallerycache.FieldRatingCount)
+	}
+	if m.addfavorited != nil {
+		fields = append(fields, gallerycache.FieldFavorited)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *GalleryCacheMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case gallerycache.FieldGalleryID:
+		return m.AddedGalleryID()
+	case gallerycache.FieldPageCount:
+		return m.AddedPageCount()
+	case gallerycache.FieldRating:
+		return m.AddedRating()
+	case gallerycache.FieldRatingCount:
+		return m.AddedRatingCount()
+	case gallerycache.FieldFavorited:
+		return m.AddedFavorited()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GalleryCacheMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case gallerycache.FieldGalleryID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGalleryID(v)
+		return nil
+	case gallerycache.FieldPageCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPageCount(v)
+		return nil
+	case gallerycache.FieldRating:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRating(v)
+		return nil
+	case gallerycache.FieldRatingCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRatingCount(v)
+		return nil
+	case gallerycache.FieldFavorited:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFavorited(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GalleryCache numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *GalleryCacheMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(gallerycache.FieldPostedAt) {
+		fields = append(fields, gallerycache.FieldPostedAt)
+	}
+	if m.FieldCleared(gallerycache.FieldTags) {
+		fields = append(fields, gallerycache.FieldTags)
+	}
+	if m.FieldCleared(gallerycache.FieldPages) {
+		fields = append(fields, gallerycache.FieldPages)
+	}
+	if m.FieldCleared(gallerycache.FieldMetaFetchedAt) {
+		fields = append(fields, gallerycache.FieldMetaFetchedAt)
+	}
+	if m.FieldCleared(gallerycache.FieldPagesFetchedAt) {
+		fields = append(fields, gallerycache.FieldPagesFetchedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *GalleryCacheMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *GalleryCacheMutation) ClearField(name string) error {
+	switch name {
+	case gallerycache.FieldPostedAt:
+		m.ClearPostedAt()
+		return nil
+	case gallerycache.FieldTags:
+		m.ClearTags()
+		return nil
+	case gallerycache.FieldPages:
+		m.ClearPages()
+		return nil
+	case gallerycache.FieldMetaFetchedAt:
+		m.ClearMetaFetchedAt()
+		return nil
+	case gallerycache.FieldPagesFetchedAt:
+		m.ClearPagesFetchedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown GalleryCache nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *GalleryCacheMutation) ResetField(name string) error {
+	switch name {
+	case gallerycache.FieldGalleryID:
+		m.ResetGalleryID()
+		return nil
+	case gallerycache.FieldToken:
+		m.ResetToken()
+		return nil
+	case gallerycache.FieldTitle:
+		m.ResetTitle()
+		return nil
+	case gallerycache.FieldTitleJpn:
+		m.ResetTitleJpn()
+		return nil
+	case gallerycache.FieldCategory:
+		m.ResetCategory()
+		return nil
+	case gallerycache.FieldThumbnail:
+		m.ResetThumbnail()
+		return nil
+	case gallerycache.FieldPageCount:
+		m.ResetPageCount()
+		return nil
+	case gallerycache.FieldRating:
+		m.ResetRating()
+		return nil
+	case gallerycache.FieldRatingCount:
+		m.ResetRatingCount()
+		return nil
+	case gallerycache.FieldUploader:
+		m.ResetUploader()
+		return nil
+	case gallerycache.FieldPosted:
+		m.ResetPosted()
+		return nil
+	case gallerycache.FieldPostedAt:
+		m.ResetPostedAt()
+		return nil
+	case gallerycache.FieldLanguage:
+		m.ResetLanguage()
+		return nil
+	case gallerycache.FieldTranslated:
+		m.ResetTranslated()
+		return nil
+	case gallerycache.FieldFileSize:
+		m.ResetFileSize()
+		return nil
+	case gallerycache.FieldFavorited:
+		m.ResetFavorited()
+		return nil
+	case gallerycache.FieldExpunged:
+		m.ResetExpunged()
+		return nil
+	case gallerycache.FieldTags:
+		m.ResetTags()
+		return nil
+	case gallerycache.FieldPages:
+		m.ResetPages()
+		return nil
+	case gallerycache.FieldMetaFetchedAt:
+		m.ResetMetaFetchedAt()
+		return nil
+	case gallerycache.FieldPagesFetchedAt:
+		m.ResetPagesFetchedAt()
+		return nil
+	case gallerycache.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown GalleryCache field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *GalleryCacheMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *GalleryCacheMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *GalleryCacheMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *GalleryCacheMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *GalleryCacheMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *GalleryCacheMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *GalleryCacheMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown GalleryCache unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *GalleryCacheMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown GalleryCache edge %s", name)
 }
 
 // PrefillJobMutation represents an operation that mutates the PrefillJob nodes in the graph.

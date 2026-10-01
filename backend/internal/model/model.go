@@ -46,6 +46,7 @@ type Gallery struct {
 	Tags        []Tag           `json:"tags"`
 	FileSize    string          `json:"file_size,omitempty"`
 	Expunged    bool            `json:"expunged,omitempty"`
+	Cached      bool            `json:"cached,omitempty"`
 }
 
 type GalleryCategory string
