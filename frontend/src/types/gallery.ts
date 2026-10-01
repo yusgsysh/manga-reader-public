@@ -112,7 +112,6 @@ export interface GalleryDetail {
   rating_count: number;
   rating: number;
   tags: Tag[];
-  cached?: boolean;
 }
 
 export interface Tag {

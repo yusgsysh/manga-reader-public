@@ -53,39 +53,7 @@ func seedGalleryCache(t *testing.T, client *ent.Client, id int64, token string) 
 	}
 }
 
-func TestGalleryPages_FallbackToCache(t *testing.T) {
-	client := newTestDB(t)
-	seedGalleryCache(t, client, 12345, "tok12345")
-
-	server := &Server{
-		Client: errorClient(),
-		DB:     &database.DB{Client: client},
-	}
-	r := setupMockRouter(server)
-
-	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345/pages", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
-	}
-
-	var resp struct {
-		Total  int                `json:"total"`
-		Cached bool               `json:"cached"`
-		Pages  []model.CachedPage `json:"pages"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if !resp.Cached {
-		t.Error("cached = false, want true")
-	}
-	if resp.Total != 2 || len(resp.Pages) != 2 {
-		t.Errorf("pages = %d (total %d), want 2", len(resp.Pages), resp.Total)
-	}
-}
+// ==================== Online endpoints: write cache, no fallback ====================
 
 func TestGalleryPages_WritesCache(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +89,28 @@ func TestGalleryPages_WritesCache(t *testing.T) {
 	}
 }
 
-func TestGetGallery_FallbackToCache(t *testing.T) {
+func TestGalleryPages_UpstreamFailure(t *testing.T) {
+	client := newTestDB(t)
+	seedGalleryCache(t, client, 12345, "tok12345")
+
+	server := &Server{
+		Client: errorClient(),
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345/pages", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Online endpoint must NOT fall back to cache; the frontend does that via
+	// the gallery-cache endpoint instead.
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", w.Code)
+	}
+}
+
+func TestGetGallery_UpstreamFailure(t *testing.T) {
 	client := newTestDB(t)
 	seedGalleryCache(t, client, 12345, "tok12345")
 
@@ -135,29 +124,12 @@ func TestGetGallery_FallbackToCache(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
-	}
-
-	var gallery model.Gallery
-	if err := json.Unmarshal(w.Body.Bytes(), &gallery); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if !gallery.Cached {
-		t.Error("cached = false, want true")
-	}
-	if gallery.Title != "Cached Gallery" {
-		t.Errorf("title = %q, want %q", gallery.Title, "Cached Gallery")
-	}
-	if gallery.PageCount != 2 || gallery.Rating != 4.5 {
-		t.Errorf("page_count=%d rating=%v, want 2 / 4.5", gallery.PageCount, gallery.Rating)
-	}
-	if len(gallery.Tags) != 1 {
-		t.Errorf("tags = %d, want 1", len(gallery.Tags))
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", w.Code)
 	}
 }
 
-func TestGalleryDetails_FallbackToCache(t *testing.T) {
+func TestGalleryDetails_UpstreamFailure(t *testing.T) {
 	client := newTestDB(t)
 	seedGalleryCache(t, client, 12345, "tok12345")
 
@@ -171,6 +143,96 @@ func TestGalleryDetails_FallbackToCache(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", w.Code)
+	}
+}
+
+// ==================== Cache-only endpoints ====================
+
+func TestCachedGalleryPages_Hit(t *testing.T) {
+	client := newTestDB(t)
+	seedGalleryCache(t, client, 12345, "tok12345")
+
+	server := &Server{DB: &database.DB{Client: client}}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery-cache/12345/tok12345/pages", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Total int                `json:"total"`
+		Pages []model.CachedPage `json:"pages"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Total != 2 || len(resp.Pages) != 2 {
+		t.Errorf("pages = %d (total %d), want 2", len(resp.Pages), resp.Total)
+	}
+	if got := w.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store", got)
+	}
+}
+
+func TestCachedGalleryPages_Miss(t *testing.T) {
+	client := newTestDB(t)
+	server := &Server{DB: &database.DB{Client: client}}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery-cache/12345/tok12345/pages", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestCachedGallery_Metadata(t *testing.T) {
+	client := newTestDB(t)
+	seedGalleryCache(t, client, 12345, "tok12345")
+
+	server := &Server{DB: &database.DB{Client: client}}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery-cache/12345/tok12345", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+	var gallery model.Gallery
+	if err := json.Unmarshal(w.Body.Bytes(), &gallery); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if gallery.Title != "Cached Gallery" {
+		t.Errorf("title = %q, want %q", gallery.Title, "Cached Gallery")
+	}
+	if gallery.PageCount != 2 || gallery.Rating != 4.5 {
+		t.Errorf("page_count=%d rating=%v, want 2 / 4.5", gallery.PageCount, gallery.Rating)
+	}
+	if len(gallery.Tags) != 1 {
+		t.Errorf("tags = %d, want 1", len(gallery.Tags))
+	}
+}
+
+func TestCachedGalleryDetails(t *testing.T) {
+	client := newTestDB(t)
+	seedGalleryCache(t, client, 12345, "tok12345")
+
+	server := &Server{DB: &database.DB{Client: client}}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery-cache/12345/tok12345/details", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
 	}
@@ -180,14 +242,10 @@ func TestGalleryDetails_FallbackToCache(t *testing.T) {
 		Title    string      `json:"title"`
 		Uploader string      `json:"uploader"`
 		Cover    string      `json:"cover"`
-		Cached   bool        `json:"cached"`
 		Tags     []model.Tag `json:"tags"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &details); err != nil {
 		t.Fatalf("unmarshal: %v", err)
-	}
-	if !details.Cached {
-		t.Error("cached = false, want true")
 	}
 	if details.ID != 12345 || details.Title != "Cached Gallery" {
 		t.Errorf("id=%d title=%q, want 12345 / Cached Gallery", details.ID, details.Title)
@@ -195,7 +253,26 @@ func TestGalleryDetails_FallbackToCache(t *testing.T) {
 	if details.Uploader != "cached_uploader" || details.Cover == "" {
 		t.Errorf("uploader=%q cover=%q, want cached values", details.Uploader, details.Cover)
 	}
+	if len(details.Tags) != 1 {
+		t.Errorf("tags = %d, want 1", len(details.Tags))
+	}
 }
+
+func TestCachedGallery_Miss(t *testing.T) {
+	client := newTestDB(t)
+	server := &Server{DB: &database.DB{Client: client}}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery-cache/12345/tok12345", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", w.Code)
+	}
+}
+
+// ==================== Prefetch / first-write-wins / cleanup ====================
 
 func TestPrefetchGallery_WritesCache(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {

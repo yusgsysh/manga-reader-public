@@ -48,6 +48,7 @@ export function GalleryDetailPage() {
 
   const {
     data: gallery,
+    source,
     isLoading,
     error,
     refetch,
@@ -198,7 +199,7 @@ export function GalleryDetailPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            {gallery.cached && (
+            {source === "cache" && (
               <Chip tone="outline" className="gap-1 text-kumo-subtle">
                 <CloudSlash className="size-3.5" weight="bold" />
                 离线数据

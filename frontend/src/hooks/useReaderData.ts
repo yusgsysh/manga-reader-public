@@ -1,34 +1,45 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
-import { fetchGallery, fetchGalleryPages } from "../api/gallery";
+import {
+  fetchGallery,
+  fetchGalleryCached,
+  fetchGalleryPages,
+  fetchGalleryPagesCached,
+} from "../api/gallery";
 import { fetchReadingProgress, updateReadingProgress } from "../api/progress";
 import { trackProgressSave } from "../lib/progressSave";
 import type { GalleryCategory } from "../types/gallery";
 import type { RecentlyReadItem, RecentlyReadResponse } from "../types/recentlyRead";
 import type {
   Gallery,
+  GalleryPagesResponse,
   ReadingProgress,
   UpdateReadingProgressRequest,
 } from "../types/reader";
+import { useOnlineThenCached } from "./useOnlineCached";
 
 const GALLERY_STALE_TIME = 5 * 60_000;
 const PAGES_STALE_TIME = 10 * 60_000;
 const PROGRESS_STALE_TIME = 30_000;
 
 export function useGallery(id: number, token: string) {
-  return useQuery({
-    queryKey: ["gallery", id, token],
-    queryFn: () => fetchGallery(id, token),
+  return useOnlineThenCached<Gallery>({
     enabled: Number.isFinite(id) && token.length > 0,
+    onlineKey: ["gallery", id, token],
+    cacheKey: ["gallery-cache", id, token],
+    onlineFn: () => fetchGallery(id, token),
+    cacheFn: () => fetchGalleryCached(id, token),
     staleTime: GALLERY_STALE_TIME,
   });
 }
 
 export function useGalleryPages(id: number, token: string) {
-  return useQuery({
-    queryKey: ["gallery-pages", id, token],
-    queryFn: () => fetchGalleryPages(id, token),
+  return useOnlineThenCached<GalleryPagesResponse>({
     enabled: Number.isFinite(id) && token.length > 0,
+    onlineKey: ["gallery-pages", id, token],
+    cacheKey: ["gallery-pages-cache", id, token],
+    onlineFn: () => fetchGalleryPages(id, token),
+    cacheFn: () => fetchGalleryPagesCached(id, token),
     staleTime: PAGES_STALE_TIME,
   });
 }

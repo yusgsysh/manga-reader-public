@@ -1,16 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchGalleryDetail } from "../api/gallery";
+import { fetchGalleryDetail, fetchGalleryDetailCached } from "../api/gallery";
 import {
   addToBookshelf,
   getBookshelfStatus,
   removeFromBookshelf,
 } from "../api/bookshelf";
+import type { GalleryDetail } from "../types/gallery";
+import { useOnlineThenCached } from "./useOnlineCached";
 
 export function useGalleryDetail(id: number, token: string) {
-  return useQuery({
-    queryKey: ["gallery-detail", id, token],
-    queryFn: () => fetchGalleryDetail(id, token),
+  return useOnlineThenCached<GalleryDetail>({
     enabled: Number.isFinite(id) && token.length > 0,
+    onlineKey: ["gallery-detail", id, token],
+    cacheKey: ["gallery-detail-cache", id, token],
+    onlineFn: () => fetchGalleryDetail(id, token),
+    cacheFn: () => fetchGalleryDetailCached(id, token),
     staleTime: 5 * 60_000,
   });
 }

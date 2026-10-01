@@ -70,3 +70,29 @@ export function fetchGalleryDetail(
 ): Promise<GalleryDetail> {
   return apiGet<GalleryDetail>(`/api/gallery/${id}/${token}/details`);
 }
+
+// Offline cache endpoints (read-only). Used by the frontend as a fallback when
+// the online endpoints above fail.
+
+export function fetchGalleryCached(
+  id: number,
+  token: string,
+): Promise<Gallery> {
+  return apiGet<Gallery>(`/api/gallery-cache/${id}/${token}`);
+}
+
+export function fetchGalleryDetailCached(
+  id: number,
+  token: string,
+): Promise<GalleryDetail> {
+  return apiGet<GalleryDetail>(`/api/gallery-cache/${id}/${token}/details`);
+}
+
+export function fetchGalleryPagesCached(
+  id: number,
+  token: string,
+): Promise<GalleryPagesResponse> {
+  return apiGet<GalleryPagesResponse>(
+    `/api/gallery-cache/${id}/${token}/pages`,
+  );
+}

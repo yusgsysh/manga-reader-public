@@ -80,21 +80,60 @@ func galleryFromCache(row *ent.GalleryCache) *model.Gallery {
 		Tags:        row.Tags,
 		FileSize:    row.FileSize,
 		Expunged:    row.Expunged,
-		Cached:      true,
 	}
 }
 
-func (s *Server) handleGetGallery(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
+func galleryDetailsFromCache(row *ent.GalleryCache) gin.H {
+	return gin.H{
+		"id":           row.GalleryID,
+		"token":        row.Token,
+		"domain":       "",
+		"title":        row.Title,
+		"title_jpn":    row.TitleJpn,
+		"cover":        row.Thumbnail,
+		"category":     model.GalleryCategory(row.Category),
+		"uploader":     row.Uploader,
+		"posted":       row.Posted,
+		"parent":       0,
+		"visible":      "",
+		"language":     row.Language,
+		"translated":   row.Translated,
+		"file_size":    row.FileSize,
+		"page_count":   row.PageCount,
+		"favorited":    row.Favorited,
+		"rating_count": row.RatingCount,
+		"rating":       row.Rating,
+		"tags":         row.Tags,
+	}
+}
+
+// parseGalleryIDToken reads and validates the :id/:token path params.
+func parseGalleryIDToken(c *gin.Context) (int64, string, bool) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gallery id"})
-		return
+		return 0, "", false
 	}
-
 	token := c.Param("token")
 	if token == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gallery token"})
+		return 0, "", false
+	}
+	return id, token, true
+}
+
+// cacheUnavailable reports whether the offline cache backend is configured.
+func (s *Server) cacheUnavailable(c *gin.Context) bool {
+	if s.cacheDB() == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "gallery cache not configured"})
+		return true
+	}
+	return false
+}
+
+func (s *Server) handleGetGallery(c *gin.Context) {
+	id, token, ok := parseGalleryIDToken(c)
+	if !ok {
 		return
 	}
 
@@ -102,12 +141,6 @@ func (s *Server) handleGetGallery(c *gin.Context) {
 
 	meta, err := exhentai.PostGalleryMetadata(ctx, s.Client, id, token)
 	if err != nil {
-		if db := s.cacheDB(); db != nil {
-			if row, found, getErr := gallerycache.Get(ctx, db, id, token); getErr == nil && found && row.Title != "" {
-				c.JSON(http.StatusOK, galleryFromCache(row))
-				return
-			}
-		}
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
 	}
@@ -122,46 +155,16 @@ func (s *Server) handleGetGallery(c *gin.Context) {
 }
 
 func (s *Server) handleGalleryDetails(c *gin.Context) {
-	id := c.Param("id")
-	token := c.Param("token")
-	if id == "" || token == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gallery id or token"})
+	galleryID, token, ok := parseGalleryIDToken(c)
+	if !ok {
 		return
 	}
 
-	u := exhentai.GalleryURL(id, token)
+	u := exhentai.GalleryURL(c.Param("id"), token)
 	ctx := c.Request.Context()
-	galleryID, _ := strconv.ParseInt(id, 10, 64)
 
 	details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u)
 	if err != nil {
-		if db := s.cacheDB(); db != nil {
-			if row, found, getErr := gallerycache.Get(ctx, db, galleryID, token); getErr == nil && found && row.Title != "" {
-				c.JSON(http.StatusOK, gin.H{
-					"id":           row.GalleryID,
-					"token":        row.Token,
-					"domain":       "",
-					"title":        row.Title,
-					"title_jpn":    row.TitleJpn,
-					"cover":        row.Thumbnail,
-					"category":     model.GalleryCategory(row.Category),
-					"uploader":     row.Uploader,
-					"posted":       row.Posted,
-					"parent":       0,
-					"visible":      "",
-					"language":     row.Language,
-					"translated":   row.Translated,
-					"file_size":    row.FileSize,
-					"page_count":   row.PageCount,
-					"favorited":    row.Favorited,
-					"rating_count": row.RatingCount,
-					"rating":       row.Rating,
-					"tags":         row.Tags,
-					"cached":       true,
-				})
-				return
-			}
-		}
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
 		return
 	}
@@ -197,57 +200,110 @@ func (s *Server) handleGalleryDetails(c *gin.Context) {
 		"rating_count": details.RatingCount,
 		"rating":       details.Rating,
 		"tags":         tags,
-		"cached":       false,
 	})
 }
 
 func (s *Server) handleGalleryPages(c *gin.Context) {
-	id := c.Param("id")
-	token := c.Param("token")
-	if id == "" || token == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gallery id or token"})
+	galleryID, token, ok := parseGalleryIDToken(c)
+	if !ok {
 		return
 	}
 
-	u := exhentai.GalleryURL(id, token)
+	u := exhentai.GalleryURL(c.Param("id"), token)
 	ctx := c.Request.Context()
-	galleryID, _ := strconv.ParseInt(id, 10, 64)
 
 	pageUrls, err := exhentai.ScrapeGalleryPageURLs(ctx, s.Client, u)
-	if err == nil {
-		pages := make([]model.CachedPage, len(pageUrls))
-		for i, p := range pageUrls {
-			pages[i] = model.CachedPage{PageURL: p, Index: i}
-		}
-		if db := s.cacheDB(); db != nil {
-			if cacheErr := gallerycache.UpsertPages(ctx, db, galleryID, token, pages); cacheErr != nil {
-				slog.Warn("gallery cache pages upsert failed", "id", galleryID, "error", cacheErr)
-			}
-		}
-		c.JSON(http.StatusOK, gin.H{
-			"id":     id,
-			"token":  token,
-			"total":  len(pages),
-			"pages":  pages,
-			"cached": false,
-		})
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery pages failed: %v", err)})
 		return
 	}
 
+	pages := make([]model.CachedPage, len(pageUrls))
+	for i, p := range pageUrls {
+		pages[i] = model.CachedPage{PageURL: p, Index: i}
+	}
 	if db := s.cacheDB(); db != nil {
-		if row, found, getErr := gallerycache.Get(ctx, db, galleryID, token); getErr == nil && found && len(row.Pages) > 0 {
-			c.JSON(http.StatusOK, gin.H{
-				"id":     id,
-				"token":  token,
-				"total":  len(row.Pages),
-				"pages":  row.Pages,
-				"cached": true,
-			})
-			return
+		if cacheErr := gallerycache.UpsertPages(ctx, db, galleryID, token, pages); cacheErr != nil {
+			slog.Warn("gallery cache pages upsert failed", "id", galleryID, "error", cacheErr)
 		}
 	}
 
-	c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery pages failed: %v", err)})
+	c.JSON(http.StatusOK, gin.H{
+		"id":    c.Param("id"),
+		"token": token,
+		"total": len(pages),
+		"pages": pages,
+	})
+}
+
+// ==================== Offline cache endpoints ====================
+//
+// These read straight from gallery_cache. They never touch the upstream and
+// never retry; the frontend orchestrates the fallback and retries.
+
+func (s *Server) handleCachedGallery(c *gin.Context) {
+	id, token, ok := parseGalleryIDToken(c)
+	if !ok || s.cacheUnavailable(c) {
+		return
+	}
+
+	row, found, err := gallerycache.Get(c.Request.Context(), s.cacheDB(), id, token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("read gallery cache failed: %v", err)})
+		return
+	}
+	if !found || row.Title == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no cached gallery metadata"})
+		return
+	}
+
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, galleryFromCache(row))
+}
+
+func (s *Server) handleCachedGalleryDetails(c *gin.Context) {
+	id, token, ok := parseGalleryIDToken(c)
+	if !ok || s.cacheUnavailable(c) {
+		return
+	}
+
+	row, found, err := gallerycache.Get(c.Request.Context(), s.cacheDB(), id, token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("read gallery cache failed: %v", err)})
+		return
+	}
+	if !found || row.Title == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no cached gallery details"})
+		return
+	}
+
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, galleryDetailsFromCache(row))
+}
+
+func (s *Server) handleCachedGalleryPages(c *gin.Context) {
+	id, token, ok := parseGalleryIDToken(c)
+	if !ok || s.cacheUnavailable(c) {
+		return
+	}
+
+	row, found, err := gallerycache.Get(c.Request.Context(), s.cacheDB(), id, token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("read gallery cache failed: %v", err)})
+		return
+	}
+	if !found || len(row.Pages) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no cached pages"})
+		return
+	}
+
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{
+		"id":    c.Param("id"),
+		"token": token,
+		"total": len(row.Pages),
+		"pages": row.Pages,
+	})
 }
 
 func (s *Server) handleSearch(c *gin.Context) {

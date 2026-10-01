@@ -107,7 +107,7 @@ export function ReaderPage() {
   const pages = pagesQuery.data?.pages;
   const total = pagesQuery.data?.total ?? 0;
   const offline =
-    galleryQuery.data?.cached === true || pagesQuery.data?.cached === true;
+    galleryQuery.source === "cache" || pagesQuery.source === "cache";
 
   const initialPage = useMemo(() => {
     if (total <= 0) return 0;
