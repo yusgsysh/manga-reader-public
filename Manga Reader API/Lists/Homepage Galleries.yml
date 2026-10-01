@@ -11,6 +11,16 @@ http:
       value: "0"
       type: query
       description: Page number (0-indexed)
+    - name: seek
+      value: "2020"
+      type: query
+      description: "Jump/Seek: date to seek to (YYYY, YY-MM or YYYY-MM-DD)"
+      disabled: true
+    - name: jump
+      value: "1y"
+      type: query
+      description: "Jump/Seek: relative offset (e.g. 3d, 1w, 6m, 1y)"
+      disabled: true
     - name: min_pages
       value: "10"
       type: query
@@ -68,3 +78,6 @@ settings:
 docs: |-
   Homepage gallery list. This endpoint has no `total`; the client decides
   whether another page exists from the fixed upstream page size of 25.
+
+  `seek` / `jump` provide the upstream Jump/Seek positioning; the response
+  includes a `nav` object with the prev/next cursors and date range metadata.

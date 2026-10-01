@@ -1486,3 +1486,180 @@ func TestMockWatched_NoAdvancedWhenEmptyOpts(t *testing.T) {
 		t.Errorf("advsearch should not be set for basic watched, got %q", q.Get("advsearch"))
 	}
 }
+
+// ==================== Jump/Seek Tests ====================
+
+// mockListingNavScript renders the inline navigation metadata ExHentai emits
+// for a listing that supports Jump/Seek.
+func mockListingNavScript() string {
+	return `<script type="text/javascript">
+var prevurl="https://exhentai.org/?f_search=yuri&prev=1814200";
+var nexturl="https://exhentai.org/?f_search=yuri&next=1813761";
+var maxdate="2026-10-01";
+var mindate="2007-03-20";
+var rangeurl="https://exhentai.org/?f_search=yuri";
+var rangemin=74;
+var rangemax=80;
+var rangespan=2;
+</script>`
+}
+
+func withListingNav(html string) string {
+	return strings.Replace(html, "<body>", "<body>"+mockListingNavScript(), 1)
+}
+
+type listingNavResp struct {
+	Prev      string `json:"prev"`
+	Next      string `json:"next"`
+	MinDate   string `json:"min_date"`
+	MaxDate   string `json:"max_date"`
+	RangeMin  int    `json:"range_min"`
+	RangeMax  int    `json:"range_max"`
+	RangeSpan int    `json:"range_span"`
+}
+
+func assertListingNav(t *testing.T, nav listingNavResp) {
+	t.Helper()
+	if nav.Prev != "1814200" || nav.Next != "1813761" {
+		t.Errorf("nav prev/next = %q/%q, want 1814200/1813761", nav.Prev, nav.Next)
+	}
+	if nav.MinDate != "2007-03-20" || nav.MaxDate != "2026-10-01" {
+		t.Errorf("nav dates = %q..%q, want 2007-03-20..2026-10-01", nav.MinDate, nav.MaxDate)
+	}
+	if nav.RangeMin != 74 || nav.RangeMax != 80 || nav.RangeSpan != 2 {
+		t.Errorf("nav range = %d..%d span %d, want 74..80 span 2", nav.RangeMin, nav.RangeMax, nav.RangeSpan)
+	}
+}
+
+func TestMockSearch_ListingNav(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, withListingNav(mockSearchHTML(5)))
+	})
+	defer mockServer.Close()
+
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/search?q=yuri", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Nav listingNavResp `json:"nav"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal: %v. body: %s", err, w.Body.String())
+	}
+	assertListingNav(t, resp.Nav)
+}
+
+func TestMockSearch_SeekForwardsParam(t *testing.T) {
+	var gotSeek string
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		gotSeek = r.URL.Query().Get("seek")
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, withListingNav(mockSearchHTML(5)))
+	})
+	defer mockServer.Close()
+
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/search?q=yuri&seek=2020", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if gotSeek != "2020" {
+		t.Errorf("upstream seek = %q, want %q", gotSeek, "2020")
+	}
+}
+
+func TestMockSearch_InvalidSeek(t *testing.T) {
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/search?q=yuri&seek=not-a-date", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestMockSearch_InvalidJump(t *testing.T) {
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/search?q=yuri&jump=abc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestMockGalleryList_JumpForwardsParam(t *testing.T) {
+	var gotJump string
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		gotJump = r.URL.Query().Get("jump")
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, withListingNav(mockGalleryListHTML(25)))
+	})
+	defer mockServer.Close()
+
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/galleries?jump=1y", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if gotJump != "1y" {
+		t.Errorf("upstream jump = %q, want %q", gotJump, "1y")
+	}
+
+	var resp struct {
+		Nav listingNavResp `json:"nav"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal: %v. body: %s", err, w.Body.String())
+	}
+	assertListingNav(t, resp.Nav)
+}
+
+func TestMockWatched_SeekForwardsParam(t *testing.T) {
+	var gotSeek string
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		gotSeek = r.URL.Query().Get("seek")
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, withListingNav(mockGalleryListHTML(10)))
+	})
+	defer mockServer.Close()
+
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/watched?seek=2020-01", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if gotSeek != "2020-01" {
+		t.Errorf("upstream seek = %q, want %q", gotSeek, "2020-01")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -322,6 +323,12 @@ func (s *Server) handleSearch(c *gin.Context) {
 		return
 	}
 
+	navOpts, err := parseListingNavOptions(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	ctx := c.Request.Context()
 
 	var siteURL string
@@ -336,7 +343,7 @@ func (s *Server) handleSearch(c *gin.Context) {
 		categories = strings.Split(categoryStr, ",")
 	}
 
-	total, results, err := exhentai.ScrapeSearch(ctx, s.Client, siteURL, keyword, categories, page, opts)
+	total, results, nav, err := exhentai.ScrapeSearch(ctx, s.Client, siteURL, keyword, categories, page, opts, navOpts)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("search failed: %v", err)})
 		return
@@ -384,6 +391,7 @@ func (s *Server) handleSearch(c *gin.Context) {
 		"page":        page,
 		"page_size":   len(items),
 		"results":     items,
+		"nav":         nav,
 	})
 }
 
@@ -419,9 +427,15 @@ func (s *Server) handleGalleryList(listURL string) gin.HandlerFunc {
 			return
 		}
 
+		navOpts, err := parseListingNavOptions(c)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
 		ctx := c.Request.Context()
 
-		results, err := exhentai.ScrapeGalleryList(ctx, s.Client, listURL, page, opts)
+		results, nav, err := exhentai.ScrapeGalleryList(ctx, s.Client, listURL, page, opts, navOpts)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery list failed: %v", err)})
 			return
@@ -464,6 +478,7 @@ func (s *Server) handleGalleryList(listURL string) gin.HandlerFunc {
 			"page":      page,
 			"page_size": len(items),
 			"results":   items,
+			"nav":       nav,
 		})
 	}
 }
@@ -478,6 +493,28 @@ func (s *Server) handleWatched(c *gin.Context) {
 
 func (s *Server) handlePopular(c *gin.Context) {
 	s.handleGalleryList(exhentai.ExhentaiURL + "/popular")(c)
+}
+
+var (
+	listingSeekPattern = regexp.MustCompile(`^\d{2,4}(-\d{1,2}(-\d{1,2})?)?$`)
+	listingJumpPattern = regexp.MustCompile(`^\d+[dwmy-]?$`)
+)
+
+// parseListingNavOptions reads the optional Jump/Seek query parameters. It
+// returns (nil, nil) when neither is supplied.
+func parseListingNavOptions(c *gin.Context) (*exhentai.ListingNavOptions, error) {
+	seek := strings.TrimSpace(c.Query("seek"))
+	jump := strings.TrimSpace(c.Query("jump"))
+	if seek == "" && jump == "" {
+		return nil, nil
+	}
+	if seek != "" && !listingSeekPattern.MatchString(seek) {
+		return nil, fmt.Errorf("invalid seek")
+	}
+	if jump != "" && !listingJumpPattern.MatchString(jump) {
+		return nil, fmt.Errorf("invalid jump")
+	}
+	return &exhentai.ListingNavOptions{Seek: seek, Jump: jump}, nil
 }
 
 func parseOptionalInt(c *gin.Context, key string) (*int, error) {

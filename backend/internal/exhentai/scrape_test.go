@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -386,7 +387,7 @@ func TestScrapeGalleryList_SequentialPagesUseCachedCursor(t *testing.T) {
 	})
 
 	for page := range 4 {
-		results, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", page, nil)
+		results, _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", page, nil, nil)
 		if err != nil {
 			t.Fatalf("page %d: %v", page, err)
 		}
@@ -404,13 +405,13 @@ func TestScrapeGalleryList_RandomAccessWalksThenCaches(t *testing.T) {
 		return listingHTML(nextHref)
 	})
 
-	if _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 2, nil); err != nil {
+	if _, _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 2, nil, nil); err != nil {
 		t.Fatalf("page 2: %v", err)
 	}
 	if got := requests.Load(); got != 3 {
 		t.Errorf("after random page 2: requests = %d, want 3 (walk 0..2)", got)
 	}
-	if _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 3, nil); err != nil {
+	if _, _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 3, nil, nil); err != nil {
 		t.Fatalf("page 3: %v", err)
 	}
 	if got := requests.Load(); got != 4 {
@@ -423,7 +424,7 @@ func TestScrapeSearch_UsesCachedCursorAcrossPages(t *testing.T) {
 		return searchHTML(true, nextHref)
 	})
 
-	total, results, err := ScrapeSearch(t.Context(), srv.Client(), srv.URL+"/", "test", nil, 1, nil)
+	total, results, _, err := ScrapeSearch(t.Context(), srv.Client(), srv.URL+"/", "test", nil, 1, nil, nil)
 	if err != nil {
 		t.Fatalf("page 1: %v", err)
 	}
@@ -434,7 +435,7 @@ func TestScrapeSearch_UsesCachedCursorAcrossPages(t *testing.T) {
 		t.Errorf("after page 1: requests = %d, want 2 (walk 0..1)", got)
 	}
 
-	total, results, err = ScrapeSearch(t.Context(), srv.Client(), srv.URL+"/", "test", nil, 2, nil)
+	total, results, _, err = ScrapeSearch(t.Context(), srv.Client(), srv.URL+"/", "test", nil, 2, nil, nil)
 	if err != nil {
 		t.Fatalf("page 2: %v", err)
 	}
@@ -451,7 +452,7 @@ func TestScrapeSearch_FallsBackToPageZeroForTotal(t *testing.T) {
 		return searchHTML(withBanner, nextHref)
 	})
 
-	total, results, err := ScrapeSearch(t.Context(), srv.Client(), srv.URL+"/", "test", nil, 1, nil)
+	total, results, _, err := ScrapeSearch(t.Context(), srv.Client(), srv.URL+"/", "test", nil, 1, nil, nil)
 	if err != nil {
 		t.Fatalf("ScrapeSearch error: %v", err)
 	}
@@ -500,5 +501,112 @@ func TestExtractNextURL(t *testing.T) {
 				t.Errorf("extractNextURL() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestListingNavOptions_Apply(t *testing.T) {
+	if (*ListingNavOptions)(nil).Active() {
+		t.Error("nil options should not be active")
+	}
+	if (&ListingNavOptions{}).Active() {
+		t.Error("empty options should not be active")
+	}
+
+	q := url.Values{}
+	nav := &ListingNavOptions{Seek: "2020-01", Jump: "1y"}
+	if !nav.Active() {
+		t.Error("options with seek/jump should be active")
+	}
+	nav.Apply(q)
+
+	if got := q.Get("seek"); got != "2020-01" {
+		t.Errorf("seek = %q, want %q", got, "2020-01")
+	}
+	if got := q.Get("jump"); got != "1y" {
+		t.Errorf("jump = %q, want %q", got, "1y")
+	}
+}
+
+func TestParseListingNav(t *testing.T) {
+	const navHTML = `<html><head></head><body><script type="text/javascript">
+var prevurl="https://exhentai.org/?f_search=x&prev=1814200";
+var nexturl="https://exhentai.org/?f_search=x&next=1813761";
+var maxdate="2026-10-01";
+var mindate="2007-03-20";
+var rangeurl="https://exhentai.org/?f_search=x";
+var rangemin=74;
+var rangemax=80;
+var rangespan=2;
+</script></body></html>`
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(navHTML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	nav := parseListingNav(doc)
+
+	if nav.Prev != "1814200" {
+		t.Errorf("Prev = %q, want %q", nav.Prev, "1814200")
+	}
+	if nav.Next != "1813761" {
+		t.Errorf("Next = %q, want %q", nav.Next, "1813761")
+	}
+	if nav.MinDate != "2007-03-20" || nav.MaxDate != "2026-10-01" {
+		t.Errorf("dates = %q..%q, want 2007-03-20..2026-10-01", nav.MinDate, nav.MaxDate)
+	}
+	if nav.RangeMin != 74 || nav.RangeMax != 80 || nav.RangeSpan != 2 {
+		t.Errorf("range = %d..%d span %d, want 74..80 span 2", nav.RangeMin, nav.RangeMax, nav.RangeSpan)
+	}
+}
+
+func TestParseListingNav_Empty(t *testing.T) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(listingHTML("")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nav := parseListingNav(doc); nav != (ListingNav{}) {
+		t.Errorf("parseListingNav() = %+v, want zero value", nav)
+	}
+}
+
+func TestScrapeSearch_ForwardsNavParams(t *testing.T) {
+	var srv *httptest.Server
+	var gotSeek, gotJump string
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotSeek = r.URL.Query().Get("seek")
+		gotJump = r.URL.Query().Get("jump")
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, searchHTML(true, ""))
+	}))
+	t.Cleanup(srv.Close)
+
+	_, _, _, err := ScrapeSearch(t.Context(), srv.Client(), srv.URL+"/", "test", nil, 0, nil, &ListingNavOptions{Seek: "2020", Jump: "1y"})
+	if err != nil {
+		t.Fatalf("ScrapeSearch: %v", err)
+	}
+	if gotSeek != "2020" || gotJump != "1y" {
+		t.Errorf("upstream seek=%q jump=%q, want 2020/1y", gotSeek, gotJump)
+	}
+}
+
+func TestScrapeGalleryList_ForwardsNavParams(t *testing.T) {
+	var srv *httptest.Server
+	var gotJump string
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotJump = r.URL.Query().Get("jump")
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, listingHTML(""))
+	}))
+	t.Cleanup(srv.Close)
+
+	results, _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 0, nil, &ListingNavOptions{Jump: "3d"})
+	if err != nil {
+		t.Fatalf("ScrapeGalleryList: %v", err)
+	}
+	if gotJump != "3d" {
+		t.Errorf("upstream jump = %q, want %q", gotJump, "3d")
+	}
+	if len(results) != 0 {
+		t.Errorf("results = %d, want 0", len(results))
 	}
 }

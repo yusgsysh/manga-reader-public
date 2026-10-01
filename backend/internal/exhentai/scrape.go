@@ -39,6 +39,18 @@ var coverUrlReg = regexp.MustCompile(`url\(([^)]+)\)`)
 var numReg = regexp.MustCompile(`Showing 1 - (\d+) of ([\d,]+) images?`)
 var nlReg = regexp.MustCompile(`nl\('(.+?)'\)`)
 
+// Listing navigation ("Jump/Seek") state is emitted by the site as plain JS
+// variables. The cursor ids are embedded in the prevurl/nexturl values.
+var (
+	prevURLReg   = regexp.MustCompile(`var prevurl="([^"]*)"`)
+	nextURLReg   = regexp.MustCompile(`var nexturl="([^"]*)"`)
+	minDateReg   = regexp.MustCompile(`var mindate="([^"]*)"`)
+	maxDateReg   = regexp.MustCompile(`var maxdate="([^"]*)"`)
+	rangeMinReg  = regexp.MustCompile(`var rangemin=(\d+)`)
+	rangeMaxReg  = regexp.MustCompile(`var rangemax=(\d+)`)
+	rangeSpanReg = regexp.MustCompile(`var rangespan=(\d+)`)
+)
+
 func httpGet(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -122,6 +134,46 @@ type SearchOptions struct {
 	DisableTagFilter      bool
 }
 
+// ListingNavOptions carries the upstream "Jump/Seek" query parameters. Seek is a
+// date expression (YYYY, YY-MM or YYYY-MM-DD); Jump is a relative offset
+// (e.g. 3d, 1w, 6m, 1y).
+type ListingNavOptions struct {
+	Seek string
+	Jump string
+}
+
+// Active reports whether any navigation parameter is set. A nil receiver is not
+// active, so callers can pass nil for a plain paginated request.
+func (n *ListingNavOptions) Active() bool {
+	return n != nil && (n.Seek != "" || n.Jump != "")
+}
+
+// Apply merges the navigation parameters into an existing query.
+func (n *ListingNavOptions) Apply(q url.Values) {
+	if n == nil {
+		return
+	}
+	if n.Seek != "" {
+		q.Set("seek", n.Seek)
+	}
+	if n.Jump != "" {
+		q.Set("jump", n.Jump)
+	}
+}
+
+// ListingNav is the navigation metadata parsed from a listing page. It lets
+// clients build a Jump/Seek UI: Prev/Next are the neighbouring cursor ids and
+// the date/range fields describe the seekable span.
+type ListingNav struct {
+	Prev      string `json:"prev"`
+	Next      string `json:"next"`
+	MinDate   string `json:"min_date"`
+	MaxDate   string `json:"max_date"`
+	RangeMin  int    `json:"range_min"`
+	RangeMax  int    `json:"range_max"`
+	RangeSpan int    `json:"range_span"`
+}
+
 func BuildSearchQuery(keyword string, categories []string, opts *SearchOptions) url.Values {
 	q := url.Values{}
 
@@ -202,25 +254,27 @@ func BuildSearchQuery(keyword string, categories []string, opts *SearchOptions) 
 	return q
 }
 
-func ScrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword string, categories []string, page int, opts *SearchOptions) (total int, results []model.SearchResult, err error) {
+func ScrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword string, categories []string, page int, opts *SearchOptions, navOpts *ListingNavOptions) (total int, results []model.SearchResult, nav ListingNav, err error) {
 	u, err := url.Parse(siteURL)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, ListingNav{}, err
 	}
-	u.RawQuery = BuildSearchQuery(keyword, categories, opts).Encode()
+	q := BuildSearchQuery(keyword, categories, opts)
+	navOpts.Apply(q)
+	u.RawQuery = q.Encode()
 	firstURL := u.String()
 
 	doc, err := fetchListingDoc(ctx, client, firstURL, page)
 	if err != nil {
 		if errors.Is(err, errNoNextPage) {
-			return 0, nil, fmt.Errorf("no results")
+			return 0, nil, ListingNav{}, fmt.Errorf("no results")
 		}
-		return 0, nil, err
+		return 0, nil, ListingNav{}, err
 	}
 
 	noHits := doc.Find("body > div.ido > div:nth-child(2) > p").Text()
 	if noHits != "" {
-		return 0, nil, fmt.Errorf("no hits found: %s", noHits)
+		return 0, nil, ListingNav{}, fmt.Errorf("no hits found: %s", noHits)
 	}
 
 	total, ok := parseSearchTotal(doc)
@@ -233,14 +287,17 @@ func ScrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 		}
 	}
 	if !ok {
-		return 0, nil, fmt.Errorf("could not parse result count")
+		return 0, nil, ListingNav{}, fmt.Errorf("could not parse result count")
 	}
 	if total == 0 {
-		return 0, nil, fmt.Errorf("no results")
+		return 0, nil, ListingNav{}, fmt.Errorf("no results")
 	}
 
 	results, err = parseSearchResults(doc)
-	return
+	if err != nil {
+		return 0, nil, ListingNav{}, err
+	}
+	return total, results, parseListingNav(doc), nil
 }
 
 // parseSearchTotal extracts the total result count from a search results page.
@@ -275,6 +332,52 @@ func extractNextURL(doc *goquery.Document) string {
 		}
 	})
 	return nextURL
+}
+
+// parseListingNav extracts the Jump/Seek navigation metadata from a listing
+// page's inline script. Listings without a navigation bar (e.g. an empty
+// watched feed, the popular page) yield the zero value.
+func parseListingNav(doc *goquery.Document) ListingNav {
+	script := doc.Find("script").Text()
+
+	nav := ListingNav{
+		Prev:    cursorFromURL(matchGroup(prevURLReg, script)),
+		Next:    cursorFromURL(matchGroup(nextURLReg, script)),
+		MinDate: matchGroup(minDateReg, script),
+		MaxDate: matchGroup(maxDateReg, script),
+	}
+	nav.RangeMin = atoiOrZero(matchGroup(rangeMinReg, script))
+	nav.RangeMax = atoiOrZero(matchGroup(rangeMaxReg, script))
+	nav.RangeSpan = atoiOrZero(matchGroup(rangeSpanReg, script))
+	return nav
+}
+
+func matchGroup(re *regexp.Regexp, s string) string {
+	m := re.FindStringSubmatch(s)
+	if len(m) < 2 {
+		return ""
+	}
+	return m[1]
+}
+
+func atoiOrZero(s string) int {
+	n, _ := strconv.Atoi(s)
+	return n
+}
+
+// cursorFromURL extracts the gid cursor from a prevurl/nexturl value.
+func cursorFromURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	if v := u.Query().Get("next"); v != "" {
+		return v
+	}
+	return u.Query().Get("prev")
 }
 
 // errNoNextPage reports that a cursor-paginated listing has no further pages.
@@ -863,36 +966,40 @@ func ProxyImage(ctx context.Context, client *http.Client, imgURL string) (data [
 	return data, contentType, nil
 }
 
-func ScrapeGalleryList(ctx context.Context, client *http.Client, listURL string, page int, opts *SearchOptions) (results []model.SearchResult, err error) {
+func ScrapeGalleryList(ctx context.Context, client *http.Client, listURL string, page int, opts *SearchOptions, navOpts *ListingNavOptions) (results []model.SearchResult, nav ListingNav, err error) {
 	u, err := url.Parse(listURL)
 	if err != nil {
-		return nil, err
+		return nil, ListingNav{}, err
 	}
 
+	existing := u.Query()
 	if opts != nil {
-		existing := u.Query()
 		newParams := BuildSearchQuery("", nil, opts)
 		for k, vs := range newParams {
 			for _, v := range vs {
 				existing.Set(k, v)
 			}
 		}
-		u.RawQuery = existing.Encode()
 	}
+	navOpts.Apply(existing)
+	u.RawQuery = existing.Encode()
 
 	doc, err := fetchListingDoc(ctx, client, u.String(), page)
 	if err != nil {
 		if errors.Is(err, errNoNextPage) {
-			return []model.SearchResult{}, nil
+			return []model.SearchResult{}, ListingNav{}, nil
 		}
-		return nil, err
+		return nil, ListingNav{}, err
 	}
 
 	results, err = parseGalleryListResults(doc)
 	if err != nil && err.Error() == "empty gallery list" {
-		return []model.SearchResult{}, nil
+		return []model.SearchResult{}, parseListingNav(doc), nil
 	}
-	return
+	if err != nil {
+		return nil, ListingNav{}, err
+	}
+	return results, parseListingNav(doc), nil
 }
 
 func parseGalleryListResults(doc *goquery.Document) ([]model.SearchResult, error) {

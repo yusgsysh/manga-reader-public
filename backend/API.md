@@ -16,6 +16,35 @@ Search / Homepage / Watched / Popular 的上游（ExHentai）使用 `next=<galle
 
 是否还有下一页按端点元信息判断：Search / Bookshelf / Recently Read 使用 `total` / `total_pages`；Homepage / Watched / Popular 按上游每页 25 条的固定页大小判断。
 
+### Jump/Seek
+
+Search / Homepage / Watched 支持上游 ExHentai 的 Jump/Seek 定位，通过两个可选查询参数：
+
+| 参数 | 含义 | 示例 |
+|------|------|------|
+| `seek` | 定位到指定日期 | `seek=2020`、`seek=2020-01`、`seek=20-01-01` |
+| `jump` | 相对当前位置偏移 | `jump=3d`、`jump=1w`、`jump=6m`、`jump=1y` |
+
+- 传 `seek` / `jump` 时，从该定位点开始返回结果；可与 `page` 组合，`page` 表示从定位点向后的第 N 页（0-indexed，用于无限滚动续页）。
+- 参数格式非法返回 HTTP 400。`seek` 允许 `YYYY` / `YY-MM` / `YYYY-MM-DD`；`jump` 为数字加可选单位 `d`/`w`/`m`/`y`（或 `-`）。
+- 上述三个端点的响应都会附带 `nav` 对象，供前端构建 Jump/Seek UI：
+
+```json
+"nav": {
+  "prev": "1814200",
+  "next": "1813761",
+  "min_date": "2007-03-20",
+  "max_date": "2026-10-01",
+  "range_min": 74,
+  "range_max": 74,
+  "range_span": 2
+}
+```
+
+`prev` / `next` 为相邻页的游标 id（空字符串表示没有相邻页）；`min_date` / `max_date` 是可定位的日期范围；`range_min` / `range_max` / `range_span` 描述上游日期滑块的当前位置与刻度。无导航栏的列表（如空的 Watched、Popular）返回零值。
+
+> Popular 不支持 Jump/Seek，请求中的 `seek` / `jump` 不会生效，`nav` 始终为零值。
+
 ## Common Response Types
 
 ### GalleryCategory
@@ -49,6 +78,8 @@ Search / Homepage / Watched / Popular 的上游（ExHentai）使用 `next=<galle
 | site | string | no | `"exhentai"` | `"exhentai"` 或 `"ehentai"` |
 | categories | string | no | - | 逗号分隔的分类，如 `"doujinshi,manga"` |
 | page | int | no | `0` | 页码 (0-indexed) |
+| seek | string | no | - | Jump/Seek: 定位到日期，如 `2020`、`2020-01`、`20-01-01` |
+| jump | string | no | - | Jump/Seek: 相对偏移，如 `3d`、`1w`、`6m`、`1y` |
 | min_pages | int | no | - | 最小页数 (>= 0) |
 | max_pages | int | no | - | 最大页数 (>= 0) |
 | min_rating | int | no | - | 最低评分: `2`, `3`, `4`, `5` |
@@ -92,6 +123,8 @@ Search / Homepage / Watched / Popular 的上游（ExHentai）使用 `next=<galle
 | `disable_uploader_filter` | `f_sfu=on` |
 | `disable_tag_filter` | `f_sft=on` |
 | `page` | 上游 `next=<id>` 游标（服务端解析并缓存，见「分页与列表加载」） |
+| `seek` | `seek` |
+| `jump` | `jump` |
 
 **Example:**
 
@@ -129,9 +162,20 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
       "pages": 24,
       "domain": "exhentai.org"
     }
-  ]
+  ],
+  "nav": {
+    "prev": "1814200",
+    "next": "1813761",
+    "min_date": "2007-03-20",
+    "max_date": "2026-10-01",
+    "range_min": 0,
+    "range_max": 0,
+    "range_span": 2
+  }
 }
 ```
+
+> `nav` 见「分页与列表加载 › Jump/Seek」。
 
 ---
 
@@ -288,6 +332,8 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | page | int | no | `0` | 页码 (0-indexed) |
+| seek | string | no | - | Jump/Seek: 定位到日期，如 `2020`、`2020-01` |
+| jump | string | no | - | Jump/Seek: 相对偏移，如 `3d`、`1w`、`6m`、`1y` |
 | min_pages | int | no | - | 最小页数 (>= 0) |
 | max_pages | int | no | - | 最大页数 (>= 0) |
 | min_rating | int | no | - | 最低评分: `2`, `3`, `4`, `5` |
@@ -323,9 +369,20 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
       "pages": 24,
       "domain": "exhentai.org"
     }
-  ]
+  ],
+  "nav": {
+    "prev": "1814200",
+    "next": "1813761",
+    "min_date": "2007-03-20",
+    "max_date": "2026-10-01",
+    "range_min": 0,
+    "range_max": 0,
+    "range_span": 2
+  }
 }
 ```
+
+> `nav` 见「分页与列表加载 › Jump/Seek」。
 
 ---
 
@@ -340,6 +397,8 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | page | int | no | `0` | 页码 (0-indexed) |
+| seek | string | no | - | Jump/Seek: 定位到日期，如 `2020`、`2020-01` |
+| jump | string | no | - | Jump/Seek: 相对偏移，如 `3d`、`1w`、`6m`、`1y` |
 | min_pages | int | no | - | 最小页数 (>= 0) |
 | max_pages | int | no | - | 最大页数 (>= 0) |
 | min_rating | int | no | - | 最低评分: `2`, `3`, `4`, `5` |
@@ -356,9 +415,9 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 
 **Response (200):**
 
-与 `/api/galleries` 格式相同。
+与 `/api/galleries` 格式相同（含 `nav`）。支持 `seek` / `jump` Jump/Seek 定位。
 
-> **注意**: 如果未设置关注标签，返回空列表。ExHentai 的 watched 页面不支持翻页，`page > 0` 始终返回空。
+> **注意**: 如果未设置关注标签，返回空列表，且 `nav` 为零值。
 
 ---
 
@@ -376,9 +435,9 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 
 **Response (200):**
 
-与 `/api/galleries` 格式相同。
+与 `/api/galleries` 格式相同（含 `nav`）。
 
-> **注意**: ExHentai 的 popular 页面不支持翻页，只有第一页有数据，`page > 0` 始终返回空。
+> **注意**: ExHentai 的 popular 页面不支持翻页与 Jump/Seek，只有第一页有数据，`page > 0` 始终返回空，`nav` 为零值。
 
 ---
 

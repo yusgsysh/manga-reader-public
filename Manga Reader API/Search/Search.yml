@@ -24,6 +24,16 @@ http:
       value: "0"
       type: query
       description: Page number (0-indexed)
+    - name: seek
+      value: "2020"
+      type: query
+      description: "Jump/Seek: date to seek to (YYYY, YY-MM or YYYY-MM-DD)"
+      disabled: true
+    - name: jump
+      value: "1y"
+      type: query
+      description: "Jump/Seek: relative offset (e.g. 3d, 1w, 6m, 1y)"
+      disabled: true
     - name: min_pages
       value: "10"
       type: query
@@ -108,6 +118,12 @@ runtime:
           expect(res.body.page).to.equal(0);
         });
 
+        test("exposes jump/seek navigation metadata", function () {
+          expect(res.body.nav).to.have.property("min_date");
+          expect(res.body.nav).to.have.property("max_date");
+          expect(res.body.nav.range_span).to.be.a("number");
+        });
+
         test("every result has id, token and title", function () {
           res.body.results.forEach(function (gallery) {
             expect(gallery).to.have.property("id");
@@ -130,3 +146,7 @@ docs: |-
 
   Invalid parameters (`min_pages < 0`, `min_pages > max_pages`,
   `min_rating` not in 2..5, ...) return HTTP 400.
+
+  `seek` / `jump` provide the upstream Jump/Seek positioning; the response
+  includes a `nav` object with the prev/next cursors and date range metadata
+  used to build a Jump/Seek UI.
