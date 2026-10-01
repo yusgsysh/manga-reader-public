@@ -124,13 +124,7 @@ export function ReaderPage() {
   const manga = useMemo(
     () =>
       gallery && pages
-        ? galleryPagesToManga(
-            String(id),
-            token ?? "",
-            gallery.title,
-            pages,
-            gallery.thumbnail,
-          )
+        ? galleryPagesToManga(String(id), token ?? "", gallery.title, pages)
         : null,
     [gallery, pages, id, token],
   );

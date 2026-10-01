@@ -3,6 +3,7 @@ import {
   calculateProgress,
   clampPageIndex,
   galleryPagesToManga,
+  getPageThumbnailURL,
   getReaderImageURL,
 } from "./reader";
 
@@ -58,18 +59,21 @@ describe("getReaderImageURL", () => {
   });
 });
 
+describe("getPageThumbnailURL", () => {
+  it("builds the index-based page thumbnail url", () => {
+    const url = getPageThumbnailURL("123", "token", 5);
+    expect(url).toBe(
+      "http://localhost:8080/api/gallery/123/token/page-thumbnail?index=5",
+    );
+  });
+});
+
 describe("galleryPagesToManga", () => {
   it("converts backend pages to comimi image pages", () => {
-    const manga = galleryPagesToManga(
-      "123",
-      "token",
-      "Title",
-      [
-        { page_url: "https://e.org/s/1", index: 0 },
-        { page_url: "https://e.org/s/2", index: 1 },
-      ],
-      "https://ehgt.org/cover.webp",
-    );
+    const manga = galleryPagesToManga("123", "token", "Title", [
+      { page_url: "https://e.org/s/1", index: 0 },
+      { page_url: "https://e.org/s/2", index: 1 },
+    ]);
     expect(manga.id).toBe("123:token");
     expect(manga.title).toBe("Title");
     expect(manga.pages).toHaveLength(2);
@@ -80,7 +84,18 @@ describe("galleryPagesToManga", () => {
     const first = manga.pages[0];
     if (first.type === "image") {
       expect(first.src).toContain("/api/cached-image?url=");
-      expect(first.thumbnailSrc).toContain("/api/cached-thumbnail?url=");
+      expect(first.thumbnailSrc).toContain(
+        "/api/gallery/123/token/page-thumbnail?index=0",
+      );
+    } else {
+      throw new Error("expected image page");
+    }
+
+    const second = manga.pages[1];
+    if (second.type === "image") {
+      expect(second.thumbnailSrc).toContain(
+        "/api/gallery/123/token/page-thumbnail?index=1",
+      );
     } else {
       throw new Error("expected image page");
     }
