@@ -1,0 +1,25 @@
+diff --git a/dist/index.js b/dist/index.js
+index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..ca8b7460a98f940929206ce76645c034b99a943a 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1807,10 +1807,16 @@ var Le = class {
+ 			i.replaceChildren(R(this.options.i18n, n + 1, this.options.errorMascot)), this.options.onPageLoadError?.(n);
+ 		}), a.addEventListener("contextmenu", (e) => e.preventDefault()), i.append(a);
+ 		let o = `${e.manga.id}:${t.id}`, s = this.imageSources.get(o);
+-		if (s) return a.src = s, {
+-			slot: i,
+-			img: a
+-		};
++		if (s) {
++			let c = Ie(this.options.i18n, this.options.loadingMascot);
++			i.append(c), a.style.visibility = "hidden", a.addEventListener("load", () => {
++				a.style.visibility = "", c.remove();
++			}, { once: !0 }), a.src = s;
++			return {
++				slot: i,
++				img: a
++			};
++		}
+ 		let c = Ie(this.options.i18n, this.options.loadingMascot);
+ 		return i.append(c), a.style.visibility = "hidden", this.resolveSource(e, t, n, r).then((e) => {
+ 			a.addEventListener("load", () => {

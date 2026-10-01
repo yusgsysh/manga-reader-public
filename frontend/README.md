@@ -47,6 +47,77 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
 
 覆盖两种关键行为：已有完整缓存的画廊从缓存即时打开（完全不请求在线 `/pages`）；无缓存时渐进流式，首批到达即挂载、无需等待整份列表。
 
+## comimi 补丁（@yui540/comimi）
+
+### 背景
+
+阅读器翻到「已预加载」的页面时，如果图片还没加载出来，会短暂白屏，而不是显示 comimi 的兔子加载动画。
+
+根因在 `@yui540/comimi@0.26.0` 的 `PageStage.buildSlot`（`dist/index.js`，约 1809 行）：它有一条快速分支，当 `imageSources` 已缓存该页的解析结果时，直接 `img.src = url` 返回，既不插入 `.comimi-loading-icon`（兔子），也不把 `<img>` 设为 `visibility: hidden`。而 `PageStage.preloadImages()` 会预热当前页 ±4 页，所以翻到这些页就命中快速分支，解码前只露出白底。
+
+### 补丁
+
+`patches/@yui540%2Fcomimi@0.26.0.patch` 把该快速分支改成与正常分支一致（插入兔子 + 隐藏图片，`load` 后移除图标）。`package.json` 的 `patchedDependencies` 声明它，`bun install` 会自动应用。
+
+升级后重新打补丁时，照下面的 diff 修改 `node_modules/@yui540/comimi/dist/index.js` 里 `buildSlot` 的快速分支：
+
+```diff
+ 		let o = `${e.manga.id}:${t.id}`, s = this.imageSources.get(o);
+-		if (s) return a.src = s, {
+-			slot: i,
+-			img: a
+-		};
++		if (s) {
++			let c = Ie(this.options.i18n, this.options.loadingMascot);
++			i.append(c), a.style.visibility = "hidden", a.addEventListener("load", () => {
++				a.style.visibility = "", c.remove();
++			}, { once: !0 }), a.src = s;
++			return {
++				slot: i,
++				img: a
++			};
++		}
+ 		let c = Ie(this.options.i18n, this.options.loadingMascot);
+```
+
+注意：`dist/manga-viewer.global.js` 是浏览器全局构建，Vite 不引用，无需修改。
+
+### 回归测试
+
+`e2e/repro-reader-loading.mjs` 延迟整页图片，先验证首页有兔子，再跳到预加载页采样。
+
+```bash
+bun run test:e2e                  # 含回归门禁（reader-pages + 兔子加载）
+bun run test:e2e:reader-loading   # 仅回归门禁（需先 build:e2e）
+bun run repro:reader-loading      # 诊断探针：仍白屏则 exit 0，已修复则 exit 1
+```
+
+### 升级 comimi 时如何重新打补丁
+
+1. 升级版本（如 `bun add @yui540/comimi@x.y.z`）后，先检查上游是否已修复：
+
+   ```bash
+   bun run build:e2e
+   EXPECT_FIXED=1 bun e2e/repro-reader-loading.mjs
+   ```
+
+   - 通过（兔子正常）：上游已修，删除 `patches/@yui540%2Fcomimi@*.patch` 和 `package.json` 的 `patchedDependencies`，本段可只留作历史记录。
+   - 失败：继续下一步。
+
+2. 重新打补丁：
+
+   ```bash
+   bun patch @yui540/comimi@x.y.z
+   # 按上面的 diff 修改 node_modules/@yui540/comimi/dist/index.js
+   bun patch --commit 'node_modules/@yui540/comimi'
+   ```
+
+   bun 会生成新的 `patches/@yui540%2Fcomimi@x.y.z.patch` 并更新 `patchedDependencies`；确认无误后删除旧补丁文件。
+
+3. 验证：`bun run test:e2e`。
+
+4. 建议同时向上游提 issue/PR，把两条渲染分支合并，最终移除补丁。
+
 ## 环境变量
 
 复制 `.env.example` 为 `.env` 并按需修改：
