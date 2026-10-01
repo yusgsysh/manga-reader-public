@@ -11,6 +11,8 @@ export function fetchSearch(params: SearchParams): Promise<SearchResponse> {
     site: params.site,
     categories: params.categories,
     page: params.page,
+    seek: params.seek,
+    jump: params.jump,
     min_pages: params.min_pages,
     max_pages: params.max_pages,
     min_rating: params.min_rating,

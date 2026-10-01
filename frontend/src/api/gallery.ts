@@ -3,6 +3,7 @@ import type {
   AdvancedSearchOptions,
   GalleryDetail,
   GalleryListResponse,
+  ListingNavOptions,
 } from "../types/gallery";
 import type { Gallery, GalleryPagesResponse } from "../types/reader";
 
@@ -29,23 +30,32 @@ function advancedToParams(filters?: AdvancedSearchOptions) {
   };
 }
 
+function navToParams(nav?: ListingNavOptions) {
+  if (!nav) return {};
+  return { seek: nav.seek, jump: nav.jump };
+}
+
 export function fetchGalleries(
   page: number,
   filters?: AdvancedSearchOptions,
+  nav?: ListingNavOptions,
 ): Promise<GalleryListResponse> {
   return apiGet<GalleryListResponse>("/api/galleries", {
     page,
     ...advancedToParams(filters),
+    ...navToParams(nav),
   });
 }
 
 export function fetchWatched(
   page: number,
   filters?: AdvancedSearchOptions,
+  nav?: ListingNavOptions,
 ): Promise<GalleryListResponse> {
   return apiGet<GalleryListResponse>("/api/watched", {
     page,
     ...advancedToParams(filters),
+    ...navToParams(nav),
   });
 }
 

@@ -6,6 +6,7 @@ import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
 import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";
+import { JumpSeekBar } from "../components/common/JumpSeekBar";
 import { Input, Button, Checkbox, Select, cn } from "@cloudflare/kumo";
 import {
   MagnifyingGlass,
@@ -15,7 +16,10 @@ import {
 } from "@phosphor-icons/react";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { PageHeader, Section } from "../components/ui";
-import type { AdvancedSearchOptions } from "../types/gallery";
+import type {
+  AdvancedSearchOptions,
+  ListingNavOptions,
+} from "../types/gallery";
 
 const CATEGORIES = [
   { value: "doujinshi", label: "Doujinshi" },
@@ -120,6 +124,10 @@ export function SearchPage() {
   const categoriesParam = searchParams.get("categories") ?? "";
   const appliedAdvancedOptions = parseAdvancedParams(searchParams);
   const appliedTags = parseTags(searchParams);
+  const appliedNav: ListingNavOptions = {
+    seek: searchParams.get("seek") ?? undefined,
+    jump: searchParams.get("jump") ?? undefined,
+  };
 
   const [inputValue, setInputValue] = useState(q);
   const [site, setSite] = useState(siteParam);
@@ -154,6 +162,7 @@ export function SearchPage() {
     site: siteParam,
     categories: categoriesParam,
     ...appliedAdvancedOptions,
+    ...appliedNav,
   });
 
   const updateAdvancedFilter = (key: keyof AdvancedSearchOptions, value: string | boolean | number | undefined) => {
@@ -229,6 +238,15 @@ export function SearchPage() {
     setSearchParams(params);
   };
 
+  const handleNavChange = (next: ListingNavOptions) => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("seek");
+    params.delete("jump");
+    if (next.seek) params.set("seek", next.seek);
+    if (next.jump) params.set("jump", next.jump);
+    setSearchParams(params);
+  };
+
   const handleTagKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -293,6 +311,24 @@ export function SearchPage() {
       label: tag,
       onRemove: () => removeAppliedTag(tag),
     })),
+    ...(appliedNav.seek
+      ? [
+          {
+            key: "seek",
+            label: `定位 ${appliedNav.seek}`,
+            onRemove: () => removeAppliedOption("seek"),
+          },
+        ]
+      : []),
+    ...(appliedNav.jump
+      ? [
+          {
+            key: "jump",
+            label: `偏移 ${appliedNav.jump}`,
+            onRemove: () => removeAppliedOption("jump"),
+          },
+        ]
+      : []),
     ...Object.entries(appliedAdvancedOptions)
       .filter(([, value]) => value !== undefined && value !== false && value !== "")
       .map(([key, value]) => ({
@@ -389,6 +425,13 @@ export function SearchPage() {
           })}
         </div>
       </div>
+
+      <JumpSeekBar
+        nav={data?.pages[0]?.nav}
+        value={appliedNav}
+        onChange={handleNavChange}
+        disabled={!fullQuery.trim()}
+      />
 
       {/* Advanced panel */}
       {showAdvanced && (

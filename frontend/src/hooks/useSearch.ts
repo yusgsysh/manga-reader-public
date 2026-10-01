@@ -11,6 +11,8 @@ export function useSearch(params: SearchParams) {
       params.q,
       params.site,
       params.categories,
+      params.seek,
+      params.jump,
       params.min_pages,
       params.max_pages,
       params.min_rating,

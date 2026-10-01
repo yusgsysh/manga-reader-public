@@ -26,10 +26,26 @@ export interface GalleryListItem {
   domain: string;
 }
 
+export interface ListingNav {
+  prev: string;
+  next: string;
+  min_date: string;
+  max_date: string;
+  range_min: number;
+  range_max: number;
+  range_span: number;
+}
+
+export interface ListingNavOptions {
+  seek?: string;
+  jump?: string;
+}
+
 export interface GalleryListResponse {
   page: number;
   page_size: number;
   results: GalleryListItem[];
+  nav?: ListingNav;
 }
 
 export interface SearchResponse {
@@ -38,6 +54,7 @@ export interface SearchResponse {
   page: number;
   page_size: number;
   results: GalleryListItem[];
+  nav?: ListingNav;
 }
 
 export interface AdvancedSearchOptions {
@@ -56,7 +73,7 @@ export interface AdvancedSearchOptions {
   disable_tag_filter?: boolean;
 }
 
-export interface SearchParams extends AdvancedSearchOptions {
+export interface SearchParams extends AdvancedSearchOptions, ListingNavOptions {
   q?: string;
   site?: string;
   categories?: string;

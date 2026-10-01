@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router";
 import { Sparkle } from "@phosphor-icons/react";
 import { useGalleries } from "../hooks/useGalleryList";
@@ -7,11 +8,14 @@ import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { GalleryCard } from "../components/gallery/GalleryCard";
 import { readingToCard } from "../components/gallery/mappers";
 import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";
+import { JumpSeekBar } from "../components/common/JumpSeekBar";
 import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
 import { PageHeader, Section } from "../components/ui";
+import type { ListingNavOptions } from "../types/gallery";
 
 export function HomePage() {
+  const [nav, setNav] = useState<ListingNavOptions>({});
   const {
     data,
     isLoading,
@@ -21,28 +25,11 @@ export function HomePage() {
     isFetchingNextPage,
     isFetchNextPageError,
     fetchNextPage,
-  } = useGalleries();
+  } = useGalleries(undefined, nav);
   const { items: recent } = useRecentlyRead();
-
-  if (isLoading) {
-    return <GalleryGridSkeleton />;
-  }
-
-  if (error) {
-    return (
-      <ErrorState
-        message={error.message || "无法加载 Gallery"}
-        onRetry={() => refetch()}
-      />
-    );
-  }
 
   const galleries = data?.pages.flatMap((page) => page.results) ?? [];
   const continueItems = recent.slice(0, 12);
-
-  if (galleries.length === 0 && continueItems.length === 0) {
-    return <EmptyState message="暂无 Gallery" />;
-  }
 
   return (
     <div className="space-y-8">
@@ -76,13 +63,33 @@ export function HomePage() {
           title="最新"
           icon={<Sparkle className="size-5" weight="fill" />}
         />
-        <GalleryGrid galleries={galleries} />
-        <InfiniteScrollTrigger
-          hasNextPage={!!hasNextPage}
-          isFetchingNextPage={isFetchingNextPage}
-          isFetchNextPageError={isFetchNextPageError}
-          fetchNextPage={() => fetchNextPage()}
+        <JumpSeekBar
+          nav={data?.pages[0]?.nav}
+          value={nav}
+          onChange={setNav}
         />
+        {isLoading ? (
+          <div className="mt-4">
+            <GalleryGridSkeleton />
+          </div>
+        ) : error ? (
+          <ErrorState
+            message={error.message || "无法加载 Gallery"}
+            onRetry={() => refetch()}
+          />
+        ) : galleries.length === 0 ? (
+          <EmptyState message="暂无 Gallery" />
+        ) : (
+          <>
+            <GalleryGrid galleries={galleries} />
+            <InfiniteScrollTrigger
+              hasNextPage={!!hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+              isFetchNextPageError={isFetchNextPageError}
+              fetchNextPage={() => fetchNextPage()}
+            />
+          </>
+        )}
       </div>
     </div>
   );
