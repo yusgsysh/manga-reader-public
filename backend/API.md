@@ -1072,6 +1072,8 @@ Content-Disposition: attachment; filename="..."; filename*=UTF-8''...
 Cache-Control: no-store
 ```
 
+**HEAD `/api/prefill/:id/zip`:** 探测 ZIP 是否就绪，不返回正文（前端在下载前调用）。状态码与 GET 相同。
+
 **Error Responses:** `404` 不存在、`400` 非法 id、`503` 数据库或缓存未配置。
 
 ---
@@ -1107,7 +1109,6 @@ Cache-Control: no-store
 
 - 在线端点成功时（元数据 / 详情 / 页面列表）
 - `POST /api/bookshelf/:id/:token` 成功后后台异步预取元数据与页面列表
-- 数据库升级时，把旧 `reading_progress` 中的元数据一次性回填到 `gallery_cache`
 
 缓存采用「首次写入优先」策略：已存在的非空字段不会被覆盖（上游元数据变动不频繁）。
 

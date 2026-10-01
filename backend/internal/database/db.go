@@ -52,13 +52,6 @@ func NewDB(dataSourceName string) (*DB, error) {
 	drv := entsql.OpenDB("sqlite3", conn)
 	client := ent.NewClient(ent.Driver(drv))
 
-	// Copy reading-progress metadata into gallery_cache before the migration
-	// drops those columns from reading_progress.
-	if err := backfillGalleryCacheFromProgress(context.Background(), conn); err != nil {
-		client.Close()
-		return nil, fmt.Errorf("backfill gallery cache: %w", err)
-	}
-
 	if err := client.Schema.Create(context.Background(),
 		migrate.WithDropIndex(true),
 		migrate.WithDropColumn(true),
@@ -104,88 +97,6 @@ func (db *DB) CleanupGalleryCache(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("cleanup gallery cache rows affected: %w", err)
 	}
 	return int(affected), nil
-}
-
-func tableExists(ctx context.Context, conn *sql.DB, name string) (bool, error) {
-	var count int
-	if err := conn.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, name,
-	).Scan(&count); err != nil {
-		return false, err
-	}
-	return count > 0, nil
-}
-
-func tableHasColumn(ctx context.Context, conn *sql.DB, table, column string) (bool, error) {
-	rows, err := conn.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", table))
-	if err != nil {
-		return false, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var (
-			cid       int
-			name      string
-			ctype     string
-			notnull   int
-			dfltValue sql.NullString
-			pk        int
-		)
-		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dfltValue, &pk); err != nil {
-			return false, err
-		}
-		if name == column {
-			return true, nil
-		}
-	}
-	return false, rows.Err()
-}
-
-// backfillGalleryCacheFromProgress migrates metadata that used to live on the
-// reading_progress row into gallery_cache. It runs before the schema migration
-// removes those columns, and is a no-op on fresh databases or after the columns
-// are already gone.
-func backfillGalleryCacheFromProgress(ctx context.Context, conn *sql.DB) error {
-	hasReading, err := tableExists(ctx, conn, "reading_progress")
-	if err != nil || !hasReading {
-		return err
-	}
-
-	hasTitleColumn, err := tableHasColumn(ctx, conn, "reading_progress", "title")
-	if err != nil || !hasTitleColumn {
-		return err
-	}
-
-	hasCache, err := tableExists(ctx, conn, "gallery_cache")
-	if err != nil {
-		return err
-	}
-	if !hasCache {
-		slog.Warn("gallery_cache missing; skipping reading-progress metadata backfill")
-		return nil
-	}
-
-	if _, err := conn.ExecContext(ctx, `
-		INSERT INTO gallery_cache (
-			gallery_id, token, title, title_jpn, category, thumbnail, page_count,
-			rating, rating_count, uploader, posted, language, translated, file_size,
-			favorited, expunged, tags, pages, meta_fetched_at, updated_at
-		)
-		SELECT
-			rp.gallery_id, rp.token, rp.title, rp.title_jpn, rp.category, rp.thumbnail, rp.page_count,
-			0, 0, '', '', '', 0, '', 0, 0, '[]', '[]', rp.updated_at, rp.updated_at
-		FROM reading_progress rp
-		WHERE (rp.title <> '' OR rp.thumbnail <> '' OR rp.category <> '' OR rp.page_count <> 0)
-		  AND NOT EXISTS (
-			SELECT 1 FROM gallery_cache gc
-			WHERE gc.gallery_id = rp.gallery_id AND gc.token = rp.token
-		  )`); err != nil {
-		return fmt.Errorf("insert gallery cache from progress: %w", err)
-	}
-
-	slog.Info("backfilled gallery cache from reading progress")
-	return nil
 }
 
 func backfillPrefillTotal(ctx context.Context, conn *sql.DB) error {
