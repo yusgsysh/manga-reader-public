@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -295,10 +296,14 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 		return
 	}
 
-	// err == nil means the scrape was complete: cache it even if the client
-	// vanished before receiving the terminal line (the data itself is whole).
+	// err == nil means the scrape was verifiably complete: persist it even if
+	// the client vanished before receiving the terminal line. Detaching the
+	// cache write from the request context keeps a disconnect during the
+	// upsert from turning a whole, verified list into a lost cache write; the
+	// upstream scrape itself still follows the request context as before.
 	if db := s.cacheDB(); db != nil {
-		if cacheErr := gallerycache.UpsertPages(ctx, db, galleryID, token, pages); cacheErr != nil {
+		cacheCtx := context.WithoutCancel(ctx)
+		if cacheErr := gallerycache.UpsertPages(cacheCtx, db, galleryID, token, pages); cacheErr != nil {
 			slog.Warn("gallery cache pages upsert failed", "id", galleryID, "error", cacheErr)
 		}
 	}

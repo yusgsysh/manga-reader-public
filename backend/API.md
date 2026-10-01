@@ -308,10 +308,10 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 
 | 行类型 | 字段 | 说明 |
 |--------|------|------|
-| `meta` | `id`、`token`、`total` | 首行；`total` 为源站 `.gpc` 的总图片数（解析不到时为 `0`） |
-| `page` | `page_url`、`index`、`thumbnail?` | 每页一行；`index` 从 `0` 递增；`thumbnail` 见下 |
-| `done` | `total` | 成功终止行；`total` 为实收条数（等于 `page` 行数） |
-| `error` | `error` | 失败终止行；客户端必须**丢弃已收到的全部 `page` 行** |
+| `meta` | `id`、`token`、`total` | 首行且**唯一**；`total` 为源站 `.gpc` 的总图片数。解析不到 `.gpc` 或首个缩略图页无页链接即判定失败（见错误语义，不发 `meta`） |
+| `page` | `page_url`、`index`、`thumbnail?` | 每页一行；`index` 从 `0` **连续**递增，不得重复或跳号 |
+| `done` | `total` | 成功终止行；`total` 为实收条数（等于 `page` 行数，且 `meta.total > 0` 时必须等于 `meta.total`） |
+| `error` | `error` | 失败终止行；发出后流立即结束，客户端必须**丢弃已收到的全部 `page` 行** |
 
 ```json
 {"type":"meta","id":"123456","token":"abcdef1234","total":24}
@@ -323,10 +323,10 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 **错误语义（成功 / 失败，没有中间状态）：**
 
 - 参数非法：`400` + `{"error": ...}`（普通 JSON）。
-- 首个上游文档加载失败（尚未发出任何行）：`502` + `{"error": ...}`（普通 JSON）。
-- 中途失败（`meta` 行已在传输中）：HTTP 状态保持 `200`，以 `{"type":"error","error":...}` 终止行报告；此前发出的 `page` 行全部作废，前端应回退到 `gallery-cache` 端点。
+- 首个上游文档加载失败、`.gpc` 总数解析失败、或首个缩略图页无页链接（均在发出任何行之前）：`502` + `{"error": ...}`（普通 JSON）。
+- 中途失败（`meta` 行已在传输中，如缩略图页抓取报错、中途出现空页、实收页数与 `meta.total` 不符）：HTTP 状态保持 `200`，以 `{"type":"error","error":...}` 终止行报告；此前发出的 `page` 行全部作废，前端应回退到 `gallery-cache` 端点。
 
-**缓存：** 只有**完整成功**（所有缩略图页无错误、且抓到的页数不少于 `meta.total`）才把列表写入 `gallery_cache`；任何失败都**不写入**，缓存中不会出现部分数据。
+**缓存：** 只有**完整成功**（所有缩略图页无错误、中途无空页、且实收页数 == `meta.total`）才把列表写入 `gallery_cache`；任何失败都**不写入**，缓存中不会出现部分数据。
 
 > `thumbnail` 描述该页缩略图在精灵图中的位置（源站用一张大图 + CSS `background-position` 切割）。用 `sprite_url` + `x/y/width/height` 调用 `/api/image-cache/page-thumbnail` 获取单张缩略图。无缩略图元数据时该字段省略。
 

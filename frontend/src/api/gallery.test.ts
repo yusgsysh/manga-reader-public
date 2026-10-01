@@ -38,13 +38,34 @@ function ndjsonResponse(...events: unknown[]): Response {
   });
 }
 
+function meta(total: number) {
+  return { type: "meta", id: "123", token: "tok", total };
+}
+
+function page(index: number) {
+  return {
+    type: "page",
+    page_url: `https://exhentai.org/s/a/${index + 1}`,
+    index,
+  };
+}
+
+// Aggregated page objects drop the stream-only `type` field.
+function expectedPage(index: number) {
+  return {
+    page_url: `https://exhentai.org/s/a/${index + 1}`,
+    index,
+    thumbnail: undefined,
+  };
+}
+
+function done(total: number) {
+  return { type: "done", total };
+}
+
+// meta(total=3) → page×3 → done(total=3)
 function liveStream(): Response {
-  return ndjsonResponse(
-    { type: "meta", id: "123", token: "tok", total: 2 },
-    { type: "page", page_url: "https://exhentai.org/s/a/1", index: 0 },
-    { type: "page", page_url: "https://exhentai.org/s/a/2", index: 1 },
-    { type: "done", total: 2 },
-  );
+  return ndjsonResponse(meta(3), page(0), page(1), page(2), done(3));
 }
 
 describe("fetchGalleryPages", () => {
@@ -59,27 +80,82 @@ describe("fetchGalleryPages", () => {
     expect(result).toEqual({
       id: "123",
       token: "tok",
-      total: 2,
-      pages: [
-        { page_url: "https://exhentai.org/s/a/1", index: 0 },
-        { page_url: "https://exhentai.org/s/a/2", index: 1 },
-      ],
+      total: 3,
+      pages: [expectedPage(0), expectedPage(1), expectedPage(2)],
     });
-    expect(snapshots.map((s) => s.pages.length)).toEqual([1, 2]);
-    expect(snapshots[1].id).toBe("123");
+
+    // total always mirrors meta.total (the gallery total), while pages grows.
+    expect(snapshots.map((s) => s.total)).toEqual([3, 3, 3]);
+    expect(snapshots.map((s) => s.pages.length)).toEqual([1, 2, 3]);
+    expect(snapshots[0].id).toBe("123");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe(
       `${BASE}/api/gallery/123/tok/pages`,
     );
   });
 
+  it("rejects a duplicate meta line", async () => {
+    fetchMock.mockResolvedValue(ndjsonResponse(meta(3), meta(3)));
+
+    await expect(fetchGalleryPages(123, "tok")).rejects.toThrow(
+      "duplicate gallery pages stream meta",
+    );
+  });
+
+  it("rejects a page before meta", async () => {
+    fetchMock.mockResolvedValue(ndjsonResponse(page(0), meta(3)));
+
+    await expect(fetchGalleryPages(123, "tok")).rejects.toThrow(
+      "gallery pages stream sent a page before meta",
+    );
+  });
+
+  it("rejects a page index gap", async () => {
+    fetchMock.mockResolvedValue(
+      ndjsonResponse(meta(3), page(0), page(2), done(3)),
+    );
+
+    await expect(fetchGalleryPages(123, "tok")).rejects.toThrow(
+      "gallery pages stream page index mismatch: expected 1, got 2",
+    );
+  });
+
+  it("rejects a duplicate page index", async () => {
+    fetchMock.mockResolvedValue(
+      ndjsonResponse(meta(3), page(0), page(0), done(3)),
+    );
+
+    await expect(fetchGalleryPages(123, "tok")).rejects.toThrow(
+      "gallery pages stream page index mismatch: expected 1, got 0",
+    );
+  });
+
+  it("rejects a done total mismatch", async () => {
+    fetchMock.mockResolvedValue(
+      ndjsonResponse(meta(3), page(0), page(1), done(1)),
+    );
+
+    await expect(fetchGalleryPages(123, "tok")).rejects.toThrow(
+      "gallery pages stream done total mismatch: 1 vs 2",
+    );
+  });
+
+  it("rejects an incomplete stream", async () => {
+    fetchMock.mockResolvedValue(
+      ndjsonResponse(meta(3), page(0), page(1), done(2)),
+    );
+
+    await expect(fetchGalleryPages(123, "tok")).rejects.toThrow(
+      "gallery pages stream ended with 2 of 3 pages",
+    );
+  });
+
   it("rejects when the stream reports an error line", async () => {
     fetchMock.mockResolvedValue(
-      ndjsonResponse(
-        { type: "meta", id: "123", token: "tok", total: 65 },
-        { type: "page", page_url: "https://exhentai.org/s/a/1", index: 0 },
-        { type: "error", error: "fetch gallery pages failed: upstream broke" },
-      ),
+      ndjsonResponse(meta(3), page(0), {
+        type: "error",
+        error: "fetch gallery pages failed: upstream broke",
+      }),
     );
 
     await expect(fetchGalleryPages(123, "tok")).rejects.toThrow(
@@ -88,30 +164,39 @@ describe("fetchGalleryPages", () => {
   });
 
   it("rejects when the stream ends without a terminal line", async () => {
-    fetchMock.mockResolvedValue(
-      ndjsonResponse(
-        { type: "meta", id: "123", token: "tok", total: 2 },
-        { type: "page", page_url: "https://exhentai.org/s/a/1", index: 0 },
-      ),
-    );
+    fetchMock.mockResolvedValue(ndjsonResponse(meta(3), page(0)));
 
     await expect(fetchGalleryPages(123, "tok")).rejects.toThrow(
       "gallery pages stream ended unexpectedly",
     );
   });
 
-  it("rejects when fewer pages arrive than the meta total promised", async () => {
+  it("rejects invalid JSON lines without swallowing the error", async () => {
     fetchMock.mockResolvedValue(
-      ndjsonResponse(
-        { type: "meta", id: "123", token: "tok", total: 2 },
-        { type: "page", page_url: "https://exhentai.org/s/a/1", index: 0 },
-        { type: "done", total: 1 },
-      ),
+      new Response(`${JSON.stringify(meta(3))}\nnot-json\n`, {
+        status: 200,
+        headers: { "Content-Type": "application/x-ndjson" },
+      }),
     );
 
     await expect(fetchGalleryPages(123, "tok")).rejects.toThrow(
-      "gallery pages stream ended with 1 of 2 pages",
+      "invalid gallery pages stream line: not-json",
     );
+  });
+
+  it("releases the reader lock and cancels the stream on failure", async () => {
+    const res = ndjsonResponse(meta(3), page(0), page(0), done(3));
+    fetchMock.mockResolvedValue(res);
+
+    await expect(fetchGalleryPages(123, "tok")).rejects.toThrow(
+      "page index mismatch",
+    );
+
+    expect(res.body).not.toBeNull();
+    expect(res.body!.locked).toBe(false);
+    // cancel() closed the stream, so nothing remains readable after failure.
+    const { done: streamDone } = await res.body!.getReader().read();
+    expect(streamDone).toBe(true);
   });
 });
 
@@ -121,8 +206,12 @@ describe("fetchGalleryPagesWithFallback", () => {
 
     const result = await fetchGalleryPagesWithFallback(123, "tok");
 
-    expect(result.pages).toHaveLength(2);
-    expect(result.total).toBe(2);
+    expect(result).toEqual({
+      id: "123",
+      token: "tok",
+      total: 3,
+      pages: [expectedPage(0), expectedPage(1), expectedPage(2)],
+    });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/api/gallery/123/tok/pages`);
   });
@@ -145,8 +234,8 @@ describe("fetchGalleryPagesWithFallback", () => {
     fetchMock
       .mockResolvedValueOnce(
         ndjsonResponse(
-          { type: "meta", id: "123", token: "tok", total: 65 },
-          { type: "page", page_url: "https://exhentai.org/s/a/1", index: 0 },
+          meta(65),
+          page(0),
           { type: "error", error: "fetch gallery pages failed: gave up" },
         ),
       )

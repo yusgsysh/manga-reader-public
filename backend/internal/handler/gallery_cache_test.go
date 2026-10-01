@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	json "encoding/json/v2"
@@ -158,6 +160,181 @@ func TestGalleryPages_MidStreamFailureWritesNothing(t *testing.T) {
 	// A failed scrape must never write partial pages into the cache.
 	if _, found, err := gallerycache.Get(t.Context(), client, 12345, "tok12345"); err != nil || found {
 		t.Fatalf("cache must stay empty on failure: found=%v err=%v", found, err)
+	}
+}
+
+// ==================== Stream completeness semantics ====================
+
+func TestGalleryPages_MissingTotalRejected(t *testing.T) {
+	// A document whose ".gpc" counter cannot be parsed must fail the scrape
+	// before anything is emitted: total == 0 means "unknown", never "0 pages".
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!DOCTYPE html><html><body><div id="gdt">
+<a href="https://exhentai.org/s/abc/1-1">p1</a>
+<a href="https://exhentai.org/s/abc/1-2">p2</a>
+</div></body></html>`)
+	})
+	defer mockServer.Close()
+
+	client := newTestDB(t)
+	server := &Server{
+		Client: newMockClient(mockServer.URL),
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345/pages", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502 (nothing emitted). body: %s", w.Code, w.Body.String())
+	}
+	if _, found, err := gallerycache.Get(t.Context(), client, 12345, "tok12345"); err != nil || found {
+		t.Fatalf("cache must stay empty: found=%v err=%v", found, err)
+	}
+}
+
+func TestGalleryPages_EmptyBatchMidStreamWritesNothing(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Has("p") {
+			// The next thumbnail page exists but has no links: pages are
+			// missing while the declared total says otherwise.
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, `<div class="gpc">Showing 41 - 65 of 65 images</div><div id="gdt"></div>`)
+			return
+		}
+		mockPaginatedGalleryHandler(12345, "EmptyBatch", 65)(w, r)
+	})
+	defer mockServer.Close()
+
+	client := newTestDB(t)
+	server := &Server{
+		Client: newMockClient(mockServer.URL),
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345/pages", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+	stream := parsePagesStream(t, w.Body.Bytes())
+	if stream.Done {
+		t.Fatal("stream must not finish with done when pages are missing")
+	}
+	if stream.Error == "" {
+		t.Fatal("terminal line must be an error")
+	}
+	if _, found, err := gallerycache.Get(t.Context(), client, 12345, "tok12345"); err != nil || found {
+		t.Fatalf("cache must stay empty: found=%v err=%v", found, err)
+	}
+}
+
+func TestGalleryPages_TotalMismatchWritesNothing(t *testing.T) {
+	// More page links than the declared total: received != total is never a
+	// successful scrape.
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!DOCTYPE html><html><body>
+<div class="gpc">Showing 1 - 2 of 1 images</div>
+<div id="gdt">
+<a href="https://exhentai.org/s/abc/1-1">p1</a>
+<a href="https://exhentai.org/s/abc/1-2">p2</a>
+</div></body></html>`)
+	})
+	defer mockServer.Close()
+
+	client := newTestDB(t)
+	server := &Server{
+		Client: newMockClient(mockServer.URL),
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345/pages", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+	stream := parsePagesStream(t, w.Body.Bytes())
+	if stream.Done {
+		t.Fatal("stream must not finish with done on a total mismatch")
+	}
+	if stream.Error == "" {
+		t.Fatal("terminal line must be an error")
+	}
+	if _, found, err := gallerycache.Get(t.Context(), client, 12345, "tok12345"); err != nil || found {
+		t.Fatalf("cache must stay empty: found=%v err=%v", found, err)
+	}
+}
+
+// disconnectOnWrite cancels the request context as soon as the marker bytes
+// reach the client, simulating a disconnect right after the pages were
+// streamed.
+type disconnectOnWrite struct {
+	http.ResponseWriter
+	cancel context.CancelFunc
+	marker string
+}
+
+func (w *disconnectOnWrite) Write(p []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(p)
+	if strings.Contains(string(p), w.marker) {
+		w.cancel()
+	}
+	return n, err
+}
+
+func (w *disconnectOnWrite) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func TestGalleryPages_CacheSurvivesClientDisconnect(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryDetailHTML(12345, "Disconnect", 3))
+	})
+	defer mockServer.Close()
+
+	client := newTestDB(t)
+	server := &Server{
+		Client: newMockClient(mockServer.URL),
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345/pages", nil)
+	ctx, cancel := context.WithCancel(req.Context())
+	defer cancel()
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(&disconnectOnWrite{ResponseWriter: w, cancel: cancel, marker: `"index":2`}, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+	stream := parsePagesStream(t, w.Body.Bytes())
+	if !stream.Done {
+		t.Fatalf("stream must still finish with done: error = %q", stream.Error)
+	}
+
+	// The scrape completed before the client vanished, so the verified list
+	// must reach the cache despite the canceled request context.
+	row, found, err := gallerycache.Get(t.Context(), client, 12345, "tok12345")
+	if err != nil || !found {
+		t.Fatalf("cache lookup after disconnect: found=%v err=%v", found, err)
+	}
+	if len(row.Pages) != 3 {
+		t.Errorf("cached pages = %d, want 3", len(row.Pages))
 	}
 }
 

@@ -862,58 +862,67 @@ func galleryTotalImages(doc *goquery.Document) int {
 // sprite thumbnail geometry), walking the paginated thumbnail list when the
 // gallery has more pages than fit on the first thumbnail page. Each batch is
 // handed to emit as soon as it is scraped so callers can forward pages
-// incrementally. emit always runs exactly once after the first document
-// loads (possibly with an empty batch); total is the image count parsed from
-// ".gpc" and is 0 when it cannot be read.
+// incrementally; total is the image count parsed from ".gpc" and is passed to
+// every emit call.
 //
-// The returned error is nil only when the complete list was scraped: every
-// thumbnail page fetched without error and, when total is known, at least
-// total pages received. A non-nil error means the list is unusable — emit was
-// never called (first document failed), a later thumbnail page failed
-// (partial data is discarded), or emit itself failed (caller went away).
-// Partial results are never reported as success.
+// total == 0 means the parse failed, not an empty gallery: ExHentai galleries
+// always contain at least one image, so an unparsable ".gpc" counter (or a
+// document without page links) fails the scrape before anything is emitted,
+// instead of letting an unknown total masquerade as a verified complete list.
+//
+// The returned error is nil only when the scrape is verifiably complete:
+// every thumbnail page fetched without error and exactly total pages
+// received. An empty thumbnail page while pages are still missing, a received
+// count that overshoots total, or an emit failure (caller went away) all fail
+// the scrape. Partial results are never reported as success.
 func StreamGalleryPages(ctx context.Context, client *http.Client, galleryURL string, emit func(total int, batch []model.CachedPage) error) error {
 	doc, err := httpGetDoc(ctx, client, galleryURL)
 	if err != nil {
 		return err
 	}
 
+	total := galleryTotalImages(doc)
+	if total <= 0 {
+		return fmt.Errorf("cannot determine gallery total: %q counter missing or invalid", ".gpc")
+	}
 	first := extractGalleryPages(doc)
+	if len(first) == 0 {
+		return fmt.Errorf("cannot determine gallery total: no page links in the gallery document")
+	}
 	for i := range first {
 		first[i].Index = i
 	}
-	total := galleryTotalImages(doc)
 	if err := emit(total, first); err != nil {
 		return err
 	}
 	received := len(first)
 
-	if total > len(first) && len(first) > 0 {
-		end := len(first)
-		pageCount := total / end
-		if total%end != 0 {
-			pageCount++
+	// Walk ?p=N until every declared page has arrived. Each thumbnail page
+	// only advances the cursor, so the batch size may vary without skipping
+	// or repeating pages; an empty batch while pages are still missing means
+	// the upstream list disagrees with total and cannot be trusted.
+	for p := 1; received < total; p++ {
+		u, _ := url.Parse(galleryURL)
+		u.RawQuery = fmt.Sprintf("p=%d", p)
+		pageDoc, err := httpGetDoc(ctx, client, u.String())
+		if err != nil {
+			return err
 		}
-		for p := 1; p < pageCount; p++ {
-			u, _ := url.Parse(galleryURL)
-			u.RawQuery = fmt.Sprintf("p=%d", p)
-			pageDoc, err := httpGetDoc(ctx, client, u.String())
-			if err != nil {
-				return err
-			}
-			batch := extractGalleryPages(pageDoc)
-			for i := range batch {
-				batch[i].Index = received + i
-			}
-			if err := emit(total, batch); err != nil {
-				return err
-			}
-			received += len(batch)
+		batch := extractGalleryPages(pageDoc)
+		if len(batch) == 0 {
+			return fmt.Errorf("incomplete page list: thumbnail page %d is empty, got %d of %d pages", p, received, total)
 		}
+		for i := range batch {
+			batch[i].Index = received + i
+		}
+		if err := emit(total, batch); err != nil {
+			return err
+		}
+		received += len(batch)
 	}
 
-	if total > 0 && received < total {
-		return fmt.Errorf("incomplete page list: got %d of %d pages", received, total)
+	if received != total {
+		return fmt.Errorf("incomplete page list: got %d pages, want %d", received, total)
 	}
 	return nil
 }

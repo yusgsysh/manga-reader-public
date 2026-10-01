@@ -72,12 +72,19 @@ export function fetchGallery(id: number, token: string): Promise<Gallery> {
   return apiGet<Gallery>(`/api/gallery/${id}/${token}`);
 }
 
-// fetchGalleryPages reads the streaming NDJSON page list: a meta line, one
-// line per page, then a terminal done/error line. onPage receives a snapshot
-// after every page so callers can render progressively; the resolved promise
-// carries the aggregated response. The stream fails (throws) on the error
-// line or when it ends without a terminal line, so partial data is never
-// mistaken for success.
+// fetchGalleryPages reads the streaming NDJSON page list. The protocol state
+// machine is meta → page* → (done | error):
+//   - meta appears exactly once and must come first; its `total` is the
+//     gallery's declared page count and stays constant for the whole stream;
+//   - page indices are contiguous from 0;
+//   - done.total must equal the number of received pages (and, when the
+//     gallery total is known, the received count must cover it);
+//   - error terminates the stream as a failure.
+// onPage receives a snapshot after every page (total = gallery total,
+// pages = received so far) so callers can render progressively; the resolved
+// promise carries the aggregated response. The stream fails (throws) on the
+// error line or when it ends without a terminal line, so partial data is
+// never mistaken for success.
 export async function fetchGalleryPages(
   id: number,
   token: string,
@@ -108,8 +115,16 @@ export async function fetchGalleryPages(
     } catch {
       throw new Error(`invalid gallery pages stream line: ${line}`);
     }
+
+    if (finished) {
+      throw new Error(`gallery pages stream line after done: ${line}`);
+    }
+
     switch (event.type) {
       case "meta":
+        if (sawMeta) {
+          throw new Error("duplicate gallery pages stream meta");
+        }
         metaId = event.id;
         metaToken = event.token;
         total = event.total;
@@ -119,6 +134,11 @@ export async function fetchGalleryPages(
         if (!sawMeta) {
           throw new Error("gallery pages stream sent a page before meta");
         }
+        if (event.index !== pages.length) {
+          throw new Error(
+            `gallery pages stream page index mismatch: expected ${pages.length}, got ${event.index}`,
+          );
+        }
         pages.push({
           page_url: event.page_url,
           index: event.index,
@@ -127,11 +147,19 @@ export async function fetchGalleryPages(
         onPage?.({
           id: metaId,
           token: metaToken,
-          total: pages.length,
+          total,
           pages: [...pages],
         });
         break;
       case "done":
+        if (!sawMeta) {
+          throw new Error("gallery pages stream sent done before meta");
+        }
+        if (event.total !== pages.length) {
+          throw new Error(
+            `gallery pages stream done total mismatch: ${event.total} vs ${pages.length}`,
+          );
+        }
         if (total > 0 && pages.length < total) {
           throw new Error(
             `gallery pages stream ended with ${pages.length} of ${total} pages`,
@@ -146,25 +174,34 @@ export async function fetchGalleryPages(
     }
   };
 
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let newline = buffer.indexOf("\n");
-    while (newline >= 0) {
-      handleLine(buffer.slice(0, newline));
-      buffer = buffer.slice(newline + 1);
-      newline = buffer.indexOf("\n");
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let newline = buffer.indexOf("\n");
+      while (newline >= 0) {
+        handleLine(buffer.slice(0, newline));
+        buffer = buffer.slice(newline + 1);
+        newline = buffer.indexOf("\n");
+      }
     }
-  }
-  buffer += decoder.decode();
-  if (buffer.trim()) handleLine(buffer.trim());
+    buffer += decoder.decode();
+    if (buffer.trim()) handleLine(buffer.trim());
 
-  if (!sawMeta) {
-    throw new Error("gallery pages stream ended without meta");
-  }
-  if (!finished) {
-    throw new Error("gallery pages stream ended unexpectedly");
+    if (!sawMeta) {
+      throw new Error("gallery pages stream ended without meta");
+    }
+    if (!finished) {
+      throw new Error("gallery pages stream ended unexpectedly");
+    }
+  } catch (error) {
+    // Abort the underlying stream on any failure (protocol, JSON, network)
+    // without letting a rejected cancel() replace the original error.
+    await reader.cancel(error).catch(() => undefined);
+    throw error;
+  } finally {
+    reader.releaseLock();
   }
 
   return { id: metaId, token: metaToken, total: pages.length, pages };
