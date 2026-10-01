@@ -14,6 +14,10 @@ type Config struct {
 	MinIO       MinIOConfig
 	LogLevel    string
 	Environment string
+	// DevTools enables the /api/dev/* debug endpoints (off by default). They
+	// exist so a deployment can simulate an ExHentai outage at runtime to
+	// verify the frontend's offline fallback.
+	DevTools bool
 }
 
 // DatabaseConfig selects the database backend. Driver defaults to "sqlite";
@@ -69,6 +73,7 @@ func Load() (*Config, error) {
 		},
 		LogLevel:    getEnv("LOG_LEVEL", "warn"),
 		Environment: getEnv("ENVIRONMENT", "production"),
+		DevTools:    parseBoolEnv("MANGA_READER_DEV_TOOLS", false),
 		Cookie: CookieConfig{
 			IpbMemberID: getEnv("EHENTAI_COOKIE_IPB_MEMBER_ID", ""),
 			IpbPassHash: getEnv("EHENTAI_COOKIE_IPB_PASS_HASH", ""),

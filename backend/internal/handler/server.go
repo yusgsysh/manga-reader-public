@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
 	"github.com/minio/minio-go/v7"
@@ -30,26 +31,41 @@ type Server struct {
 	DB     *database.DB
 	Cache  ImageCache
 
+	// devTools enables the /api/dev/* debug endpoints; simulateUpstreamDown is
+	// a runtime switch they toggle to make upstream-backed endpoints fail.
+	devTools             bool
+	simulateUpstreamDown atomic.Bool
+
 	prefillOnce sync.Once
 	prefillMu   sync.Mutex
 	prefillMgr  *prefillManager
 }
 
 type Config struct {
-	Client *http.Client
-	DB     *database.DB
-	Cache  ImageCache
+	Client   *http.Client
+	DB       *database.DB
+	Cache    ImageCache
+	DevTools bool
 }
 
 func New(cfg Config) *Server {
 	return &Server{
-		Client: cfg.Client,
-		DB:     cfg.DB,
-		Cache:  cfg.Cache,
+		Client:   cfg.Client,
+		DB:       cfg.DB,
+		Cache:    cfg.Cache,
+		devTools: cfg.DevTools,
 	}
 }
 
 func (s *Server) RegisterRoutes(r *gin.Engine) {
+	// Simulated upstream outage must be checked before any upstream handler.
+	r.Use(s.upstreamSimulationMiddleware())
+
+	if s.devTools {
+		r.GET("/api/dev/upstream-down", s.handleDevUpstreamDownGet)
+		r.PUT("/api/dev/upstream-down", s.handleDevUpstreamDownPut)
+	}
+
 	r.GET("/api/gallery/:id/:token", s.handleGetGallery)
 	r.GET("/api/gallery/:id/:token/details", s.handleGalleryDetails)
 	r.GET("/api/gallery/:id/:token/pages", s.handleGalleryPages)

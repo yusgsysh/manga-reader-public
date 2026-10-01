@@ -1,14 +1,17 @@
-// Reader page-loading e2e tests.
+// Reader / gallery-detail loading e2e tests.
 //
-// Verifies the cache-first / streaming behaviour that makes the reader open
-// without waiting for the whole /pages stream:
-//   1. a gallery with a complete cached list mounts from cache, ignoring a
-//      slow live endpoint (no live /pages request at all);
-//   2. a gallery with no cache streams progressively and mounts after the
-//      first batch, before the stream completes.
+// Verifies the frontend-only "online-first, cache placeholder + fallback"
+// behaviour:
+//   1001  complete cache, slow live endpoint -> mounts from cache immediately,
+//         while still requesting the live stream;
+//   1002  cache miss -> streams progressively, mounts after the first batch
+//         before the stream completes;
+//   1003  complete cache, upstream down (all online endpoints 502) -> the
+//         reader and gallery detail render from cache, and download queues the
+//         cached page urls.
 //
 // Requires a production build (bun run build:e2e) and Chromium
-// (bun run test:e2e:install). Run with: bun run test:e2e / bun run test:e2e:install
+// (bun run test:e2e:install). Run with: bun run test:e2e
 
 import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -46,45 +49,69 @@ async function waitForServer() {
   throw new Error("mock server did not start");
 }
 
-async function loadReader(browser, id, token) {
+async function openReader(browser, id) {
   const page = await browser.newPage();
-  let liveRequests = 0;
+  let livePages = 0;
   page.on("request", (req) => {
-    if (new RegExp(`/api/gallery/${id}/${token}/pages$`).test(req.url())) {
-      liveRequests++;
-    }
+    if (/\/api\/gallery\/\d+\/tok\/pages$/.test(req.url())) livePages++;
   });
-
   const started = Date.now();
-  await page.goto(`${BASE}/reader/${id}/${token}`, {
-    waitUntil: "domcontentloaded",
-  });
+  await page.goto(`${BASE}/reader/${id}/tok`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector(".reader-shell", { timeout: 30000 });
-  const mountedMs = Date.now() - started;
-  const shown = await page.locator(".reader-topbar").innerText();
-  await page.close();
-  return { mountedMs, liveRequests, shown };
+  return { page, livePages, mountedMs: Date.now() - started };
 }
 
 try {
   await waitForServer();
   const browser = await chromium.launch();
 
-  console.log("scenario 1001: complete cache, slow live endpoint");
+  console.log("scenario 1001: cache present, slow live endpoint");
   {
-    const { mountedMs, liveRequests } = await loadReader(browser, 1001, "tok");
-    check("mounts from cache quickly", mountedMs < 5000, `${mountedMs}ms`);
-    check("never requests the live stream", liveRequests === 0, `${liveRequests} requests`);
+    const { page, livePages, mountedMs } = await openReader(browser, 1001);
+    check("mounts from cache before the slow live stream", mountedMs < 3000, `${mountedMs}ms`);
+    check("still requests the live stream", livePages === 1, `${livePages} requests`);
+    await page.close();
   }
 
   console.log("scenario 1002: cache miss, progressive stream");
   {
-    const { mountedMs, liveRequests, shown } = await loadReader(browser, 1002, "tok");
-    // The live stream pauses 8s after the first 40 pages; mounting must happen
-    // during that pause, i.e. well before the stream (and its 8s hold) ends.
+    const { page, livePages, mountedMs } = await openReader(browser, 1002);
+    const shown = await page.locator(".reader-topbar").innerText();
     check("mounts after the first batch", mountedMs < 6000, `${mountedMs}ms`);
-    check("streams from the live endpoint", liveRequests === 1, `${liveRequests} requests`);
-    check("shows the first page of the gallery total", /1\s*\/\s*50/.test(shown), shown);
+    check("streams from the live endpoint", livePages === 1, `${livePages} requests`);
+    check("shows the gallery total", /1\s*\/\s*50/.test(shown), shown);
+    await page.close();
+  }
+
+  console.log("scenario 1003: cache present, upstream down");
+  {
+    const { page, livePages, mountedMs } = await openReader(browser, 1003);
+    check("reader opens from cache while upstream is down", mountedMs < 5000, `${mountedMs}ms`);
+    check("live stream was attempted", livePages === 1, `${livePages} requests`);
+    await page.close();
+  }
+
+  console.log("scenario 1003: gallery detail + download from cache");
+  {
+    const page = await browser.newPage();
+    const prefilled = page.waitForRequest(
+      (req) => req.url().endsWith("/api/prefill") && req.method() === "POST",
+      { timeout: 30000 },
+    );
+    await page.goto(`${BASE}/gallery/1003/tok`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("h1", { timeout: 30000 });
+
+    const errorBlocks = await page.locator("text=无法加载 Gallery").count();
+    check("detail renders from cache (no error state)", errorBlocks === 0, `${errorBlocks} error blocks`);
+
+    await page.locator('button[aria-label="添加下载任务"]').click();
+    const body = (await prefilled).postDataJSON();
+    check(
+      "download queues the cached page urls",
+      Array.isArray(body?.urls) && body.urls.length === 50,
+      `urls=${body?.urls?.length}`,
+    );
+    await page.close();
   }
 
   await browser.close();

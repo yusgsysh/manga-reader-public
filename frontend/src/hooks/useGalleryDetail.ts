@@ -16,6 +16,8 @@ export function useGalleryDetail(id: number, token: string) {
     onlineFn: () => fetchGalleryDetail(id, token),
     cacheFn: () => fetchGalleryDetailCached(id, token),
     staleTime: 5 * 60_000,
+    // Show the cached details immediately while the live scrape loads.
+    useCacheAsPlaceholder: true,
   });
 }
 

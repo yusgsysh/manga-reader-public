@@ -30,6 +30,14 @@ interface UseOnlineThenCachedOptions<T> {
   cacheFn: () => Promise<T>;
   staleTime?: number;
   onlineRetry?: number;
+  /**
+   * When true, the cache is queried immediately (even while online) and shown
+   * as a placeholder until the online result arrives. The online query still
+   * runs, so online stays authoritative and the fallback semantics are
+   * unchanged; the only difference is that a cache hit renders instantly
+   * instead of waiting for the online request (which may be slow or fail).
+   */
+  useCacheAsPlaceholder?: boolean;
 }
 
 export interface UseOnlineThenCachedResult<T> {
@@ -40,6 +48,12 @@ export interface UseOnlineThenCachedResult<T> {
   isFetching: boolean;
   isError: boolean;
   error: Error | null;
+  /**
+   * True when the cache is shown because the online source failed or the
+   * browser is offline (a real fallback), not as a placeholder while the
+   * online query is still running.
+   */
+  isFallback: boolean;
   refetch: () => void;
 }
 
@@ -56,6 +70,7 @@ export function useOnlineThenCached<T>({
   cacheFn,
   staleTime,
   onlineRetry = 2,
+  useCacheAsPlaceholder = false,
 }: UseOnlineThenCachedOptions<T>): UseOnlineThenCachedResult<T> {
   const online = useOnlineStatus();
 
@@ -67,7 +82,8 @@ export function useOnlineThenCached<T>({
     retry: onlineRetry,
   });
 
-  const useCache = enabled && (!online || onlineQuery.isError);
+  const useCache =
+    enabled && (useCacheAsPlaceholder || !online || onlineQuery.isError);
   const cacheQuery = useQuery({
     queryKey: cacheKey,
     queryFn: cacheFn,
@@ -76,13 +92,18 @@ export function useOnlineThenCached<T>({
     retry: 0,
   });
 
-  const data = onlineQuery.data ?? cacheQuery.data;
+  const onlineData = onlineQuery.data;
+  const cacheData = cacheQuery.data;
+  // Online stays authoritative; the cache is only a placeholder until it wins
+  // (or a fallback when online never produces data).
+  const data = onlineData ?? cacheData;
   const source: DataSource | null =
-    onlineQuery.data !== undefined
+    onlineData !== undefined
       ? "online"
-      : cacheQuery.data !== undefined
+      : cacheData !== undefined
         ? "cache"
         : null;
+  const isFallback = source === "cache" && (!online || onlineQuery.isError);
 
   const onlineErrored = !enabled || !online || onlineQuery.isError;
   const cacheErrored = !useCache || cacheQuery.isError;
@@ -95,6 +116,7 @@ export function useOnlineThenCached<T>({
       return;
     }
     void onlineQuery.refetch();
+    if (useCacheAsPlaceholder) void cacheQuery.refetch();
   };
 
   // Only surface an error when neither source produced data; a successful
@@ -110,6 +132,7 @@ export function useOnlineThenCached<T>({
     isFetching: onlineQuery.isFetching,
     isError,
     error,
+    isFallback,
     refetch,
   };
 }

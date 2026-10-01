@@ -111,8 +111,9 @@ func run() error {
 	}
 
 	handlerCfg := handler.Config{
-		Client: client,
-		DB:     db,
+		Client:   client,
+		DB:       db,
+		DevTools: cfg.DevTools,
 	}
 
 	if cfg.MinIO.IsValid() {

@@ -103,7 +103,7 @@ export function GalleryDetailPage() {
 
   const {
     data: gallery,
-    source,
+    isFallback,
     isLoading,
     error,
     refetch,
@@ -323,7 +323,7 @@ export function GalleryDetailPage() {
 
             {/* Summary */}
             <div className="flex flex-wrap items-center gap-2.5 text-sm">
-              {source === "cache" && (
+              {isFallback && (
                 <Chip tone="outline" className="gap-1 text-kumo-subtle">
                   <CloudSlash className="size-3.5" weight="bold" />
                   离线数据

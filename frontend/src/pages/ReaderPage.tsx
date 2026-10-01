@@ -19,7 +19,6 @@ import {
 } from "@yui540/comimi-react";
 import { useGallery, useGalleryPages, useReadingProgress } from "../hooks/useReaderData";
 import { useReadingProgressSync } from "../hooks/useReadingProgressSync";
-import { useOnlineStatus } from "../hooks/useOnlineCached";
 import { useTheme } from "../hooks/useTheme";
 import {
   clampPageIndex,
@@ -123,13 +122,12 @@ export function ReaderPage() {
   const pagesQuery = useGalleryPages(id, token ?? "");
   const progressQuery = useReadingProgress(id, token ?? "");
 
-  const online = useOnlineStatus();
   const gallery = galleryQuery.data;
   const pages = pagesQuery.data?.pages;
   const total = pagesQuery.data?.total ?? 0;
-  // A cache-first page list is not "offline data"; only flag when the browser
-  // is actually offline or the gallery metadata came from the cache fallback.
-  const offline = !online || galleryQuery.source === "cache";
+  // "离线数据" only when a cache value is actually being used as a fallback
+  // (upstream failed or the browser is offline), not as a loading placeholder.
+  const offline = galleryQuery.isFallback || pagesQuery.isFallback;
 
   const initialPage = useMemo(() => {
     if (total <= 0) return 0;
