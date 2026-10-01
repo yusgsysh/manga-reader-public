@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, useKumoToastManager, cn } from "@cloudflare/kumo";
+import { Button, useKumoToastManager } from "@cloudflare/kumo";
 import {
   ArrowLeft,
   BookmarkSimple,

@@ -12,14 +12,15 @@ const pages: GalleryPagesResponse = {
 };
 
 const fetchMock = vi.fn();
+const originalFetch = globalThis.fetch;
 
 beforeEach(() => {
   fetchMock.mockReset();
-  vi.stubGlobal("fetch", fetchMock);
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  globalThis.fetch = originalFetch;
 });
 
 function jsonResponse(body: unknown, status = 200): Response {
