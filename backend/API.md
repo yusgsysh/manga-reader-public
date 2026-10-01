@@ -375,6 +375,31 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 }
 ```
 
+#### Gallery Page Thumbnail (by index)
+
+`GET /api/gallery/:id/:token/page-thumbnail?index=N`
+
+按画廊 + 页索引直接获取单张缩略图（无需先请求 `/pages`）。服务端定位该页所属精灵图并裁剪，返回格式与 `/api/page-thumbnail` 相同。
+
+**Path / Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | int | yes | Gallery ID |
+| token | string | yes | Gallery token |
+| index | int | yes | 页索引 (0-indexed) |
+
+**行为:**
+
+- 优先使用 `gallery_cache` 中已存的 `pages[].thumbnail`；未命中则抓取上游（只抓该索引所在的那一页缩略图）。
+- 裁剪结果复用 `/api/page-thumbnail` 的 MinIO 缓存。
+
+**Error Response:**
+
+- `400`: `index` 缺失或非法
+- `404`: 索引超出范围或该页无缩略图元数据
+- `502`: 上游抓取或裁剪失败
+
 ---
 
 ### 6. Homepage Gallery List

@@ -2,11 +2,13 @@ package handler
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/color"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -133,6 +135,81 @@ func TestPageThumbnail_UpstreamFailure(t *testing.T) {
 
 	if w.Code != http.StatusBadGateway {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusBadGateway)
+	}
+}
+
+const testGalleryThumbHTML = `<html><body>
+<div class="gpc">Showing 1 - 2 of 2 images</div>
+<div id="gdt" class="gt200">
+<a href="https://exhentai.org/s/a/1-1"><div><div title="Page 1" style="width:4px;height:4px;background:transparent url(https://cdn.hath.network/c2/hash/1-0.webp) -0px 0 no-repeat"></div></div></a>
+<a href="https://exhentai.org/s/b/1-2"><div><div title="Page 2" style="width:4px;height:4px;background:transparent url(https://cdn.hath.network/c2/hash/1-0.webp) -4px 0 no-repeat"></div></div></a>
+</div></body></html>`
+
+func newGallerySpriteServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	sprite := makeTestSprite(t)
+	srv := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/g/") {
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, testGalleryThumbHTML)
+			return
+		}
+		w.Header().Set("Content-Type", "image/webp")
+		_, _ = w.Write(sprite)
+	})
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestGalleryPageThumbnail_Success(t *testing.T) {
+	srv := newGallerySpriteServer(t)
+	server := &Server{Client: newMockClient(srv.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/123456/abcdef/page-thumbnail?index=1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "image/webp" {
+		t.Errorf("content-type = %q, want image/webp", ct)
+	}
+
+	img, err := webp.Decode(bytes.NewReader(w.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got := img.Bounds().Size(); got.X != 4 || got.Y != 4 {
+		t.Errorf("cropped size = %v, want 4x4", got)
+	}
+}
+
+func TestGalleryPageThumbnail_OutOfRange(t *testing.T) {
+	srv := newGallerySpriteServer(t)
+	server := &Server{Client: newMockClient(srv.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/123456/abcdef/page-thumbnail?index=5", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestGalleryPageThumbnail_InvalidIndex(t *testing.T) {
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
+
+	for _, idx := range []string{"", "abc", "-1"} {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest("GET", "/api/gallery/123456/abcdef/page-thumbnail?index="+idx, nil))
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("index=%q: status = %d, want %d", idx, w.Code, http.StatusBadRequest)
+		}
 	}
 }
 

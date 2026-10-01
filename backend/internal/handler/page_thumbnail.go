@@ -16,7 +16,9 @@ import (
 
 	"manga-reader/internal/cache"
 	"manga-reader/internal/exhentai"
+	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/imageproc"
+	"manga-reader/internal/model"
 )
 
 const (
@@ -111,6 +113,71 @@ func (s *Server) handlePageThumbnail(c *gin.Context) {
 
 	c.Header("Cache-Control", cacheControlHeader)
 	c.Data(http.StatusOK, "image/webp", data)
+}
+
+// handleGalleryPageThumbnail resolves the sprite geometry for a single page
+// index of a gallery and returns the cropped WebP. It lets clients request a
+// thumbnail without first calling /pages.
+func (s *Server) handleGalleryPageThumbnail(c *gin.Context) {
+	galleryID, token, ok := parseGalleryIDToken(c)
+	if !ok {
+		return
+	}
+
+	indexRaw := c.Query("index")
+	if indexRaw == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing index parameter"})
+		return
+	}
+	index, err := strconv.Atoi(indexRaw)
+	if err != nil || index < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid index parameter"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	thumb, found, err := s.resolveGalleryPageThumb(ctx, c.Param("id"), token, galleryID, index)
+	if err != nil {
+		slog.Error("gallery page-thumbnail resolve failed", "id", galleryID, "index", index, "error", err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("resolve page thumbnail failed: %v", err)})
+		return
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"error": "page thumbnail not found"})
+		return
+	}
+
+	rect := image.Rect(thumb.X, thumb.Y, thumb.X+thumb.Width, thumb.Y+thumb.Height)
+	data, err := s.loadOrCropThumbnail(ctx, thumb.SpriteURL, rect)
+	if err != nil {
+		slog.Error("gallery page-thumbnail crop failed", "id", galleryID, "index", index, "error", err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("crop page thumbnail failed: %v", err)})
+		return
+	}
+
+	c.Header("Cache-Control", cacheControlHeader)
+	c.Data(http.StatusOK, "image/webp", data)
+}
+
+// resolveGalleryPageThumb returns the sprite geometry for a page index, using
+// the gallery cache when it already holds the thumbnail metadata and scraping
+// upstream otherwise.
+func (s *Server) resolveGalleryPageThumb(ctx context.Context, idParam, token string, galleryID int64, index int) (model.GalleryPageThumb, bool, error) {
+	if db := s.cacheDB(); db != nil {
+		row, found, err := gallerycache.Get(ctx, db, galleryID, token)
+		if err != nil {
+			slog.Warn("gallery page-thumbnail cache read failed", "id", galleryID, "error", err)
+		} else if found {
+			for _, p := range row.Pages {
+				if p.Index == index && p.Thumbnail != nil {
+					return *p.Thumbnail, true, nil
+				}
+			}
+		}
+	}
+
+	u := exhentai.GalleryURL(idParam, token)
+	return exhentai.ScrapeGalleryPageThumb(ctx, s.Client, u, index)
 }
 
 // loadOrCropThumbnail returns the cropped thumbnail, fetching the sprite and

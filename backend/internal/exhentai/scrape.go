@@ -893,6 +893,51 @@ func ScrapeGalleryPages(ctx context.Context, client *http.Client, galleryURL str
 	return pages, nil
 }
 
+// ScrapeGalleryPageThumb returns the sprite thumbnail geometry for a single
+// gallery page index. Unlike ScrapeGalleryPages it fetches only the thumbnail
+// page that contains the requested index instead of walking the whole gallery.
+func ScrapeGalleryPageThumb(ctx context.Context, client *http.Client, galleryURL string, index int) (model.GalleryPageThumb, bool, error) {
+	if index < 0 {
+		return model.GalleryPageThumb{}, false, nil
+	}
+
+	doc, err := httpGetDoc(ctx, client, galleryURL)
+	if err != nil {
+		return model.GalleryPageThumb{}, false, err
+	}
+
+	if total := galleryTotalImages(doc); total > 0 && index >= total {
+		return model.GalleryPageThumb{}, false, nil
+	}
+
+	first := extractGalleryPages(doc)
+	perPage := len(first)
+	if perPage == 0 {
+		return model.GalleryPageThumb{}, false, nil
+	}
+	if index < perPage {
+		return pageThumbAt(first, index)
+	}
+
+	u, err := url.Parse(galleryURL)
+	if err != nil {
+		return model.GalleryPageThumb{}, false, err
+	}
+	u.RawQuery = fmt.Sprintf("p=%d", index/perPage)
+	pageDoc, err := httpGetDoc(ctx, client, u.String())
+	if err != nil {
+		return model.GalleryPageThumb{}, false, err
+	}
+	return pageThumbAt(extractGalleryPages(pageDoc), index%perPage)
+}
+
+func pageThumbAt(pages []model.CachedPage, index int) (model.GalleryPageThumb, bool, error) {
+	if index < 0 || index >= len(pages) || pages[index].Thumbnail == nil {
+		return model.GalleryPageThumb{}, false, nil
+	}
+	return *pages[index].Thumbnail, true, nil
+}
+
 func ScrapePageImageURL(ctx context.Context, client *http.Client, pageURL string) (imgURL string, fallbackURL string, err error) {
 	resp, err := httpGet(ctx, client, pageURL)
 	if err != nil {
