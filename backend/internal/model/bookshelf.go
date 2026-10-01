@@ -65,18 +65,10 @@ type BookshelfMutationResponse struct {
 }
 
 // UpdateReadingProgressRequest is the request body for updating reading progress.
-// Metadata fields are optional and only used to snapshot gallery info on the
-// first save; they never overwrite already stored values.
 type UpdateReadingProgressRequest struct {
 	CurrentPage int     `json:"current_page"`
 	Progress    float64 `json:"progress"`
 	Completed   bool    `json:"completed"`
-
-	Title     string `json:"title"`
-	TitleJPN  string `json:"title_jpn"`
-	Category  string `json:"category"`
-	Thumbnail string `json:"thumbnail"`
-	PageCount int    `json:"page_count"`
 }
 
 // RecentlyReadItem is a single item in the recently read list.

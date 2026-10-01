@@ -10,9 +10,25 @@ import (
 	json "encoding/json/v2"
 
 	"manga-reader/internal/database"
+	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/bookshelf"
+	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/model"
 )
+
+func seedGalleryMeta(t *testing.T, client *ent.Client, meta *model.Bookshelf) {
+	t.Helper()
+	err := gallerycache.UpsertMeta(t.Context(), client, meta.GalleryID, meta.Token, model.GalleryCacheSnapshot{
+		Title:     meta.Title,
+		TitleJPN:  meta.TitleJPN,
+		Category:  string(meta.Category),
+		Thumbnail: meta.Thumbnail,
+		PageCount: meta.PageCount,
+	})
+	if err != nil {
+		t.Fatalf("seed gallery meta: %v", err)
+	}
+}
 
 func TestHandleRecentlyRead_Empty(t *testing.T) {
 	client := newTestDB(t)
@@ -52,17 +68,13 @@ func TestHandleRecentlyRead_WithRecords(t *testing.T) {
 	client := newTestDB(t)
 
 	meta := newTestBookshelf()
+	seedGalleryMeta(t, client, meta)
 	client.ReadingProgress.Create().
 		SetGalleryID(meta.GalleryID).
 		SetToken(meta.Token).
 		SetCurrentPage(5).
 		SetProgress(0.2).
 		SetCompleted(false).
-		SetTitle(meta.Title).
-		SetTitleJpn(meta.TitleJPN).
-		SetCategory(string(meta.Category)).
-		SetThumbnail(meta.Thumbnail).
-		SetPageCount(meta.PageCount).
 		SetStartedAt(time.Now().UTC()).
 		SetUpdatedAt(time.Now().UTC()).
 		Save(t.Context())
@@ -115,6 +127,7 @@ func TestHandleRecentlyRead_MetadataSurvivesBookshelfRemove(t *testing.T) {
 	client := newTestDB(t)
 
 	meta := newTestBookshelf()
+	seedGalleryMeta(t, client, meta)
 	client.Bookshelf.Create().
 		SetGalleryID(meta.GalleryID).
 		SetToken(meta.Token).
@@ -131,11 +144,6 @@ func TestHandleRecentlyRead_MetadataSurvivesBookshelfRemove(t *testing.T) {
 		SetCurrentPage(5).
 		SetProgress(0.2).
 		SetCompleted(false).
-		SetTitle(meta.Title).
-		SetTitleJpn(meta.TitleJPN).
-		SetCategory(string(meta.Category)).
-		SetThumbnail(meta.Thumbnail).
-		SetPageCount(meta.PageCount).
 		SetStartedAt(time.Now().UTC()).
 		SetUpdatedAt(time.Now().UTC()).
 		Save(t.Context())

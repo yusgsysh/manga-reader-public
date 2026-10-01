@@ -142,98 +142,30 @@ func TestHandleUpdateProgress_Update(t *testing.T) {
 	}
 }
 
-func TestHandleUpdateProgress_PersistsMetadata(t *testing.T) {
+func TestHandleUpdateProgress_DoesNotWriteGalleryCache(t *testing.T) {
 	client := newTestDB(t)
 	r := setupTestRouter()
 	server := &Server{DB: &database.DB{Client: client}}
 
 	r.PUT("/api/progress/:id/:token", server.handleUpdateProgress)
 
-	body, _ := json.Marshal(model.UpdateReadingProgressRequest{
-		CurrentPage: 5,
-		Progress:    0.208,
-		Title:       "Test Gallery",
-		TitleJPN:    "テストギャラリー",
-		Category:    "doujinshi",
-		Thumbnail:   "https://example.com/thumb.webp",
-		PageCount:   24,
-	})
-	req := httptest.NewRequest("PUT", "/api/progress/123456/abcdef", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	stored, err := client.ReadingProgress.Query().
-		Where(
-			readingprogress.GalleryID(123456),
-			readingprogress.Token("abcdef"),
-		).
-		Only(t.Context())
-	if err != nil {
-		t.Fatalf("load progress: %v", err)
-	}
-	if stored.Title != "Test Gallery" {
-		t.Errorf("Title = %q, want %q", stored.Title, "Test Gallery")
-	}
-	if stored.TitleJpn != "テストギャラリー" {
-		t.Errorf("TitleJpn = %q, want %q", stored.TitleJpn, "テストギャラリー")
-	}
-	if stored.Category != "doujinshi" {
-		t.Errorf("Category = %q, want %q", stored.Category, "doujinshi")
-	}
-	if stored.Thumbnail != "https://example.com/thumb.webp" {
-		t.Errorf("Thumbnail = %q, want %q", stored.Thumbnail, "https://example.com/thumb.webp")
-	}
-	if stored.PageCount != 24 {
-		t.Errorf("PageCount = %d, want 24", stored.PageCount)
-	}
-}
-
-func TestHandleUpdateProgress_MetadataNotOverwritten(t *testing.T) {
-	client := newTestDB(t)
-	r := setupTestRouter()
-	server := &Server{DB: &database.DB{Client: client}}
-
-	r.PUT("/api/progress/:id/:token", server.handleUpdateProgress)
-
-	save := func(req model.UpdateReadingProgressRequest) {
+	save := func(page int, progress float64) {
 		t.Helper()
-		body, _ := json.Marshal(req)
-		httpReq := httptest.NewRequest("PUT", "/api/progress/123456/abcdef", bytes.NewReader(body))
-		httpReq.Header.Set("Content-Type", "application/json")
+		body, _ := json.Marshal(model.UpdateReadingProgressRequest{
+			CurrentPage: page,
+			Progress:    progress,
+		})
+		req := httptest.NewRequest("PUT", "/api/progress/123456/abcdef", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
-		r.ServeHTTP(w, httpReq)
+		r.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 		}
 	}
 
-	save(model.UpdateReadingProgressRequest{
-		CurrentPage: 5,
-		Progress:    0.2,
-		Title:       "Original Title",
-		Thumbnail:   "https://example.com/original.webp",
-		PageCount:   24,
-	})
-
-	// A later save with empty metadata must not clear the stored snapshot.
-	save(model.UpdateReadingProgressRequest{
-		CurrentPage: 10,
-		Progress:    0.4,
-	})
-
-	// A later save with different metadata must not overwrite the original.
-	save(model.UpdateReadingProgressRequest{
-		CurrentPage: 12,
-		Progress:    0.5,
-		Title:       "Changed Title",
-		Thumbnail:   "https://example.com/changed.webp",
-		PageCount:   99,
-	})
+	save(5, 0.2)
+	save(12, 0.5)
 
 	stored, err := client.ReadingProgress.Query().
 		Where(
@@ -244,17 +176,18 @@ func TestHandleUpdateProgress_MetadataNotOverwritten(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load progress: %v", err)
 	}
-	if stored.Title != "Original Title" {
-		t.Errorf("Title = %q, want %q (metadata must not be overwritten)", stored.Title, "Original Title")
-	}
-	if stored.Thumbnail != "https://example.com/original.webp" {
-		t.Errorf("Thumbnail = %q, want %q", stored.Thumbnail, "https://example.com/original.webp")
-	}
-	if stored.PageCount != 24 {
-		t.Errorf("PageCount = %d, want 24", stored.PageCount)
-	}
 	if stored.CurrentPage != 12 {
 		t.Errorf("CurrentPage = %d, want 12", stored.CurrentPage)
+	}
+
+	// Progress saves must not populate gallery_cache (that is owned by the
+	// online endpoints and the bookshelf prefetch).
+	count, err := client.GalleryCache.Query().Count(t.Context())
+	if err != nil {
+		t.Fatalf("count gallery cache: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("gallery_cache rows = %d, want 0", count)
 	}
 }
 

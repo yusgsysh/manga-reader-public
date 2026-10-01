@@ -22,7 +22,6 @@ import { useReadingProgressSync } from "../hooks/useReadingProgressSync";
 import { useTheme } from "../hooks/useTheme";
 import { clampPageIndex, galleryPagesToManga } from "../lib/reader";
 import { ErrorState } from "../components/common/ErrorState";
-import type { ProgressMetadata } from "../types/reader";
 
 type LayoutMode = ViewerSettings["layoutMode"];
 
@@ -115,28 +114,11 @@ export function ReaderPage() {
     return clampPageIndex(progressQuery.data?.current_page ?? 0, total);
   }, [total, restart, progressQuery.data?.current_page]);
 
-  // Snapshot gallery metadata on progress saves so the recently-read list can
-  // render without re-fetching metadata later.
-  const progressMetadata = useMemo<ProgressMetadata | undefined>(
-    () =>
-      gallery
-        ? {
-            title: gallery.title,
-            title_jpn: gallery.title_jpn,
-            category: gallery.category,
-            thumbnail: gallery.thumbnail,
-            page_count: gallery.page_count,
-          }
-        : undefined,
-    [gallery],
-  );
-
   const { currentPage, onPageChange, flushProgress } = useReadingProgressSync(
     id,
     token ?? "",
     total,
     initialPage,
-    progressMetadata,
   );
 
   const manga = useMemo(

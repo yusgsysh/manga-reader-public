@@ -9,8 +9,15 @@ import (
 
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/gallerycache"
+	"manga-reader/internal/ent/predicate"
 	"manga-reader/internal/model"
 )
+
+// Ref identifies a gallery in the cache.
+type Ref struct {
+	GalleryID int64
+	Token     string
+}
 
 // Get returns the cached row for a gallery and whether it exists.
 func Get(ctx context.Context, client *ent.Client, galleryID int64, token string) (*ent.GalleryCache, bool, error) {
@@ -27,6 +34,33 @@ func Get(ctx context.Context, client *ent.Client, galleryID int64, token string)
 		return nil, false, err
 	}
 	return row, true, nil
+}
+
+// GetMany returns the cached rows for the given refs, keyed by ref.
+func GetMany(ctx context.Context, client *ent.Client, refs []Ref) (map[Ref]*ent.GalleryCache, error) {
+	result := make(map[Ref]*ent.GalleryCache, len(refs))
+	if len(refs) == 0 {
+		return result, nil
+	}
+
+	preds := make([]predicate.GalleryCache, 0, len(refs))
+	for _, r := range refs {
+		preds = append(preds, gallerycache.And(
+			gallerycache.GalleryID(r.GalleryID),
+			gallerycache.Token(r.Token),
+		))
+	}
+
+	rows, err := client.GalleryCache.Query().
+		Where(gallerycache.Or(preds...)).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		result[Ref{GalleryID: row.GalleryID, Token: row.Token}] = row
+	}
+	return result, nil
 }
 
 // UpsertMeta writes metadata into the cache on a "first value wins" basis: the

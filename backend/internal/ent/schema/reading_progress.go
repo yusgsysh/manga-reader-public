@@ -30,11 +30,6 @@ func (ReadingProgress) Fields() []ent.Field {
 		field.Int("current_page").Default(0).NonNegative(),
 		field.Float("progress").Default(0).Min(0).Max(1),
 		field.Bool("completed").Default(false),
-		field.String("title").Default(""),
-		field.String("title_jpn").Default(""),
-		field.String("category").Default(""),
-		field.String("thumbnail").Default(""),
-		field.Int("page_count").Default(0),
 		field.Time("started_at").Optional().Nillable(),
 		field.Time("updated_at").Optional().Nillable().UpdateDefault(time.Now),
 	}

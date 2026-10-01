@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/readingprogress"
+	"manga-reader/internal/gallerycache"
 
 	"manga-reader/internal/model"
 )
@@ -43,17 +44,24 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 		return
 	}
 
+	// Metadata now lives in gallery_cache; the reading record only carries
+	// progress. Batched lookup keeps this at two queries per page.
+	refs := make([]gallerycache.Ref, 0, len(entities))
+	for _, rp := range entities {
+		refs = append(refs, gallerycache.Ref{GalleryID: rp.GalleryID, Token: rp.Token})
+	}
+	metaByRef, err := gallerycache.GetMany(ctx, s.DB.Client, refs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load gallery cache failed: %v", err)})
+		return
+	}
+
 	items := make([]model.RecentlyReadItem, 0, len(entities))
 
 	for _, rp := range entities {
-		items = append(items, model.RecentlyReadItem{
-			ID:        rp.GalleryID,
-			Token:     rp.Token,
-			Title:     rp.Title,
-			TitleJPN:  rp.TitleJpn,
-			Category:  model.GalleryCategory(rp.Category),
-			Thumbnail: rp.Thumbnail,
-			Pages:     rp.PageCount,
+		item := model.RecentlyReadItem{
+			ID:    rp.GalleryID,
+			Token: rp.Token,
 			Reading: model.ReadingProgress{
 				GalleryID:   rp.GalleryID,
 				Token:       rp.Token,
@@ -63,7 +71,17 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 				StartedAt:   rp.StartedAt,
 				UpdatedAt:   rp.UpdatedAt,
 			},
-		})
+		}
+
+		if meta := metaByRef[gallerycache.Ref{GalleryID: rp.GalleryID, Token: rp.Token}]; meta != nil {
+			item.Title = meta.Title
+			item.TitleJPN = meta.TitleJpn
+			item.Category = model.GalleryCategory(meta.Category)
+			item.Thumbnail = meta.Thumbnail
+			item.Pages = meta.PageCount
+		}
+
+		items = append(items, item)
 	}
 
 	c.JSON(http.StatusOK, model.RecentlyReadResponse{

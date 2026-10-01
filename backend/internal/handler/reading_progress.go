@@ -11,7 +11,6 @@ import (
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/readingprogress"
 
-	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/model"
 )
 
@@ -115,11 +114,6 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 			SetCurrentPage(req.CurrentPage).
 			SetProgress(req.Progress).
 			SetCompleted(req.Completed).
-			SetTitle(req.Title).
-			SetTitleJpn(req.TitleJPN).
-			SetCategory(req.Category).
-			SetThumbnail(req.Thumbnail).
-			SetPageCount(req.PageCount).
 			SetStartedAt(now).
 			SetUpdatedAt(now).
 			Save(ctx)
@@ -134,44 +128,11 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 			SetCompleted(req.Completed).
 			SetUpdatedAt(now)
 
-		// Snapshot gallery metadata on the first opportunity only; never
-		// overwrite already stored values or clear them with empty ones.
-		if existing.Title == "" && req.Title != "" {
-			update.SetTitle(req.Title)
-		}
-		if existing.TitleJpn == "" && req.TitleJPN != "" {
-			update.SetTitleJpn(req.TitleJPN)
-		}
-		if existing.Category == "" && req.Category != "" {
-			update.SetCategory(req.Category)
-		}
-		if existing.Thumbnail == "" && req.Thumbnail != "" {
-			update.SetThumbnail(req.Thumbnail)
-		}
-		if existing.PageCount == 0 && req.PageCount > 0 {
-			update.SetPageCount(req.PageCount)
-		}
-
 		err = update.Exec(ctx)
 	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("update progress failed: %v", err)})
 		return
-	}
-
-	if req.Title != "" || req.TitleJPN != "" || req.Category != "" || req.Thumbnail != "" || req.PageCount != 0 {
-		if db := s.cacheDB(); db != nil {
-			snap := model.GalleryCacheSnapshot{
-				Title:     req.Title,
-				TitleJPN:  req.TitleJPN,
-				Category:  req.Category,
-				Thumbnail: req.Thumbnail,
-				PageCount: req.PageCount,
-			}
-			if cacheErr := gallerycache.UpsertMeta(ctx, db, id, token, snap); cacheErr != nil {
-				slog.Warn("gallery cache progress meta upsert failed", "id", id, "error", cacheErr)
-			}
-		}
 	}
 
 	p, err := s.DB.Client.ReadingProgress.Query().
