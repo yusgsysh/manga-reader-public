@@ -45,7 +45,17 @@ const isDown = (id) => id === "1003";
 let devDown = false;
 
 function page(i) {
-  return { page_url: `https://exhentai.org/s/tok/${i + 1}-${i + 1}`, index: i };
+  return {
+    page_url: `https://exhentai.org/s/tok/${i + 1}-${i + 1}`,
+    index: i,
+    thumbnail: {
+      sprite_url: "https://cdn.hath.network/x/1-0.webp",
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 282,
+    },
+  };
 }
 
 function fullList(id) {

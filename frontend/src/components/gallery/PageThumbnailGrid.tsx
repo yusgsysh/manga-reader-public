@@ -45,10 +45,12 @@ function PageThumbnail({
         <span className="page-thumb-placeholder" aria-hidden />
       )}
       {showShimmer && (
-        <span
-          className="skeleton-shimmer absolute inset-0 bg-kumo-recessed"
-          aria-hidden
-        />
+        // Same structure as the homepage card: the wrapper is absolute while
+        // .skeleton-shimmer keeps `position: relative`, so the shimmer fills
+        // the tile instead of collapsing to nothing.
+        <div className="absolute inset-0 overflow-hidden" aria-hidden>
+          <div className="skeleton-shimmer h-full w-full bg-kumo-recessed" />
+        </div>
       )}
       <span className="page-thumb-number">{page.index + 1}</span>
     </Link>

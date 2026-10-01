@@ -20,6 +20,12 @@ import { chromium } from "playwright";
 const PORT = Number(process.env.E2E_PORT ?? 4188);
 const BASE = `http://127.0.0.1:${PORT}`;
 
+// 1x1 transparent PNG, used to fulfil delayed thumbnail requests.
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
+  "base64",
+);
+
 let failures = 0;
 function check(name, condition, detail) {
   if (condition) {
@@ -110,6 +116,30 @@ try {
       "download queues the cached page urls",
       Array.isArray(body?.urls) && body.urls.length === 50,
       `urls=${body?.urls?.length}`,
+    );
+    await page.close();
+  }
+
+  console.log("gallery thumbnails: loading shimmer");
+  {
+    const page = await browser.newPage();
+    // Delay the page thumbnails so the loading shimmer stays observable.
+    await page.route("**/api/image-cache/page-thumbnail**", async (route) => {
+      await sleep(1500);
+      await route.fulfill({ status: 200, contentType: "image/png", body: PNG });
+    });
+    await page.goto(`${BASE}/gallery/1001/tok`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".page-thumb-item", { timeout: 30000 });
+    const box = await page.evaluate(() => {
+      const el = document.querySelector(".page-thumb-item .skeleton-shimmer");
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { w: Math.round(r.width), h: Math.round(r.height) };
+    });
+    check(
+      "page thumbnail shimmer is visible while loading",
+      !!box && box.w > 0 && box.h > 0,
+      JSON.stringify(box),
     );
     await page.close();
   }
