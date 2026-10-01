@@ -26,7 +26,7 @@ interface UseOnlineThenCachedOptions<T> {
   enabled: boolean;
   onlineKey: readonly unknown[];
   cacheKey: readonly unknown[];
-  onlineFn: () => Promise<T>;
+  onlineFn: (context: { signal: AbortSignal }) => Promise<T>;
   cacheFn: () => Promise<T>;
   staleTime?: number;
   onlineRetry?: number;
@@ -61,7 +61,7 @@ export function useOnlineThenCached<T>({
 
   const onlineQuery = useQuery({
     queryKey: onlineKey,
-    queryFn: onlineFn,
+    queryFn: (context) => onlineFn(context),
     enabled: enabled && online,
     staleTime,
     retry: onlineRetry,

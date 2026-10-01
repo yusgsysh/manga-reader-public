@@ -858,12 +858,28 @@ func galleryTotalImages(doc *goquery.Document) int {
 	return total
 }
 
+// galleryPagesWalkBudget returns how long the pagination walk (?p=N) may take
+// for a gallery whose ".gpc" total is known. It grows with the page count
+// (30s base + 0.5s per page) and is clamped to [1m, 10m] so a large gallery
+// is not cut off early while a stuck walk still terminates.
+func galleryPagesWalkBudget(total int) time.Duration {
+	d := 30*time.Second + time.Duration(total)*500*time.Millisecond
+	if d < time.Minute {
+		return time.Minute
+	}
+	if d > 10*time.Minute {
+		return 10 * time.Minute
+	}
+	return d
+}
+
 // StreamGalleryPages fetches the full list of gallery pages (page URL plus
 // sprite thumbnail geometry), walking the paginated thumbnail list when the
 // gallery has more pages than fit on the first thumbnail page. Each batch is
 // handed to emit as soon as it is scraped so callers can forward pages
 // incrementally; total is the image count parsed from ".gpc" and is passed to
-// every emit call.
+// every emit call. The pagination walk is bounded by galleryPagesWalkBudget,
+// computed from that total.
 //
 // total == 0 means the parse failed, not an empty gallery: ExHentai galleries
 // always contain at least one image, so an unparsable ".gpc" counter (or a
@@ -897,6 +913,13 @@ func StreamGalleryPages(ctx context.Context, client *http.Client, galleryURL str
 	}
 	received := len(first)
 
+	// The total parsed from the first document bounds the pagination walk: a
+	// gallery with many pages gets more time, but a hanging or abusive walk
+	// cannot run forever. The first document and the caller's cache write are
+	// not covered by this budget.
+	walkCtx, cancelWalk := context.WithTimeout(ctx, galleryPagesWalkBudget(total))
+	defer cancelWalk()
+
 	// Walk ?p=N until every declared page has arrived. Each thumbnail page
 	// only advances the cursor, so the batch size may vary without skipping
 	// or repeating pages; an empty batch while pages are still missing means
@@ -904,7 +927,7 @@ func StreamGalleryPages(ctx context.Context, client *http.Client, galleryURL str
 	for p := 1; received < total; p++ {
 		u, _ := url.Parse(galleryURL)
 		u.RawQuery = fmt.Sprintf("p=%d", p)
-		pageDoc, err := httpGetDoc(ctx, client, u.String())
+		pageDoc, err := httpGetDoc(walkCtx, client, u.String())
 		if err != nil {
 			return err
 		}

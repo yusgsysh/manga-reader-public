@@ -86,6 +86,9 @@ docs: |-
   gallery sprite; feed it into **Page Thumbnail**.
 
   On a fully successful scrape the list is written to `gallery_cache`; any
-  failure writes nothing (no partial cache entries). This endpoint never falls
-  back; the offline fallback lives in the **Gallery Cache** folder
+  failure writes nothing (no partial cache entries). The scrape is detached
+  from the request, so a client disconnect does not abort it or lose the cache
+  write; concurrent requests for the same gallery share one scrape (the first
+  streams, the rest receive the finished list at once). This endpoint never
+  falls back; the offline fallback lives in the **Gallery Cache** folder
   (`GET /api/gallery-cache/:id/:token/pages`, plain JSON).

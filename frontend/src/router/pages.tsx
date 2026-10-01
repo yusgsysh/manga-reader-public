@@ -1,4 +1,5 @@
 import { lazy, Suspense, type ReactNode } from "react";
+import { useParams } from "react-router";
 import { Loader } from "@cloudflare/kumo";
 
 export const HomePage = lazy(() =>
@@ -58,4 +59,11 @@ export function ReaderLoading() {
       <Loader size={32} />
     </div>
   );
+}
+
+// Remount the reader when the gallery changes so all reader state (frozen page
+// snapshot, resume target, fullscreen) resets cleanly.
+export function ReaderRoute() {
+  const { id, token } = useParams<{ id: string; token: string }>();
+  return <ReaderPage key={`${id}:${token}`} />;
 }

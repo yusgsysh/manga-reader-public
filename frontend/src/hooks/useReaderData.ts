@@ -37,10 +37,18 @@ export function useGallery(id: number, token: string) {
 export function useGalleryPages(id: number, token: string) {
   const [partial, setPartial] = useState<GalleryPagesResponse | null>(null);
 
-  const onlineFn = useCallback(() => {
-    setPartial(null);
-    return fetchGalleryPages(id, token, (snapshot) => setPartial(snapshot));
-  }, [id, token]);
+  const onlineFn = useCallback(
+    ({ signal }: { signal: AbortSignal }) => {
+      setPartial(null);
+      return fetchGalleryPages(
+        id,
+        token,
+        (snapshot) => setPartial(snapshot),
+        signal,
+      );
+    },
+    [id, token],
+  );
 
   const result = useOnlineThenCached<GalleryPagesResponse>({
     enabled: Number.isFinite(id) && token.length > 0,
@@ -49,6 +57,8 @@ export function useGalleryPages(id: number, token: string) {
     onlineFn,
     cacheFn: () => fetchGalleryPagesCached(id, token),
     staleTime: PAGES_STALE_TIME,
+    // A failed stream falls back to cache instead of re-scraping upstream.
+    onlineRetry: 0,
   });
 
   // Expose the snapshot only while the live stream is still running: once the

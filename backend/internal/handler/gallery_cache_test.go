@@ -7,7 +7,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	json "encoding/json/v2"
 
@@ -335,6 +338,99 @@ func TestGalleryPages_CacheSurvivesClientDisconnect(t *testing.T) {
 	}
 	if len(row.Pages) != 3 {
 		t.Errorf("cached pages = %d, want 3", len(row.Pages))
+	}
+}
+
+// failWritesResponseWriter fails every write, simulating a client that is
+// already gone when the streaming response starts.
+type failWritesResponseWriter struct {
+	http.ResponseWriter
+}
+
+func (w *failWritesResponseWriter) Write([]byte) (int, error) {
+	return 0, errors.New("client disconnected")
+}
+
+func (w *failWritesResponseWriter) Flush() {}
+
+func TestGalleryPages_MultiBatchWriteFailureStillCaches(t *testing.T) {
+	// 100 pages = three thumbnail batches (40 + 40 + 20). The client is gone
+	// from the first write, but the detached scrape must still walk every
+	// batch and cache the complete list.
+	var reqCount atomic.Int32
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		reqCount.Add(1)
+		mockPaginatedGalleryHandler(91001, "Detached", 100)(w, r)
+	})
+	defer mockServer.Close()
+
+	client := newTestDB(t)
+	server := &Server{
+		Client: newMockClient(mockServer.URL),
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/91001/tok91001/pages", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(&failWritesResponseWriter{ResponseWriter: w}, req)
+
+	if got := reqCount.Load(); got != 3 {
+		t.Errorf("upstream requests = %d, want 3 (first page + two ?p= batches)", got)
+	}
+
+	row, found, err := gallerycache.Get(t.Context(), client, 91001, "tok91001")
+	if err != nil || !found {
+		t.Fatalf("cache lookup after write failure: found=%v err=%v", found, err)
+	}
+	if len(row.Pages) != 100 {
+		t.Errorf("cached pages = %d, want 100", len(row.Pages))
+	}
+}
+
+func TestGalleryPages_ConcurrentScrapesShareSingleflight(t *testing.T) {
+	// Each upstream response is delayed so both requests overlap: the first
+	// becomes the singleflight leader, the second waits and replays.
+	var reqCount atomic.Int32
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		reqCount.Add(1)
+		time.Sleep(100 * time.Millisecond)
+		mockPaginatedGalleryHandler(91002, "Shared", 65)(w, r)
+	})
+	defer mockServer.Close()
+
+	client := newTestDB(t)
+	server := &Server{
+		Client: newMockClient(mockServer.URL),
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	bodies := make([]string, 2)
+	var wg sync.WaitGroup
+	for i := range bodies {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			req := httptest.NewRequest("GET", "/api/gallery/91002/tok91002/pages", nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			bodies[i] = w.Body.String()
+		}(i)
+	}
+	wg.Wait()
+
+	if got := reqCount.Load(); got != 2 {
+		t.Errorf("upstream requests = %d, want 2 (one shared scrape: first page + ?p=1)", got)
+	}
+	for i, body := range bodies {
+		stream := parsePagesStream(t, []byte(body))
+		if !stream.Done {
+			t.Errorf("response %d did not finish with done: error=%q", i, stream.Error)
+		}
+		if len(stream.Pages) != 65 {
+			t.Errorf("response %d pages = %d, want 65", i, len(stream.Pages))
+		}
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -620,6 +621,25 @@ func TestExtractGalleryPages_ThumbnailSprite(t *testing.T) {
 	}
 	if pages[2].Thumbnail != nil {
 		t.Errorf("page without sprite should have nil thumbnail, got %+v", pages[2].Thumbnail)
+	}
+}
+
+func TestGalleryPagesWalkBudget(t *testing.T) {
+	cases := []struct {
+		total int
+		want  time.Duration
+	}{
+		{total: 0, want: time.Minute},
+		{total: 10, want: time.Minute},
+		{total: 60, want: time.Minute},        // 30s base + 30s
+		{total: 120, want: 90 * time.Second},  // 30s + 60s
+		{total: 500, want: 280 * time.Second}, // 30s + 250s
+		{total: 2000, want: 10 * time.Minute}, // capped at 10m
+	}
+	for _, tc := range cases {
+		if got := galleryPagesWalkBudget(tc.total); got != tc.want {
+			t.Errorf("galleryPagesWalkBudget(%d) = %s, want %s", tc.total, got, tc.want)
+		}
 	}
 }
 

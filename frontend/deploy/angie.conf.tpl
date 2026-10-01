@@ -147,9 +147,9 @@ http {
         }
 
         # ========================================================
-        # Cached: gallery detail / scraped details / pages (1 day)
+        # Cached: gallery detail / scraped details (1 day)
         #
-        # GET /api/gallery/:id/:token[/details|/pages]
+        # GET /api/gallery/:id/:token[/details]
         # ========================================================
 
         location /api/gallery/ {
@@ -159,6 +159,24 @@ http {
             proxy_cache_valid 200 1d;
 
             add_header X-Cache-Status $upstream_cache_status always;
+        }
+
+        # ========================================================
+        # Streamed: gallery page list (NDJSON)
+        #
+        # GET /api/gallery/:id/:token/pages
+        #
+        # This regex location wins over the /api/gallery/ prefix above so the
+        # incremental stream is neither buffered nor cached.
+        # ========================================================
+
+        location ~ ^/api/gallery/[^/]+/[^/]+/pages$ {
+            proxy_pass http://backend;
+
+            proxy_cache off;
+            proxy_buffering off;
+            proxy_read_timeout 300s;
+            proxy_send_timeout 300s;
         }
 
         # ========================================================

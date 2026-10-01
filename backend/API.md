@@ -328,6 +328,12 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 
 **缓存：** 只有**完整成功**（所有缩略图页无错误、中途无空页、且实收页数 == `meta.total`）才把列表写入 `gallery_cache`；任何失败都**不写入**，缓存中不会出现部分数据。
 
+**抓取生命周期：**
+
+- 抓取与请求上下文**解绑**：客户端中途断开不会取消上游抓取，只要最终完整成功，列表仍会写入 `gallery_cache`（客户端断开时后续行自然丢失）。整次抓取有 10 分钟硬上限。
+- `?p=N` 续页抓取按 `meta.total` 动态限时：`30s + 0.5s/页`，钳制在 `[1 分钟, 10 分钟]`；首个文档与缓存写入不在此预算内。
+- 同一 `(id, token)` 的并发请求通过 singleflight 合并为一次上游抓取：首个请求边抓边推流，其余请求等抓取完成后**一次性**收到完整的 `meta` + 全部 `page` + `done`。
+
 > `thumbnail` 描述该页缩略图在精灵图中的位置（源站用一张大图 + CSS `background-position` 切割）。用 `sprite_url` + `x/y/width/height` 调用 `/api/image-cache/page-thumbnail` 获取单张缩略图。无缩略图元数据时该字段省略。
 
 ---

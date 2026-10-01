@@ -89,9 +89,11 @@ export async function fetchGalleryPages(
   id: number,
   token: string,
   onPage?: (partial: GalleryPagesResponse) => void,
+  signal?: AbortSignal,
 ): Promise<GalleryPagesResponse> {
   const res = await fetchChecked(
     buildApiUrl(`/api/gallery/${id}/${token}/pages`),
+    signal ? { signal } : undefined,
   );
   if (!res.body) {
     throw new Error("gallery pages stream has no body");
@@ -144,6 +146,11 @@ export async function fetchGalleryPages(
           index: event.index,
           thumbnail: event.thumbnail,
         });
+        if (total > 0 && pages.length > total) {
+          throw new Error(
+            `gallery pages stream exceeded meta total: ${pages.length} > ${total}`,
+          );
+        }
         onPage?.({
           id: metaId,
           token: metaToken,
@@ -204,7 +211,9 @@ export async function fetchGalleryPages(
     reader.releaseLock();
   }
 
-  return { id: metaId, token: metaToken, total: pages.length, pages };
+  // total mirrors meta.total (the gallery total); verification above guarantees
+  // it equals pages.length when meta.total is positive.
+  return { id: metaId, token: metaToken, total: total > 0 ? total : pages.length, pages };
 }
 
 export function fetchGalleryDetail(

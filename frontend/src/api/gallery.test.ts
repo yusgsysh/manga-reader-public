@@ -184,6 +184,26 @@ describe("fetchGalleryPages", () => {
     );
   });
 
+  it("rejects when the stream exceeds meta.total", async () => {
+    fetchMock.mockResolvedValue(
+      ndjsonResponse(meta(1), page(0), page(1), done(2)),
+    );
+
+    await expect(fetchGalleryPages(123, "tok")).rejects.toThrow(
+      "gallery pages stream exceeded meta total: 2 > 1",
+    );
+  });
+
+  it("forwards the abort signal to the request", async () => {
+    fetchMock.mockResolvedValue(liveStream());
+    const controller = new AbortController();
+
+    await fetchGalleryPages(123, "tok", undefined, controller.signal);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]?.signal).toBe(controller.signal);
+  });
+
   it("releases the reader lock and cancels the stream on failure", async () => {
     const res = ndjsonResponse(meta(3), page(0), page(0), done(3));
     fetchMock.mockResolvedValue(res);

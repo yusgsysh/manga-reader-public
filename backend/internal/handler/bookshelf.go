@@ -46,12 +46,10 @@ func (s *Server) prefetchGallery(galleryID int64, token string, seed *model.Gall
 
 		u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
 
-		if pages, err := exhentai.ScrapeGalleryPages(ctx, s.Client, u); err != nil {
-			slog.Debug("gallery prefetch pages failed", "id", galleryID, "error", err)
-		} else if db != nil {
-			if err := gallerycache.UpsertPages(ctx, db, galleryID, token, pages); err != nil {
-				slog.Warn("gallery prefetch pages upsert failed", "id", galleryID, "error", err)
-			}
+		// Shares the singleflight scrape with the streaming /pages handler so a
+		// gallery is never fetched from upstream twice at the same time.
+		if pagesScrape, _ := s.scrapeGalleryPagesOnce(ctx, galleryID, token, nil); pagesScrape.err != nil {
+			slog.Debug("gallery prefetch pages failed", "id", galleryID, "error", pagesScrape.err)
 		}
 
 		if details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u); err != nil {

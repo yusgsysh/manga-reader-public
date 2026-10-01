@@ -9,7 +9,7 @@ import {
   LazyPage,
   PopularPage,
   ReaderLoading,
-  ReaderPage,
+  ReaderRoute,
   RecentlyReadPage,
   SearchPage,
   SettingsPage,
@@ -99,7 +99,7 @@ export const router = createBrowserRouter([
     path: "/reader/:id/:token",
     element: (
       <Suspense fallback={<ReaderLoading />}>
-        <ReaderPage />
+        <ReaderRoute />
       </Suspense>
     ),
   },

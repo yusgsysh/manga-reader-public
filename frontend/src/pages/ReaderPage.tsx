@@ -27,6 +27,7 @@ import {
 } from "../lib/reader";
 import { observeLazyThumbnails } from "../lib/lazyThumbnails";
 import { ErrorState } from "../components/common/ErrorState";
+import type { GalleryPage } from "../types/reader";
 
 type LayoutMode = ViewerSettings["layoutMode"];
 
@@ -42,6 +43,11 @@ export function ReaderPage() {
   const { resolvedMode } = useTheme();
   const viewerRef = useRef<MangaViewerHandle>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // The page the reader is actually on. The library resets to page 0 whenever
+  // its `manga` prop changes (storage is disabled), so we keep the real index
+  // here and restore it after the one-time completion update.
+  const currentPageRef = useRef(0);
+  const [viewerPages, setViewerPages] = useState<GalleryPage[] | null>(null);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("inline");
   const id = Number(idParam);
   const restart = searchParams.get("restart") === "1";
@@ -145,12 +151,58 @@ export function ReaderPage() {
     initialPage,
   );
 
+  const pageCount = pages?.length ?? 0;
+  // The reader mounts only once the batch containing the resume target has
+  // arrived, so it can jump straight to the right page instead of clamping to
+  // a partial list.
+  const targetReady = !!pages && total > 0 && pageCount > initialPage;
+  const listComplete = !!pages && total > 0 && pageCount >= total;
+
+  useEffect(() => {
+    currentPageRef.current = initialPage;
+  }, [initialPage]);
+
+  // Freeze the page list handed to the viewer: take the first snapshot once
+  // the target page is available, then refresh it exactly once when the full
+  // list has arrived. The short delay lets a whole upstream batch settle so
+  // the snapshot is never a single half-rendered page. Feeding every batch
+  // would make comimi reset to page 0 on each update.
+  useEffect(() => {
+    if (!pages || !targetReady) return;
+    const needsSnapshot =
+      viewerPages === null ||
+      (listComplete && viewerPages.length < pages.length);
+    if (!needsSnapshot) return;
+    const timer = window.setTimeout(() => setViewerPages(pages), 120);
+    return () => window.clearTimeout(timer);
+  }, [pages, targetReady, listComplete, viewerPages]);
+
+  const handlePageChange = useCallback(
+    ({ pageIndex }: { pageIndex: number }) => {
+      currentPageRef.current = pageIndex;
+      onPageChange(pageIndex);
+    },
+    [onPageChange],
+  );
+
+  // comimi resets to page 0 on every setManga; after the single completion
+  // update restore the page the reader was actually on.
+  const handleMangaChange = useCallback(() => {
+    requestAnimationFrame(() => {
+      const viewer = viewerRef.current;
+      const target = currentPageRef.current;
+      if (viewer && viewer.getCurrentPageIndex() !== target) {
+        viewer.goToPage(target);
+      }
+    });
+  }, []);
+
   const manga = useMemo(
     () =>
-      gallery && pages
-        ? galleryPagesToManga(String(id), token ?? "", gallery.title, pages)
+      gallery && viewerPages
+        ? galleryPagesToManga(String(id), token ?? "", gallery.title, viewerPages)
         : null,
-    [gallery, pages, id, token],
+    [gallery, viewerPages, id, token],
   );
 
   const loading =
@@ -217,6 +269,22 @@ export function ReaderPage() {
     );
   }
 
+  // Keep the reader closed until the page list has streamed up to the resume
+  // target, so mounting it cannot clamp to a not-yet-arrived page.
+  if (!targetReady || !viewerPages) {
+    return (
+      <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-kumo-base">
+        <Loader size={32} />
+        <p className="text-sm text-kumo-subtle">
+          正在加载到第 {initialPage + 1} 页…
+        </p>
+        <p className="tnum text-xs text-kumo-inactive">
+          {pageCount} / {total} 页
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={containerRef}
@@ -273,7 +341,8 @@ export function ReaderPage() {
           locale="zh-CN"
           storage={{ enabled: false }}
           settings={viewerSettings}
-          onPageChange={({ pageIndex }) => onPageChange(pageIndex)}
+          onPageChange={handlePageChange}
+          onMangaChange={handleMangaChange}
           onLayoutChange={({ layoutMode: mode }) => setLayoutMode(mode)}
           className="h-full w-full"
         />
