@@ -1,18 +1,37 @@
+import { useEffect, useState } from "react";
 import { Outlet, ScrollRestoration, useLocation } from "react-router";
 import { Header } from "./Header";
 import { DesktopSidebar } from "./DesktopSidebar";
 import { BackToTop } from "../common/BackToTop";
 import { PageTransition } from "../ui";
 
+const SIDEBAR_STORAGE_KEY = "manga-reader-sidebar";
+
 export function AppLayout() {
   const location = useLocation();
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem(SIDEBAR_STORAGE_KEY) === "collapsed",
+  );
+
+  useEffect(() => {
+    localStorage.setItem(
+      SIDEBAR_STORAGE_KEY,
+      collapsed ? "collapsed" : "expanded",
+    );
+  }, [collapsed]);
 
   return (
-    <div className="min-h-dvh bg-kumo-base text-kumo-default">
+    <div
+      data-sidebar={collapsed ? "collapsed" : "expanded"}
+      className="min-h-dvh bg-kumo-base text-kumo-default"
+    >
       <ScrollRestoration />
-      <DesktopSidebar />
+      <DesktopSidebar
+        collapsed={collapsed}
+        onToggle={() => setCollapsed((value) => !value)}
+      />
       <Header />
-      <div className="lg:pl-[var(--app-sidebar-width)]">
+      <div className="transition-[padding] duration-200 lg:pl-[var(--app-sidebar-width)]">
         <main className="app-container py-6 md:py-8">
           <PageTransition routeKey={location.pathname}>
             <Outlet />

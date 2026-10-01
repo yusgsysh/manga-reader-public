@@ -27,11 +27,17 @@
 
   /* Desktop navigation rail width; 0 while the mobile header is used. */
   --app-sidebar-width: 0px;
+  --app-sidebar-expanded: 15rem;
+  --app-sidebar-collapsed: 4.5rem;
 }
 
 @media (min-width: 1024px) {
   :root {
-    --app-sidebar-width: 15rem;
+    --app-sidebar-width: var(--app-sidebar-expanded);
+  }
+
+  [data-sidebar="collapsed"] {
+    --app-sidebar-width: var(--app-sidebar-collapsed);
   }
 }
 
