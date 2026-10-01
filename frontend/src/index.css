@@ -24,6 +24,15 @@
   --text-color-kumo-link: var(--app-accent);
 
   --app-cover-radius: 0.75rem;
+
+  /* Desktop navigation rail width; 0 while the mobile header is used. */
+  --app-sidebar-width: 0px;
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --app-sidebar-width: 15rem;
+  }
 }
 
 [data-mode="dark"] {

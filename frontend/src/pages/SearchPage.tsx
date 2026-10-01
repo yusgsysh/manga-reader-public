@@ -317,7 +317,7 @@ export function SearchPage() {
       />
 
       {/* Sticky search bar */}
-      <div className="sticky top-14 z-30 -mx-1 bg-kumo-base/85 px-1 py-3 backdrop-blur-md">
+      <div className="sticky top-14 z-30 -mx-1 bg-kumo-base/85 px-1 py-3 backdrop-blur-md lg:top-0">
         <div className="flex gap-2">
           <Input
             placeholder="搜索 Gallery..."
