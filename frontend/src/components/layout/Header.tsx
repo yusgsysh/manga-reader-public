@@ -64,7 +64,7 @@ export function Header() {
                   className={cn(
                     "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
                     active
-                      ? "bg-kumo-contrast text-kumo-inverse"
+                      ? "bg-[var(--app-accent)] text-[var(--app-accent-contrast)]"
                       : "text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default",
                   )}
                 >

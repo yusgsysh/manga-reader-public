@@ -99,7 +99,7 @@ function FilterChip({
   onRemove: () => void;
 }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-kumo-contrast px-2.5 py-1 text-xs font-medium text-kumo-inverse">
+    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--app-chip-bg)] px-2.5 py-1 text-xs font-medium text-[var(--app-chip-fg)]">
       {label}
       <button
         type="button"
@@ -360,7 +360,7 @@ export function SearchPage() {
             )}
             高级搜索
             {activeFilterCount > 0 && (
-              <span className="inline-flex items-center justify-center rounded-full bg-[var(--app-accent)] px-2 py-0.5 text-xs font-medium text-white">
+              <span className="inline-flex items-center justify-center rounded-full bg-[var(--app-accent)] px-2 py-0.5 text-xs font-medium text-[var(--app-accent-contrast)]">
                 {activeFilterCount}
               </span>
             )}
@@ -379,7 +379,7 @@ export function SearchPage() {
                 className={cn(
                   "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
                   active
-                    ? "border-transparent bg-kumo-contrast text-kumo-inverse"
+                    ? "border-transparent bg-[var(--app-accent)] text-[var(--app-accent-contrast)]"
                     : "border-kumo-hairline text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default",
                 )}
               >

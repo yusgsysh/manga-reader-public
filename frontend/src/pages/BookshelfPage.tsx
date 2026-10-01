@@ -61,7 +61,7 @@ export function BookshelfPage() {
           className={cn(
             "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
             filter === option.value
-              ? "bg-kumo-elevated text-kumo-default shadow-sm"
+              ? "bg-[var(--app-accent)] text-[var(--app-accent-contrast)] shadow-sm"
               : "text-kumo-subtle hover:text-kumo-default",
           )}
         >

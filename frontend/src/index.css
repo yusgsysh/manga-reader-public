@@ -12,7 +12,10 @@
 :root {
   --app-accent: #2563eb;
   --app-accent-soft: color-mix(in oklab, var(--app-accent) 12%, transparent);
+  --app-accent-contrast: #ffffff;
   --app-ring: color-mix(in oklab, var(--app-accent) 45%, transparent);
+  --app-chip-bg: #f1f5f9;
+  --app-chip-fg: #64748b;
 
   /* High-emphasis buttons = blue (Kumo mixes brand with white for the button). */
   --color-kumo-brand: #2563eb;
@@ -26,7 +29,10 @@
 [data-mode="dark"] {
   --app-accent: #60a5fa;
   --app-accent-soft: color-mix(in oklab, var(--app-accent) 18%, transparent);
+  --app-accent-contrast: #0b1220;
   --app-ring: color-mix(in oklab, var(--app-accent) 50%, transparent);
+  --app-chip-bg: #3f3f46;
+  --app-chip-fg: #d4d4d8;
 
   --color-kumo-brand: #3b82f6;
   --color-kumo-brand-hover: #60a5fa;

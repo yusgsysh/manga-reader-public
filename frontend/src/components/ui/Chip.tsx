@@ -11,7 +11,7 @@ interface ChipProps {
 
 const TONE_CLASSES: Record<ChipTone, string> = {
   neutral: "bg-kumo-recessed text-kumo-subtle",
-  solid: "bg-kumo-contrast text-kumo-inverse",
+  solid: "bg-[var(--app-chip-bg)] text-[var(--app-chip-fg)]",
   outline: "border border-kumo-hairline text-kumo-subtle",
 };
 

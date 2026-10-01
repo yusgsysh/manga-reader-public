@@ -168,7 +168,7 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
           >
             <button
               type="button"
-              className="flex size-7 items-center justify-center rounded-full bg-black/55 text-white/90 backdrop-blur-sm transition-colors hover:bg-black/75 hover:text-white"
+              className="flex size-7 items-center justify-center rounded-full bg-[var(--app-accent)] text-[var(--app-accent-contrast)] shadow-sm transition-colors hover:opacity-90"
               onClick={toggleTags}
               aria-label="查看标签"
               aria-expanded={showTags}
