@@ -1,8 +1,6 @@
-import { Link } from "react-router";
 import {
   ArrowsClockwise,
   CircleNotch,
-  FolderSimple,
   Gear,
   Monitor,
   Moon,
@@ -114,39 +112,6 @@ function TagDatabaseSection() {
   );
 }
 
-function DataSection() {
-  return (
-    <Section title="数据">
-      <div className="grid gap-2 sm:grid-cols-2">
-        <Link
-          to="/recently-read"
-          className="card-surface flex items-center gap-3 p-4 text-sm transition-colors hover:bg-kumo-tint"
-        >
-          <FolderSimple className="size-5 text-kumo-subtle" />
-          <span>
-            <span className="block font-medium">阅读记录</span>
-            <span className="block text-xs text-kumo-subtle">
-              查看与清理最近阅读
-            </span>
-          </span>
-        </Link>
-        <Link
-          to="/downloads"
-          className="card-surface flex items-center gap-3 p-4 text-sm transition-colors hover:bg-kumo-tint"
-        >
-          <FolderSimple className="size-5 text-kumo-subtle" />
-          <span>
-            <span className="block font-medium">下载记录</span>
-            <span className="block text-xs text-kumo-subtle">
-              查看与清理下载任务
-            </span>
-          </span>
-        </Link>
-      </div>
-    </Section>
-  );
-}
-
 export function SettingsPage() {
   return (
     <div className="max-w-3xl">
@@ -157,7 +122,6 @@ export function SettingsPage() {
       <div className="space-y-8">
         <AppearanceSection />
         <TagDatabaseSection />
-        <DataSection />
       </div>
     </div>
   );
