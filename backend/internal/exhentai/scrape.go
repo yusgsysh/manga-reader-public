@@ -858,20 +858,38 @@ func galleryTotalImages(doc *goquery.Document) int {
 	return total
 }
 
-// ScrapeGalleryPages fetches the full list of gallery pages (page URL plus
+// StreamGalleryPages fetches the full list of gallery pages (page URL plus
 // sprite thumbnail geometry), walking the paginated thumbnail list when the
-// gallery has more pages than fit on the first thumbnail page.
-func ScrapeGalleryPages(ctx context.Context, client *http.Client, galleryURL string) ([]model.CachedPage, error) {
+// gallery has more pages than fit on the first thumbnail page. Each batch is
+// handed to emit as soon as it is scraped so callers can forward pages
+// incrementally. emit always runs exactly once after the first document
+// loads (possibly with an empty batch); total is the image count parsed from
+// ".gpc" and is 0 when it cannot be read.
+//
+// The returned error is nil only when the complete list was scraped: every
+// thumbnail page fetched without error and, when total is known, at least
+// total pages received. A non-nil error means the list is unusable — emit was
+// never called (first document failed), a later thumbnail page failed
+// (partial data is discarded), or emit itself failed (caller went away).
+// Partial results are never reported as success.
+func StreamGalleryPages(ctx context.Context, client *http.Client, galleryURL string, emit func(total int, batch []model.CachedPage) error) error {
 	doc, err := httpGetDoc(ctx, client, galleryURL)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	pages := extractGalleryPages(doc)
+	first := extractGalleryPages(doc)
+	for i := range first {
+		first[i].Index = i
+	}
 	total := galleryTotalImages(doc)
+	if err := emit(total, first); err != nil {
+		return err
+	}
+	received := len(first)
 
-	if total > len(pages) && len(pages) > 0 {
-		end := len(pages)
+	if total > len(first) && len(first) > 0 {
+		end := len(first)
 		pageCount := total / end
 		if total%end != 0 {
 			pageCount++
@@ -881,14 +899,35 @@ func ScrapeGalleryPages(ctx context.Context, client *http.Client, galleryURL str
 			u.RawQuery = fmt.Sprintf("p=%d", p)
 			pageDoc, err := httpGetDoc(ctx, client, u.String())
 			if err != nil {
-				break
+				return err
 			}
-			pages = append(pages, extractGalleryPages(pageDoc)...)
+			batch := extractGalleryPages(pageDoc)
+			for i := range batch {
+				batch[i].Index = received + i
+			}
+			if err := emit(total, batch); err != nil {
+				return err
+			}
+			received += len(batch)
 		}
 	}
 
-	for i := range pages {
-		pages[i].Index = i
+	if total > 0 && received < total {
+		return fmt.Errorf("incomplete page list: got %d of %d pages", received, total)
+	}
+	return nil
+}
+
+// ScrapeGalleryPages fetches the full list of gallery pages. It reports an
+// error instead of returning a partial list, so callers only ever cache a
+// complete result.
+func ScrapeGalleryPages(ctx context.Context, client *http.Client, galleryURL string) ([]model.CachedPage, error) {
+	var pages []model.CachedPage
+	if err := StreamGalleryPages(ctx, client, galleryURL, func(_ int, batch []model.CachedPage) error {
+		pages = append(pages, batch...)
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return pages, nil
 }

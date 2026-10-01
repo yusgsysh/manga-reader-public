@@ -1,3 +1,4 @@
+import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import {
@@ -34,14 +35,32 @@ export function useGallery(id: number, token: string) {
 }
 
 export function useGalleryPages(id: number, token: string) {
-  return useOnlineThenCached<GalleryPagesResponse>({
+  const [partial, setPartial] = useState<GalleryPagesResponse | null>(null);
+
+  const onlineFn = useCallback(() => {
+    setPartial(null);
+    return fetchGalleryPages(id, token, (snapshot) => setPartial(snapshot));
+  }, [id, token]);
+
+  const result = useOnlineThenCached<GalleryPagesResponse>({
     enabled: Number.isFinite(id) && token.length > 0,
     onlineKey: ["gallery-pages", id, token],
     cacheKey: ["gallery-pages-cache", id, token],
-    onlineFn: () => fetchGalleryPages(id, token),
+    onlineFn,
     cacheFn: () => fetchGalleryPagesCached(id, token),
     staleTime: PAGES_STALE_TIME,
   });
+
+  // Expose the snapshot only while the live stream is still running: once the
+  // query fails or settles the partial list must disappear, so a broken stream
+  // falls back to the cache (or errors) instead of leaking partial pages.
+  // onlineFn resets the snapshot whenever a new stream starts.
+  const streaming =
+    partial !== null && result.data === undefined && result.isFetching;
+  if (streaming) {
+    return { ...result, data: partial, isLoading: false };
+  }
+  return result;
 }
 
 export function useReadingProgress(id: number, token: string) {

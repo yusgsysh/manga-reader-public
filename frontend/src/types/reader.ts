@@ -36,6 +36,13 @@ export interface GalleryPagesResponse {
   pages: GalleryPage[];
 }
 
+// One NDJSON line of the streaming /pages endpoint.
+export type GalleryPagesStreamEvent =
+  | { type: "meta"; id: string; token: string; total: number }
+  | ({ type: "page" } & GalleryPage)
+  | { type: "done"; total: number }
+  | { type: "error"; error: string };
+
 export interface ReadingProgress {
   gallery_id: number;
   token: string;

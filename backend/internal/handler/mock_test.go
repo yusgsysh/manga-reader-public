@@ -805,33 +805,27 @@ func TestMockGalleryPages_Success(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
-
-	var resp struct {
-		ID    string `json:"id"`
-		Token string `json:"token"`
-		Total int    `json:"total"`
-		Pages []struct {
-			PageURL string `json:"page_url"`
-			Index   int    `json:"index"`
-		} `json:"pages"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to unmarshal: %v. body: %s", err, w.Body.String())
+	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "application/x-ndjson") {
+		t.Errorf("Content-Type = %q, want application/x-ndjson", ct)
 	}
 
-	if resp.ID != "12345" {
-		t.Errorf("ID = %q, want %q", resp.ID, "12345")
+	stream := parsePagesStream(t, w.Body.Bytes())
+	if !stream.Done {
+		t.Fatalf("stream did not finish with done: error = %q", stream.Error)
 	}
-	if resp.Token != "tok12345" {
-		t.Errorf("Token = %q, want %q", resp.Token, "tok12345")
+	if stream.Meta.ID != "12345" {
+		t.Errorf("meta id = %q, want %q", stream.Meta.ID, "12345")
 	}
-	if resp.Total <= 0 {
-		t.Errorf("total = %d, want > 0", resp.Total)
+	if stream.Meta.Token != "tok12345" {
+		t.Errorf("meta token = %q, want %q", stream.Meta.Token, "tok12345")
 	}
-	if len(resp.Pages) == 0 {
+	if *stream.Meta.Total <= 0 {
+		t.Errorf("total = %d, want > 0", *stream.Meta.Total)
+	}
+	if len(stream.Pages) == 0 {
 		t.Fatal("pages should not be empty")
 	}
-	for i, p := range resp.Pages {
+	for i, p := range stream.Pages {
 		if p.PageURL == "" {
 			t.Errorf("pages[%d].page_url should not be empty", i)
 		}
@@ -864,24 +858,17 @@ func TestMockGalleryPages_Paginated(t *testing.T) {
 		t.Errorf("upstream requests = %d, want 2 (first page + ?p=1)", got)
 	}
 
-	var resp struct {
-		Total int `json:"total"`
-		Pages []struct {
-			PageURL string `json:"page_url"`
-			Index   int    `json:"index"`
-		} `json:"pages"`
+	stream := parsePagesStream(t, w.Body.Bytes())
+	if !stream.Done {
+		t.Fatalf("stream did not finish with done: error = %q", stream.Error)
 	}
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to unmarshal: %v. body: %s", err, w.Body.String())
+	if *stream.Meta.Total != 65 {
+		t.Errorf("total = %d, want 65", *stream.Meta.Total)
 	}
-
-	if resp.Total != 65 {
-		t.Errorf("total = %d, want 65", resp.Total)
+	if len(stream.Pages) != 65 {
+		t.Fatalf("pages len = %d, want 65", len(stream.Pages))
 	}
-	if len(resp.Pages) != 65 {
-		t.Fatalf("pages len = %d, want 65", len(resp.Pages))
-	}
-	for i, p := range resp.Pages {
+	for i, p := range stream.Pages {
 		if p.Index != i {
 			t.Errorf("pages[%d].index = %d, want %d", i, p.Index, i)
 		}

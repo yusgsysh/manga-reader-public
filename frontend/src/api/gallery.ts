@@ -1,11 +1,16 @@
-import { apiGet } from "./client";
+import { buildApiUrl, fetchChecked, apiGet } from "./client";
 import type {
   AdvancedSearchOptions,
   GalleryDetail,
   GalleryListResponse,
   ListingNavOptions,
 } from "../types/gallery";
-import type { Gallery, GalleryPagesResponse } from "../types/reader";
+import type {
+  Gallery,
+  GalleryPage,
+  GalleryPagesResponse,
+  GalleryPagesStreamEvent,
+} from "../types/reader";
 
 function boolToStr(v?: boolean): string | undefined {
   return v === undefined ? undefined : v ? "true" : "false";
@@ -67,11 +72,102 @@ export function fetchGallery(id: number, token: string): Promise<Gallery> {
   return apiGet<Gallery>(`/api/gallery/${id}/${token}`);
 }
 
-export function fetchGalleryPages(
+// fetchGalleryPages reads the streaming NDJSON page list: a meta line, one
+// line per page, then a terminal done/error line. onPage receives a snapshot
+// after every page so callers can render progressively; the resolved promise
+// carries the aggregated response. The stream fails (throws) on the error
+// line or when it ends without a terminal line, so partial data is never
+// mistaken for success.
+export async function fetchGalleryPages(
   id: number,
   token: string,
+  onPage?: (partial: GalleryPagesResponse) => void,
 ): Promise<GalleryPagesResponse> {
-  return apiGet<GalleryPagesResponse>(`/api/gallery/${id}/${token}/pages`);
+  const res = await fetchChecked(
+    buildApiUrl(`/api/gallery/${id}/${token}/pages`),
+  );
+  if (!res.body) {
+    throw new Error("gallery pages stream has no body");
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  const pages: GalleryPage[] = [];
+  let buffer = "";
+  let metaId = String(id);
+  let metaToken = token;
+  let total = 0;
+  let sawMeta = false;
+  let finished = false;
+
+  const handleLine = (line: string) => {
+    if (!line.trim()) return;
+    let event: GalleryPagesStreamEvent;
+    try {
+      event = JSON.parse(line) as GalleryPagesStreamEvent;
+    } catch {
+      throw new Error(`invalid gallery pages stream line: ${line}`);
+    }
+    switch (event.type) {
+      case "meta":
+        metaId = event.id;
+        metaToken = event.token;
+        total = event.total;
+        sawMeta = true;
+        break;
+      case "page":
+        if (!sawMeta) {
+          throw new Error("gallery pages stream sent a page before meta");
+        }
+        pages.push({
+          page_url: event.page_url,
+          index: event.index,
+          thumbnail: event.thumbnail,
+        });
+        onPage?.({
+          id: metaId,
+          token: metaToken,
+          total: pages.length,
+          pages: [...pages],
+        });
+        break;
+      case "done":
+        if (total > 0 && pages.length < total) {
+          throw new Error(
+            `gallery pages stream ended with ${pages.length} of ${total} pages`,
+          );
+        }
+        finished = true;
+        break;
+      case "error":
+        throw new Error(event.error);
+      default:
+        throw new Error(`unknown gallery pages stream line: ${line}`);
+    }
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline = buffer.indexOf("\n");
+    while (newline >= 0) {
+      handleLine(buffer.slice(0, newline));
+      buffer = buffer.slice(newline + 1);
+      newline = buffer.indexOf("\n");
+    }
+  }
+  buffer += decoder.decode();
+  if (buffer.trim()) handleLine(buffer.trim());
+
+  if (!sawMeta) {
+    throw new Error("gallery pages stream ended without meta");
+  }
+  if (!finished) {
+    throw new Error("gallery pages stream ended unexpectedly");
+  }
+
+  return { id: metaId, token: metaToken, total: pages.length, pages };
 }
 
 export function fetchGalleryDetail(

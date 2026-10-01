@@ -1,6 +1,6 @@
 module manga-reader
 
-go 1.27.0
+go 1.27
 
 require (
 	entgo.io/ent v0.14.6

@@ -17,38 +17,53 @@ http:
       description: Gallery token
 
 runtime:
-  assertions:
-    - expression: res.status
-      operator: eq
-      value: "200"
-    - expression: res.body.total
-      operator: isNumber
-    - expression: res.body.pages
-      operator: isArray
   scripts:
     - type: tests
       code: |-
-        test("page count matches the pages array length", function () {
-          expect(res.body.pages.length).to.equal(res.body.total);
+        test("responds with an NDJSON stream", function () {
+          expect(res.status).to.equal(200);
+          expect(res.getHeader("content-type")).to.include("application/x-ndjson");
+          expect(res.getHeader("cache-control")).to.equal("no-store");
         });
 
-        test("pages are indexed and expose page_url", function () {
-          res.body.pages.forEach(function (page, index) {
+        test("meta line first, pages indexed, done line last", function () {
+          var lines = String(res.body).trim().split("\n").map(function (line) {
+            return JSON.parse(line);
+          });
+
+          var meta = lines[0];
+          expect(meta.type).to.equal("meta");
+          expect(meta.id).to.exist;
+          expect(meta.token).to.exist;
+
+          var pages = lines.filter(function (line) {
+            return line.type === "page";
+          });
+          pages.forEach(function (page, index) {
             expect(page.index).to.equal(index);
             expect(page.page_url).to.include("exhentai.org");
           });
+
+          var last = lines[lines.length - 1];
+          expect(last.type).to.equal("done");
+          expect(last.total).to.equal(pages.length);
+          if (meta.total > 0) {
+            expect(pages.length).to.be.at.least(meta.total);
+          }
         });
 
         test("exposes sprite thumbnail geometry when available", function () {
-          res.body.pages
-            .filter(function (page) {
-              return page.thumbnail;
-            })
-            .forEach(function (page) {
-              expect(page.thumbnail.sprite_url).to.include("http");
-              expect(page.thumbnail.width).to.be.a("number");
-              expect(page.thumbnail.height).to.be.a("number");
-            });
+          var pages = String(res.body).trim().split("\n").map(function (line) {
+            return JSON.parse(line);
+          }).filter(function (line) {
+            return line.type === "page" && line.thumbnail;
+          });
+
+          pages.forEach(function (page) {
+            expect(page.thumbnail.sprite_url).to.include("http");
+            expect(page.thumbnail.width).to.be.a("number");
+            expect(page.thumbnail.height).to.be.a("number");
+          });
         });
 
 settings:
@@ -58,13 +73,19 @@ settings:
   maxRedirects: 5
 
 docs: |-
-  Return the ordered list of page URLs for a gallery. Feed a `page_url` into
-  **Page Image**, **Cached Image** or **Start Prefill**.
+  Return the ordered list of page URLs for a gallery as a **streaming NDJSON**
+  response (`application/x-ndjson`): a `meta` line (id/token/total), one `page`
+  line per page as soon as it is scraped, then a terminal `done` line — or an
+  `error` line when scraping fails midway, in which case every `page` line
+  received so far must be discarded.
 
-  Each entry may also carry a `thumbnail` object (`sprite_url`, `x`, `y`,
+  Feed a `page_url` into **Page Image**, **Cached Image** or **Start Prefill**.
+
+  Each `page` line may also carry a `thumbnail` object (`sprite_url`, `x`, `y`,
   `width`, `height`) describing where the page thumbnail lives inside the
   gallery sprite; feed it into **Page Thumbnail**.
 
-  On success the list is written to `gallery_cache`. This endpoint never
-  falls back; the offline fallback lives in the **Gallery Cache** folder
-  (`GET /api/gallery-cache/:id/:token/pages`).
+  On a fully successful scrape the list is written to `gallery_cache`; any
+  failure writes nothing (no partial cache entries). This endpoint never falls
+  back; the offline fallback lives in the **Gallery Cache** folder
+  (`GET /api/gallery-cache/:id/:token/pages`, plain JSON).

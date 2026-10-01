@@ -47,6 +47,83 @@ func skipIfNoCookies(t *testing.T) {
 	}
 }
 
+// pagesStreamResult is the decoded form of an NDJSON /pages response.
+type pagesStreamResult struct {
+	Meta     galleryPagesLine
+	Pages    []model.CachedPage
+	Done     bool
+	Error    string
+	Terminal int
+}
+
+// parsePagesStream decodes the NDJSON body of GET /api/gallery/:id/:token/pages
+// and enforces the protocol: meta first, then pages, then exactly one terminal
+// done/error line.
+func parsePagesStream(t *testing.T, body []byte) pagesStreamResult {
+	t.Helper()
+
+	text := strings.TrimRight(string(body), "\n")
+	if text == "" {
+		t.Fatal("empty stream body")
+	}
+
+	var res pagesStreamResult
+	sawMeta := false
+	for i, line := range strings.Split(text, "\n") {
+		var l galleryPagesLine
+		if err := json.Unmarshal([]byte(line), &l); err != nil {
+			t.Fatalf("line %d: unmarshal %q: %v", i, line, err)
+		}
+		switch l.Type {
+		case "meta":
+			if sawMeta {
+				t.Fatalf("duplicate meta line at %d", i)
+			}
+			if l.Total == nil {
+				t.Fatalf("meta line %d is missing total", i)
+			}
+			sawMeta = true
+			res.Meta = l
+		case "page":
+			if !sawMeta {
+				t.Fatalf("page line before meta at %d", i)
+			}
+			if l.Index == nil {
+				t.Fatalf("page line %d is missing index", i)
+			}
+			res.Pages = append(res.Pages, model.CachedPage{
+				PageURL:   l.PageURL,
+				Index:     *l.Index,
+				Thumbnail: l.Thumbnail,
+			})
+		case "done":
+			if l.Total == nil {
+				t.Fatalf("done line %d is missing total", i)
+			}
+			res.Done = true
+			res.Terminal++
+		case "error":
+			if l.Error == "" {
+				t.Fatalf("error line %d is missing error", i)
+			}
+			res.Error = l.Error
+			res.Terminal++
+		default:
+			t.Fatalf("unknown line type %q at %d: %s", l.Type, i, line)
+		}
+	}
+	if !sawMeta {
+		t.Fatal("missing meta line")
+	}
+	if res.Terminal != 1 {
+		t.Fatalf("terminal lines = %d, want exactly 1", res.Terminal)
+	}
+	if res.Done && *res.Meta.Total > 0 && len(res.Pages) < *res.Meta.Total {
+		t.Fatalf("pages = %d, want >= meta total %d", len(res.Pages), *res.Meta.Total)
+	}
+	return res
+}
+
 // ==================== 集成测试 ====================
 
 func TestAPI_GetGallery(t *testing.T) {
@@ -325,27 +402,27 @@ func TestAPI_GalleryPages(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
-
-	var resp struct {
-		ID    string `json:"id"`
-		Token string `json:"token"`
-		Total int    `json:"total"`
-		Pages []struct {
-			PageURL string `json:"page_url"`
-			Index   int    `json:"index"`
-		} `json:"pages"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to unmarshal response: %v", err)
+	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "application/x-ndjson") {
+		t.Errorf("Content-Type = %q, want application/x-ndjson", ct)
 	}
 
-	if resp.Total <= 0 {
-		t.Errorf("total = %d, want > 0", resp.Total)
+	stream := parsePagesStream(t, w.Body.Bytes())
+	if stream.Meta.ID != strconv.Itoa(testGalleryID) {
+		t.Errorf("meta id = %q, want %q", stream.Meta.ID, strconv.Itoa(testGalleryID))
 	}
-	if len(resp.Pages) == 0 {
+	if stream.Meta.Token != testGalleryToken {
+		t.Errorf("meta token = %q, want %q", stream.Meta.Token, testGalleryToken)
+	}
+	if !stream.Done {
+		t.Fatalf("stream did not finish with done: error = %q", stream.Error)
+	}
+	if *stream.Meta.Total <= 0 {
+		t.Errorf("total = %d, want > 0", *stream.Meta.Total)
+	}
+	if len(stream.Pages) == 0 {
 		t.Fatal("pages should not be empty")
 	}
-	for i, p := range resp.Pages {
+	for i, p := range stream.Pages {
 		if p.PageURL == "" {
 			t.Errorf("pages[%d].page_url should not be empty", i)
 		}
@@ -353,7 +430,7 @@ func TestAPI_GalleryPages(t *testing.T) {
 			t.Errorf("pages[%d].index = %d, want %d", i, p.Index, i)
 		}
 	}
-	t.Logf("Gallery %s/%s: %d pages", resp.ID, resp.Token, resp.Total)
+	t.Logf("Gallery %s/%s: %d pages", stream.Meta.ID, stream.Meta.Token, len(stream.Pages))
 }
 
 func TestAPI_PageImage(t *testing.T) {
@@ -742,19 +819,16 @@ func TestAPI_GalleryPagesValidURLs(t *testing.T) {
 		t.Fatalf("status = %d. body: %s", w.Code, w.Body.String())
 	}
 
-	var resp struct {
-		Pages []struct {
-			PageURL string `json:"page_url"`
-		} `json:"pages"`
+	stream := parsePagesStream(t, w.Body.Bytes())
+	if !stream.Done {
+		t.Fatalf("stream did not finish with done: error = %q", stream.Error)
 	}
-	json.Unmarshal(w.Body.Bytes(), &resp)
-
-	for i, p := range resp.Pages {
+	for i, p := range stream.Pages {
 		if !strings.HasPrefix(p.PageURL, "https://") {
 			t.Errorf("pages[%d].page_url = %q, want https:// prefix", i, p.PageURL)
 		}
 	}
-	t.Logf("All %d page URLs have https:// prefix", len(resp.Pages))
+	t.Logf("All %d page URLs have https:// prefix", len(stream.Pages))
 }
 
 func TestAPI_GalleryPagesOrdering(t *testing.T) {
@@ -776,20 +850,17 @@ func TestAPI_GalleryPagesOrdering(t *testing.T) {
 		t.Fatalf("status = %d. body: %s", w.Code, w.Body.String())
 	}
 
-	var resp struct {
-		Pages []struct {
-			Index int `json:"index"`
-		} `json:"pages"`
+	stream := parsePagesStream(t, w.Body.Bytes())
+	if !stream.Done {
+		t.Fatalf("stream did not finish with done: error = %q", stream.Error)
 	}
-	json.Unmarshal(w.Body.Bytes(), &resp)
-
-	for i, p := range resp.Pages {
+	for i, p := range stream.Pages {
 		if p.Index != i {
 			t.Errorf("pages[%d].index = %d, want %d", i, p.Index, i)
 			break
 		}
 	}
-	t.Logf("All %d pages are in correct order", len(resp.Pages))
+	t.Logf("All %d pages are in correct order", len(stream.Pages))
 }
 
 func TestAPI_GalleryMultiPagePagination(t *testing.T) {
@@ -811,31 +882,26 @@ func TestAPI_GalleryMultiPagePagination(t *testing.T) {
 		t.Fatalf("status = %d. body: %s", w.Code, w.Body.String())
 	}
 
-	var resp struct {
-		Total int `json:"total"`
-		Pages []struct {
-			PageURL string `json:"page_url"`
-			Index   int    `json:"index"`
-		} `json:"pages"`
+	stream := parsePagesStream(t, w.Body.Bytes())
+	if !stream.Done {
+		t.Fatalf("stream did not finish with done: error = %q", stream.Error)
 	}
-	json.Unmarshal(w.Body.Bytes(), &resp)
-
-	if resp.Total < 65 {
-		t.Errorf("total = %d, want >= 65 for multi-page gallery", resp.Total)
+	if *stream.Meta.Total < 65 {
+		t.Errorf("total = %d, want >= 65 for multi-page gallery", *stream.Meta.Total)
 	}
-	if len(resp.Pages) < 65 {
-		t.Errorf("pages len = %d, want >= 65", len(resp.Pages))
+	if len(stream.Pages) < 65 {
+		t.Errorf("pages len = %d, want >= 65", len(stream.Pages))
 	}
-	if len(resp.Pages) > 0 {
-		lastPage := resp.Pages[len(resp.Pages)-1]
+	if len(stream.Pages) > 0 {
+		lastPage := stream.Pages[len(stream.Pages)-1]
 		if lastPage.PageURL == "" {
 			t.Error("last page URL should not be empty")
 		}
-		if lastPage.Index != len(resp.Pages)-1 {
-			t.Errorf("last page index = %d, want %d", lastPage.Index, len(resp.Pages)-1)
+		if lastPage.Index != len(stream.Pages)-1 {
+			t.Errorf("last page index = %d, want %d", lastPage.Index, len(stream.Pages)-1)
 		}
 	}
-	t.Logf("Multi-page gallery: total=%d, pages_fetched=%d", resp.Total, len(resp.Pages))
+	t.Logf("Multi-page gallery: total=%d, pages_fetched=%d", *stream.Meta.Total, len(stream.Pages))
 }
 
 func TestAPI_SearchCoverURL(t *testing.T) {

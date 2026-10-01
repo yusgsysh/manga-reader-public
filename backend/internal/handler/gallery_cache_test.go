@@ -27,6 +27,20 @@ func errorClient() *http.Client {
 	return &http.Client{Transport: errorTransport{}}
 }
 
+// failPaginatedTransport redirects requests to the mock server but fails every
+// request carrying ?p= (the second and later thumbnail pages), simulating
+// ExHentai dropping out in the middle of a scrape.
+type failPaginatedTransport struct {
+	mockURL string
+}
+
+func (t *failPaginatedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Query().Has("p") {
+		return nil, errors.New("upstream failed mid-scrape")
+	}
+	return (&mockTransport{mockURL: t.mockURL}).RoundTrip(req)
+}
+
 func seedGalleryCache(t *testing.T, client *ent.Client, id int64, token string) {
 	t.Helper()
 	if err := gallerycache.UpsertMeta(t.Context(), client, id, token, model.GalleryCacheSnapshot{
@@ -107,6 +121,43 @@ func TestGalleryPages_UpstreamFailure(t *testing.T) {
 	// the gallery-cache endpoint instead.
 	if w.Code != http.StatusBadGateway {
 		t.Fatalf("status = %d, want 502", w.Code)
+	}
+}
+
+func TestGalleryPages_MidStreamFailureWritesNothing(t *testing.T) {
+	mockServer := newMockServer(mockPaginatedGalleryHandler(12345, "Partial", 65))
+	defer mockServer.Close()
+
+	client := newTestDB(t)
+	server := &Server{
+		Client: &http.Client{Transport: &failPaginatedTransport{mockURL: mockServer.URL}},
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345/pages", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// The meta line is already on the wire, so the status stays 200; the
+	// failure is reported as a terminal error line instead.
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+	stream := parsePagesStream(t, w.Body.Bytes())
+	if stream.Done {
+		t.Fatal("stream must not finish with done after a mid-scrape failure")
+	}
+	if stream.Error == "" {
+		t.Fatal("terminal line must be an error")
+	}
+	if len(stream.Pages) == 0 {
+		t.Fatal("pages should have been streamed before the failure")
+	}
+
+	// A failed scrape must never write partial pages into the cache.
+	if _, found, err := gallerycache.Get(t.Context(), client, 12345, "tok12345"); err != nil || found {
+		t.Fatalf("cache must stay empty on failure: found=%v err=%v", found, err)
 	}
 }
 
@@ -306,6 +357,40 @@ func TestPrefetchGallery_WritesCache(t *testing.T) {
 	}
 	if len(row.Pages) != 4 {
 		t.Errorf("cached pages = %d, want 4", len(row.Pages))
+	}
+}
+
+func TestPrefetchGallery_IncompletePagesNotCached(t *testing.T) {
+	mockServer := newMockServer(mockPaginatedGalleryHandler(77777, "Incomplete", 65))
+	defer mockServer.Close()
+
+	client := newTestDB(t)
+	server := &Server{
+		Client: &http.Client{Transport: &failPaginatedTransport{mockURL: mockServer.URL}},
+		DB:     &database.DB{Client: client},
+	}
+
+	seed := &model.Gallery{
+		ID:        77777,
+		Token:     "pf77777",
+		Title:     "Incomplete",
+		Category:  model.CategoryManga,
+		Thumbnail: "https://example.com/incomplete.webp",
+		PageCount: 65,
+	}
+	server.prefetchGallery(77777, "pf77777", seed)
+
+	row, found, err := gallerycache.Get(t.Context(), client, 77777, "pf77777")
+	if err != nil || !found {
+		t.Fatalf("cache lookup: found=%v err=%v", found, err)
+	}
+	// Metadata is written independently, but a partial page list must not be
+	// cached: first-write-wins would lock it in forever.
+	if row.PagesFetchedAt != nil {
+		t.Error("pages_fetched_at must not be set on a failed scrape")
+	}
+	if len(row.Pages) != 0 {
+		t.Errorf("cached pages = %d, want 0", len(row.Pages))
 	}
 }
 

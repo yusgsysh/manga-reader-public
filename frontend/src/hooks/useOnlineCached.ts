@@ -36,6 +36,8 @@ export interface UseOnlineThenCachedResult<T> {
   data: T | undefined;
   source: DataSource | null;
   isLoading: boolean;
+  // True while the online query is in flight (including streaming responses).
+  isFetching: boolean;
   isError: boolean;
   error: Error | null;
   refetch: () => void;
@@ -105,6 +107,7 @@ export function useOnlineThenCached<T>({
     data,
     source,
     isLoading,
+    isFetching: onlineQuery.isFetching,
     isError,
     error,
     refetch,

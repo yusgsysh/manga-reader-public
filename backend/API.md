@@ -302,43 +302,33 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 | id | int | Gallery ID |
 | token | string | Gallery token |
 
-**Response (200):**
+**Response (200): NDJSON 流**
+
+`Content-Type: application/x-ndjson; charset=utf-8`，`Cache-Control: no-store`。响应为**流式 chunked 传输**：每抓到一页立即写出一行，无需等待整份列表抓取完成。每行是一个 JSON 对象，按顺序：
+
+| 行类型 | 字段 | 说明 |
+|--------|------|------|
+| `meta` | `id`、`token`、`total` | 首行；`total` 为源站 `.gpc` 的总图片数（解析不到时为 `0`） |
+| `page` | `page_url`、`index`、`thumbnail?` | 每页一行；`index` 从 `0` 递增；`thumbnail` 见下 |
+| `done` | `total` | 成功终止行；`total` 为实收条数（等于 `page` 行数） |
+| `error` | `error` | 失败终止行；客户端必须**丢弃已收到的全部 `page` 行** |
 
 ```json
-{
-  "id": "123456",
-  "token": "abcdef1234",
-  "total": 24,
-  "pages": [
-    {
-      "page_url": "https://exhentai.org/s/abcdef1234/123456-1",
-      "index": 0,
-      "thumbnail": {
-        "sprite_url": "https://cdn.hath.network/c2/hash/123456-0.webp",
-        "x": 0,
-        "y": 0,
-        "width": 200,
-        "height": 282
-      }
-    },
-    {
-      "page_url": "https://exhentai.org/s/abcdef1234/123456-2",
-      "index": 1,
-      "thumbnail": {
-        "sprite_url": "https://cdn.hath.network/c2/hash/123456-0.webp",
-        "x": 200,
-        "y": 0,
-        "width": 200,
-        "height": 282
-      }
-    }
-  ]
-}
+{"type":"meta","id":"123456","token":"abcdef1234","total":24}
+{"type":"page","page_url":"https://exhentai.org/s/abcdef1234/123456-1","index":0,"thumbnail":{"sprite_url":"https://cdn.hath.network/c2/hash/123456-0.webp","x":0,"y":0,"width":200,"height":282}}
+{"type":"page","page_url":"https://exhentai.org/s/abcdef1234/123456-2","index":1,"thumbnail":{"sprite_url":"https://cdn.hath.network/c2/hash/123456-0.webp","x":200,"y":0,"width":200,"height":282}}
+{"type":"done","total":24}
 ```
 
+**错误语义（成功 / 失败，没有中间状态）：**
+
+- 参数非法：`400` + `{"error": ...}`（普通 JSON）。
+- 首个上游文档加载失败（尚未发出任何行）：`502` + `{"error": ...}`（普通 JSON）。
+- 中途失败（`meta` 行已在传输中）：HTTP 状态保持 `200`，以 `{"type":"error","error":...}` 终止行报告；此前发出的 `page` 行全部作废，前端应回退到 `gallery-cache` 端点。
+
+**缓存：** 只有**完整成功**（所有缩略图页无错误、且抓到的页数不少于 `meta.total`）才把列表写入 `gallery_cache`；任何失败都**不写入**，缓存中不会出现部分数据。
+
 > `thumbnail` 描述该页缩略图在精灵图中的位置（源站用一张大图 + CSS `background-position` 切割）。用 `sprite_url` + `x/y/width/height` 调用 `/api/image-cache/page-thumbnail` 获取单张缩略图。无缩略图元数据时该字段省略。
->
-> 在线成功后会把页面列表写入 `gallery_cache`；本接口不做缓存回退。
 
 ---
 
@@ -1236,7 +1226,7 @@ Cache-Control: no-store
 
 ## 离线缓存（gallery-cache）
 
-在线端点（`/api/gallery/:id/:token`、`/details`、`/pages`）只负责访问上游；成功时会把结果写入 `gallery_cache`，但**不做缓存回退**。回退与重试全部由前端编排：先请求在线端点（带重试），失败或浏览器离线时再请求下面的只读缓存端点。
+在线端点（`/api/gallery/:id/:token`、`/details`、`/pages`）只负责访问上游；**完整成功**时会把结果写入 `gallery_cache`（`/pages` 只有整份列表抓取成功才写入，失败绝不写入部分数据），但**不做缓存回退**。回退与重试全部由前端编排：先请求在线端点（带重试），失败或浏览器离线时再请求下面的只读缓存端点；`/pages` 的失败包括流中途以 `error` 行终止。
 
 ### Cached Gallery
 
@@ -1254,7 +1244,7 @@ Cache-Control: no-store
 
 `GET /api/gallery-cache/:id/:token/pages`
 
-返回缓存的页面列表，结构同 `/pages`。
+返回缓存的页面列表（**普通 JSON，非流式**）：`{ "id", "token", "total", "pages": [...] }`，`pages` 元素结构与在线 `/pages` 流中的 `page` 行一致。
 
 **说明：**
 
@@ -1263,8 +1253,8 @@ Cache-Control: no-store
 
 ### 缓存写入时机
 
-- 在线端点成功时（元数据 / 详情 / 页面列表）
-- `POST /api/bookshelf/:id/:token` 成功后后台异步预取元数据与页面列表
+- 在线端点完整成功时（元数据 / 详情 / 页面列表；`/pages` 抓取不完整时**不写入**）
+- `POST /api/bookshelf/:id/:token` 成功后后台异步预取元数据与页面列表（页面列表同样仅在完整成功时写入）
 
 缓存采用「首次写入优先」策略：已存在的非空字段不会被覆盖（上游元数据变动不频繁）。
 

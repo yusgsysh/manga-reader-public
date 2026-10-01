@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	json "encoding/json/v2"
+
 	"github.com/gin-gonic/gin"
 
 	"manga-reader/internal/ent"
@@ -204,6 +206,27 @@ func (s *Server) handleGalleryDetails(c *gin.Context) {
 	})
 }
 
+// galleryPagesLine is one NDJSON line of the streaming /pages response.
+type galleryPagesLine struct {
+	Type string `json:"type"`
+	// meta fields
+	ID    string `json:"id,omitempty"`
+	Token string `json:"token,omitempty"`
+	// page fields
+	PageURL   string                  `json:"page_url,omitempty"`
+	Index     *int                    `json:"index,omitempty"`
+	Thumbnail *model.GalleryPageThumb `json:"thumbnail,omitempty"`
+	// terminal fields
+	Total *int   `json:"total,omitempty"`
+	Error string `json:"error,omitempty"`
+}
+
+// handleGalleryPages streams the page list as NDJSON: a meta line (gallery
+// id/token plus the total image count), one line per page as it is scraped,
+// then a terminal done line or an error line. The response is committed only
+// after the first upstream document loads, so a failure there still returns
+// plain 502 JSON. The gallery cache is written only when the complete list
+// was scraped — failures never cache partial data.
 func (s *Server) handleGalleryPages(c *gin.Context) {
 	galleryID, token, ok := parseGalleryIDToken(c)
 	if !ok {
@@ -213,24 +236,77 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 	u := exhentai.GalleryURL(c.Param("id"), token)
 	ctx := c.Request.Context()
 
-	pages, err := exhentai.ScrapeGalleryPages(ctx, s.Client, u)
-	if err != nil {
+	idParam := c.Param("id")
+	started := false
+	var pages []model.CachedPage
+
+	writeLine := func(line galleryPagesLine) error {
+		data, err := json.Marshal(line)
+		if err != nil {
+			return err
+		}
+		if _, err := c.Writer.Write(append(data, '\n')); err != nil {
+			return err
+		}
+		c.Writer.Flush()
+		return nil
+	}
+
+	err := exhentai.StreamGalleryPages(ctx, s.Client, u, func(total int, batch []model.CachedPage) error {
+		if !started {
+			c.Header("Content-Type", "application/x-ndjson; charset=utf-8")
+			c.Header("Cache-Control", "no-store")
+			c.Status(http.StatusOK)
+			started = true
+			if writeErr := writeLine(galleryPagesLine{
+				Type:  "meta",
+				ID:    idParam,
+				Token: token,
+				Total: &total,
+			}); writeErr != nil {
+				return writeErr
+			}
+		}
+		for _, p := range batch {
+			index := p.Index
+			line := galleryPagesLine{
+				Type:      "page",
+				PageURL:   p.PageURL,
+				Index:     &index,
+				Thumbnail: p.Thumbnail,
+			}
+			pages = append(pages, p)
+			if writeErr := writeLine(line); writeErr != nil {
+				return writeErr
+			}
+		}
+		return nil
+	})
+
+	if !started {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery pages failed: %v", err)})
 		return
 	}
+	if err != nil {
+		// Headers are already on the wire: report the failure as a terminal
+		// error line (the client discards what it received) and cache nothing.
+		slog.Warn("gallery pages stream failed", "id", galleryID, "error", err)
+		_ = writeLine(galleryPagesLine{Type: "error", Error: fmt.Sprintf("fetch gallery pages failed: %v", err)})
+		return
+	}
 
+	// err == nil means the scrape was complete: cache it even if the client
+	// vanished before receiving the terminal line (the data itself is whole).
 	if db := s.cacheDB(); db != nil {
 		if cacheErr := gallerycache.UpsertPages(ctx, db, galleryID, token, pages); cacheErr != nil {
 			slog.Warn("gallery cache pages upsert failed", "id", galleryID, "error", cacheErr)
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"id":    c.Param("id"),
-		"token": token,
-		"total": len(pages),
-		"pages": pages,
-	})
+	total := len(pages)
+	if writeErr := writeLine(galleryPagesLine{Type: "done", Total: &total}); writeErr != nil {
+		slog.Warn("gallery pages done write failed", "id", galleryID, "error", writeErr)
+	}
 }
 
 // ==================== Offline cache endpoints ====================

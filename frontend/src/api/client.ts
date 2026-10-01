@@ -27,7 +27,7 @@ export function buildApiUrl(
   return url.toString();
 }
 
-async function fetchChecked(path: string, init?: RequestInit): Promise<Response> {
+export async function fetchChecked(path: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(path, init);
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
