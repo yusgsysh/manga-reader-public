@@ -4,7 +4,23 @@ import {
   clampPageIndex,
   galleryPagesToManga,
   getReaderImageURL,
+  parsePageParam,
 } from "./reader";
+
+describe("parsePageParam", () => {
+  it("parses non-negative integers", () => {
+    expect(parsePageParam("0")).toBe(0);
+    expect(parsePageParam("42")).toBe(42);
+  });
+
+  it("rejects missing or invalid values", () => {
+    expect(parsePageParam(null)).toBeNull();
+    expect(parsePageParam("")).toBeNull();
+    expect(parsePageParam("-1")).toBeNull();
+    expect(parsePageParam("1.5")).toBeNull();
+    expect(parsePageParam("abc")).toBeNull();
+  });
+});
 
 describe("clampPageIndex", () => {
   it("keeps in-range values", () => {

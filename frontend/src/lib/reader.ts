@@ -25,6 +25,17 @@ export function galleryPagesToManga(
   };
 }
 
+/**
+ * Parses a `?page=` query value (0-indexed). Returns null for missing or
+ * invalid input.
+ */
+export function parsePageParam(raw: string | null): number | null {
+  if (raw === null) return null;
+  if (!/^\d+$/.test(raw)) return null;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) ? value : null;
+}
+
 export function clampPageIndex(pageIndex: number, total: number): number {
   if (total <= 0) return 0;
   return Math.min(Math.max(Math.round(pageIndex), 0), total - 1);

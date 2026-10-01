@@ -17,13 +17,24 @@ import {
   useGalleryDetail,
 } from "../hooks/useGalleryDetail";
 import { fetchGalleryPagesWithFallback } from "../api/gallery";
-import { useReadingProgress } from "../hooks/useReaderData";
+import { useGalleryPages, useReadingProgress } from "../hooks/useReaderData";
 import { useStartPrefillJob } from "../hooks/usePrefillJobs";
 import { ErrorState } from "../components/common/ErrorState";
+import { PageThumbnailGrid } from "../components/gallery/PageThumbnailGrid";
 import { TagList } from "../components/tag";
 import { thumbnailUrl } from "../lib/image";
 import { formatPosted } from "../lib/time";
 import { Chip, Section } from "../components/ui";
+
+function PageGridSkeleton() {
+  return (
+    <div className="page-thumb-grid">
+      {Array.from({ length: 10 }).map((_, index) => (
+        <div key={index} className="page-thumb-item animate-pulse" />
+      ))}
+    </div>
+  );
+}
 
 function DetailSkeleton() {
   return (
@@ -56,6 +67,7 @@ export function GalleryDetailPage() {
   const { data: shelfStatus } = useBookshelfStatus(id, token ?? "");
   const { add, remove } = useBookshelfToggle(id, token ?? "");
   const { data: progress } = useReadingProgress(id, token ?? "");
+  const pagesQuery = useGalleryPages(id, token ?? "");
   const startPrefill = useStartPrefillJob();
   const queryClient = useQueryClient();
   const toast = useKumoToastManager();
@@ -299,6 +311,21 @@ export function GalleryDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Page thumbnails */}
+      <Section title="页面" description={`共 ${gallery.page_count} 页`}>
+        {pagesQuery.isLoading ? (
+          <PageGridSkeleton />
+        ) : pagesQuery.data && pagesQuery.data.pages.length > 0 ? (
+          <PageThumbnailGrid
+            id={id}
+            token={token ?? ""}
+            pages={pagesQuery.data.pages}
+          />
+        ) : (
+          <p className="text-sm text-kumo-subtle">暂无页面数据</p>
+        )}
+      </Section>
 
       {/* Tags */}
       {gallery.tags.length > 0 && (

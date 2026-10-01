@@ -20,7 +20,11 @@ import {
 import { useGallery, useGalleryPages, useReadingProgress } from "../hooks/useReaderData";
 import { useReadingProgressSync } from "../hooks/useReadingProgressSync";
 import { useTheme } from "../hooks/useTheme";
-import { clampPageIndex, galleryPagesToManga } from "../lib/reader";
+import {
+  clampPageIndex,
+  galleryPagesToManga,
+  parsePageParam,
+} from "../lib/reader";
 import { observeLazyThumbnails } from "../lib/lazyThumbnails";
 import { ErrorState } from "../components/common/ErrorState";
 
@@ -32,7 +36,7 @@ const THUMBNAIL_CONCURRENCY = 6;
 
 export function ReaderPage() {
   const { id: idParam, token } = useParams<{ id: string; token: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const navigationType = useNavigationType();
   const { resolvedMode } = useTheme();
@@ -41,6 +45,11 @@ export function ReaderPage() {
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("inline");
   const id = Number(idParam);
   const restart = searchParams.get("restart") === "1";
+  // Capture a `?page=N` deep-link target once, so cleaning it from the URL
+  // below cannot reset the reader back to the saved progress.
+  const [pageOverride] = useState<number | null>(() =>
+    parsePageParam(searchParams.get("page")),
+  );
 
   const isDark = resolvedMode === "dark";
   const isFullscreen =
@@ -115,9 +124,19 @@ export function ReaderPage() {
 
   const initialPage = useMemo(() => {
     if (total <= 0) return 0;
+    if (pageOverride !== null) return clampPageIndex(pageOverride, total);
     if (restart) return 0;
     return clampPageIndex(progressQuery.data?.current_page ?? 0, total);
-  }, [total, restart, progressQuery.data?.current_page]);
+  }, [total, pageOverride, restart, progressQuery.data?.current_page]);
+
+  // Drop the deep-link `page` param once captured so a refresh resumes from
+  // the saved progress instead of jumping to the old target again.
+  useEffect(() => {
+    if (!searchParams.has("page")) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("page");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const { currentPage, onPageChange, flushProgress } = useReadingProgressSync(
     id,
