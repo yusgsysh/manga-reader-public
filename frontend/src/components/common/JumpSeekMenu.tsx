@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Popover } from "@cloudflare/kumo";
-import { Crosshair } from "@phosphor-icons/react";
+import { CalendarBlank } from "@phosphor-icons/react";
 import { IconButton } from "../ui";
 import { JumpSeekPanel } from "./JumpSeekPanel";
 import type { ListingNav, ListingNavOptions } from "../../types/gallery";
@@ -42,7 +42,7 @@ export function JumpSeekMenu({
                 : undefined
             }
           >
-            <Crosshair className="size-4" weight="bold" />
+            <CalendarBlank className="size-4" weight="bold" />
           </IconButton>
         }
       />

@@ -629,7 +629,6 @@ export function SearchPage() {
             nav={data?.pages[0]?.nav}
             value={appliedNav}
             onChange={handleNavChange}
-            disabled={!fullQuery.trim()}
           />
 
           <div className="flex justify-end">
