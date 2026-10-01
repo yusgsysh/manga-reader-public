@@ -156,6 +156,11 @@ body {
   contain-intrinsic-size: auto 320px;
 }
 
+/* Slightly dim cover art in dark mode to reduce glare. */
+[data-mode="dark"] .app-image {
+  filter: brightness(0.85);
+}
+
 @keyframes app-shimmer {
   100% {
     transform: translateX(100%);

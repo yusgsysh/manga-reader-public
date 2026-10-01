@@ -173,7 +173,7 @@ export function GalleryDetailPage() {
             <img
               src={thumbnailUrl(gallery.cover)}
               alt={gallery.title}
-              className="h-full w-full object-cover"
+              className="app-image h-full w-full object-cover"
               onError={(e) => {
                 e.currentTarget.style.display = "none";
                 e.currentTarget.nextElementSibling?.classList.remove("hidden");
