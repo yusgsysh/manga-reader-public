@@ -63,83 +63,6 @@ func (_u *BookshelfUpdate) SetNillableToken(v *string) *BookshelfUpdate {
 	return _u
 }
 
-// SetTitle sets the "title" field.
-func (_u *BookshelfUpdate) SetTitle(v string) *BookshelfUpdate {
-	_u.mutation.SetTitle(v)
-	return _u
-}
-
-// SetNillableTitle sets the "title" field if the given value is not nil.
-func (_u *BookshelfUpdate) SetNillableTitle(v *string) *BookshelfUpdate {
-	if v != nil {
-		_u.SetTitle(*v)
-	}
-	return _u
-}
-
-// SetTitleJpn sets the "title_jpn" field.
-func (_u *BookshelfUpdate) SetTitleJpn(v string) *BookshelfUpdate {
-	_u.mutation.SetTitleJpn(v)
-	return _u
-}
-
-// SetNillableTitleJpn sets the "title_jpn" field if the given value is not nil.
-func (_u *BookshelfUpdate) SetNillableTitleJpn(v *string) *BookshelfUpdate {
-	if v != nil {
-		_u.SetTitleJpn(*v)
-	}
-	return _u
-}
-
-// SetCategory sets the "category" field.
-func (_u *BookshelfUpdate) SetCategory(v string) *BookshelfUpdate {
-	_u.mutation.SetCategory(v)
-	return _u
-}
-
-// SetNillableCategory sets the "category" field if the given value is not nil.
-func (_u *BookshelfUpdate) SetNillableCategory(v *string) *BookshelfUpdate {
-	if v != nil {
-		_u.SetCategory(*v)
-	}
-	return _u
-}
-
-// SetThumbnail sets the "thumbnail" field.
-func (_u *BookshelfUpdate) SetThumbnail(v string) *BookshelfUpdate {
-	_u.mutation.SetThumbnail(v)
-	return _u
-}
-
-// SetNillableThumbnail sets the "thumbnail" field if the given value is not nil.
-func (_u *BookshelfUpdate) SetNillableThumbnail(v *string) *BookshelfUpdate {
-	if v != nil {
-		_u.SetThumbnail(*v)
-	}
-	return _u
-}
-
-// SetPageCount sets the "page_count" field.
-func (_u *BookshelfUpdate) SetPageCount(v int) *BookshelfUpdate {
-	_u.mutation.ResetPageCount()
-	_u.mutation.SetPageCount(v)
-	return _u
-}
-
-// SetNillablePageCount sets the "page_count" field if the given value is not nil.
-func (_u *BookshelfUpdate) SetNillablePageCount(v *int) *BookshelfUpdate {
-	if v != nil {
-		_u.SetPageCount(*v)
-	}
-	return _u
-}
-
-// AddPageCount adds value to the "page_count" field.
-func (_u *BookshelfUpdate) AddPageCount(v int) *BookshelfUpdate {
-	_u.mutation.AddPageCount(v)
-	return _u
-}
-
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *BookshelfUpdate) SetUpdatedAt(v time.Time) *BookshelfUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -205,24 +128,6 @@ func (_u *BookshelfUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Token(); ok {
 		_spec.SetField(bookshelf.FieldToken, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.Title(); ok {
-		_spec.SetField(bookshelf.FieldTitle, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.TitleJpn(); ok {
-		_spec.SetField(bookshelf.FieldTitleJpn, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.Category(); ok {
-		_spec.SetField(bookshelf.FieldCategory, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.Thumbnail(); ok {
-		_spec.SetField(bookshelf.FieldThumbnail, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.PageCount(); ok {
-		_spec.SetField(bookshelf.FieldPageCount, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedPageCount(); ok {
-		_spec.AddField(bookshelf.FieldPageCount, field.TypeInt, value)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(bookshelf.FieldUpdatedAt, field.TypeTime, value)
 	}
@@ -278,83 +183,6 @@ func (_u *BookshelfUpdateOne) SetNillableToken(v *string) *BookshelfUpdateOne {
 	if v != nil {
 		_u.SetToken(*v)
 	}
-	return _u
-}
-
-// SetTitle sets the "title" field.
-func (_u *BookshelfUpdateOne) SetTitle(v string) *BookshelfUpdateOne {
-	_u.mutation.SetTitle(v)
-	return _u
-}
-
-// SetNillableTitle sets the "title" field if the given value is not nil.
-func (_u *BookshelfUpdateOne) SetNillableTitle(v *string) *BookshelfUpdateOne {
-	if v != nil {
-		_u.SetTitle(*v)
-	}
-	return _u
-}
-
-// SetTitleJpn sets the "title_jpn" field.
-func (_u *BookshelfUpdateOne) SetTitleJpn(v string) *BookshelfUpdateOne {
-	_u.mutation.SetTitleJpn(v)
-	return _u
-}
-
-// SetNillableTitleJpn sets the "title_jpn" field if the given value is not nil.
-func (_u *BookshelfUpdateOne) SetNillableTitleJpn(v *string) *BookshelfUpdateOne {
-	if v != nil {
-		_u.SetTitleJpn(*v)
-	}
-	return _u
-}
-
-// SetCategory sets the "category" field.
-func (_u *BookshelfUpdateOne) SetCategory(v string) *BookshelfUpdateOne {
-	_u.mutation.SetCategory(v)
-	return _u
-}
-
-// SetNillableCategory sets the "category" field if the given value is not nil.
-func (_u *BookshelfUpdateOne) SetNillableCategory(v *string) *BookshelfUpdateOne {
-	if v != nil {
-		_u.SetCategory(*v)
-	}
-	return _u
-}
-
-// SetThumbnail sets the "thumbnail" field.
-func (_u *BookshelfUpdateOne) SetThumbnail(v string) *BookshelfUpdateOne {
-	_u.mutation.SetThumbnail(v)
-	return _u
-}
-
-// SetNillableThumbnail sets the "thumbnail" field if the given value is not nil.
-func (_u *BookshelfUpdateOne) SetNillableThumbnail(v *string) *BookshelfUpdateOne {
-	if v != nil {
-		_u.SetThumbnail(*v)
-	}
-	return _u
-}
-
-// SetPageCount sets the "page_count" field.
-func (_u *BookshelfUpdateOne) SetPageCount(v int) *BookshelfUpdateOne {
-	_u.mutation.ResetPageCount()
-	_u.mutation.SetPageCount(v)
-	return _u
-}
-
-// SetNillablePageCount sets the "page_count" field if the given value is not nil.
-func (_u *BookshelfUpdateOne) SetNillablePageCount(v *int) *BookshelfUpdateOne {
-	if v != nil {
-		_u.SetPageCount(*v)
-	}
-	return _u
-}
-
-// AddPageCount adds value to the "page_count" field.
-func (_u *BookshelfUpdateOne) AddPageCount(v int) *BookshelfUpdateOne {
-	_u.mutation.AddPageCount(v)
 	return _u
 }
 
@@ -452,24 +280,6 @@ func (_u *BookshelfUpdateOne) sqlSave(ctx context.Context) (_node *Bookshelf, er
 	}
 	if value, ok := _u.mutation.Token(); ok {
 		_spec.SetField(bookshelf.FieldToken, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.Title(); ok {
-		_spec.SetField(bookshelf.FieldTitle, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.TitleJpn(); ok {
-		_spec.SetField(bookshelf.FieldTitleJpn, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.Category(); ok {
-		_spec.SetField(bookshelf.FieldCategory, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.Thumbnail(); ok {
-		_spec.SetField(bookshelf.FieldThumbnail, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.PageCount(); ok {
-		_spec.SetField(bookshelf.FieldPageCount, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedPageCount(); ok {
-		_spec.AddField(bookshelf.FieldPageCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(bookshelf.FieldUpdatedAt, field.TypeTime, value)

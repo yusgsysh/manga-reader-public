@@ -32,76 +32,6 @@ func (_c *BookshelfCreate) SetToken(v string) *BookshelfCreate {
 	return _c
 }
 
-// SetTitle sets the "title" field.
-func (_c *BookshelfCreate) SetTitle(v string) *BookshelfCreate {
-	_c.mutation.SetTitle(v)
-	return _c
-}
-
-// SetNillableTitle sets the "title" field if the given value is not nil.
-func (_c *BookshelfCreate) SetNillableTitle(v *string) *BookshelfCreate {
-	if v != nil {
-		_c.SetTitle(*v)
-	}
-	return _c
-}
-
-// SetTitleJpn sets the "title_jpn" field.
-func (_c *BookshelfCreate) SetTitleJpn(v string) *BookshelfCreate {
-	_c.mutation.SetTitleJpn(v)
-	return _c
-}
-
-// SetNillableTitleJpn sets the "title_jpn" field if the given value is not nil.
-func (_c *BookshelfCreate) SetNillableTitleJpn(v *string) *BookshelfCreate {
-	if v != nil {
-		_c.SetTitleJpn(*v)
-	}
-	return _c
-}
-
-// SetCategory sets the "category" field.
-func (_c *BookshelfCreate) SetCategory(v string) *BookshelfCreate {
-	_c.mutation.SetCategory(v)
-	return _c
-}
-
-// SetNillableCategory sets the "category" field if the given value is not nil.
-func (_c *BookshelfCreate) SetNillableCategory(v *string) *BookshelfCreate {
-	if v != nil {
-		_c.SetCategory(*v)
-	}
-	return _c
-}
-
-// SetThumbnail sets the "thumbnail" field.
-func (_c *BookshelfCreate) SetThumbnail(v string) *BookshelfCreate {
-	_c.mutation.SetThumbnail(v)
-	return _c
-}
-
-// SetNillableThumbnail sets the "thumbnail" field if the given value is not nil.
-func (_c *BookshelfCreate) SetNillableThumbnail(v *string) *BookshelfCreate {
-	if v != nil {
-		_c.SetThumbnail(*v)
-	}
-	return _c
-}
-
-// SetPageCount sets the "page_count" field.
-func (_c *BookshelfCreate) SetPageCount(v int) *BookshelfCreate {
-	_c.mutation.SetPageCount(v)
-	return _c
-}
-
-// SetNillablePageCount sets the "page_count" field if the given value is not nil.
-func (_c *BookshelfCreate) SetNillablePageCount(v *int) *BookshelfCreate {
-	if v != nil {
-		_c.SetPageCount(*v)
-	}
-	return _c
-}
-
 // SetAddedAt sets the "added_at" field.
 func (_c *BookshelfCreate) SetAddedAt(v time.Time) *BookshelfCreate {
 	_c.mutation.SetAddedAt(v)
@@ -165,26 +95,6 @@ func (_c *BookshelfCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *BookshelfCreate) defaults() {
-	if _, ok := _c.mutation.Title(); !ok {
-		v := bookshelf.DefaultTitle
-		_c.mutation.SetTitle(v)
-	}
-	if _, ok := _c.mutation.TitleJpn(); !ok {
-		v := bookshelf.DefaultTitleJpn
-		_c.mutation.SetTitleJpn(v)
-	}
-	if _, ok := _c.mutation.Category(); !ok {
-		v := bookshelf.DefaultCategory
-		_c.mutation.SetCategory(v)
-	}
-	if _, ok := _c.mutation.Thumbnail(); !ok {
-		v := bookshelf.DefaultThumbnail
-		_c.mutation.SetThumbnail(v)
-	}
-	if _, ok := _c.mutation.PageCount(); !ok {
-		v := bookshelf.DefaultPageCount
-		_c.mutation.SetPageCount(v)
-	}
 	if _, ok := _c.mutation.AddedAt(); !ok {
 		v := bookshelf.DefaultAddedAt()
 		_c.mutation.SetAddedAt(v)
@@ -202,21 +112,6 @@ func (_c *BookshelfCreate) check() error {
 	}
 	if _, ok := _c.mutation.Token(); !ok {
 		return &ValidationError{Name: "token", err: errors.New(`ent: missing required field "Bookshelf.token"`)}
-	}
-	if _, ok := _c.mutation.Title(); !ok {
-		return &ValidationError{Name: "title", err: errors.New(`ent: missing required field "Bookshelf.title"`)}
-	}
-	if _, ok := _c.mutation.TitleJpn(); !ok {
-		return &ValidationError{Name: "title_jpn", err: errors.New(`ent: missing required field "Bookshelf.title_jpn"`)}
-	}
-	if _, ok := _c.mutation.Category(); !ok {
-		return &ValidationError{Name: "category", err: errors.New(`ent: missing required field "Bookshelf.category"`)}
-	}
-	if _, ok := _c.mutation.Thumbnail(); !ok {
-		return &ValidationError{Name: "thumbnail", err: errors.New(`ent: missing required field "Bookshelf.thumbnail"`)}
-	}
-	if _, ok := _c.mutation.PageCount(); !ok {
-		return &ValidationError{Name: "page_count", err: errors.New(`ent: missing required field "Bookshelf.page_count"`)}
 	}
 	if _, ok := _c.mutation.AddedAt(); !ok {
 		return &ValidationError{Name: "added_at", err: errors.New(`ent: missing required field "Bookshelf.added_at"`)}
@@ -257,26 +152,6 @@ func (_c *BookshelfCreate) createSpec() (*Bookshelf, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Token(); ok {
 		_spec.SetField(bookshelf.FieldToken, field.TypeString, value)
 		_node.Token = value
-	}
-	if value, ok := _c.mutation.Title(); ok {
-		_spec.SetField(bookshelf.FieldTitle, field.TypeString, value)
-		_node.Title = value
-	}
-	if value, ok := _c.mutation.TitleJpn(); ok {
-		_spec.SetField(bookshelf.FieldTitleJpn, field.TypeString, value)
-		_node.TitleJpn = value
-	}
-	if value, ok := _c.mutation.Category(); ok {
-		_spec.SetField(bookshelf.FieldCategory, field.TypeString, value)
-		_node.Category = value
-	}
-	if value, ok := _c.mutation.Thumbnail(); ok {
-		_spec.SetField(bookshelf.FieldThumbnail, field.TypeString, value)
-		_node.Thumbnail = value
-	}
-	if value, ok := _c.mutation.PageCount(); ok {
-		_spec.SetField(bookshelf.FieldPageCount, field.TypeInt, value)
-		_node.PageCount = value
 	}
 	if value, ok := _c.mutation.AddedAt(); ok {
 		_spec.SetField(bookshelf.FieldAddedAt, field.TypeTime, value)

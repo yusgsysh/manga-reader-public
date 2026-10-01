@@ -60,9 +60,9 @@ func newTestDatabase(t *testing.T) *database.DB {
 	return &database.DB{Client: client, Conn: conn}
 }
 
-func newTestBookshelf() *model.Bookshelf {
-	return &model.Bookshelf{
-		GalleryID: 123456,
+func newTestGallery() *model.Gallery {
+	return &model.Gallery{
+		ID:        123456,
 		Token:     "abcdef1234",
 		Title:     "Test Gallery",
 		TitleJPN:  "テストギャラリー",
@@ -72,15 +72,17 @@ func newTestBookshelf() *model.Bookshelf {
 	}
 }
 
+func newTestBookshelf() *model.Bookshelf {
+	return &model.Bookshelf{
+		GalleryID: 123456,
+		Token:     "abcdef1234",
+	}
+}
+
 func newTestBookshelf2() *model.Bookshelf {
 	return &model.Bookshelf{
 		GalleryID: 789012,
 		Token:     "xyz78901234",
-		Title:     "Test Gallery 2",
-		TitleJPN:  "テストギャラリー2",
-		Category:  model.CategoryManga,
-		Thumbnail: "https://example.com/thumb2.webp",
-		PageCount: 30,
 	}
 }
 

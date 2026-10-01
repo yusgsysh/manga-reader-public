@@ -43,12 +43,6 @@ type BookshelfMutation struct {
 	gallery_id    *int64
 	addgallery_id *int64
 	token         *string
-	title         *string
-	title_jpn     *string
-	category      *string
-	thumbnail     *string
-	page_count    *int
-	addpage_count *int
 	added_at      *time.Time
 	updated_at    *time.Time
 	clearedFields map[string]struct{}
@@ -247,206 +241,6 @@ func (m *BookshelfMutation) ResetToken() {
 	m.token = nil
 }
 
-// SetTitle sets the "title" field.
-func (m *BookshelfMutation) SetTitle(s string) {
-	m.title = &s
-}
-
-// Title returns the value of the "title" field in the mutation.
-func (m *BookshelfMutation) Title() (r string, exists bool) {
-	v := m.title
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldTitle returns the old "title" field's value of the Bookshelf entity.
-// If the Bookshelf object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *BookshelfMutation) OldTitle(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldTitle is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldTitle requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldTitle: %w", err)
-	}
-	return oldValue.Title, nil
-}
-
-// ResetTitle resets all changes to the "title" field.
-func (m *BookshelfMutation) ResetTitle() {
-	m.title = nil
-}
-
-// SetTitleJpn sets the "title_jpn" field.
-func (m *BookshelfMutation) SetTitleJpn(s string) {
-	m.title_jpn = &s
-}
-
-// TitleJpn returns the value of the "title_jpn" field in the mutation.
-func (m *BookshelfMutation) TitleJpn() (r string, exists bool) {
-	v := m.title_jpn
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldTitleJpn returns the old "title_jpn" field's value of the Bookshelf entity.
-// If the Bookshelf object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *BookshelfMutation) OldTitleJpn(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldTitleJpn is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldTitleJpn requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldTitleJpn: %w", err)
-	}
-	return oldValue.TitleJpn, nil
-}
-
-// ResetTitleJpn resets all changes to the "title_jpn" field.
-func (m *BookshelfMutation) ResetTitleJpn() {
-	m.title_jpn = nil
-}
-
-// SetCategory sets the "category" field.
-func (m *BookshelfMutation) SetCategory(s string) {
-	m.category = &s
-}
-
-// Category returns the value of the "category" field in the mutation.
-func (m *BookshelfMutation) Category() (r string, exists bool) {
-	v := m.category
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldCategory returns the old "category" field's value of the Bookshelf entity.
-// If the Bookshelf object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *BookshelfMutation) OldCategory(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCategory is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCategory requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCategory: %w", err)
-	}
-	return oldValue.Category, nil
-}
-
-// ResetCategory resets all changes to the "category" field.
-func (m *BookshelfMutation) ResetCategory() {
-	m.category = nil
-}
-
-// SetThumbnail sets the "thumbnail" field.
-func (m *BookshelfMutation) SetThumbnail(s string) {
-	m.thumbnail = &s
-}
-
-// Thumbnail returns the value of the "thumbnail" field in the mutation.
-func (m *BookshelfMutation) Thumbnail() (r string, exists bool) {
-	v := m.thumbnail
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldThumbnail returns the old "thumbnail" field's value of the Bookshelf entity.
-// If the Bookshelf object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *BookshelfMutation) OldThumbnail(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldThumbnail is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldThumbnail requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldThumbnail: %w", err)
-	}
-	return oldValue.Thumbnail, nil
-}
-
-// ResetThumbnail resets all changes to the "thumbnail" field.
-func (m *BookshelfMutation) ResetThumbnail() {
-	m.thumbnail = nil
-}
-
-// SetPageCount sets the "page_count" field.
-func (m *BookshelfMutation) SetPageCount(i int) {
-	m.page_count = &i
-	m.addpage_count = nil
-}
-
-// PageCount returns the value of the "page_count" field in the mutation.
-func (m *BookshelfMutation) PageCount() (r int, exists bool) {
-	v := m.page_count
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldPageCount returns the old "page_count" field's value of the Bookshelf entity.
-// If the Bookshelf object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *BookshelfMutation) OldPageCount(ctx context.Context) (v int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldPageCount is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldPageCount requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldPageCount: %w", err)
-	}
-	return oldValue.PageCount, nil
-}
-
-// AddPageCount adds i to the "page_count" field.
-func (m *BookshelfMutation) AddPageCount(i int) {
-	if m.addpage_count != nil {
-		*m.addpage_count += i
-	} else {
-		m.addpage_count = &i
-	}
-}
-
-// AddedPageCount returns the value that was added to the "page_count" field in this mutation.
-func (m *BookshelfMutation) AddedPageCount() (r int, exists bool) {
-	v := m.addpage_count
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ResetPageCount resets all changes to the "page_count" field.
-func (m *BookshelfMutation) ResetPageCount() {
-	m.page_count = nil
-	m.addpage_count = nil
-}
-
 // SetAddedAt sets the "added_at" field.
 func (m *BookshelfMutation) SetAddedAt(t time.Time) {
 	m.added_at = &t
@@ -553,27 +347,12 @@ func (m *BookshelfMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *BookshelfMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 4)
 	if m.gallery_id != nil {
 		fields = append(fields, bookshelf.FieldGalleryID)
 	}
 	if m.token != nil {
 		fields = append(fields, bookshelf.FieldToken)
-	}
-	if m.title != nil {
-		fields = append(fields, bookshelf.FieldTitle)
-	}
-	if m.title_jpn != nil {
-		fields = append(fields, bookshelf.FieldTitleJpn)
-	}
-	if m.category != nil {
-		fields = append(fields, bookshelf.FieldCategory)
-	}
-	if m.thumbnail != nil {
-		fields = append(fields, bookshelf.FieldThumbnail)
-	}
-	if m.page_count != nil {
-		fields = append(fields, bookshelf.FieldPageCount)
 	}
 	if m.added_at != nil {
 		fields = append(fields, bookshelf.FieldAddedAt)
@@ -593,16 +372,6 @@ func (m *BookshelfMutation) Field(name string) (ent.Value, bool) {
 		return m.GalleryID()
 	case bookshelf.FieldToken:
 		return m.Token()
-	case bookshelf.FieldTitle:
-		return m.Title()
-	case bookshelf.FieldTitleJpn:
-		return m.TitleJpn()
-	case bookshelf.FieldCategory:
-		return m.Category()
-	case bookshelf.FieldThumbnail:
-		return m.Thumbnail()
-	case bookshelf.FieldPageCount:
-		return m.PageCount()
 	case bookshelf.FieldAddedAt:
 		return m.AddedAt()
 	case bookshelf.FieldUpdatedAt:
@@ -620,16 +389,6 @@ func (m *BookshelfMutation) OldField(ctx context.Context, name string) (ent.Valu
 		return m.OldGalleryID(ctx)
 	case bookshelf.FieldToken:
 		return m.OldToken(ctx)
-	case bookshelf.FieldTitle:
-		return m.OldTitle(ctx)
-	case bookshelf.FieldTitleJpn:
-		return m.OldTitleJpn(ctx)
-	case bookshelf.FieldCategory:
-		return m.OldCategory(ctx)
-	case bookshelf.FieldThumbnail:
-		return m.OldThumbnail(ctx)
-	case bookshelf.FieldPageCount:
-		return m.OldPageCount(ctx)
 	case bookshelf.FieldAddedAt:
 		return m.OldAddedAt(ctx)
 	case bookshelf.FieldUpdatedAt:
@@ -657,41 +416,6 @@ func (m *BookshelfMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetToken(v)
 		return nil
-	case bookshelf.FieldTitle:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetTitle(v)
-		return nil
-	case bookshelf.FieldTitleJpn:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetTitleJpn(v)
-		return nil
-	case bookshelf.FieldCategory:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetCategory(v)
-		return nil
-	case bookshelf.FieldThumbnail:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetThumbnail(v)
-		return nil
-	case bookshelf.FieldPageCount:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetPageCount(v)
-		return nil
 	case bookshelf.FieldAddedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -717,9 +441,6 @@ func (m *BookshelfMutation) AddedFields() []string {
 	if m.addgallery_id != nil {
 		fields = append(fields, bookshelf.FieldGalleryID)
 	}
-	if m.addpage_count != nil {
-		fields = append(fields, bookshelf.FieldPageCount)
-	}
 	return fields
 }
 
@@ -730,8 +451,6 @@ func (m *BookshelfMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case bookshelf.FieldGalleryID:
 		return m.AddedGalleryID()
-	case bookshelf.FieldPageCount:
-		return m.AddedPageCount()
 	}
 	return nil, false
 }
@@ -747,13 +466,6 @@ func (m *BookshelfMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddGalleryID(v)
-		return nil
-	case bookshelf.FieldPageCount:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddPageCount(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Bookshelf numeric field %s", name)
@@ -787,21 +499,6 @@ func (m *BookshelfMutation) ResetField(name string) error {
 		return nil
 	case bookshelf.FieldToken:
 		m.ResetToken()
-		return nil
-	case bookshelf.FieldTitle:
-		m.ResetTitle()
-		return nil
-	case bookshelf.FieldTitleJpn:
-		m.ResetTitleJpn()
-		return nil
-	case bookshelf.FieldCategory:
-		m.ResetCategory()
-		return nil
-	case bookshelf.FieldThumbnail:
-		m.ResetThumbnail()
-		return nil
-	case bookshelf.FieldPageCount:
-		m.ResetPageCount()
 		return nil
 	case bookshelf.FieldAddedAt:
 		m.ResetAddedAt()

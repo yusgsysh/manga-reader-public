@@ -14,11 +14,6 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "gallery_id", Type: field.TypeInt64},
 		{Name: "token", Type: field.TypeString},
-		{Name: "title", Type: field.TypeString, Default: ""},
-		{Name: "title_jpn", Type: field.TypeString, Default: ""},
-		{Name: "category", Type: field.TypeString, Default: ""},
-		{Name: "thumbnail", Type: field.TypeString, Default: ""},
-		{Name: "page_count", Type: field.TypeInt, Default: 0},
 		{Name: "added_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}

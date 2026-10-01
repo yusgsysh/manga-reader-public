@@ -21,16 +21,6 @@ type Bookshelf struct {
 	GalleryID int64 `json:"gallery_id,omitempty"`
 	// Token holds the value of the "token" field.
 	Token string `json:"token,omitempty"`
-	// Title holds the value of the "title" field.
-	Title string `json:"title,omitempty"`
-	// TitleJpn holds the value of the "title_jpn" field.
-	TitleJpn string `json:"title_jpn,omitempty"`
-	// Category holds the value of the "category" field.
-	Category string `json:"category,omitempty"`
-	// Thumbnail holds the value of the "thumbnail" field.
-	Thumbnail string `json:"thumbnail,omitempty"`
-	// PageCount holds the value of the "page_count" field.
-	PageCount int `json:"page_count,omitempty"`
 	// AddedAt holds the value of the "added_at" field.
 	AddedAt time.Time `json:"added_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -43,9 +33,9 @@ func (*Bookshelf) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case bookshelf.FieldID, bookshelf.FieldGalleryID, bookshelf.FieldPageCount:
+		case bookshelf.FieldID, bookshelf.FieldGalleryID:
 			values[i] = new(sql.NullInt64)
-		case bookshelf.FieldToken, bookshelf.FieldTitle, bookshelf.FieldTitleJpn, bookshelf.FieldCategory, bookshelf.FieldThumbnail:
+		case bookshelf.FieldToken:
 			values[i] = new(sql.NullString)
 		case bookshelf.FieldAddedAt, bookshelf.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -81,36 +71,6 @@ func (_m *Bookshelf) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field token", values[i])
 			} else if value.Valid {
 				_m.Token = value.String
-			}
-		case bookshelf.FieldTitle:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field title", values[i])
-			} else if value.Valid {
-				_m.Title = value.String
-			}
-		case bookshelf.FieldTitleJpn:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field title_jpn", values[i])
-			} else if value.Valid {
-				_m.TitleJpn = value.String
-			}
-		case bookshelf.FieldCategory:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field category", values[i])
-			} else if value.Valid {
-				_m.Category = value.String
-			}
-		case bookshelf.FieldThumbnail:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field thumbnail", values[i])
-			} else if value.Valid {
-				_m.Thumbnail = value.String
-			}
-		case bookshelf.FieldPageCount:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field page_count", values[i])
-			} else if value.Valid {
-				_m.PageCount = int(value.Int64)
 			}
 		case bookshelf.FieldAddedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -165,21 +125,6 @@ func (_m *Bookshelf) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("token=")
 	builder.WriteString(_m.Token)
-	builder.WriteString(", ")
-	builder.WriteString("title=")
-	builder.WriteString(_m.Title)
-	builder.WriteString(", ")
-	builder.WriteString("title_jpn=")
-	builder.WriteString(_m.TitleJpn)
-	builder.WriteString(", ")
-	builder.WriteString("category=")
-	builder.WriteString(_m.Category)
-	builder.WriteString(", ")
-	builder.WriteString("thumbnail=")
-	builder.WriteString(_m.Thumbnail)
-	builder.WriteString(", ")
-	builder.WriteString("page_count=")
-	builder.WriteString(fmt.Sprintf("%v", _m.PageCount))
 	builder.WriteString(", ")
 	builder.WriteString("added_at=")
 	builder.WriteString(_m.AddedAt.Format(time.ANSIC))

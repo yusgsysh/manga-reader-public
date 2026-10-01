@@ -8,6 +8,7 @@ import (
 	json "encoding/json/v2"
 
 	"manga-reader/internal/database"
+	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/model"
 )
 
@@ -174,11 +175,18 @@ func TestHandleBookshelfAdd_OfflineUsesCachedMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bookshelf query: %v", err)
 	}
-	if b.Title != "Cached Gallery" {
-		t.Errorf("title = %q, want %q", b.Title, "Cached Gallery")
+	if b.GalleryID != 123456 || b.Token != "abcdef1234" {
+		t.Errorf("bookshelf ref = %d/%q, want 123456/abcdef1234", b.GalleryID, b.Token)
 	}
-	if b.PageCount != 2 {
-		t.Errorf("page_count = %d, want 2", b.PageCount)
+
+	// Metadata is not stored on the bookshelf row; it is served from
+	// gallery_cache (seeded above).
+	row, found, err := gallerycache.Get(t.Context(), client, 123456, "abcdef1234")
+	if err != nil || !found {
+		t.Fatalf("gallery cache lookup: found=%v err=%v", found, err)
+	}
+	if row.Title != "Cached Gallery" || row.PageCount != 2 {
+		t.Errorf("cached meta = %q/%d, want Cached Gallery/2", row.Title, row.PageCount)
 	}
 }
 
@@ -209,11 +217,6 @@ func TestHandleBookshelfRemove_Success(t *testing.T) {
 	client.Bookshelf.Create().
 		SetGalleryID(b.GalleryID).
 		SetToken(b.Token).
-		SetTitle(b.Title).
-		SetTitleJpn(b.TitleJPN).
-		SetCategory(string(b.Category)).
-		SetThumbnail(b.Thumbnail).
-		SetPageCount(b.PageCount).
 		Save(t.Context())
 
 	r := setupTestRouter()
@@ -261,11 +264,6 @@ func TestHandleBookshelfStatus_InBookshelf(t *testing.T) {
 	client.Bookshelf.Create().
 		SetGalleryID(b.GalleryID).
 		SetToken(b.Token).
-		SetTitle(b.Title).
-		SetTitleJpn(b.TitleJPN).
-		SetCategory(string(b.Category)).
-		SetThumbnail(b.Thumbnail).
-		SetPageCount(b.PageCount).
 		Save(t.Context())
 
 	r := setupTestRouter()
@@ -341,27 +339,61 @@ func TestHandleBookshelfList_Empty(t *testing.T) {
 	}
 }
 
+func TestHandleBookshelfList_PrefersGalleryCache(t *testing.T) {
+	client := newTestDB(t)
+	b := newTestBookshelf()
+
+	// The bookshelf row stores only the reference.
+	client.Bookshelf.Create().
+		SetGalleryID(b.GalleryID).
+		SetToken(b.Token).
+		Save(t.Context())
+
+	// gallery_cache holds the metadata served for it.
+	seedGalleryCache(t, client, b.GalleryID, b.Token)
+
+	r := setupTestRouter()
+	server := &Server{DB: &database.DB{Client: client}}
+	r.GET("/api/bookshelf", server.handleBookshelfList)
+
+	req := httptest.NewRequest("GET", "/api/bookshelf", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+
+	var resp model.BookshelfListResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp.Results) != 1 {
+		t.Fatalf("results = %d, want 1", len(resp.Results))
+	}
+	item := resp.Results[0]
+	if item.Title != "Cached Gallery" {
+		t.Errorf("title = %q, want the cached title", item.Title)
+	}
+	if item.Thumbnail != "https://example.com/thumb.webp" {
+		t.Errorf("thumbnail = %q, want the cached thumbnail", item.Thumbnail)
+	}
+	if item.Pages != 2 {
+		t.Errorf("pages = %d, want the cached 2", item.Pages)
+	}
+}
+
 func TestHandleBookshelfList_WithItems(t *testing.T) {
 	client := newTestDB(t)
 	b1 := newTestBookshelf()
 	client.Bookshelf.Create().
 		SetGalleryID(b1.GalleryID).
 		SetToken(b1.Token).
-		SetTitle(b1.Title).
-		SetTitleJpn(b1.TitleJPN).
-		SetCategory(string(b1.Category)).
-		SetThumbnail(b1.Thumbnail).
-		SetPageCount(b1.PageCount).
 		Save(t.Context())
 	b2 := newTestBookshelf2()
 	client.Bookshelf.Create().
 		SetGalleryID(b2.GalleryID).
 		SetToken(b2.Token).
-		SetTitle(b2.Title).
-		SetTitleJpn(b2.TitleJPN).
-		SetCategory(string(b2.Category)).
-		SetThumbnail(b2.Thumbnail).
-		SetPageCount(b2.PageCount).
 		Save(t.Context())
 
 	r := setupTestRouter()

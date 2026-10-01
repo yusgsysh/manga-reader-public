@@ -683,6 +683,8 @@ Cache-Control: public, max-age=31536000, immutable
 
 获取书架列表，按收藏时间倒序排列。
 
+> 书架表只保存 `(id, token)` 引用；`title` / `title_jpn` / `category` / `thumbnail` / `pages` 等元数据在返回时从 `gallery_cache` 关联读取，因此始终反映最新已知上游数据（若没有对应的缓存行，这些字段为空/零值）。
+
 **Query Parameters:**
 
 | Name | Type | Required | Default | Description |
@@ -730,7 +732,7 @@ Cache-Control: public, max-age=31536000, immutable
 
 `POST /api/bookshelf/:id/:token`
 
-将 Gallery 加入书架。首次添加时会从 ExHentai 获取 Gallery 基本信息并保存快照。重复添加幂等，不会产生重复数据。
+将 Gallery 加入书架。首次添加时会获取 Gallery 基本信息并写入 `gallery_cache`（书架表本身只保存 `(id, token)` 引用）。重复添加幂等，不会产生重复数据。
 
 支持离线收藏：当 ExHentai 不可达时，若 `gallery_cache` 中已有该 Gallery 的快照（例如之前浏览/下拉过），则使用缓存元数据完成添加，响应中 `offline` 为 `true`；若既无法访问 ExHentai 也没有缓存，则返回 502。
 

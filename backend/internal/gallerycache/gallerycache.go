@@ -63,10 +63,14 @@ func GetMany(ctx context.Context, client *ent.Client, refs []Ref) (map[Ref]*ent.
 	return result, nil
 }
 
-// UpsertMeta writes metadata into the cache on a "first value wins" basis: the
-// row is created on first write and existing non-empty values are never
-// overwritten. Only fields that are still empty are filled, because upstream
-// metadata changes infrequently and we don't want repeated views to churn it.
+// UpsertMeta writes metadata into the cache, keeping it in sync with the API:
+// every incoming non-empty value overwrites the stored one, while empty/zero
+// incoming values leave the existing value untouched. The latter matters
+// because the two sources carry different subsets (metadata omits language /
+// favorited / posted-relative fields that details provides), so a later
+// metadata write must not blank out richer detail fields. The cache is the
+// single source of truth for bookshelf and history metadata, so it tracks the
+// latest upstream response rather than freezing the first one seen.
 func UpsertMeta(ctx context.Context, client *ent.Client, galleryID int64, token string, snap model.GalleryCacheSnapshot) error {
 	existing, found, err := Get(ctx, client, galleryID, token)
 	if err != nil {
@@ -133,67 +137,67 @@ func UpsertMeta(ctx context.Context, client *ent.Client, galleryID int64, token 
 	update := client.GalleryCache.UpdateOneID(existing.ID)
 	changed := false
 
-	if existing.Title == "" && snap.Title != "" {
+	if snap.Title != "" {
 		update.SetTitle(snap.Title)
 		changed = true
 	}
-	if existing.TitleJpn == "" && snap.TitleJPN != "" {
+	if snap.TitleJPN != "" {
 		update.SetTitleJpn(snap.TitleJPN)
 		changed = true
 	}
-	if existing.Category == "" && snap.Category != "" {
+	if snap.Category != "" {
 		update.SetCategory(snap.Category)
 		changed = true
 	}
-	if existing.Thumbnail == "" && snap.Thumbnail != "" {
+	if snap.Thumbnail != "" {
 		update.SetThumbnail(snap.Thumbnail)
 		changed = true
 	}
-	if existing.PageCount == 0 && snap.PageCount != 0 {
+	if snap.PageCount != 0 {
 		update.SetPageCount(snap.PageCount)
 		changed = true
 	}
-	if existing.Rating == 0 && snap.Rating != 0 {
+	if snap.Rating != 0 {
 		update.SetRating(snap.Rating)
 		changed = true
 	}
-	if existing.RatingCount == 0 && snap.RatingCount != 0 {
+	if snap.RatingCount != 0 {
 		update.SetRatingCount(snap.RatingCount)
 		changed = true
 	}
-	if existing.Uploader == "" && snap.Uploader != "" {
+	if snap.Uploader != "" {
 		update.SetUploader(snap.Uploader)
 		changed = true
 	}
-	if existing.Posted == "" && snap.Posted != "" {
+	if snap.Posted != "" {
 		update.SetPosted(snap.Posted)
 		changed = true
 	}
-	if existing.PostedAt == nil && snap.PostedAt != nil {
+	if snap.PostedAt != nil {
 		update.SetPostedAt(*snap.PostedAt)
 		changed = true
 	}
-	if existing.Language == "" && snap.Language != "" {
+	if snap.Language != "" {
 		update.SetLanguage(snap.Language)
 		changed = true
 	}
-	if !existing.Translated && snap.Translated {
+	if snap.Translated {
 		update.SetTranslated(true)
 		changed = true
 	}
-	if existing.FileSize == "" && snap.FileSize != "" {
+	if snap.FileSize != "" {
 		update.SetFileSize(snap.FileSize)
 		changed = true
 	}
-	if existing.Favorited == 0 && snap.Favorited != 0 {
+	if snap.Favorited != 0 {
 		update.SetFavorited(snap.Favorited)
 		changed = true
 	}
-	if !existing.Expunged && snap.Expunged {
+	if snap.Expunged {
 		update.SetExpunged(true)
 		changed = true
 	}
-	if len(existing.Tags) == 0 && len(snap.Tags) > 0 {
+	if len(snap.Tags) > 0 {
 		update.SetTags(snap.Tags)
 		changed = true
 	}

@@ -16,14 +16,14 @@ import (
 	"manga-reader/internal/model"
 )
 
-func seedGalleryMeta(t *testing.T, client *ent.Client, meta *model.Bookshelf) {
+func seedGalleryMeta(t *testing.T, client *ent.Client, g *model.Gallery) {
 	t.Helper()
-	err := gallerycache.UpsertMeta(t.Context(), client, meta.GalleryID, meta.Token, model.GalleryCacheSnapshot{
-		Title:     meta.Title,
-		TitleJPN:  meta.TitleJPN,
-		Category:  string(meta.Category),
-		Thumbnail: meta.Thumbnail,
-		PageCount: meta.PageCount,
+	err := gallerycache.UpsertMeta(t.Context(), client, g.ID, g.Token, model.GalleryCacheSnapshot{
+		Title:     g.Title,
+		TitleJPN:  g.TitleJPN,
+		Category:  string(g.Category),
+		Thumbnail: g.Thumbnail,
+		PageCount: g.PageCount,
 	})
 	if err != nil {
 		t.Fatalf("seed gallery meta: %v", err)
@@ -67,10 +67,10 @@ func TestHandleRecentlyRead_Empty(t *testing.T) {
 func TestHandleRecentlyRead_WithRecords(t *testing.T) {
 	client := newTestDB(t)
 
-	meta := newTestBookshelf()
+	meta := newTestGallery()
 	seedGalleryMeta(t, client, meta)
 	client.ReadingProgress.Create().
-		SetGalleryID(meta.GalleryID).
+		SetGalleryID(meta.ID).
 		SetToken(meta.Token).
 		SetCurrentPage(5).
 		SetProgress(0.2).
@@ -126,20 +126,15 @@ func TestHandleRecentlyRead_WithRecords(t *testing.T) {
 func TestHandleRecentlyRead_MetadataSurvivesBookshelfRemove(t *testing.T) {
 	client := newTestDB(t)
 
-	meta := newTestBookshelf()
+	meta := newTestGallery()
 	seedGalleryMeta(t, client, meta)
 	client.Bookshelf.Create().
-		SetGalleryID(meta.GalleryID).
+		SetGalleryID(meta.ID).
 		SetToken(meta.Token).
-		SetTitle(meta.Title).
-		SetTitleJpn(meta.TitleJPN).
-		SetCategory(string(meta.Category)).
-		SetThumbnail(meta.Thumbnail).
-		SetPageCount(meta.PageCount).
 		Save(t.Context())
 
 	client.ReadingProgress.Create().
-		SetGalleryID(meta.GalleryID).
+		SetGalleryID(meta.ID).
 		SetToken(meta.Token).
 		SetCurrentPage(5).
 		SetProgress(0.2).
@@ -150,7 +145,7 @@ func TestHandleRecentlyRead_MetadataSurvivesBookshelfRemove(t *testing.T) {
 
 	client.Bookshelf.Delete().
 		Where(
-			bookshelf.GalleryID(meta.GalleryID),
+			bookshelf.GalleryID(meta.ID),
 			bookshelf.Token(meta.Token),
 		).
 		Exec(t.Context())

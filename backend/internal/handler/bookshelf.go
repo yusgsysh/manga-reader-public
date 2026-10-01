@@ -119,19 +119,35 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 		}
 	}
 
+	// Metadata lives in gallery_cache (the bookshelf table only stores the
+	// reference), so a bookshelf entry always reflects the latest known
+	// upstream data regardless of when or how it was added.
+	refs := make([]gallerycache.Ref, 0, len(items))
+	for _, b := range items {
+		refs = append(refs, gallerycache.Ref{GalleryID: b.GalleryID, Token: b.Token})
+	}
+	metaByRef, err := gallerycache.GetMany(ctx, s.DB.Client, refs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load gallery cache failed: %v", err)})
+		return
+	}
+
 	for _, b := range items {
 		progress := progressByKey[galleryRef{id: b.GalleryID, token: b.Token}]
 
 		item := model.BookshelfItem{
 			ID:        b.GalleryID,
 			Token:     b.Token,
-			Title:     b.Title,
-			TitleJPN:  b.TitleJpn,
-			Category:  model.GalleryCategory(b.Category),
-			Thumbnail: b.Thumbnail,
-			Pages:     b.PageCount,
 			AddedAt:   b.AddedAt,
 			UpdatedAt: b.UpdatedAt,
+		}
+
+		if meta := metaByRef[gallerycache.Ref{GalleryID: b.GalleryID, Token: b.Token}]; meta != nil {
+			item.Title = meta.Title
+			item.TitleJPN = meta.TitleJpn
+			item.Category = model.GalleryCategory(meta.Category)
+			item.Thumbnail = meta.Thumbnail
+			item.Pages = meta.PageCount
 		}
 
 		if progress != nil && progress.UpdatedAt != nil {
@@ -189,26 +205,18 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 		return
 	}
 
+	// Resolve metadata once: it reports the offline flag and seeds the
+	// gallery_cache row the list endpoint reads from. Only the reference is
+	// stored in the bookshelf table itself.
 	gallery, offline, err := s.galleryForBookshelf(ctx, id, token)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
 	}
 
-	bookshelfModel := model.GalleryToBookshelf(gallery)
-	if bookshelfModel == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "convert gallery to bookshelf failed"})
-		return
-	}
-
 	_, err = s.DB.Client.Bookshelf.Create().
-		SetGalleryID(bookshelfModel.GalleryID).
-		SetToken(bookshelfModel.Token).
-		SetTitle(bookshelfModel.Title).
-		SetTitleJpn(bookshelfModel.TitleJPN).
-		SetCategory(string(bookshelfModel.Category)).
-		SetThumbnail(bookshelfModel.Thumbnail).
-		SetPageCount(bookshelfModel.PageCount).
+		SetGalleryID(id).
+		SetToken(token).
 		Save(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("add bookshelf failed: %v", err)})

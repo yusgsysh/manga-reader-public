@@ -667,7 +667,7 @@ func TestPrefetchGallery_IncompletePagesNotCached(t *testing.T) {
 	}
 }
 
-func TestGalleryCache_FirstValueWins(t *testing.T) {
+func TestGalleryCache_MetaTracksApiPagesFirstWrite(t *testing.T) {
 	client := newTestDB(t)
 	ctx := t.Context()
 
@@ -677,8 +677,7 @@ func TestGalleryCache_FirstValueWins(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("first meta write: %v", err)
 	}
-	// Second write must not overwrite existing fields, but should fill the
-	// still-empty uploader.
+	// A later API response overwrites non-empty fields and fills the uploader.
 	if err := gallerycache.UpsertMeta(ctx, client, 9001, "tok", model.GalleryCacheSnapshot{
 		Title:    "Second",
 		Rating:   5.0,
@@ -691,14 +690,25 @@ func TestGalleryCache_FirstValueWins(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("cache lookup: found=%v err=%v", found, err)
 	}
-	if row.Title != "First" {
-		t.Errorf("title = %q, want First (no overwrite)", row.Title)
+	if row.Title != "Second" {
+		t.Errorf("title = %q, want Second (updated from API)", row.Title)
 	}
-	if row.Rating != 4.0 {
-		t.Errorf("rating = %v, want 4.0 (no overwrite)", row.Rating)
+	if row.Rating != 5.0 {
+		t.Errorf("rating = %v, want 5.0 (updated from API)", row.Rating)
 	}
 	if row.Uploader != "uploader" {
-		t.Errorf("uploader = %q, want uploader (fill empty)", row.Uploader)
+		t.Errorf("uploader = %q, want uploader", row.Uploader)
+	}
+
+	// An empty incoming subset must not blank out richer stored fields.
+	if err := gallerycache.UpsertMeta(ctx, client, 9001, "tok", model.GalleryCacheSnapshot{
+		Title: "Second",
+	}); err != nil {
+		t.Fatalf("third meta write: %v", err)
+	}
+	row, _, _ = gallerycache.Get(ctx, client, 9001, "tok")
+	if row.Rating != 5.0 || row.Uploader != "uploader" {
+		t.Errorf("empty fields must not overwrite: rating=%v uploader=%q", row.Rating, row.Uploader)
 	}
 
 	// Pages are stored first-write only.
@@ -772,7 +782,7 @@ func TestCleanupGalleryCache_RemovesOrphans(t *testing.T) {
 	seedGalleryCache(t, db.Client, 1003, "tokC")
 
 	if _, err := db.Client.Bookshelf.Create().
-		SetGalleryID(1001).SetToken("tokA").SetTitle("A").Save(ctx); err != nil {
+		SetGalleryID(1001).SetToken("tokA").Save(ctx); err != nil {
 		t.Fatalf("insert bookshelf: %v", err)
 	}
 	if _, err := db.Client.ReadingProgress.Create().

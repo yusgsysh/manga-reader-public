@@ -445,11 +445,6 @@ func TestHandleReadingProgressCleanup_PreservesBookshelf(t *testing.T) {
 	_, err := client.Bookshelf.Create().
 		SetGalleryID(b.GalleryID).
 		SetToken(b.Token).
-		SetTitle(b.Title).
-		SetTitleJpn(string(b.TitleJPN)).
-		SetCategory(string(b.Category)).
-		SetThumbnail(b.Thumbnail).
-		SetPageCount(b.PageCount).
 		Save(t.Context())
 	if err != nil {
 		t.Fatalf("add bookshelf: %v", err)

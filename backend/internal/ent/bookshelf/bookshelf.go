@@ -17,16 +17,6 @@ const (
 	FieldGalleryID = "gallery_id"
 	// FieldToken holds the string denoting the token field in the database.
 	FieldToken = "token"
-	// FieldTitle holds the string denoting the title field in the database.
-	FieldTitle = "title"
-	// FieldTitleJpn holds the string denoting the title_jpn field in the database.
-	FieldTitleJpn = "title_jpn"
-	// FieldCategory holds the string denoting the category field in the database.
-	FieldCategory = "category"
-	// FieldThumbnail holds the string denoting the thumbnail field in the database.
-	FieldThumbnail = "thumbnail"
-	// FieldPageCount holds the string denoting the page_count field in the database.
-	FieldPageCount = "page_count"
 	// FieldAddedAt holds the string denoting the added_at field in the database.
 	FieldAddedAt = "added_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -40,11 +30,6 @@ var Columns = []string{
 	FieldID,
 	FieldGalleryID,
 	FieldToken,
-	FieldTitle,
-	FieldTitleJpn,
-	FieldCategory,
-	FieldThumbnail,
-	FieldPageCount,
 	FieldAddedAt,
 	FieldUpdatedAt,
 }
@@ -60,16 +45,6 @@ func ValidColumn(column string) bool {
 }
 
 var (
-	// DefaultTitle holds the default value on creation for the "title" field.
-	DefaultTitle string
-	// DefaultTitleJpn holds the default value on creation for the "title_jpn" field.
-	DefaultTitleJpn string
-	// DefaultCategory holds the default value on creation for the "category" field.
-	DefaultCategory string
-	// DefaultThumbnail holds the default value on creation for the "thumbnail" field.
-	DefaultThumbnail string
-	// DefaultPageCount holds the default value on creation for the "page_count" field.
-	DefaultPageCount int
 	// DefaultAddedAt holds the default value on creation for the "added_at" field.
 	DefaultAddedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -94,31 +69,6 @@ func ByGalleryID(opts ...sql.OrderTermOption) OrderOption {
 // ByToken orders the results by the token field.
 func ByToken(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldToken, opts...).ToFunc()
-}
-
-// ByTitle orders the results by the title field.
-func ByTitle(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldTitle, opts...).ToFunc()
-}
-
-// ByTitleJpn orders the results by the title_jpn field.
-func ByTitleJpn(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldTitleJpn, opts...).ToFunc()
-}
-
-// ByCategory orders the results by the category field.
-func ByCategory(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldCategory, opts...).ToFunc()
-}
-
-// ByThumbnail orders the results by the thumbnail field.
-func ByThumbnail(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldThumbnail, opts...).ToFunc()
-}
-
-// ByPageCount orders the results by the page_count field.
-func ByPageCount(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldPageCount, opts...).ToFunc()
 }
 
 // ByAddedAt orders the results by the added_at field.

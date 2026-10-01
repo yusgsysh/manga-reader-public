@@ -2,16 +2,11 @@ package model
 
 import "time"
 
-// Bookshelf is a bookshelf record in the database.
+// Bookshelf is a bookshelf record in the database. It stores only the gallery
+// reference; metadata is joined from gallery_cache when the list is served.
 type Bookshelf struct {
-	GalleryID int64           `json:"gallery_id"`
-	Token     string          `json:"token"`
-	Title     string          `json:"title"`
-	TitleJPN  string          `json:"title_jpn"`
-	Category  GalleryCategory `json:"category"`
-	Thumbnail string          `json:"thumbnail"`
-	PageCount int             `json:"page_count"`
-
+	GalleryID int64     `json:"gallery_id"`
+	Token     string    `json:"token"`
 	AddedAt   time.Time `json:"added_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -94,42 +89,4 @@ type RecentlyReadResponse struct {
 	Total      int                `json:"total"`
 	TotalPages int                `json:"total_pages"`
 	Results    []RecentlyReadItem `json:"results"`
-}
-
-// GalleryToBookshelf converts a Gallery to a Bookshelf snapshot.
-func GalleryToBookshelf(g *Gallery) *Bookshelf {
-	if g == nil {
-		return nil
-	}
-
-	return &Bookshelf{
-		GalleryID: g.ID,
-		Token:     g.Token,
-		Title:     g.Title,
-		TitleJPN:  g.TitleJPN,
-		Category:  g.Category,
-		Thumbnail: g.Thumbnail,
-		PageCount: g.PageCount,
-	}
-}
-
-// BookshelfToItem converts a Bookshelf to a BookshelfItem for API responses.
-func BookshelfToItem(b *Bookshelf, progress *ReadingProgress) BookshelfItem {
-	item := BookshelfItem{
-		ID:        b.GalleryID,
-		Token:     b.Token,
-		Title:     b.Title,
-		TitleJPN:  b.TitleJPN,
-		Category:  b.Category,
-		Thumbnail: b.Thumbnail,
-		Pages:     b.PageCount,
-		AddedAt:   b.AddedAt,
-		UpdatedAt: b.UpdatedAt,
-	}
-
-	if progress != nil {
-		item.Reading = progress
-	}
-
-	return item
 }

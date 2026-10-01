@@ -17,32 +17,12 @@ import (
 func init() {
 	bookshelfFields := schema.Bookshelf{}.Fields()
 	_ = bookshelfFields
-	// bookshelfDescTitle is the schema descriptor for title field.
-	bookshelfDescTitle := bookshelfFields[2].Descriptor()
-	// bookshelf.DefaultTitle holds the default value on creation for the title field.
-	bookshelf.DefaultTitle = bookshelfDescTitle.Default.(string)
-	// bookshelfDescTitleJpn is the schema descriptor for title_jpn field.
-	bookshelfDescTitleJpn := bookshelfFields[3].Descriptor()
-	// bookshelf.DefaultTitleJpn holds the default value on creation for the title_jpn field.
-	bookshelf.DefaultTitleJpn = bookshelfDescTitleJpn.Default.(string)
-	// bookshelfDescCategory is the schema descriptor for category field.
-	bookshelfDescCategory := bookshelfFields[4].Descriptor()
-	// bookshelf.DefaultCategory holds the default value on creation for the category field.
-	bookshelf.DefaultCategory = bookshelfDescCategory.Default.(string)
-	// bookshelfDescThumbnail is the schema descriptor for thumbnail field.
-	bookshelfDescThumbnail := bookshelfFields[5].Descriptor()
-	// bookshelf.DefaultThumbnail holds the default value on creation for the thumbnail field.
-	bookshelf.DefaultThumbnail = bookshelfDescThumbnail.Default.(string)
-	// bookshelfDescPageCount is the schema descriptor for page_count field.
-	bookshelfDescPageCount := bookshelfFields[6].Descriptor()
-	// bookshelf.DefaultPageCount holds the default value on creation for the page_count field.
-	bookshelf.DefaultPageCount = bookshelfDescPageCount.Default.(int)
 	// bookshelfDescAddedAt is the schema descriptor for added_at field.
-	bookshelfDescAddedAt := bookshelfFields[7].Descriptor()
+	bookshelfDescAddedAt := bookshelfFields[2].Descriptor()
 	// bookshelf.DefaultAddedAt holds the default value on creation for the added_at field.
 	bookshelf.DefaultAddedAt = bookshelfDescAddedAt.Default.(func() time.Time)
 	// bookshelfDescUpdatedAt is the schema descriptor for updated_at field.
-	bookshelfDescUpdatedAt := bookshelfFields[8].Descriptor()
+	bookshelfDescUpdatedAt := bookshelfFields[3].Descriptor()
 	// bookshelf.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	bookshelf.DefaultUpdatedAt = bookshelfDescUpdatedAt.Default.(func() time.Time)
 	// bookshelf.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
