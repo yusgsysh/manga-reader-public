@@ -204,8 +204,23 @@ func UpsertMeta(ctx context.Context, client *ent.Client, galleryID int64, token 
 	return update.SetMetaFetchedAt(now).Exec(ctx)
 }
 
-// UpsertPages stores the page list on first write only. Page URLs are stable
-// for a gallery, so an existing list is never overwritten.
+func countPageThumbnails(pages []model.CachedPage) int {
+	n := 0
+	for _, p := range pages {
+		if p.Thumbnail != nil {
+			n++
+		}
+	}
+	return n
+}
+
+// UpsertPages stores the page list on first write, with one exception: an
+// existing list is replaced when the incoming one carries more page-thumbnail
+// geometry. Page URLs are stable for a gallery, but the sprite geometry was
+// added later, so rows cached before it existed (and locked in by the original
+// first-write-wins rule) are refreshed here as soon as a scrape supplies the
+// richer data. A list with equal or fewer thumbnails never overwrites, so
+// existing data is not downgraded.
 func UpsertPages(ctx context.Context, client *ent.Client, galleryID int64, token string, pages []model.CachedPage) error {
 	existing, found, err := Get(ctx, client, galleryID, token)
 	if err != nil {
@@ -222,7 +237,8 @@ func UpsertPages(ctx context.Context, client *ent.Client, galleryID int64, token
 			Exec(ctx)
 	}
 
-	if len(existing.Pages) > 0 {
+	if len(existing.Pages) > 0 &&
+		countPageThumbnails(pages) <= countPageThumbnails(existing.Pages) {
 		return nil
 	}
 

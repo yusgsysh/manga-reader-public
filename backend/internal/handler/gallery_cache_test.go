@@ -720,6 +720,48 @@ func TestGalleryCache_FirstValueWins(t *testing.T) {
 	}
 }
 
+func TestUpsertPages_BackfillsThumbnailGeometry(t *testing.T) {
+	client := newTestDB(t)
+	ctx := t.Context()
+
+	// A row cached before sprite geometry existed (no thumbnails).
+	if err := gallerycache.UpsertPages(ctx, client, 9002, "tok", []model.CachedPage{
+		{PageURL: "a", Index: 0},
+		{PageURL: "b", Index: 1},
+	}); err != nil {
+		t.Fatalf("first pages write: %v", err)
+	}
+
+	// A later scrape with the same pages plus geometry must replace it.
+	thumb := &model.GalleryPageThumb{SpriteURL: "https://cdn.example/1-0.webp", Width: 200, Height: 282}
+	if err := gallerycache.UpsertPages(ctx, client, 9002, "tok", []model.CachedPage{
+		{PageURL: "a", Index: 0, Thumbnail: thumb},
+		{PageURL: "b", Index: 1, Thumbnail: thumb},
+	}); err != nil {
+		t.Fatalf("backfill write: %v", err)
+	}
+
+	row, _, err := gallerycache.Get(ctx, client, 9002, "tok")
+	if err != nil {
+		t.Fatalf("cache lookup: %v", err)
+	}
+	if len(row.Pages) != 2 || row.Pages[0].Thumbnail == nil || row.Pages[1].Thumbnail == nil {
+		t.Fatalf("pages should be backfilled with geometry: %+v", row.Pages)
+	}
+
+	// A geometry-less list must not downgrade the enriched one.
+	if err := gallerycache.UpsertPages(ctx, client, 9002, "tok", []model.CachedPage{
+		{PageURL: "a", Index: 0},
+		{PageURL: "b", Index: 1},
+	}); err != nil {
+		t.Fatalf("downgrade write: %v", err)
+	}
+	row, _, _ = gallerycache.Get(ctx, client, 9002, "tok")
+	if row.Pages[0].Thumbnail == nil {
+		t.Error("a geometry-less list must not overwrite an enriched one")
+	}
+}
+
 func TestCleanupGalleryCache_RemovesOrphans(t *testing.T) {
 	db := newTestDatabase(t)
 	ctx := t.Context()
