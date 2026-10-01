@@ -184,6 +184,41 @@ describe("fetchGalleryPages", () => {
     );
   });
 
+  it("reports progressive snapshots before the stream completes", async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c;
+        c.enqueue(encoder.encode(`${JSON.stringify(meta(3))}\n`));
+        c.enqueue(encoder.encode(`${JSON.stringify(page(0))}\n`));
+      },
+    });
+    fetchMock.mockResolvedValue(
+      new Response(stream, {
+        status: 200,
+        headers: { "Content-Type": "application/x-ndjson" },
+      }),
+    );
+
+    const snapshots: number[] = [];
+    const promise = fetchGalleryPages(123, "tok", (s) =>
+      snapshots.push(s.pages.length),
+    );
+
+    // The first page must reach the caller while the stream is still open.
+    await vi.waitFor(() => expect(snapshots).toEqual([1]));
+
+    controller.enqueue(encoder.encode(`${JSON.stringify(page(1))}\n`));
+    controller.enqueue(encoder.encode(`${JSON.stringify(page(2))}\n`));
+    controller.enqueue(encoder.encode(`${JSON.stringify(done(3))}\n`));
+    controller.close();
+
+    const result = await promise;
+    expect(result.pages).toHaveLength(3);
+    expect(snapshots).toEqual([1, 2, 3]);
+  });
+
   it("rejects when the stream exceeds meta.total", async () => {
     fetchMock.mockResolvedValue(
       ndjsonResponse(meta(1), page(0), page(1), done(2)),

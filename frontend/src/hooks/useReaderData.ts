@@ -17,7 +17,7 @@ import type {
   ReadingProgress,
   UpdateReadingProgressRequest,
 } from "../types/reader";
-import { useOnlineThenCached } from "./useOnlineCached";
+import { useOnlineStatus, useOnlineThenCached } from "./useOnlineCached";
 
 const GALLERY_STALE_TIME = 5 * 60_000;
 const PAGES_STALE_TIME = 10 * 60_000;
@@ -35,7 +35,22 @@ export function useGallery(id: number, token: string) {
 }
 
 export function useGalleryPages(id: number, token: string) {
+  const enabled = Number.isFinite(id) && token.length > 0;
+  const online = useOnlineStatus();
   const [partial, setPartial] = useState<GalleryPagesResponse | null>(null);
+
+  // The page list is only ever cached when complete, so a cache hit is served
+  // immediately and no live stream is started. Otherwise the live NDJSON
+  // stream is read (progressively) and the backend caches it when complete.
+  const cacheQuery = useQuery({
+    queryKey: ["gallery-pages-cache", id, token],
+    queryFn: () => fetchGalleryPagesCached(id, token),
+    enabled,
+    staleTime: PAGES_STALE_TIME,
+    retry: 0,
+  });
+
+  const cacheSettled = cacheQuery.data !== undefined || cacheQuery.isError;
 
   const onlineFn = useCallback(
     ({ signal }: { signal: AbortSignal }) => {
@@ -50,27 +65,63 @@ export function useGalleryPages(id: number, token: string) {
     [id, token],
   );
 
-  const result = useOnlineThenCached<GalleryPagesResponse>({
-    enabled: Number.isFinite(id) && token.length > 0,
-    onlineKey: ["gallery-pages", id, token],
-    cacheKey: ["gallery-pages-cache", id, token],
-    onlineFn,
-    cacheFn: () => fetchGalleryPagesCached(id, token),
+  const onlineQuery = useQuery({
+    queryKey: ["gallery-pages", id, token],
+    queryFn: (context) => onlineFn(context),
+    // Cache-first: only hit the live endpoint when no complete list is cached.
+    enabled: enabled && online && cacheSettled && cacheQuery.data === undefined,
     staleTime: PAGES_STALE_TIME,
-    // A failed stream falls back to cache instead of re-scraping upstream.
-    onlineRetry: 0,
+    retry: 0,
   });
 
   // Expose the snapshot only while the live stream is still running: once the
   // query fails or settles the partial list must disappear, so a broken stream
-  // falls back to the cache (or errors) instead of leaking partial pages.
+  // errors (or a later cache fallback wins) instead of leaking partial pages.
   // onlineFn resets the snapshot whenever a new stream starts.
   const streaming =
-    partial !== null && result.data === undefined && result.isFetching;
+    partial !== null &&
+    cacheQuery.data === undefined &&
+    onlineQuery.data === undefined &&
+    onlineQuery.isFetching;
   if (streaming) {
-    return { ...result, data: partial, isLoading: false };
+    return {
+      data: partial,
+      source: "online" as const,
+      isLoading: false,
+      isFetching: true,
+      isError: false,
+      error: null,
+      refetch: () => {
+        void onlineQuery.refetch();
+      },
+    };
   }
-  return result;
+
+  const data = cacheQuery.data ?? onlineQuery.data;
+  const source: "online" | "cache" | null =
+    cacheQuery.data !== undefined
+      ? "cache"
+      : onlineQuery.data !== undefined
+        ? "online"
+        : null;
+  const onlineErrored = !online || onlineQuery.isError;
+  const isError = enabled && data === undefined && cacheSettled && onlineErrored;
+  const isLoading = enabled && data === undefined && !isError;
+
+  return {
+    data,
+    source,
+    isLoading,
+    isFetching: onlineQuery.isFetching,
+    isError,
+    error: isError
+      ? ((cacheQuery.error ?? onlineQuery.error) as Error | null)
+      : null,
+    refetch: () => {
+      if (online) void onlineQuery.refetch();
+      void cacheQuery.refetch();
+    },
+  };
 }
 
 export function useReadingProgress(id: number, token: string) {

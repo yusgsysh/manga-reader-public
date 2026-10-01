@@ -314,6 +314,7 @@ func writeNDJSONLine(c *gin.Context, line galleryPagesLine) error {
 func replayGalleryPages(c *gin.Context, id, token string, total int, pages []model.CachedPage) error {
 	c.Header("Content-Type", "application/x-ndjson; charset=utf-8")
 	c.Header("Cache-Control", "no-store")
+	c.Header("X-Accel-Buffering", "no")
 	c.Status(http.StatusOK)
 
 	if err := writeNDJSONLine(c, galleryPagesLine{Type: "meta", ID: id, Token: token, Total: &total}); err != nil {
@@ -374,6 +375,10 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 		if !started {
 			c.Header("Content-Type", "application/x-ndjson; charset=utf-8")
 			c.Header("Cache-Control", "no-store")
+			// Defeat proxy buffering (nginx/Angie) even when the location's
+			// proxy_buffering is on, so lines reach the browser as they are
+			// scraped instead of after the whole response finishes.
+			c.Header("X-Accel-Buffering", "no")
 			c.Status(http.StatusOK)
 			started = true
 			if writeErr := writeLine(galleryPagesLine{
