@@ -31,6 +31,22 @@ bun run dev
 bun run db:update
 ```
 
+## 测试
+
+```bash
+bun run test   # 单元测试（vitest）
+bun run lint   # oxlint
+```
+
+阅读器页面加载的端到端测试（Playwright）不需要真实后端：`e2e/mock-server.mjs` 会托管生产构建并 mock `/api/*`。
+
+```bash
+bun run test:e2e:install   # 首次安装 Chromium
+bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
+```
+
+覆盖两种关键行为：已有完整缓存的画廊从缓存即时打开（完全不请求在线 `/pages`）；无缓存时渐进流式，首批到达即挂载、无需等待整份列表。
+
 ## 环境变量
 
 复制 `.env.example` 为 `.env` 并按需修改：

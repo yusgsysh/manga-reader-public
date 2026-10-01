@@ -1,0 +1,39 @@
+name: Frontend Tests
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Unit + reader e2e
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Runs in the same base image used to build the frontend. The browser
+      # download cache is kept in a named volume so repeated runs are fast.
+      - name: Run frontend tests
+        run: |
+          set -euo pipefail
+
+          docker run --rm \
+            -v "$PWD/frontend:/app" \
+            -v manga-reader-bun:/root/.bun \
+            -v manga-reader-playwright:/root/.cache/ms-playwright \
+            -w /app \
+            oven/bun:1 \
+            sh -ec '
+              bun install --frozen-lockfile
+              bun run test
+              bun run build:e2e
+              bunx playwright install --with-deps chromium
+              bun e2e/reader-pages.mjs
+            '

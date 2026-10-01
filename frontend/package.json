@@ -6,8 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:e2e": "vite build --mode e2e",
     "lint": "oxlint",
     "test": "vitest run",
+    "test:e2e": "bun run build:e2e && bun e2e/reader-pages.mjs",
+    "test:e2e:install": "playwright install chromium",
     "preview": "vite preview",
     "db:update": "node scripts/update-tag-db.mjs"
   },
@@ -30,6 +33,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.85.0",
+    "playwright": "^1.63.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~7.0.2",
     "vite": "^8.3.1",
