@@ -49,7 +49,6 @@ export function RecentlyReadPage() {
       <div>
         <PageHeader
           title="阅读历史"
-          description="最近打开的画廊"
           icon={<ClockCounterClockwise className="size-5" weight="fill" />}
         />
         <EmptyState
@@ -65,7 +64,6 @@ export function RecentlyReadPage() {
     <div>
       <PageHeader
         title="阅读历史"
-        description="最近打开的画廊"
         icon={<ClockCounterClockwise className="size-5" weight="fill" />}
         actions={
           <Button

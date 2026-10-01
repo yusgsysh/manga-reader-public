@@ -218,7 +218,7 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
           </h3>
 
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-kumo-subtle">
-            {gallery.category && <Chip tone="accent">{gallery.category}</Chip>}
+            {gallery.category && <Chip tone="solid">{gallery.category}</Chip>}
             {typeof gallery.rating === "number" && (
               <span className="inline-flex items-center gap-0.5">
                 <Star className="size-3.5 text-kumo-warning" weight="fill" />

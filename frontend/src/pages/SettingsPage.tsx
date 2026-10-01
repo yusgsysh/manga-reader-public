@@ -25,7 +25,7 @@ function AppearanceSection() {
   const { mode, setMode } = useTheme();
 
   return (
-    <Section title="外观" description="选择界面主题">
+    <Section title="外观">
       <div className="flex flex-wrap gap-2">
         {THEME_OPTIONS.map((option) => {
           const Icon = option.icon;
@@ -79,7 +79,6 @@ function TagDatabaseSection() {
   return (
     <Section
       title="标签翻译数据库"
-      description="用于将日文/英文标签翻译为中文"
       action={
         <Button variant="secondary" size="sm" onClick={handleUpdate} disabled={updating}>
           {updating ? (
@@ -117,7 +116,7 @@ function TagDatabaseSection() {
 
 function DataSection() {
   return (
-    <Section title="数据" description="管理本地缓存与记录">
+    <Section title="数据">
       <div className="grid gap-2 sm:grid-cols-2">
         <Link
           to="/recently-read"
@@ -153,7 +152,6 @@ export function SettingsPage() {
     <div className="max-w-3xl">
       <PageHeader
         title="设置"
-        description="外观、翻译数据库与数据管理"
         icon={<Gear className="size-5" weight="fill" />}
       />
       <div className="space-y-8">

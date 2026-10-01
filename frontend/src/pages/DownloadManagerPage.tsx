@@ -254,7 +254,6 @@ export function DownloadManagerPage() {
     <div className="space-y-6">
       <PageHeader
         title="下载管理"
-        description="画廊预取与打包下载任务"
         icon={<DownloadSimple className="size-5" weight="bold" />}
         actions={
           jobs.length > 0 ? (

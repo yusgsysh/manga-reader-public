@@ -39,7 +39,6 @@ export function SubscriptionsPage() {
       <div>
         <PageHeader
           title="订阅"
-          description="你关注的上传者与画廊更新"
           icon={<BookmarkSimple className="size-5" weight="fill" />}
         />
         <EmptyState
@@ -55,7 +54,6 @@ export function SubscriptionsPage() {
     <div>
       <PageHeader
         title="订阅"
-        description="你关注的上传者与画廊更新"
         icon={<BookmarkSimple className="size-5" weight="fill" />}
       />
       <GalleryGrid galleries={galleries} />

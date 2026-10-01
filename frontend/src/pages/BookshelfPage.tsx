@@ -76,7 +76,6 @@ export function BookshelfPage() {
       <div>
         <PageHeader
           title="书架"
-          description="收藏的画廊与阅读进度"
           icon={<BooksIcon className="size-5" weight="fill" />}
         />
         <EmptyState
@@ -92,7 +91,6 @@ export function BookshelfPage() {
     <div>
       <PageHeader
         title="书架"
-        description="收藏的画廊与阅读进度"
         icon={<BooksIcon className="size-5" weight="fill" />}
         actions={controls}
       />

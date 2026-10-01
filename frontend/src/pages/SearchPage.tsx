@@ -99,7 +99,7 @@ function FilterChip({
   onRemove: () => void;
 }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--app-accent-soft)] px-2.5 py-1 text-xs font-medium text-[var(--app-accent)]">
+    <span className="inline-flex items-center gap-1 rounded-full bg-kumo-contrast px-2.5 py-1 text-xs font-medium text-kumo-inverse">
       {label}
       <button
         type="button"
@@ -313,7 +313,6 @@ export function SearchPage() {
     <div className="space-y-5">
       <PageHeader
         title="搜索"
-        description="搜索 ExHentai / E-Hentai 画廊"
         icon={<MagnifyingGlass className="size-5" weight="bold" />}
       />
 
@@ -380,7 +379,7 @@ export function SearchPage() {
                 className={cn(
                   "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
                   active
-                    ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
+                    ? "border-transparent bg-kumo-contrast text-kumo-inverse"
                     : "border-kumo-hairline text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default",
                 )}
               >

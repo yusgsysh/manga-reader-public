@@ -14,9 +14,9 @@
   --app-accent-soft: color-mix(in oklab, var(--app-accent) 12%, transparent);
   --app-ring: color-mix(in oklab, var(--app-accent) 45%, transparent);
 
-  /* High-emphasis = near-black (Kumo mixes brand with white for the button). */
-  --color-kumo-brand: oklch(0.2 0 0);
-  --color-kumo-brand-hover: oklch(0.3 0 0);
+  /* High-emphasis buttons = blue (Kumo mixes brand with white for the button). */
+  --color-kumo-brand: #2563eb;
+  --color-kumo-brand-hover: #1d4ed8;
   --color-kumo-focus: var(--app-accent);
   --text-color-kumo-link: var(--app-accent);
 
@@ -28,8 +28,8 @@
   --app-accent-soft: color-mix(in oklab, var(--app-accent) 18%, transparent);
   --app-ring: color-mix(in oklab, var(--app-accent) 50%, transparent);
 
-  --color-kumo-brand: oklch(0.32 0 0);
-  --color-kumo-brand-hover: oklch(0.4 0 0);
+  --color-kumo-brand: #3b82f6;
+  --color-kumo-brand-hover: #60a5fa;
   --color-kumo-focus: var(--app-accent);
   --text-color-kumo-link: var(--app-accent);
 }

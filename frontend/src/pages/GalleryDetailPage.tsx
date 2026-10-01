@@ -197,7 +197,7 @@ export function GalleryDetailPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Chip tone="accent">{gallery.category}</Chip>
+            <Chip tone="solid">{gallery.category}</Chip>
             <span className="inline-flex items-center gap-1 text-kumo-default">
               <Star className="size-4 text-kumo-warning" weight="fill" />
               <span className="tnum font-medium">{gallery.rating.toFixed(2)}</span>

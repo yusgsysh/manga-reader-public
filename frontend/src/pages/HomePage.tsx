@@ -74,7 +74,6 @@ export function HomePage() {
       <div>
         <PageHeader
           title="最新"
-          description="来自 ExHentai 的最新画廊"
           icon={<Sparkle className="size-5" weight="fill" />}
         />
         <GalleryGrid galleries={galleries} />

@@ -39,7 +39,6 @@ export function PopularPage() {
       <div>
         <PageHeader
           title="热门"
-          description="近期最受欢迎的画廊"
           icon={<Fire className="size-5" weight="fill" />}
         />
         <EmptyState message="暂无热门 Gallery" />
@@ -51,7 +50,6 @@ export function PopularPage() {
     <div>
       <PageHeader
         title="热门"
-        description="近期最受欢迎的画廊"
         icon={<Fire className="size-5" weight="fill" />}
       />
       <GalleryGrid galleries={galleries} />

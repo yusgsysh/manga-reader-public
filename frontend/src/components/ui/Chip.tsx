@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@cloudflare/kumo";
 
-type ChipTone = "neutral" | "accent" | "outline";
+type ChipTone = "neutral" | "solid" | "outline";
 
 interface ChipProps {
   children: ReactNode;
@@ -11,7 +11,7 @@ interface ChipProps {
 
 const TONE_CLASSES: Record<ChipTone, string> = {
   neutral: "bg-kumo-recessed text-kumo-subtle",
-  accent: "bg-[var(--app-accent-soft)] text-[var(--app-accent)]",
+  solid: "bg-kumo-contrast text-kumo-inverse",
   outline: "border border-kumo-hairline text-kumo-subtle",
 };
 
