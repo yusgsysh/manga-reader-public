@@ -53,7 +53,7 @@ export function TagBadge({ tag, showNamespace = true }: TagBadgeProps) {
     return (
       <Popover open={open} onOpenChange={setOpen}>
         <Popover.Trigger
-          render={<button type="button" className="cursor-pointer text-left" />}
+          render={<button type="button" className="text-left" />}
         >
           {chip}
         </Popover.Trigger>
@@ -74,7 +74,6 @@ export function TagBadge({ tag, showNamespace = true }: TagBadgeProps) {
       side="top"
       align="start"
       delay={150}
-      className="cursor-help"
       render={<span />}
       content={detail}
     >
