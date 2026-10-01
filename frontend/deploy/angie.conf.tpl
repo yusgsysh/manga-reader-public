@@ -6,7 +6,7 @@
 # Optimizations vs. the previous revision:
 #   - one `upstream` block with keepalive (connection reuse to the backend)
 #   - shared proxy headers / timeouts declared once at server level
-#   - locations grouped (5m list cache, 1d gallery cache, streamed image endpoints)
+#   - locations grouped (5m list cache, streamed gallery pages/images)
 #   - gzip, immutable caching for hashed /assets, no-store for index.html
 #   - cache stampede lock + stale-while-revalidate
 
@@ -91,7 +91,7 @@ http {
     }
 
     # ============================================================
-    # API Cache
+    # API Cache (list endpoints only)
     # ============================================================
 
     proxy_cache_path /var/cache/angie/api
@@ -123,7 +123,8 @@ http {
         proxy_read_timeout 60s;
         proxy_send_timeout 60s;
 
-        # Default: no caching. Cached locations opt in explicitly.
+        # Default: no caching. Only the list endpoints opt in below. Gallery
+        # metadata/details are not cached here (the backend owns gallery_cache).
         proxy_cache off;
 
         # Cache stampede protection + stale-while-revalidate.
@@ -147,33 +148,17 @@ http {
         }
 
         # ========================================================
-        # Cached: gallery detail / scraped details (1 day)
-        #
-        # GET /api/gallery/:id/:token[/details]
-        # ========================================================
-
-        location /api/gallery/ {
-            proxy_pass http://backend;
-
-            proxy_cache api_cache;
-            proxy_cache_valid 200 1d;
-
-            add_header X-Cache-Status $upstream_cache_status always;
-        }
-
-        # ========================================================
         # Streamed: gallery page list (NDJSON)
         #
         # GET /api/gallery/:id/:token/pages
         #
-        # This regex location wins over the /api/gallery/ prefix above so the
-        # incremental stream is neither buffered nor cached.
+        # Kept apart from the default /api/ location only for the longer
+        # timeouts; the incremental stream is never buffered or cached.
         # ========================================================
 
         location ~ ^/api/gallery/[^/]+/[^/]+/pages$ {
             proxy_pass http://backend;
 
-            proxy_cache off;
             proxy_buffering off;
             proxy_read_timeout 300s;
             proxy_send_timeout 300s;
