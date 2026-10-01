@@ -1,0 +1,318 @@
+package exhentai
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/url"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/PuerkitoBio/goquery"
+
+	"manga-reader/internal/model"
+)
+
+var coverUrlReg = regexp.MustCompile(`url\(([^)]+)\)`)
+var numReg = regexp.MustCompile(`Showing 1 - (\d+) of ([\d,]+) images?`)
+
+// pageThumbStyleReg parses the inline style ExHentai uses to place a page
+// thumbnail inside its sprite, e.g.
+// "width:200px;height:282px;background:transparent url(https://...webp) -0px 0 no-repeat".
+var pageThumbStyleReg = regexp.MustCompile(`width:(\d+)px;height:(\d+)px;background:[^;]*url\(([^)]+)\)\s*(-?\d+)px\s*(-?\d+)`)
+
+func ScrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL string) (model.GalleryDetail, error) {
+	doc, err := httpGetDoc(ctx, client, galleryURL)
+	if err != nil {
+		return model.GalleryDetail{}, err
+	}
+
+	var cover string
+	doc.Find("#gd1 > div").Each(func(i int, sel *goquery.Selection) {
+		style, exists := sel.Attr("style")
+		if exists {
+			matches := coverUrlReg.FindStringSubmatch(style)
+			if len(matches) > 1 {
+				cover = matches[1]
+			}
+		}
+	})
+
+	title := doc.Find("#gn").Text()
+	titleJpn := doc.Find("#gj").Text()
+	cat := doc.Find("#gdc > div").Text()
+	uploader := doc.Find("#gdn > a:nth-child(1)").Text()
+
+	gdd := doc.Find("#gdd > table > tbody")
+	posted := gdd.Find("tr:nth-child(1) > td.gdt2").Text()
+	parent := gdd.Find("tr:nth-child(2) > td.gdt2 > a").Text()
+	parentId, _ := strconv.Atoi(parent)
+	visible := gdd.Find("tr:nth-child(3) > td.gdt2").Text()
+	langSel := gdd.Find("tr:nth-child(4) > td.gdt2").Clone()
+	langSel.Find("span").Remove()
+	language := strings.TrimSpace(langSel.Text())
+	translated := gdd.Find("tr:nth-child(4) > td.gdt2 > span").Text()
+	fileSize := gdd.Find("tr:nth-child(5) > td.gdt2").Text()
+	length := gdd.Find("tr:nth-child(6) > td.gdt2").Text()
+	length = strings.TrimSuffix(length, " pages")
+	lengthNum, _ := strconv.Atoi(length)
+	favorited := gdd.Find("tr:nth-child(7) > td.gdt2").Text()
+	favorited = strings.TrimSuffix(favorited, " times")
+	favoritedNum, _ := strconv.Atoi(favorited)
+
+	ratingCountStr := doc.Find("#rating_count").Text()
+	ratingCount, _ := strconv.Atoi(ratingCountStr)
+	ratingStr := doc.Find("#rating_label").Text()
+	ratingStr = strings.TrimPrefix(ratingStr, "Average: ")
+	ratingStr = strings.TrimSpace(ratingStr)
+	rating, _ := strconv.ParseFloat(ratingStr, 64)
+
+	var tags []model.TagItem
+	taglist := doc.Find("#taglist > table > tbody")
+	taglist.Find("tr").Each(func(i int, s *goquery.Selection) {
+		namespace := s.Find("td:nth-child(1)").Text()
+		if namespace == "" {
+			return
+		}
+		namespace = strings.TrimSuffix(namespace, ":")
+		s.Find("td:nth-child(2) > div").Each(func(i int, s *goquery.Selection) {
+			tag := s.Find("a").Text()
+			if tag != "" {
+				tags = append(tags, model.TagItem{Namespace: namespace, Name: tag})
+			}
+		})
+	})
+
+	domain := ""
+	if strings.Contains(galleryURL, "exhentai.org") {
+		domain = "exhentai.org"
+	} else if strings.Contains(galleryURL, "e-hentai.org") {
+		domain = "e-hentai.org"
+	}
+
+	gIdStr := ""
+	gTokenStr := ""
+	d, gId, gToken := ParseGalleryURL(galleryURL)
+	if d != "" {
+		domain = d
+		gIdStr = gId
+		gTokenStr = gToken
+	}
+	gIdNum, _ := strconv.Atoi(gIdStr)
+
+	return model.GalleryDetail{
+		Domain:      domain,
+		GalleryID:   gIdNum,
+		Token:       gTokenStr,
+		Cover:       cover,
+		Title:       title,
+		TitleJpn:    titleJpn,
+		Cat:         cat,
+		Uploader:    uploader,
+		Posted:      posted,
+		Parent:      parentId,
+		Visible:     visible,
+		Language:    language,
+		Translated:  translated,
+		FileSize:    fileSize,
+		Length:      lengthNum,
+		Favorited:   favoritedNum,
+		RatingCount: ratingCount,
+		Rating:      rating,
+		Tags:        tags,
+	}, nil
+}
+
+// extractGalleryPages collects gallery page links and their sprite thumbnail
+// geometry from a gallery document.
+func extractGalleryPages(doc *goquery.Document) []model.CachedPage {
+	var pages []model.CachedPage
+	doc.Find("#gdt > a").Each(func(i int, s *goquery.Selection) {
+		href, _ := s.Attr("href")
+		if href == "" {
+			return
+		}
+		page := model.CachedPage{PageURL: href}
+		if style, ok := s.Find("div[style]").First().Attr("style"); ok {
+			if m := pageThumbStyleReg.FindStringSubmatch(style); len(m) == 6 {
+				w, _ := strconv.Atoi(m[1])
+				h, _ := strconv.Atoi(m[2])
+				posX, _ := strconv.Atoi(m[4])
+				posY, _ := strconv.Atoi(m[5])
+				page.Thumbnail = &model.GalleryPageThumb{
+					SpriteURL: m[3],
+					X:         -posX,
+					Y:         -posY,
+					Width:     w,
+					Height:    h,
+				}
+			}
+		}
+		pages = append(pages, page)
+	})
+	return pages
+}
+
+// galleryTotalImages parses the total image count from the ".gpc" counter.
+func galleryTotalImages(doc *goquery.Document) int {
+	matches := numReg.FindStringSubmatch(doc.Find(".gpc").Text())
+	if len(matches) < 3 {
+		return 0
+	}
+	matches[2] = strings.ReplaceAll(matches[2], ",", "")
+	total, _ := strconv.Atoi(matches[2])
+	return total
+}
+
+// galleryPagesWalkBudget returns how long the pagination walk (?p=N) may take
+// for a gallery whose ".gpc" total is known. It grows with the page count
+// (30s base + 0.5s per page) and is clamped to [1m, 10m] so a large gallery
+// is not cut off early while a stuck walk still terminates.
+func galleryPagesWalkBudget(total int) time.Duration {
+	d := 30*time.Second + time.Duration(total)*500*time.Millisecond
+	if d < time.Minute {
+		return time.Minute
+	}
+	if d > 10*time.Minute {
+		return 10 * time.Minute
+	}
+	return d
+}
+
+// StreamGalleryPages fetches the full list of gallery pages (page URL plus
+// sprite thumbnail geometry), walking the paginated thumbnail list when the
+// gallery has more pages than fit on the first thumbnail page. Each batch is
+// handed to emit as soon as it is scraped so callers can forward pages
+// incrementally; total is the image count parsed from ".gpc" and is passed to
+// every emit call. The pagination walk is bounded by galleryPagesWalkBudget,
+// computed from that total.
+//
+// total == 0 means the parse failed, not an empty gallery: ExHentai galleries
+// always contain at least one image, so an unparsable ".gpc" counter (or a
+// document without page links) fails the scrape before anything is emitted,
+// instead of letting an unknown total masquerade as a verified complete list.
+//
+// The returned error is nil only when the scrape is verifiably complete:
+// every thumbnail page fetched without error and exactly total pages
+// received. An empty thumbnail page while pages are still missing, a received
+// count that overshoots total, or an emit failure (caller went away) all fail
+// the scrape. Partial results are never reported as success.
+func StreamGalleryPages(ctx context.Context, client *http.Client, galleryURL string, emit func(total int, batch []model.CachedPage) error) error {
+	doc, err := httpGetDoc(ctx, client, galleryURL)
+	if err != nil {
+		return err
+	}
+
+	total := galleryTotalImages(doc)
+	if total <= 0 {
+		return fmt.Errorf("cannot determine gallery total: %q counter missing or invalid", ".gpc")
+	}
+	first := extractGalleryPages(doc)
+	if len(first) == 0 {
+		return fmt.Errorf("cannot determine gallery total: no page links in the gallery document")
+	}
+	for i := range first {
+		first[i].Index = i
+	}
+	if err := emit(total, first); err != nil {
+		return err
+	}
+	received := len(first)
+
+	// The total parsed from the first document bounds the pagination walk: a
+	// gallery with many pages gets more time, but a hanging or abusive walk
+	// cannot run forever. The first document and the caller's cache write are
+	// not covered by this budget.
+	walkCtx, cancelWalk := context.WithTimeout(ctx, galleryPagesWalkBudget(total))
+	defer cancelWalk()
+
+	// Walk ?p=N until every declared page has arrived. Each thumbnail page
+	// only advances the cursor, so the batch size may vary without skipping
+	// or repeating pages; an empty batch while pages are still missing means
+	// the upstream list disagrees with total and cannot be trusted.
+	for p := 1; received < total; p++ {
+		u, _ := url.Parse(galleryURL)
+		u.RawQuery = fmt.Sprintf("p=%d", p)
+		pageDoc, err := httpGetDoc(walkCtx, client, u.String())
+		if err != nil {
+			return err
+		}
+		batch := extractGalleryPages(pageDoc)
+		if len(batch) == 0 {
+			return fmt.Errorf("incomplete page list: thumbnail page %d is empty, got %d of %d pages", p, received, total)
+		}
+		for i := range batch {
+			batch[i].Index = received + i
+		}
+		if err := emit(total, batch); err != nil {
+			return err
+		}
+		received += len(batch)
+	}
+
+	if received != total {
+		return fmt.Errorf("incomplete page list: got %d pages, want %d", received, total)
+	}
+	return nil
+}
+
+// ScrapeGalleryPages fetches the full list of gallery pages. It reports an
+// error instead of returning a partial list, so callers only ever cache a
+// complete result.
+func ScrapeGalleryPages(ctx context.Context, client *http.Client, galleryURL string) ([]model.CachedPage, error) {
+	var pages []model.CachedPage
+	if err := StreamGalleryPages(ctx, client, galleryURL, func(_ int, batch []model.CachedPage) error {
+		pages = append(pages, batch...)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return pages, nil
+}
+
+// ScrapeGalleryPageThumb returns the sprite thumbnail geometry for a single
+// gallery page index. Unlike ScrapeGalleryPages it fetches only the thumbnail
+// page that contains the requested index instead of walking the whole gallery.
+func ScrapeGalleryPageThumb(ctx context.Context, client *http.Client, galleryURL string, index int) (model.GalleryPageThumb, bool, error) {
+	if index < 0 {
+		return model.GalleryPageThumb{}, false, nil
+	}
+
+	doc, err := httpGetDoc(ctx, client, galleryURL)
+	if err != nil {
+		return model.GalleryPageThumb{}, false, err
+	}
+
+	if total := galleryTotalImages(doc); total > 0 && index >= total {
+		return model.GalleryPageThumb{}, false, nil
+	}
+
+	first := extractGalleryPages(doc)
+	perPage := len(first)
+	if perPage == 0 {
+		return model.GalleryPageThumb{}, false, nil
+	}
+	if index < perPage {
+		return pageThumbAt(first, index)
+	}
+
+	u, err := url.Parse(galleryURL)
+	if err != nil {
+		return model.GalleryPageThumb{}, false, err
+	}
+	u.RawQuery = fmt.Sprintf("p=%d", index/perPage)
+	pageDoc, err := httpGetDoc(ctx, client, u.String())
+	if err != nil {
+		return model.GalleryPageThumb{}, false, err
+	}
+	return pageThumbAt(extractGalleryPages(pageDoc), index%perPage)
+}
+
+func pageThumbAt(pages []model.CachedPage, index int) (model.GalleryPageThumb, bool, error) {
+	if index < 0 || index >= len(pages) || pages[index].Thumbnail == nil {
+		return model.GalleryPageThumb{}, false, nil
+	}
+	return *pages[index].Thumbnail, true, nil
+}
