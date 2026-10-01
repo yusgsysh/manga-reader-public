@@ -21,10 +21,6 @@ import type { ProgressMetadata } from "../types/reader";
 
 type LayoutMode = ViewerSettings["layoutMode"];
 
-const READER_MASCOT = {
-  loading: { html: '<div class="app-reader-spinner"></div>' },
-};
-
 export function ReaderPage() {
   const { id: idParam, token } = useParams<{ id: string; token: string }>();
   const [searchParams] = useSearchParams();
@@ -256,7 +252,6 @@ export function ReaderPage() {
           locale="zh-CN"
           storage={{ enabled: false }}
           settings={viewerSettings}
-          mascot={READER_MASCOT}
           onPageChange={({ pageIndex }) => onPageChange(pageIndex)}
           onLayoutChange={({ layoutMode: mode }) => setLayoutMode(mode)}
           className="h-full w-full"
