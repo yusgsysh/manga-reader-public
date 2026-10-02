@@ -47,14 +47,41 @@ describe("formatRelativeTime", () => {
 });
 
 describe("formatPosted", () => {
-  it("passes date-only values through unchanged", () => {
-    expect(formatPosted("2024-01-01")).toBe("2024-01-01");
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const utc = new Date(Date.UTC(2026, 7, 29, 10, 0));
+
+  it("renders date-only values as Y/M/D", () => {
+    expect(formatPosted("2024-01-01")).toBe("2024/1/1");
   });
 
-  it("converts a UTC datetime to the local timezone", () => {
-    const utc = new Date(Date.UTC(2026, 7, 29, 10, 0));
-    const expected = formatDateTime(utc);
-    expect(formatPosted("2026-08-29 10:00")).toBe(expected);
+  it("formats recent datetimes in minutes", () => {
+    const now = new Date(utc.getTime() + 10 * 60_000);
+    expect(formatPosted("2026-08-29 10:00", now)).toBe("10分钟前");
+  });
+
+  it("formats earlier-today datetimes with a 今天 prefix", () => {
+    const local = new Date(utc.getTime());
+    const now = new Date(local);
+    now.setHours(local.getHours() + 2);
+    expect(formatPosted("2026-08-29 10:00", now)).toBe(
+      `今天${pad(local.getHours())}:${pad(local.getMinutes())}`,
+    );
+  });
+
+  it("formats earlier-this-year datetimes as M/D HH:mm", () => {
+    const local = new Date(utc.getTime());
+    const now = new Date(Date.UTC(2026, 8, 15, 10, 0));
+    expect(formatPosted("2026-08-29 10:00", now)).toBe(
+      `${local.getMonth() + 1}/${local.getDate()} ${pad(local.getHours())}:${pad(local.getMinutes())}`,
+    );
+  });
+
+  it("formats datetimes from another year with the full date", () => {
+    const local = new Date(utc.getTime());
+    const now = new Date(Date.UTC(2027, 0, 15, 10, 0));
+    expect(formatPosted("2026-08-29 10:00", now)).toBe(
+      `${local.getFullYear()}/${local.getMonth() + 1}/${local.getDate()} ${pad(local.getHours())}:${pad(local.getMinutes())}`,
+    );
   });
 
   it("handles empty/invalid input", () => {

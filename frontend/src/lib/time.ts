@@ -36,14 +36,25 @@ export function formatDateTime(value?: string | number | Date | null): string {
 
 /**
  * ExHentai "posted" strings come either as a date only ("2024-01-01") or as a
- * UTC datetime ("2024-01-01 12:34"). Date-only values are passed through, while
- * datetimes are converted from UTC to the browser's local timezone.
+ * UTC datetime ("2024-01-01 12:34"). Datetimes are converted from UTC to the
+ * browser's local timezone and rendered relative to now:
+ *   - within the last hour: "10分钟前"
+ *   - earlier today:        "今天10:00"
+ *   - earlier this year:    "8/29 10:00"
+ *   - any other year:       "2024/1/1 10:00"
+ * Date-only values render as "2024/1/1". Unrecognized values pass through.
  */
-export function formatPosted(posted?: string | null): string {
+export function formatPosted(
+  posted?: string | null,
+  now: Date = new Date(),
+): string {
   if (!posted) return "";
   const trimmed = posted.trim();
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [year, month, day] = trimmed.split("-");
+    return `${year}/${Number(month)}/${Number(day)}`;
+  }
 
   const match = trimmed.match(
     /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/,
@@ -56,7 +67,27 @@ export function formatPosted(posted?: string | null): string {
       Number(match[4]),
       Number(match[5]),
     );
-    return formatDateTime(new Date(utc));
+    const date = new Date(utc);
+
+    const diffMs = now.getTime() - date.getTime();
+    if (diffMs >= 0 && diffMs < 3_600_000) {
+      const diffMin = Math.floor(diffMs / 60_000);
+      return diffMin < 1 ? "刚刚" : `${diffMin}分钟前`;
+    }
+
+    const hh = String(date.getHours()).padStart(2, "0");
+    const mm = String(date.getMinutes()).padStart(2, "0");
+    if (
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate()
+    ) {
+      return `今天${hh}:${mm}`;
+    }
+    if (date.getFullYear() === now.getFullYear()) {
+      return `${date.getMonth() + 1}/${date.getDate()} ${hh}:${mm}`;
+    }
+    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${hh}:${mm}`;
   }
 
   return trimmed;
