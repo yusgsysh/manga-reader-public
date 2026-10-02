@@ -28,13 +28,6 @@ type SearchOptions struct {
 	HasTorrent      bool
 	IncludeExpunged bool
 
-	SearchName        bool
-	SearchTags        bool
-	SearchDescription bool
-
-	IncludeLowPowerTags  bool
-	IncludeDownvotedTags bool
-
 	DisableLanguageFilter bool
 	DisableUploaderFilter bool
 	DisableTagFilter      bool
@@ -76,16 +69,17 @@ func BuildSearchQuery(keyword string, categories []string, opts *SearchOptions) 
 		advanced = true
 	}
 
-	if opts.MinPages != nil {
+	// ExHentai treats empty/zero page bounds as "unset" (search_presubmit
+	// disables them before submit), so only forward positive values.
+	if opts.MinPages != nil && *opts.MinPages > 0 {
 		q.Set("f_spf", strconv.Itoa(*opts.MinPages))
 		advanced = true
 	}
-	if opts.MaxPages != nil {
+	if opts.MaxPages != nil && *opts.MaxPages > 0 {
 		q.Set("f_spt", strconv.Itoa(*opts.MaxPages))
 		advanced = true
 	}
 	if opts.MinRating != nil {
-		q.Set("f_sr", "on")
 		q.Set("f_srdd", strconv.Itoa(*opts.MinRating))
 		advanced = true
 	}
@@ -95,26 +89,6 @@ func BuildSearchQuery(keyword string, categories []string, opts *SearchOptions) 
 	}
 	if opts.IncludeExpunged {
 		q.Set("f_sh", "on")
-		advanced = true
-	}
-	if opts.SearchName {
-		q.Set("f_sname", "on")
-		advanced = true
-	}
-	if opts.SearchTags {
-		q.Set("f_stags", "on")
-		advanced = true
-	}
-	if opts.SearchDescription {
-		q.Set("f_sdesc", "on")
-		advanced = true
-	}
-	if opts.IncludeLowPowerTags {
-		q.Set("f_sdt1", "on")
-		advanced = true
-	}
-	if opts.IncludeDownvotedTags {
-		q.Set("f_sdt2", "on")
 		advanced = true
 	}
 	if opts.DisableLanguageFilter {

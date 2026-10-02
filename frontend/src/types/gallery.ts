@@ -63,11 +63,6 @@ export interface AdvancedSearchOptions {
   min_rating?: number;
   has_torrent?: boolean;
   include_expunged?: boolean;
-  search_name?: boolean;
-  search_tags?: boolean;
-  search_description?: boolean;
-  include_low_power_tags?: boolean;
-  include_downvoted_tags?: boolean;
   disable_language_filter?: boolean;
   disable_uploader_filter?: boolean;
   disable_tag_filter?: boolean;

@@ -59,31 +59,6 @@ http:
       type: query
       description: Include expunged galleries
       disabled: true
-    - name: search_name
-      value: "false"
-      type: query
-      description: Search in gallery name
-      disabled: true
-    - name: search_tags
-      value: "false"
-      type: query
-      description: Search in tags
-      disabled: true
-    - name: search_description
-      value: "false"
-      type: query
-      description: Search in description
-      disabled: true
-    - name: include_low_power_tags
-      value: "false"
-      type: query
-      description: Include low power tags
-      disabled: true
-    - name: include_downvoted_tags
-      value: "false"
-      type: query
-      description: Include downvoted tags
-      disabled: true
     - name: disable_language_filter
       value: "false"
       type: query

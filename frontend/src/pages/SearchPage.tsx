@@ -22,9 +22,14 @@ import {
   parseAdvancedParams,
   isActiveValue,
   countActiveFilters,
+  serializeAdvancedParams,
 } from "../components/search/advancedSearch";
 import { FilterChip } from "../components/search/FilterChip";
-import { ALL_CATEGORY_VALUES } from "../lib/categories";
+import {
+  ALL_CATEGORY_VALUES,
+  normalizeIncludedCategories,
+  toggleIncludedCategory,
+} from "../lib/categories";
 import type {
   AdvancedSearchOptions,
   ListingNavOptions,
@@ -95,11 +100,9 @@ export function SearchPage() {
     if (categories) params.set("categories", categories);
     const allTags = [...appliedTags, ...pendingTags];
     if (allTags.length > 0) params.set("tags", [...new Set(allTags)].join(","));
-    for (const [key, value] of Object.entries(pendingAdvancedOptions)) {
-      if (value !== undefined && value !== false && value !== "") {
-        params.set(key, String(value));
-      }
-    }
+    serializeAdvancedParams(pendingAdvancedOptions).forEach((value, key) =>
+      params.set(key, value),
+    );
     setSearchParams(params);
     setPendingTags([]);
   };
@@ -113,15 +116,11 @@ export function SearchPage() {
   // empty value means "all included".
   const toggleCategory = (cat: string) => {
     setCategories((prev) => {
-      const included = prev
-        ? prev.split(",").filter(Boolean)
-        : [...ALL_CATEGORY_VALUES];
-      const next = included.includes(cat)
-        ? included.filter((c) => c !== cat)
-        : [...included, cat];
-      if (next.length === 0) return prev;
-      if (next.length === ALL_CATEGORY_VALUES.length) return "";
-      return ALL_CATEGORY_VALUES.filter((value) => next.includes(value)).join(",");
+      const included = normalizeIncludedCategories(
+        prev ? prev.split(",") : undefined,
+      );
+      const next = toggleIncludedCategory(included, cat);
+      return next.length === ALL_CATEGORY_VALUES.length ? "" : next.join(",");
     });
   };
 
@@ -206,9 +205,9 @@ export function SearchPage() {
 
   const galleries = data?.pages.flatMap((page) => page.results) ?? [];
   const total = data?.pages[0]?.total ?? 0;
-  const includedCategories = categories
-    ? categories.split(",").filter(Boolean)
-    : ALL_CATEGORY_VALUES;
+  const includedCategories = normalizeIncludedCategories(
+    categories ? categories.split(",") : undefined,
+  );
 
   return (
     <div className="space-y-5">
@@ -226,6 +225,7 @@ export function SearchPage() {
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
+            maxLength={200}
             className="flex-1"
           />
           <Button onClick={handleSearch} aria-label="搜索">

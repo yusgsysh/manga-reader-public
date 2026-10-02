@@ -543,8 +543,7 @@ func TestMockSearch_InvalidBooleanParams(t *testing.T) {
 	r := setupMockRouter(server)
 
 	params := []string{
-		"include_expunged", "search_name", "search_tags", "search_description",
-		"include_low_power_tags", "include_downvoted_tags",
+		"include_expunged",
 		"disable_language_filter", "disable_uploader_filter", "disable_tag_filter",
 	}
 	for _, p := range params {
@@ -624,9 +623,6 @@ func TestMockSearch_AdvancedSearchParamsPassThrough(t *testing.T) {
 	}
 	if q.Get("f_spt") != "200" {
 		t.Errorf("f_spt = %q, want %q", q.Get("f_spt"), "200")
-	}
-	if q.Get("f_sr") != "on" {
-		t.Errorf("f_sr = %q, want %q", q.Get("f_sr"), "on")
 	}
 	if q.Get("f_srdd") != "4" {
 		t.Errorf("f_srdd = %q, want %q", q.Get("f_srdd"), "4")
@@ -1351,9 +1347,6 @@ func TestMockWatched_AdvancedSearchParams(t *testing.T) {
 	if q.Get("f_sto") != "on" {
 		t.Errorf("f_sto = %q, want %q", q.Get("f_sto"), "on")
 	}
-	if q.Get("f_sr") != "on" {
-		t.Errorf("f_sr = %q, want %q", q.Get("f_sr"), "on")
-	}
 	if q.Get("f_srdd") != "4" {
 		t.Errorf("f_srdd = %q, want %q", q.Get("f_srdd"), "4")
 	}
@@ -1434,7 +1427,7 @@ func TestMockGalleries_AdvancedSearchParams(t *testing.T) {
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/galleries?include_expunged=true&search_name=true", nil)
+	req := httptest.NewRequest("GET", "/api/galleries?include_expunged=true", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -1450,9 +1443,6 @@ func TestMockGalleries_AdvancedSearchParams(t *testing.T) {
 	}
 	if q.Get("f_sh") != "on" {
 		t.Errorf("f_sh = %q, want %q", q.Get("f_sh"), "on")
-	}
-	if q.Get("f_sname") != "on" {
-		t.Errorf("f_sname = %q, want %q", q.Get("f_sname"), "on")
 	}
 }
 

@@ -1164,26 +1164,6 @@ func parseSearchOptions(c *gin.Context) (*exhentai.SearchOptions, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid include_expunged")
 	}
-	searchName, err := parseOptionalBool(c, "search_name")
-	if err != nil {
-		return nil, fmt.Errorf("invalid search_name")
-	}
-	searchTags, err := parseOptionalBool(c, "search_tags")
-	if err != nil {
-		return nil, fmt.Errorf("invalid search_tags")
-	}
-	searchDescription, err := parseOptionalBool(c, "search_description")
-	if err != nil {
-		return nil, fmt.Errorf("invalid search_description")
-	}
-	includeLowPowerTags, err := parseOptionalBool(c, "include_low_power_tags")
-	if err != nil {
-		return nil, fmt.Errorf("invalid include_low_power_tags")
-	}
-	includeDownvotedTags, err := parseOptionalBool(c, "include_downvoted_tags")
-	if err != nil {
-		return nil, fmt.Errorf("invalid include_downvoted_tags")
-	}
 	disableLanguageFilter, err := parseOptionalBool(c, "disable_language_filter")
 	if err != nil {
 		return nil, fmt.Errorf("invalid disable_language_filter")
@@ -1204,11 +1184,6 @@ func parseSearchOptions(c *gin.Context) (*exhentai.SearchOptions, error) {
 		MinRating:             minRating,
 		HasTorrent:            hasTorrent,
 		IncludeExpunged:       includeExpunged,
-		SearchName:            searchName,
-		SearchTags:            searchTags,
-		SearchDescription:     searchDescription,
-		IncludeLowPowerTags:   includeLowPowerTags,
-		IncludeDownvotedTags:  includeDownvotedTags,
 		DisableLanguageFilter: disableLanguageFilter,
 		DisableUploaderFilter: disableUploaderFilter,
 		DisableTagFilter:      disableTagFilter,

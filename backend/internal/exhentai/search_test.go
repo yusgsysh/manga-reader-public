@@ -79,7 +79,6 @@ func TestBuildSearchQuery(t *testing.T) {
 			expected: map[string]string{
 				"f_search":  "test",
 				"advsearch": "1",
-				"f_sr":      "on",
 				"f_srdd":    "4",
 			},
 		},
@@ -105,36 +104,6 @@ func TestBuildSearchQuery(t *testing.T) {
 				"f_search":  "test",
 				"advsearch": "1",
 				"f_sh":      "on",
-			},
-		},
-		{
-			name:    "search targets",
-			keyword: "test",
-			opts: &SearchOptions{
-				SearchName:        true,
-				SearchTags:        true,
-				SearchDescription: true,
-			},
-			expected: map[string]string{
-				"f_search":  "test",
-				"advsearch": "1",
-				"f_sname":   "on",
-				"f_stags":   "on",
-				"f_sdesc":   "on",
-			},
-		},
-		{
-			name:    "low power and downvoted tags",
-			keyword: "test",
-			opts: &SearchOptions{
-				IncludeLowPowerTags:  true,
-				IncludeDownvotedTags: true,
-			},
-			expected: map[string]string{
-				"f_search":  "test",
-				"advsearch": "1",
-				"f_sdt1":    "on",
-				"f_sdt2":    "on",
 			},
 		},
 		{
@@ -167,7 +136,6 @@ func TestBuildSearchQuery(t *testing.T) {
 				"advsearch": "1",
 				"f_spf":     "10",
 				"f_spt":     "200",
-				"f_sr":      "on",
 				"f_srdd":    "4",
 				"f_sto":     "on",
 			},
@@ -202,6 +170,17 @@ func TestBuildSearchQuery(t *testing.T) {
 				"f_search":  "test",
 				"advsearch": "1",
 				"f_spt":     "100",
+			},
+		},
+		{
+			name:    "zero page bounds treated as unset",
+			keyword: "test",
+			opts: &SearchOptions{
+				MinPages: new(0),
+				MaxPages: new(0),
+			},
+			expected: map[string]string{
+				"f_search": "test",
 			},
 		},
 	}

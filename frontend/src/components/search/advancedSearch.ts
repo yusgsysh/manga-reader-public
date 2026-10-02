@@ -20,11 +20,6 @@ export const ADVANCED_LABELS: Record<string, string> = {
   min_rating: "最低评分",
   has_torrent: "有种子",
   include_expunged: "含已删除",
-  search_name: "搜索标题",
-  search_tags: "搜索标签",
-  search_description: "搜索描述",
-  include_low_power_tags: "含低权重标签",
-  include_downvoted_tags: "含被降权标签",
   disable_language_filter: "不限语言",
   disable_uploader_filter: "不限上传者",
   disable_tag_filter: "不过滤标签",
@@ -34,26 +29,25 @@ export const ADVANCED_KEYS = Object.keys(ADVANCED_LABELS) as Array<
   keyof AdvancedSearchOptions
 >;
 
+// ExHentai treats an empty or zero page bound as "unset" (search_presubmit
+// disables the field before submit), so `0` must never reach the query string.
+export function normalizePageBound(value: unknown): number | undefined {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
 export function parseAdvancedParams(
   searchParams: URLSearchParams,
 ): AdvancedSearchOptions {
+  const minPages = normalizePageBound(searchParams.get("min_pages"));
+  const maxPages = normalizePageBound(searchParams.get("max_pages"));
+  const minRating = normalizePageBound(searchParams.get("min_rating"));
   return {
-    min_pages: searchParams.get("min_pages")
-      ? Number(searchParams.get("min_pages"))
-      : undefined,
-    max_pages: searchParams.get("max_pages")
-      ? Number(searchParams.get("max_pages"))
-      : undefined,
-    min_rating: searchParams.get("min_rating")
-      ? Number(searchParams.get("min_rating"))
-      : undefined,
+    min_pages: minPages,
+    max_pages: maxPages,
+    min_rating: minRating,
     has_torrent: searchParams.get("has_torrent") === "true",
     include_expunged: searchParams.get("include_expunged") === "true",
-    search_name: searchParams.get("search_name") === "true",
-    search_tags: searchParams.get("search_tags") === "true",
-    search_description: searchParams.get("search_description") === "true",
-    include_low_power_tags: searchParams.get("include_low_power_tags") === "true",
-    include_downvoted_tags: searchParams.get("include_downvoted_tags") === "true",
     disable_language_filter: searchParams.get("disable_language_filter") === "true",
     disable_uploader_filter: searchParams.get("disable_uploader_filter") === "true",
     disable_tag_filter: searchParams.get("disable_tag_filter") === "true",
@@ -61,7 +55,21 @@ export function parseAdvancedParams(
 }
 
 export function isActiveValue(value: unknown): boolean {
-  return value !== undefined && value !== false && value !== "";
+  return value !== undefined && value !== false && value !== "" && value !== 0;
+}
+
+// Serializes the advanced options into URL params, dropping inactive values and
+// zero page bounds so the resulting request matches the ExHentai form.
+export function serializeAdvancedParams(
+  options: AdvancedSearchOptions,
+): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const key of ADVANCED_KEYS) {
+    const value = options[key];
+    if (!isActiveValue(value)) continue;
+    params.set(key, String(value));
+  }
+  return params;
 }
 
 export function countActiveFilters(options: AdvancedSearchOptions): number {

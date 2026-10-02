@@ -1,19 +1,23 @@
 import { Input, Checkbox, Select, cn } from "@cloudflare/kumo";
 import { Section } from "../ui";
-import { MIN_RATING_OPTIONS } from "./advancedSearch";
+import { MIN_RATING_OPTIONS, normalizePageBound } from "./advancedSearch";
 import type { AdvancedSearchOptions } from "../../types/gallery";
 
-const FILTER_TOGGLES: Array<{
-  key: keyof AdvancedSearchOptions;
+type AdvancedKey = keyof AdvancedSearchOptions;
+
+interface FilterToggle {
+  key: AdvancedKey;
   label: string;
-}> = [
-  { key: "has_torrent", label: "有种子" },
+}
+
+// Mirrors the ExHentai advanced pane's first group: Expunged / Torrent.
+const PRIMARY_TOGGLES: FilterToggle[] = [
   { key: "include_expunged", label: "包含已删除的 Gallery" },
-  { key: "search_tags", label: "搜索标签" },
-  { key: "search_name", label: "搜索标题" },
-  { key: "search_description", label: "搜索描述" },
-  { key: "include_low_power_tags", label: "包含低权重标签" },
-  { key: "include_downvoted_tags", label: "包含被降权的标签" },
+  { key: "has_torrent", label: "有种子" },
+];
+
+// Mirrors the ExHentai advanced pane's "Disable custom filters for" group.
+const DISABLE_FILTER_TOGGLES: FilterToggle[] = [
   { key: "disable_language_filter", label: "禁用语言过滤" },
   { key: "disable_uploader_filter", label: "禁用上传者过滤" },
   { key: "disable_tag_filter", label: "禁用标签过滤" },
@@ -40,8 +44,30 @@ export function AdvancedFilterFields({
   disabled,
   layout = "responsive",
 }: AdvancedFilterFieldsProps) {
+  const toggleGrid = cn(
+    "grid gap-3",
+    layout === "stacked" ? "grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-3",
+  );
+
+  const renderToggles = (toggles: FilterToggle[]) => (
+    <div className={toggleGrid}>
+      {toggles.map((toggle) => (
+        <label key={toggle.key} className="flex items-center gap-2 text-sm">
+          <Checkbox
+            checked={Boolean(value[toggle.key])}
+            disabled={disabled}
+            onCheckedChange={(checked) => onChange(toggle.key, checked)}
+          />
+          {toggle.label}
+        </label>
+      ))}
+    </div>
+  );
+
   return (
     <>
+      <Section title="筛选选项">{renderToggles(PRIMARY_TOGGLES)}</Section>
+
       <Section title="范围">
         <div
           className={cn(
@@ -61,13 +87,11 @@ export function AdvancedFilterFields({
                 disabled={disabled}
                 className="min-w-0 flex-1"
                 value={value.min_pages ?? ""}
-                onChange={(e) => {
-                  const next = e.target.value
-                    ? Number(e.target.value)
-                    : undefined;
-                  onChange("min_pages", next);
-                }}
-                min="0"
+                onChange={(e) =>
+                  onChange("min_pages", normalizePageBound(e.target.value))
+                }
+                min="1"
+                max="9999"
               />
               <span className="shrink-0 text-kumo-subtle">-</span>
               <Input
@@ -77,13 +101,11 @@ export function AdvancedFilterFields({
                 disabled={disabled}
                 className="min-w-0 flex-1"
                 value={value.max_pages ?? ""}
-                onChange={(e) => {
-                  const next = e.target.value
-                    ? Number(e.target.value)
-                    : undefined;
-                  onChange("max_pages", next);
-                }}
-                min="0"
+                onChange={(e) =>
+                  onChange("max_pages", normalizePageBound(e.target.value))
+                }
+                min="1"
+                max="9999"
               />
             </div>
           </div>
@@ -105,31 +127,8 @@ export function AdvancedFilterFields({
         </div>
       </Section>
 
-      <Section title="筛选选项">
-        <div
-          className={cn(
-            "grid gap-3",
-            layout === "stacked"
-              ? "grid-cols-2"
-              : "sm:grid-cols-2 lg:grid-cols-3",
-          )}
-        >
-          {FILTER_TOGGLES.map((toggle) => (
-            <label
-              key={toggle.key}
-              className="flex items-center gap-2 text-sm"
-            >
-              <Checkbox
-                checked={Boolean(value[toggle.key])}
-                disabled={disabled}
-                onCheckedChange={(checked) =>
-                  onChange(toggle.key, checked)
-                }
-              />
-              {toggle.label}
-            </label>
-          ))}
-        </div>
+      <Section title="禁用自定义过滤器">
+        {renderToggles(DISABLE_FILTER_TOGGLES)}
       </Section>
     </>
   );
