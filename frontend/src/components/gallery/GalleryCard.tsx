@@ -13,6 +13,10 @@ import { CategoryChip } from "./CategoryChip";
 const TAG_POPOVER_WIDTH = 224;
 const VIEWPORT_MARGIN = 8;
 
+// Namespaces hidden from the card's tag popover (language is shown as a code,
+// and group/artist tags add little at a glance).
+const HIDDEN_TAG_NAMESPACES = new Set(["language", "group", "artist"]);
+
 function computePopoverPosition(element: HTMLElement) {
   const rect = element.getBoundingClientRect();
   const maxLeft = window.innerWidth - TAG_POPOVER_WIDTH - VIEWPORT_MARGIN;
@@ -56,7 +60,10 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { translateTag, ready: tagDbReady } = useTagTranslation();
 
-  const hasTags = (gallery.tags?.length ?? 0) > 0;
+  const displayTags = (gallery.tags ?? []).filter(
+    (raw) => !HIDDEN_TAG_NAMESPACES.has(parseTagString(raw).namespace),
+  );
+  const hasTags = displayTags.length > 0;
   const language = languageCodeFromTags(gallery.tags);
   const hasPages = typeof gallery.pages === "number" && gallery.pages > 0;
   const galleryHref = `/gallery/${gallery.id}/${gallery.token}`;
@@ -217,7 +224,7 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
               onMouseLeave={handleMouseLeave}
             >
               <div className="flex flex-wrap gap-1">
-                {gallery.tags!.map((tag) => (
+                {displayTags.map((tag) => (
                   <span
                     key={tag}
                     className="inline-block rounded-md bg-kumo-recessed px-1.5 py-0.5 text-[11px]"
