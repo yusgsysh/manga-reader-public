@@ -23,7 +23,7 @@ import { useReadingProgress } from "../hooks/useReaderData";
 import { useStartPrefillJob } from "../hooks/usePrefillJobs";
 import { ErrorState } from "../components/common/ErrorState";
 import { PageThumbnailGrid } from "../components/gallery/PageThumbnailGrid";
-import { TagList } from "../components/tag";
+import { TagGroups } from "../components/tag";
 import { thumbnailUrl } from "../lib/image";
 import { DOWNLOAD_PAGES_STALE_TIME } from "../lib/cacheConfig";
 import { formatPosted } from "../lib/time";
@@ -443,8 +443,8 @@ export function GalleryDetailPage() {
 
         {/* Tags */}
         {gallery.tags.length > 0 && (
-          <Section title="标签">
-            <TagList tags={gallery.tags} />
+          <Section>
+            <TagGroups tags={gallery.tags} />
           </Section>
         )}
       </div>
