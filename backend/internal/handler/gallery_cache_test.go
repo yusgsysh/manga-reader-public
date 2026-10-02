@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1156,6 +1157,56 @@ func TestRefreshPages_Shrinks(t *testing.T) {
 	if len(row.Pages) != 2 {
 		t.Errorf("pages = %d, want 2 (replaced)", len(row.Pages))
 	}
+}
+
+// A permanently failed cached page URL must trigger a background gallery
+// refresh so a stale page list self-heals. A 404 page response is classified
+// as a permanent upstream error, which reaches the existing triggerPageRefresh.
+func TestCachedImage_PermanentFailureRefreshesGalleryCache(t *testing.T) {
+	const id, token = 91005, "tok91005"
+	pageURL := "https://exhentai.org/s/abc/91005-1"
+
+	db := newTestDB(t)
+	if err := gallerycache.UpsertPages(t.Context(), db, id, token,
+		[]string{"https://exhentai.org/s/old/91005-1"}); err != nil {
+		t.Fatalf("seed pages: %v", err)
+	}
+
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/g/") {
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, mockGalleryDetailHTML(id, "Healed", 3))
+			return
+		}
+		// The stale /s/ page is gone.
+		w.WriteHeader(http.StatusNotFound)
+	})
+	defer mockServer.Close()
+
+	server := &Server{
+		Client: newMockClient(mockServer.URL),
+		DB:     &database.DB{Client: db},
+		Cache:  newMockImageCache(),
+	}
+	r := setupMockRouter(server)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("GET", "/api/image-cache/page?url="+url.QueryEscape(pageURL), nil))
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusBadGateway, w.Body.String())
+	}
+
+	// The refresh runs detached; wait for the page list to be replaced.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		row, found, err := gallerycache.Get(t.Context(), db, id, token)
+		if err == nil && found && len(row.Pages) == 3 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Error("gallery cache was never refreshed after a permanent page failure")
 }
 
 // verifyCachedPageCount is the stale-while-revalidate probe: when upstream's

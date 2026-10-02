@@ -24,6 +24,14 @@ func ScrapePageImageURL(ctx context.Context, client *http.Client, pageURL string
 	}
 	defer resp.Body.Close()
 
+	// A non-OK status here means the page URL itself is gone (e.g. a stale
+	// cached page URL after a gallery was replaced). Surface it as a status
+	// error so callers can classify it as permanent and refresh the gallery
+	// cache, instead of the generic "could not find image src" parse failure.
+	if resp.StatusCode != http.StatusOK {
+		return "", "", &httpStatusError{code: resp.StatusCode}
+	}
+
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes))
 	if err != nil {
 		return "", "", err
