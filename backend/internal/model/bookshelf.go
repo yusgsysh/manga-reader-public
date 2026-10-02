@@ -5,10 +5,10 @@ import "time"
 // Bookshelf is a bookshelf record in the database. It stores only the gallery
 // reference; metadata is joined from gallery_cache when the list is served.
 type Bookshelf struct {
-	GalleryID  int64     `json:"gallery_id"`
-	Token      string    `json:"token"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	GalleryID int64     `json:"gallery_id"`
+	Token     string    `json:"token"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // ReadingProgress is a reading progress record in the database.

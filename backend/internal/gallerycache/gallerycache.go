@@ -257,10 +257,7 @@ func mergeStrings(stored, incoming []string) []string {
 // SpriteURL replaces the stored geometry at the same index; empty entries leave
 // the stored value untouched. The result never shrinks.
 func mergeThumbs(stored, incoming []model.GalleryPageThumb, limit int) []model.GalleryPageThumb {
-	n := min(len(incoming), limit)
-	if n < len(stored) {
-		n = len(stored)
-	}
+	n := max(min(len(incoming), limit), len(stored))
 	merged := make([]model.GalleryPageThumb, n)
 	copy(merged, stored)
 	for i := 0; i < len(incoming) && i < n; i++ {

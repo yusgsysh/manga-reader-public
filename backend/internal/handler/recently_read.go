@@ -65,13 +65,13 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 			ID:    rp.GalleryID,
 			Token: rp.Token,
 			Reading: model.ReadingProgress{
-				GalleryID:  rp.GalleryID,
-				Token:      rp.Token,
+				GalleryID:   rp.GalleryID,
+				Token:       rp.Token,
 				CurrentPage: rp.CurrentPage,
-				Progress:   rp.Progress,
-				Completed:  rp.Completed,
-				CreatedAt:  &createdAt,
-				UpdatedAt:  &updatedAt,
+				Progress:    rp.Progress,
+				Completed:   rp.Completed,
+				CreatedAt:   &createdAt,
+				UpdatedAt:   &updatedAt,
 			},
 		}
 

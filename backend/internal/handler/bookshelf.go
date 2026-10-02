@@ -137,10 +137,10 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 		progress := progressByKey[galleryRef{id: b.GalleryID, token: b.Token}]
 
 		item := model.BookshelfItem{
-			ID:         b.GalleryID,
-			Token:      b.Token,
-			CreatedAt:  b.CreatedAt,
-			UpdatedAt:  b.UpdatedAt,
+			ID:        b.GalleryID,
+			Token:     b.Token,
+			CreatedAt: b.CreatedAt,
+			UpdatedAt: b.UpdatedAt,
 		}
 
 		if meta := metaByRef[gallerycache.Ref{GalleryID: b.GalleryID, Token: b.Token}]; meta != nil {

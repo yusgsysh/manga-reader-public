@@ -1106,7 +1106,7 @@ func parseTagsQuery(raw string) []string {
 	}
 	seen := make(map[string]struct{})
 	tags := make([]string, 0)
-	for _, part := range strings.Split(raw, ",") {
+	for part := range strings.SplitSeq(raw, ",") {
 		tag := strings.TrimSpace(part)
 		if tag == "" {
 			continue
