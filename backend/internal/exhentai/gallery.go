@@ -17,6 +17,7 @@ import (
 
 var coverUrlReg = regexp.MustCompile(`url\(([^)]+)\)`)
 var numReg = regexp.MustCompile(`Showing 1 - (\d+) of ([\d,]+) images?`)
+var torrentCountReg = regexp.MustCompile(`Torrent Download \((\d+)\)`)
 
 // pageThumbStyleReg parses the inline style ExHentai uses to place a page
 // thumbnail inside its sprite, e.g.
@@ -69,6 +70,13 @@ func ScrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL s
 	ratingStr = strings.TrimSpace(ratingStr)
 	rating, _ := strconv.ParseFloat(ratingStr, 64)
 
+	torrentCount := 0
+	doc.Find("a[onclick*='gallerytorrents.php']").Each(func(_ int, s *goquery.Selection) {
+		if m := torrentCountReg.FindStringSubmatch(s.Text()); len(m) == 2 {
+			torrentCount, _ = strconv.Atoi(m[1])
+		}
+	})
+
 	var tags []model.TagItem
 	taglist := doc.Find("#taglist > table > tbody")
 	taglist.Find("tr").Each(func(i int, s *goquery.Selection) {
@@ -103,25 +111,26 @@ func ScrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL s
 	gIdNum, _ := strconv.Atoi(gIdStr)
 
 	return model.GalleryDetail{
-		Domain:      domain,
-		GalleryID:   gIdNum,
-		Token:       gTokenStr,
-		Cover:       cover,
-		Title:       title,
-		TitleJpn:    titleJpn,
-		Cat:         cat,
-		Uploader:    uploader,
-		Posted:      posted,
-		Parent:      parentId,
-		Visible:     visible,
-		Language:    language,
-		Translated:  translated,
-		FileSize:    fileSize,
-		Length:      lengthNum,
-		Favorited:   favoritedNum,
-		RatingCount: ratingCount,
-		Rating:      rating,
-		Tags:        tags,
+		Domain:       domain,
+		GalleryID:    gIdNum,
+		Token:        gTokenStr,
+		Cover:        cover,
+		Title:        title,
+		TitleJpn:     titleJpn,
+		Cat:          cat,
+		Uploader:     uploader,
+		Posted:       posted,
+		Parent:       parentId,
+		Visible:      visible,
+		Language:     language,
+		Translated:   translated,
+		FileSize:     fileSize,
+		Length:       lengthNum,
+		Favorited:    favoritedNum,
+		RatingCount:  ratingCount,
+		Rating:       rating,
+		TorrentCount: torrentCount,
+		Tags:         tags,
 	}, nil
 }
 

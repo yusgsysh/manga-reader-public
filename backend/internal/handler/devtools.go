@@ -11,13 +11,16 @@ import (
 // endpoints (/api/gallery-cache/*, /api/bookshelf*, /api/progress*,
 // /api/recently-read, /api/image-cache/*) untouched.
 var upstreamRoutes = map[string]struct{}{
-	"/api/gallery/:id/:token":         {},
-	"/api/gallery/:id/:token/details": {},
-	"/api/gallery/:id/:token/pages":   {},
-	"/api/galleries":                  {},
-	"/api/search":                     {},
-	"/api/watched":                    {},
-	"/api/popular":                    {},
+	"/api/gallery/:id/:token":                         {},
+	"/api/gallery/:id/:token/details":                 {},
+	"/api/gallery/:id/:token/pages":                   {},
+	"/api/gallery/:id/:token/torrents":                {},
+	"/api/gallery/:id/:token/torrents/:gtid/info":     {},
+	"/api/gallery/:id/:token/torrents/:gtid/download": {},
+	"/api/galleries":                                  {},
+	"/api/search":                                     {},
+	"/api/watched":                                    {},
+	"/api/popular":                                    {},
 }
 
 func isUpstreamRoute(fullPath string) bool {

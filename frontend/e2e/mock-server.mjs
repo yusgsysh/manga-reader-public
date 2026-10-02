@@ -246,6 +246,44 @@ const server = Bun.serve({
     }
     if (path.startsWith("/api/prefill")) return json({ jobs: [] });
 
+    // ---- Torrents (live, no cache) ---------------------------------------
+    let t = path.match(/^\/api\/gallery\/(\d+)\/tok\/torrents$/);
+    if (t) {
+      return json({
+        torrents: [
+          {
+            gtid: "2250081",
+            name: "E2E Gallery [e2e].zip",
+            size: "42.13 MiB",
+            posted: "2026-10-02 06:30",
+            seeds: 8,
+            peers: 4,
+            downloads: 12,
+            uploader: "e2e",
+          },
+        ],
+      });
+    }
+    t = path.match(/^\/api\/gallery\/(\d+)\/tok\/torrents\/(\d+)\/info$/);
+    if (t) {
+      return json({
+        posted: "2026-10-02 06:30",
+        seeds: 9,
+        uploader: "e2e",
+        dlers: 5,
+        size: "42.13 MiB",
+        completes: 12,
+        comments: "No comments were given for this torrent.",
+        personalized: true,
+      });
+    }
+    t = path.match(/^\/api\/gallery\/(\d+)\/tok\/torrents\/(\d+)\/download$/);
+    if (t) {
+      return new Response("torrent-bytes", {
+        headers: { ...CORS, "Content-Type": "application/x-bittorrent" },
+      });
+    }
+
     if (path.startsWith("/api/image-cache/") || path.startsWith("/api/image/")) {
       return new Response(PNG, { headers: { ...CORS, "Content-Type": "image/png" } });
     }

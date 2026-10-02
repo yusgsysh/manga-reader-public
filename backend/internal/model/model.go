@@ -164,28 +164,58 @@ type SearchResult struct {
 
 // GalleryDetail represents parsed gallery detail page data.
 type GalleryDetail struct {
-	Domain      string
-	GalleryID   int
-	Token       string
-	Cover       string
-	Title       string
-	TitleJpn    string
-	Cat         string
-	Uploader    string
-	Posted      string
-	Parent      int
-	Visible     string
-	Language    string
-	Translated  string
-	FileSize    string
-	Length      int
-	Favorited   int
-	RatingCount int
-	Rating      float64
-	Tags        []TagItem
+	Domain       string
+	GalleryID    int
+	Token        string
+	Cover        string
+	Title        string
+	TitleJpn     string
+	Cat          string
+	Uploader     string
+	Posted       string
+	Parent       int
+	Visible      string
+	Language     string
+	Translated   string
+	FileSize     string
+	Length       int
+	Favorited    int
+	RatingCount  int
+	Rating       float64
+	TorrentCount int
+	Tags         []TagItem
 }
 
 type TagItem struct {
 	Namespace string
 	Name      string
+}
+
+// GalleryTorrent is one torrent entry from the ExHentai gallery torrents page.
+type GalleryTorrent struct {
+	GTID      string `json:"gtid"`
+	Name      string `json:"name"`
+	Size      string `json:"size"`
+	Posted    string `json:"posted"`
+	Seeds     int    `json:"seeds"`
+	Peers     int    `json:"peers"`
+	Downloads int    `json:"downloads"`
+	Uploader  string `json:"uploader"`
+
+	// DownloadURL is the upstream redistributable .torrent link. It is resolved
+	// and proxied server-side, never exposed to API clients.
+	DownloadURL string `json:"-"`
+}
+
+// GalleryTorrentInfo is the expanded "Information" view of one torrent: tracker
+// stats, the personal/redistributable download links and the uploader comment.
+type GalleryTorrentInfo struct {
+	Posted       string `json:"posted"`
+	Seeds        int    `json:"seeds"`
+	Uploader     string `json:"uploader"`
+	Dlers        int    `json:"dlers"`
+	Size         string `json:"size"`
+	Completes    int    `json:"completes"`
+	Comments     string `json:"comments"`
+	Personalized bool   `json:"personalized"`
 }

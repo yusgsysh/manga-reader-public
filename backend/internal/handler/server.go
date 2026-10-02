@@ -62,6 +62,9 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 	r.GET("/api/gallery/:id/:token", s.handleGetGallery)
 	r.GET("/api/gallery/:id/:token/details", s.handleGalleryDetails)
 	r.GET("/api/gallery/:id/:token/pages", s.handleGalleryPages)
+	r.GET("/api/gallery/:id/:token/torrents", s.handleGalleryTorrents)
+	r.GET("/api/gallery/:id/:token/torrents/:gtid/info", s.handleGalleryTorrentInfo)
+	r.GET("/api/gallery/:id/:token/torrents/:gtid/download", s.handleGalleryTorrentDownload)
 
 	// Offline cache (read-only fallback; the frontend decides when to use it).
 	r.GET("/api/gallery-cache/:id/:token", s.handleCachedGallery)

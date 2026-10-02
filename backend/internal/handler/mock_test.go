@@ -108,10 +108,11 @@ func mockGalleryDetailHTML(gid int, title string, pageCount int) string {
 </tbody></table></div>
 <div id="rating_count">456</div>
 <div id="rating_label">Average: 4.50</div>
+<p class="g2 gsp"><a href="#" onclick="return popUp('https://exhentai.org/gallerytorrents.php?gid=%d&amp;t=abc',610,590)">Torrent Download (1)</a></p>
 <div id="taglist"><table><tbody>%s</tbody></table></div>
 <div class="gpc">Showing 1 - %d of %d images</div>
 <div id="gdt">%s</div>
-</body></html>`, title, title, pageCount, tagsHTML.String(), pageCount, pageCount, pageLinks.String())
+</body></html>`, title, title, pageCount, gid, tagsHTML.String(), pageCount, pageCount, pageLinks.String())
 }
 
 // mockPaginatedGalleryHandler serves a gallery details page whose thumbnail
@@ -750,15 +751,16 @@ func TestMockGalleryDetails_Success(t *testing.T) {
 	}
 
 	var details struct {
-		ID        int         `json:"id"`
-		Token     string      `json:"token"`
-		Title     string      `json:"title"`
-		Cover     string      `json:"cover"`
-		Category  string      `json:"category"`
-		Uploader  string      `json:"uploader"`
-		PageCount int         `json:"page_count"`
-		Rating    float64     `json:"rating"`
-		Tags      []model.Tag `json:"tags"`
+		ID           int         `json:"id"`
+		Token        string      `json:"token"`
+		Title        string      `json:"title"`
+		Cover        string      `json:"cover"`
+		Category     string      `json:"category"`
+		Uploader     string      `json:"uploader"`
+		PageCount    int         `json:"page_count"`
+		Rating       float64     `json:"rating"`
+		TorrentCount int         `json:"torrent_count"`
+		Tags         []model.Tag `json:"tags"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &details); err != nil {
 		t.Fatalf("failed to unmarshal: %v. body: %s", err, w.Body.String())
@@ -778,6 +780,9 @@ func TestMockGalleryDetails_Success(t *testing.T) {
 	}
 	if details.Rating != 4.50 {
 		t.Errorf("Rating = %f, want 4.50", details.Rating)
+	}
+	if details.TorrentCount != 1 {
+		t.Errorf("TorrentCount = %d, want 1", details.TorrentCount)
 	}
 	if len(details.Tags) == 0 {
 		t.Error("Tags should not be empty")

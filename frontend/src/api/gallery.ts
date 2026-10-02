@@ -3,6 +3,8 @@ import type {
   GalleryDetail,
   GalleryListFilters,
   GalleryListResponse,
+  GalleryTorrent,
+  GalleryTorrentInfo,
   ListingNavOptions,
 } from "../types/gallery";
 import type {
@@ -242,6 +244,38 @@ export function fetchGalleryDetail(
   token: string,
 ): Promise<GalleryDetail> {
   return apiGet<GalleryDetail>(`/api/gallery/${id}/${token}/details`);
+}
+
+// Torrent endpoints are live-only: the backend scrapes upstream and proxies the
+// .torrent file, never touching the gallery cache.
+export function fetchGalleryTorrents(
+  id: number,
+  token: string,
+): Promise<{ torrents: GalleryTorrent[] }> {
+  return apiGet<{ torrents: GalleryTorrent[] }>(
+    `/api/gallery/${id}/${token}/torrents`,
+  );
+}
+
+export function fetchGalleryTorrentInfo(
+  id: number,
+  token: string,
+  gtid: string,
+): Promise<GalleryTorrentInfo> {
+  return apiGet<GalleryTorrentInfo>(
+    `/api/gallery/${id}/${token}/torrents/${gtid}/info`,
+  );
+}
+
+export function galleryTorrentDownloadUrl(
+  id: number,
+  token: string,
+  gtid: string,
+  variant: "redistributable" | "personalized" = "redistributable",
+): string {
+  return buildApiUrl(`/api/gallery/${id}/${token}/torrents/${gtid}/download`, {
+    variant,
+  });
 }
 
 // Cache endpoints (read-through). A hit is served from the backend cache; a

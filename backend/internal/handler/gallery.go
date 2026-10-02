@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -140,25 +141,26 @@ func galleryDetailsJSON(details model.GalleryDetail) gin.H {
 		tags[i] = model.Tag{Namespace: t.Namespace, Name: t.Name}
 	}
 	return gin.H{
-		"id":           details.GalleryID,
-		"token":        details.Token,
-		"domain":       details.Domain,
-		"title":        details.Title,
-		"title_jpn":    details.TitleJpn,
-		"cover":        details.Cover,
-		"category":     model.MapCategory(details.Cat),
-		"uploader":     details.Uploader,
-		"posted":       details.Posted,
-		"parent":       details.Parent,
-		"visible":      details.Visible,
-		"language":     details.Language,
-		"translated":   details.Translated == "TR",
-		"file_size":    details.FileSize,
-		"page_count":   details.Length,
-		"favorited":    details.Favorited,
-		"rating_count": details.RatingCount,
-		"rating":       details.Rating,
-		"tags":         tags,
+		"id":            details.GalleryID,
+		"token":         details.Token,
+		"domain":        details.Domain,
+		"title":         details.Title,
+		"title_jpn":     details.TitleJpn,
+		"cover":         details.Cover,
+		"category":      model.MapCategory(details.Cat),
+		"uploader":      details.Uploader,
+		"posted":        details.Posted,
+		"parent":        details.Parent,
+		"visible":       details.Visible,
+		"language":      details.Language,
+		"translated":    details.Translated == "TR",
+		"file_size":     details.FileSize,
+		"page_count":    details.Length,
+		"favorited":     details.Favorited,
+		"rating_count":  details.RatingCount,
+		"rating":        details.Rating,
+		"torrent_count": details.TorrentCount,
+		"tags":          tags,
 	}
 }
 
@@ -627,6 +629,110 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 	streamGalleryPagesNDJSON(c, idParam, token, func(ctx context.Context, emit func(int, []string, []model.GalleryPageThumb) error) (int, error) {
 		return s.scrapeGalleryPages(ctx, galleryID, token, emit)
 	})
+}
+
+// ==================== Torrents (live, no cache) ====================
+
+// handleGalleryTorrents lists the gallery's torrents. It always scrapes the
+// upstream torrents page and never touches the gallery cache.
+func (s *Server) handleGalleryTorrents(c *gin.Context) {
+	id, token, ok := parseGalleryIDToken(c)
+	if !ok {
+		return
+	}
+	torrents, err := exhentai.ScrapeGalleryTorrents(c.Request.Context(), s.Client, strconv.FormatInt(id, 10), token)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery torrents failed: %v", err)})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"torrents": torrents})
+}
+
+// handleGalleryTorrentInfo returns one torrent's expanded "Information" view
+// (tracker stats plus the uploader comment). Live scrape, no cache.
+func (s *Server) handleGalleryTorrentInfo(c *gin.Context) {
+	id, token, ok := parseGalleryIDToken(c)
+	if !ok {
+		return
+	}
+	gtid := strings.TrimSpace(c.Param("gtid"))
+	if gtid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid torrent id"})
+		return
+	}
+	result, err := exhentai.ScrapeGalleryTorrentInfo(c.Request.Context(), s.Client, strconv.FormatInt(id, 10), token, gtid)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch torrent info failed: %v", err)})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, result.Info)
+}
+
+// handleGalleryTorrentDownload proxies the .torrent file through the backend so
+// the session cookie is used (the browser has none). It re-resolves the link by
+// torrent id and never caches.
+func (s *Server) handleGalleryTorrentDownload(c *gin.Context) {
+	id, token, ok := parseGalleryIDToken(c)
+	if !ok {
+		return
+	}
+	gtid := strings.TrimSpace(c.Param("gtid"))
+	if gtid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid torrent id"})
+		return
+	}
+	idParam := strconv.FormatInt(id, 10)
+	ctx := c.Request.Context()
+
+	torrents, err := exhentai.ScrapeGalleryTorrents(ctx, s.Client, idParam, token)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery torrents failed: %v", err)})
+		return
+	}
+	var torrent *model.GalleryTorrent
+	for i := range torrents {
+		if torrents[i].GTID == gtid {
+			torrent = &torrents[i]
+			break
+		}
+	}
+	if torrent == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "torrent not found"})
+		return
+	}
+
+	rawURL := torrent.DownloadURL
+	if c.Query("variant") == "personalized" {
+		result, infoErr := exhentai.ScrapeGalleryTorrentInfo(ctx, s.Client, idParam, token, gtid)
+		if infoErr != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch torrent info failed: %v", infoErr)})
+			return
+		}
+		if result.PersonalizedURL == "" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "personalized torrent not available"})
+			return
+		}
+		rawURL = result.PersonalizedURL
+	}
+	if rawURL == "" {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "torrent download link missing"})
+		return
+	}
+
+	data, err := exhentai.FetchTorrent(ctx, s.Client, rawURL)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download torrent failed: %v", err)})
+		return
+	}
+
+	filename := exhentai.TorrentFilename(torrent.Name, gtid)
+	ascii := "torrent-" + gtid + ".torrent"
+	c.Header("Content-Type", "application/x-bittorrent")
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`, ascii, url.PathEscape(filename)))
+	c.Header("Cache-Control", "no-store")
+	c.Data(http.StatusOK, "application/x-bittorrent", data)
 }
 
 // ==================== Cache (read-through) endpoints ====================

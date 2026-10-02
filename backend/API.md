@@ -339,6 +339,68 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 
 ---
 
+### 4.1 Gallery Torrents（实时，不缓存）
+
+上游 `gallerytorrents.php` 的实时抓取，**不读写任何缓存**（不使用 `gallery_cache`/MinIO），所有响应 `Cache-Control: no-store`。
+
+#### 列表
+
+`GET /api/gallery/:id/:token/torrents`
+
+**Response (200):**
+
+```json
+{
+  "torrents": [
+    {
+      "gtid": "2250081",
+      "name": "[Yanje] ... [中国翻訳].zip",
+      "size": "42.13 MiB",
+      "posted": "2026-10-02 06:30",
+      "seeds": 8,
+      "peers": 4,
+      "downloads": 12,
+      "uploader": "Konazumi"
+    }
+  ]
+}
+```
+
+> 无种子时返回 `{"torrents":[]}`。上游下载链接不会返回给客户端（由后端代理）。
+
+#### Information
+
+`GET /api/gallery/:id/:token/torrents/:gtid/info`
+
+后端向上游 POST `torrent_info=Information` 并解析统计与评论。
+
+**Response (200):**
+
+```json
+{
+  "posted": "2026-10-02 06:30",
+  "seeds": 9,
+  "uploader": "Konazumi",
+  "dlers": 5,
+  "size": "42.13 MiB",
+  "completes": 12,
+  "comments": "No comments were given for this torrent.",
+  "personalized": true
+}
+```
+
+#### 下载 `.torrent`
+
+`GET /api/gallery/:id/:token/torrents/:gtid/download?variant=redistributable|personalized`
+
+后端用已登录 Cookie 重新解析上游链接并代理下载（浏览器没有 exhentai session，无法直连）。`variant` 默认 `redistributable`；`personalized` 会先 POST Information 取带 session 段的个性化链接。
+
+**Response (200):** `Content-Type: application/x-bittorrent`，`Content-Disposition: attachment; filename*=UTF-8''...`，响应体为 `.torrent` 文件；文件大小上限 10 MB。
+
+> 详情页的画廊信息中包含 `torrent_count`（解析自源站 “Torrent Download (N)”）；缓存/离线详情不含该字段。
+
+---
+
 ### 5. Image (live)
 
 图片源站代理，**不依赖 MinIO**，每次请求都从上游获取。缓存版本见第 9-11 节（`/api/image-cache/*`）。

@@ -22,13 +22,13 @@ func setupRouter() *gin.Engine {
 
 // pagesStreamResult is the decoded form of an NDJSON /pages response.
 type pagesStreamResult struct {
-	Meta       galleryPagesLine
-	PageURLs   []string
+	Meta        galleryPagesLine
+	PageURLs    []string
 	PageIndexes []int
-	Thumbnails []model.GalleryPageThumb
-	Done       bool
-	Error      string
-	Terminal   int
+	Thumbnails  []model.GalleryPageThumb
+	Done        bool
+	Error       string
+	Terminal    int
 }
 
 // parsePagesStream decodes the NDJSON body of GET /api/gallery/:id/:token/pages

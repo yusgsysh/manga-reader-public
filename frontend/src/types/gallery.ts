@@ -133,7 +133,30 @@ export interface GalleryDetail {
   favorited: number;
   rating_count: number;
   rating: number;
+  torrent_count?: number;
   tags: Tag[];
+}
+
+export interface GalleryTorrent {
+  gtid: string;
+  name: string;
+  size: string;
+  posted: string;
+  seeds: number;
+  peers: number;
+  downloads: number;
+  uploader: string;
+}
+
+export interface GalleryTorrentInfo {
+  posted: string;
+  seeds: number;
+  uploader: string;
+  dlers: number;
+  size: string;
+  completes: number;
+  comments: string;
+  personalized: boolean;
 }
 
 export interface Tag {

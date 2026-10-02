@@ -8,6 +8,7 @@ import {
   BookOpen,
   CloudSlash,
   DownloadSimple,
+  Magnet,
   Star,
   CircleNotch,
 } from "@phosphor-icons/react";
@@ -28,6 +29,7 @@ import { DOWNLOAD_PAGES_STALE_TIME } from "../lib/cacheConfig";
 import { formatPosted } from "../lib/time";
 import { Chip, Section } from "../components/ui";
 import { CategoryChip } from "../components/gallery/CategoryChip";
+import { GalleryTorrentsDialog } from "../components/gallery/GalleryTorrentsDialog";
 
 function DetailSkeleton() {
   return (
@@ -106,6 +108,7 @@ export function GalleryDetailPage() {
   const toast = useKumoToastManager();
 
   const [preparingDownload, setPreparingDownload] = useState(false);
+  const [torrentsOpen, setTorrentsOpen] = useState(false);
 
   const inShelf = shelfStatus?.in_bookshelf ?? false;
   const hasProgress =
@@ -403,6 +406,17 @@ export function GalleryDetailPage() {
                   下载
                 </Button>
               )}
+
+              <Button
+                variant="outline"
+                onClick={() => setTorrentsOpen(true)}
+                aria-label="种子下载"
+              >
+                <Magnet className="mr-1.5 size-4" weight="bold" />
+                种子下载
+                {typeof gallery.torrent_count === "number" &&
+                  ` (${gallery.torrent_count})`}
+              </Button>
             </div>
 
             {/* Metadata */}
@@ -452,6 +466,13 @@ export function GalleryDetailPage() {
           </p>
         )}
       </Section>
+
+      <GalleryTorrentsDialog
+        id={id}
+        token={token ?? ""}
+        open={torrentsOpen}
+        onOpenChange={setTorrentsOpen}
+      />
     </div>
   );
 }
