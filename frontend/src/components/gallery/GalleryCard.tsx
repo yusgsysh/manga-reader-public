@@ -120,7 +120,9 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
   };
 
   const progress = gallery.reading
-    ? Math.round(gallery.reading.progress * 100)
+    ? gallery.reading.completed
+      ? 100
+      : Math.round(gallery.reading.progress * 100)
     : 0;
 
   return (
@@ -158,9 +160,9 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
               </div>
             )}
 
-            {/* progress bar */}
+            {/* progress bar: read portion solid, unread portion translucent */}
             {gallery.reading && (
-              <div className="absolute inset-x-0 bottom-0 h-1 bg-black/30">
+              <div className="absolute inset-x-0 bottom-0 h-1 bg-[color-mix(in_oklab,var(--app-accent)_30%,transparent)]">
                 <div
                   className="h-full bg-[var(--app-accent)]"
                   style={{ width: `${progress}%` }}
@@ -186,14 +188,6 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
             >
               <TagIcon className="size-3.5" weight="fill" />
             </button>
-          </div>
-        )}
-
-        {gallery.reading && (
-          <div className="pointer-events-none absolute left-2 top-2">
-            <span className="rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white/90 backdrop-blur-sm">
-              {gallery.reading.completed ? "已读完" : `已读 ${progress}%`}
-            </span>
           </div>
         )}
 
