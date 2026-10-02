@@ -1054,11 +1054,11 @@ POST /api/reading-progress/cleanup?days=0
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | urls | string[] | yes | 页面 URL 列表（顺序即抓取顺序），1~2000 个，必须为 `exhentai.org` / `e-hentai.org` |
-| gallery_id | int | no | 画廊 ID（与 gallery_token 一起用于去重） |
-| gallery_token | string | no | 画廊 token |
+| gallery_id | int | no | 画廊 ID（与 token 一起用于去重） |
+| token | string | no | 画廊 token |
 | title | string | no | 任务显示标题 |
 
-去重规则：相同 `gallery_id` + `gallery_token` 已存在 `queued`/`running` 任务时，直接返回该任务（`200`），不重复创建；否则创建新任务（`202`）。
+去重规则：相同 `gallery_id` + `token` 已存在 `queued`/`running` 任务时，直接返回该任务（`200`），不重复创建；否则创建新任务（`202`）。
 
 离线下载：前端获取页面列表时会优先请求在线接口，失败或浏览器离线时回退到 `GET /api/gallery-cache/:id/:token/pages`，因此只要本地缓存过页面列表即可在 ExHentai 不可达时排队下载任务。任务按顺序重试抓取；已在 MinIO 缓存的页面直接命中，未缓存的页面抓取失败会计入 `errors`。
 
@@ -1070,7 +1070,7 @@ Content-Type: application/json
 
 {
   "gallery_id": 3138775,
-  "gallery_token": "30b0285f9b",
+  "token": "30b0285f9b",
   "title": "Test Gallery",
   "urls": [
     "https://exhentai.org/s/abc/3138775-1",
@@ -1085,7 +1085,7 @@ Content-Type: application/json
 {
   "id": 1,
   "gallery_id": 3138775,
-  "gallery_token": "30b0285f9b",
+  "token": "30b0285f9b",
   "title": "Test Gallery",
   "status": "queued",
   "total": 2,
@@ -1104,7 +1104,7 @@ Content-Type: application/json
 |-------|------|-------------|
 | id | int | 任务 ID |
 | gallery_id | int \| null | 画廊 ID（可空） |
-| gallery_token | string | 画廊 token |
+| token | string | 画廊 token |
 | title | string | 任务标题 |
 | status | string | `queued` / `running` / `completed` / `cancelled` / `failed` |
 | total | int | 页面总数（= `urls` 长度） |

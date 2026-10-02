@@ -14,7 +14,7 @@ const BASE = "http://localhost:8080";
 const sampleJob: PrefillJob = {
   id: 7,
   gallery_id: 123,
-  gallery_token: "tok",
+  token: "tok",
   title: "title",
   status: "queued",
   total: 3,
@@ -51,7 +51,7 @@ describe("prefill api", () => {
 
     const req = {
       gallery_id: 123,
-      gallery_token: "tok",
+      token: "tok",
       title: "title",
       urls: ["https://exhentai.org/s/a/1-1"],
     };

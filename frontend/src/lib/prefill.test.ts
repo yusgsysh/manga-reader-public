@@ -13,7 +13,7 @@ function makeJob(overrides: Partial<PrefillJob> = {}): PrefillJob {
   return {
     id: 1,
     gallery_id: null,
-    gallery_token: "",
+    token: "",
     title: "test",
     status: "completed",
     total: 10,

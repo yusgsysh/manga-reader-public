@@ -184,7 +184,7 @@ export function GalleryDetailPage() {
       startPrefill.mutate(
         {
           gallery_id: id,
-          gallery_token: token ?? "",
+          token: token ?? "",
           title: gallery.title,
           urls: pagesData.pages.map((p) => p.page_url),
         },

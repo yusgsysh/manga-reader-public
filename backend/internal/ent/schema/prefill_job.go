@@ -32,7 +32,7 @@ func (PrefillJob) Annotations() []schema.Annotation {
 func (PrefillJob) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("gallery_id").Optional().Nillable(),
-		field.String("gallery_token").Default(""),
+		field.String("token").Default(""),
 		field.String("title").Default(""),
 		field.JSON("urls", []string{}),
 		field.String("status").Default("queued"),
@@ -49,5 +49,8 @@ func (PrefillJob) Fields() []ent.Field {
 func (PrefillJob) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("status", "created_at"),
+		// Backs the dedupe lookup (gallery_id + token + status); not unique
+		// because jobs without a gallery keep the empty defaults.
+		index.Fields("gallery_id", "token"),
 	}
 }

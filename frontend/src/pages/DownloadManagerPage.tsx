@@ -148,9 +148,9 @@ function JobRow({ job, zippingIds, onZipStart }: JobRowProps) {
       )}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-kumo-subtle">
-        {job.gallery_id !== null && job.gallery_token && (
+        {job.gallery_id !== null && job.token && (
           <Link
-            to={`/gallery/${job.gallery_id}/${job.gallery_token}`}
+            to={`/gallery/${job.gallery_id}/${job.token}`}
             className="font-medium text-[var(--app-accent)] hover:underline"
           >
             打开画廊

@@ -59,9 +59,9 @@ func GalleryID(v int64) predicate.PrefillJob {
 	return predicate.PrefillJob(sql.FieldEQ(FieldGalleryID, v))
 }
 
-// GalleryToken applies equality check predicate on the "gallery_token" field. It's identical to GalleryTokenEQ.
-func GalleryToken(v string) predicate.PrefillJob {
-	return predicate.PrefillJob(sql.FieldEQ(FieldGalleryToken, v))
+// Token applies equality check predicate on the "token" field. It's identical to TokenEQ.
+func Token(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldEQ(FieldToken, v))
 }
 
 // Title applies equality check predicate on the "title" field. It's identical to TitleEQ.
@@ -149,69 +149,69 @@ func GalleryIDNotNil() predicate.PrefillJob {
 	return predicate.PrefillJob(sql.FieldNotNull(FieldGalleryID))
 }
 
-// GalleryTokenEQ applies the EQ predicate on the "gallery_token" field.
-func GalleryTokenEQ(v string) predicate.PrefillJob {
-	return predicate.PrefillJob(sql.FieldEQ(FieldGalleryToken, v))
+// TokenEQ applies the EQ predicate on the "token" field.
+func TokenEQ(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldEQ(FieldToken, v))
 }
 
-// GalleryTokenNEQ applies the NEQ predicate on the "gallery_token" field.
-func GalleryTokenNEQ(v string) predicate.PrefillJob {
-	return predicate.PrefillJob(sql.FieldNEQ(FieldGalleryToken, v))
+// TokenNEQ applies the NEQ predicate on the "token" field.
+func TokenNEQ(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldNEQ(FieldToken, v))
 }
 
-// GalleryTokenIn applies the In predicate on the "gallery_token" field.
-func GalleryTokenIn(vs ...string) predicate.PrefillJob {
-	return predicate.PrefillJob(sql.FieldIn(FieldGalleryToken, vs...))
+// TokenIn applies the In predicate on the "token" field.
+func TokenIn(vs ...string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldIn(FieldToken, vs...))
 }
 
-// GalleryTokenNotIn applies the NotIn predicate on the "gallery_token" field.
-func GalleryTokenNotIn(vs ...string) predicate.PrefillJob {
-	return predicate.PrefillJob(sql.FieldNotIn(FieldGalleryToken, vs...))
+// TokenNotIn applies the NotIn predicate on the "token" field.
+func TokenNotIn(vs ...string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldNotIn(FieldToken, vs...))
 }
 
-// GalleryTokenGT applies the GT predicate on the "gallery_token" field.
-func GalleryTokenGT(v string) predicate.PrefillJob {
-	return predicate.PrefillJob(sql.FieldGT(FieldGalleryToken, v))
+// TokenGT applies the GT predicate on the "token" field.
+func TokenGT(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldGT(FieldToken, v))
 }
 
-// GalleryTokenGTE applies the GTE predicate on the "gallery_token" field.
-func GalleryTokenGTE(v string) predicate.PrefillJob {
-	return predicate.PrefillJob(sql.FieldGTE(FieldGalleryToken, v))
+// TokenGTE applies the GTE predicate on the "token" field.
+func TokenGTE(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldGTE(FieldToken, v))
 }
 
-// GalleryTokenLT applies the LT predicate on the "gallery_token" field.
-func GalleryTokenLT(v string) predicate.PrefillJob {
-	return predicate.PrefillJob(sql.FieldLT(FieldGalleryToken, v))
+// TokenLT applies the LT predicate on the "token" field.
+func TokenLT(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldLT(FieldToken, v))
 }
 
-// GalleryTokenLTE applies the LTE predicate on the "gallery_token" field.
-func GalleryTokenLTE(v string) predicate.PrefillJob {
-	return predicate.PrefillJob(sql.FieldLTE(FieldGalleryToken, v))
+// TokenLTE applies the LTE predicate on the "token" field.
+func TokenLTE(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldLTE(FieldToken, v))
 }
 
-// GalleryTokenContains applies the Contains predicate on the "gallery_token" field.
-func GalleryTokenContains(v string) predicate.PrefillJob {
-	return predicate.PrefillJob(sql.FieldContains(FieldGalleryToken, v))
+// TokenContains applies the Contains predicate on the "token" field.
+func TokenContains(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldContains(FieldToken, v))
 }
 
-// GalleryTokenHasPrefix applies the HasPrefix predicate on the "gallery_token" field.
-func GalleryTokenHasPrefix(v string) predicate.PrefillJob {
-	return predicate.PrefillJob(sql.FieldHasPrefix(FieldGalleryToken, v))
+// TokenHasPrefix applies the HasPrefix predicate on the "token" field.
+func TokenHasPrefix(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldHasPrefix(FieldToken, v))
 }
 
-// GalleryTokenHasSuffix applies the HasSuffix predicate on the "gallery_token" field.
-func GalleryTokenHasSuffix(v string) predicate.PrefillJob {
-	return predicate.PrefillJob(sql.FieldHasSuffix(FieldGalleryToken, v))
+// TokenHasSuffix applies the HasSuffix predicate on the "token" field.
+func TokenHasSuffix(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldHasSuffix(FieldToken, v))
 }
 
-// GalleryTokenEqualFold applies the EqualFold predicate on the "gallery_token" field.
-func GalleryTokenEqualFold(v string) predicate.PrefillJob {
-	return predicate.PrefillJob(sql.FieldEqualFold(FieldGalleryToken, v))
+// TokenEqualFold applies the EqualFold predicate on the "token" field.
+func TokenEqualFold(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldEqualFold(FieldToken, v))
 }
 
-// GalleryTokenContainsFold applies the ContainsFold predicate on the "gallery_token" field.
-func GalleryTokenContainsFold(v string) predicate.PrefillJob {
-	return predicate.PrefillJob(sql.FieldContainsFold(FieldGalleryToken, v))
+// TokenContainsFold applies the ContainsFold predicate on the "token" field.
+func TokenContainsFold(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldContainsFold(FieldToken, v))
 }
 
 // TitleEQ applies the EQ predicate on the "title" field.

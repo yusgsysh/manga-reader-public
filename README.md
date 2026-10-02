@@ -181,7 +181,7 @@ curl -X POST http://localhost:8080/api/reading-progress/cleanup?days=0
 # 创建任务（同画廊已有排队/运行中的任务时返回该任务）
 curl -X POST http://localhost:8080/api/prefill \
   -H 'Content-Type: application/json' \
-  -d '{"gallery_id":123,"gallery_token":"abc","title":"My Gallery","urls":["https://exhentai.org/s/x/123-1"]}'
+  -d '{"gallery_id":123,"token":"abc","title":"My Gallery","urls":["https://exhentai.org/s/x/123-1"]}'
 
 # 任务列表 / 单个任务（轮询进度）
 curl http://localhost:8080/api/prefill

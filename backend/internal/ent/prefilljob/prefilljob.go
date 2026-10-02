@@ -15,8 +15,8 @@ const (
 	FieldID = "id"
 	// FieldGalleryID holds the string denoting the gallery_id field in the database.
 	FieldGalleryID = "gallery_id"
-	// FieldGalleryToken holds the string denoting the gallery_token field in the database.
-	FieldGalleryToken = "gallery_token"
+	// FieldToken holds the string denoting the token field in the database.
+	FieldToken = "token"
 	// FieldTitle holds the string denoting the title field in the database.
 	FieldTitle = "title"
 	// FieldUrls holds the string denoting the urls field in the database.
@@ -43,7 +43,7 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldGalleryID,
-	FieldGalleryToken,
+	FieldToken,
 	FieldTitle,
 	FieldUrls,
 	FieldStatus,
@@ -66,8 +66,8 @@ func ValidColumn(column string) bool {
 }
 
 var (
-	// DefaultGalleryToken holds the default value on creation for the "gallery_token" field.
-	DefaultGalleryToken string
+	// DefaultToken holds the default value on creation for the "token" field.
+	DefaultToken string
 	// DefaultTitle holds the default value on creation for the "title" field.
 	DefaultTitle string
 	// DefaultStatus holds the default value on creation for the "status" field.
@@ -97,9 +97,9 @@ func ByGalleryID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldGalleryID, opts...).ToFunc()
 }
 
-// ByGalleryToken orders the results by the gallery_token field.
-func ByGalleryToken(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldGalleryToken, opts...).ToFunc()
+// ByToken orders the results by the token field.
+func ByToken(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldToken, opts...).ToFunc()
 }
 
 // ByTitle orders the results by the title field.

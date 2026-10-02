@@ -423,18 +423,18 @@ func prefillJobJSON(m *prefillManager, row *ent.PrefillJob) gin.H {
 		finishedAt = row.FinishedAt.Format(time.RFC3339)
 	}
 	return gin.H{
-		"id":            row.ID,
-		"gallery_id":    galleryID,
-		"gallery_token": row.GalleryToken,
-		"title":         row.Title,
-		"status":        row.Status,
-		"total":         row.Total,
-		"progress":      progress,
-		"failed_count":  failedCount,
-		"errors":        errs,
-		"created_at":    row.CreatedAt.Format(time.RFC3339),
-		"updated_at":    row.UpdatedAt.Format(time.RFC3339),
-		"finished_at":   finishedAt,
+		"id":           row.ID,
+		"gallery_id":   galleryID,
+		"token":        row.Token,
+		"title":        row.Title,
+		"status":       row.Status,
+		"total":        row.Total,
+		"progress":     progress,
+		"failed_count": failedCount,
+		"errors":       errs,
+		"created_at":   row.CreatedAt.Format(time.RFC3339),
+		"updated_at":   row.UpdatedAt.Format(time.RFC3339),
+		"finished_at":  finishedAt,
 	}
 }
 
@@ -444,10 +444,10 @@ func prefillJobJSON(m *prefillManager, row *ent.PrefillJob) gin.H {
 // Progress is polled separately; no image data is returned.
 func (s *Server) handlePrefillStart(c *gin.Context) {
 	var req struct {
-		GalleryID    int64    `json:"gallery_id"`
-		GalleryToken string   `json:"gallery_token"`
-		Title        string   `json:"title"`
-		URLs         []string `json:"urls"`
+		GalleryID int64    `json:"gallery_id"`
+		Token     string   `json:"token"`
+		Title     string   `json:"title"`
+		URLs      []string `json:"urls"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -479,11 +479,11 @@ func (s *Server) handlePrefillStart(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	// Deduplicate: an already queued/running job for the same gallery wins.
-	if req.GalleryID != 0 && req.GalleryToken != "" {
+	if req.GalleryID != 0 && req.Token != "" {
 		existing, err := s.DB.Client.PrefillJob.Query().
 			Where(
 				prefilljob.GalleryID(req.GalleryID),
-				prefilljob.GalleryToken(req.GalleryToken),
+				prefilljob.Token(req.Token),
 				prefilljob.StatusIn(prefillStatusQueued, prefillStatusRunning),
 			).
 			Order(ent.Desc(prefilljob.FieldCreatedAt)).
@@ -501,7 +501,7 @@ func (s *Server) handlePrefillStart(c *gin.Context) {
 
 	create := s.DB.Client.PrefillJob.Create().
 		SetUrls(req.URLs).
-		SetGalleryToken(req.GalleryToken).
+		SetToken(req.Token).
 		SetTitle(req.Title).
 		SetStatus(prefillStatusQueued).
 		SetTotal(len(req.URLs))
@@ -535,7 +535,7 @@ func (s *Server) handlePrefillList(c *gin.Context) {
 		Select(
 			prefilljob.FieldID,
 			prefilljob.FieldGalleryID,
-			prefilljob.FieldGalleryToken,
+			prefilljob.FieldToken,
 			prefilljob.FieldTitle,
 			prefilljob.FieldStatus,
 			prefilljob.FieldTotal,
@@ -588,18 +588,18 @@ func prefillJobJSONWithRuns(row *ent.PrefillJob, runs map[int]*prefillRun) gin.H
 		finishedAt = row.FinishedAt.Format(time.RFC3339)
 	}
 	return gin.H{
-		"id":            row.ID,
-		"gallery_id":    galleryID,
-		"gallery_token": row.GalleryToken,
-		"title":         row.Title,
-		"status":        row.Status,
-		"total":         row.Total,
-		"progress":      progress,
-		"failed_count":  failedCount,
-		"errors":        errs,
-		"created_at":    row.CreatedAt.Format(time.RFC3339),
-		"updated_at":    row.UpdatedAt.Format(time.RFC3339),
-		"finished_at":   finishedAt,
+		"id":           row.ID,
+		"gallery_id":   galleryID,
+		"token":        row.Token,
+		"title":        row.Title,
+		"status":       row.Status,
+		"total":        row.Total,
+		"progress":     progress,
+		"failed_count": failedCount,
+		"errors":       errs,
+		"created_at":   row.CreatedAt.Format(time.RFC3339),
+		"updated_at":   row.UpdatedAt.Format(time.RFC3339),
+		"finished_at":  finishedAt,
 	}
 }
 

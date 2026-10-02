@@ -2399,7 +2399,7 @@ type PrefillJobMutation struct {
 	id              *int
 	gallery_id      *int64
 	addgallery_id   *int64
-	gallery_token   *string
+	token           *string
 	title           *string
 	urls            *[]string
 	appendurls      []string
@@ -2587,40 +2587,40 @@ func (m *PrefillJobMutation) ResetGalleryID() {
 	delete(m.clearedFields, prefilljob.FieldGalleryID)
 }
 
-// SetGalleryToken sets the "gallery_token" field.
-func (m *PrefillJobMutation) SetGalleryToken(s string) {
-	m.gallery_token = &s
+// SetToken sets the "token" field.
+func (m *PrefillJobMutation) SetToken(s string) {
+	m.token = &s
 }
 
-// GalleryToken returns the value of the "gallery_token" field in the mutation.
-func (m *PrefillJobMutation) GalleryToken() (r string, exists bool) {
-	v := m.gallery_token
+// Token returns the value of the "token" field in the mutation.
+func (m *PrefillJobMutation) Token() (r string, exists bool) {
+	v := m.token
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldGalleryToken returns the old "gallery_token" field's value of the PrefillJob entity.
+// OldToken returns the old "token" field's value of the PrefillJob entity.
 // If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PrefillJobMutation) OldGalleryToken(ctx context.Context) (v string, err error) {
+func (m *PrefillJobMutation) OldToken(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldGalleryToken is only allowed on UpdateOne operations")
+		return v, errors.New("OldToken is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldGalleryToken requires an ID field in the mutation")
+		return v, errors.New("OldToken requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldGalleryToken: %w", err)
+		return v, fmt.Errorf("querying old value for OldToken: %w", err)
 	}
-	return oldValue.GalleryToken, nil
+	return oldValue.Token, nil
 }
 
-// ResetGalleryToken resets all changes to the "gallery_token" field.
-func (m *PrefillJobMutation) ResetGalleryToken() {
-	m.gallery_token = nil
+// ResetToken resets all changes to the "token" field.
+func (m *PrefillJobMutation) ResetToken() {
+	m.token = nil
 }
 
 // SetTitle sets the "title" field.
@@ -3082,8 +3082,8 @@ func (m *PrefillJobMutation) Fields() []string {
 	if m.gallery_id != nil {
 		fields = append(fields, prefilljob.FieldGalleryID)
 	}
-	if m.gallery_token != nil {
-		fields = append(fields, prefilljob.FieldGalleryToken)
+	if m.token != nil {
+		fields = append(fields, prefilljob.FieldToken)
 	}
 	if m.title != nil {
 		fields = append(fields, prefilljob.FieldTitle)
@@ -3122,8 +3122,8 @@ func (m *PrefillJobMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case prefilljob.FieldGalleryID:
 		return m.GalleryID()
-	case prefilljob.FieldGalleryToken:
-		return m.GalleryToken()
+	case prefilljob.FieldToken:
+		return m.Token()
 	case prefilljob.FieldTitle:
 		return m.Title()
 	case prefilljob.FieldUrls:
@@ -3153,8 +3153,8 @@ func (m *PrefillJobMutation) OldField(ctx context.Context, name string) (ent.Val
 	switch name {
 	case prefilljob.FieldGalleryID:
 		return m.OldGalleryID(ctx)
-	case prefilljob.FieldGalleryToken:
-		return m.OldGalleryToken(ctx)
+	case prefilljob.FieldToken:
+		return m.OldToken(ctx)
 	case prefilljob.FieldTitle:
 		return m.OldTitle(ctx)
 	case prefilljob.FieldUrls:
@@ -3189,12 +3189,12 @@ func (m *PrefillJobMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetGalleryID(v)
 		return nil
-	case prefilljob.FieldGalleryToken:
+	case prefilljob.FieldToken:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetGalleryToken(v)
+		m.SetToken(v)
 		return nil
 	case prefilljob.FieldTitle:
 		v, ok := value.(string)
@@ -3371,8 +3371,8 @@ func (m *PrefillJobMutation) ResetField(name string) error {
 	case prefilljob.FieldGalleryID:
 		m.ResetGalleryID()
 		return nil
-	case prefilljob.FieldGalleryToken:
-		m.ResetGalleryToken()
+	case prefilljob.FieldToken:
+		m.ResetToken()
 		return nil
 	case prefilljob.FieldTitle:
 		m.ResetTitle()

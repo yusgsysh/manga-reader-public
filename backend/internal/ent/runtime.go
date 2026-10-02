@@ -93,10 +93,10 @@ func init() {
 	gallerycache.UpdateDefaultUpdatedAt = gallerycacheDescUpdatedAt.UpdateDefault.(func() time.Time)
 	prefilljobFields := schema.PrefillJob{}.Fields()
 	_ = prefilljobFields
-	// prefilljobDescGalleryToken is the schema descriptor for gallery_token field.
-	prefilljobDescGalleryToken := prefilljobFields[1].Descriptor()
-	// prefilljob.DefaultGalleryToken holds the default value on creation for the gallery_token field.
-	prefilljob.DefaultGalleryToken = prefilljobDescGalleryToken.Default.(string)
+	// prefilljobDescToken is the schema descriptor for token field.
+	prefilljobDescToken := prefilljobFields[1].Descriptor()
+	// prefilljob.DefaultToken holds the default value on creation for the token field.
+	prefilljob.DefaultToken = prefilljobDescToken.Default.(string)
 	// prefilljobDescTitle is the schema descriptor for title field.
 	prefilljobDescTitle := prefilljobFields[2].Descriptor()
 	// prefilljob.DefaultTitle holds the default value on creation for the title field.

@@ -35,16 +35,16 @@ func (_c *PrefillJobCreate) SetNillableGalleryID(v *int64) *PrefillJobCreate {
 	return _c
 }
 
-// SetGalleryToken sets the "gallery_token" field.
-func (_c *PrefillJobCreate) SetGalleryToken(v string) *PrefillJobCreate {
-	_c.mutation.SetGalleryToken(v)
+// SetToken sets the "token" field.
+func (_c *PrefillJobCreate) SetToken(v string) *PrefillJobCreate {
+	_c.mutation.SetToken(v)
 	return _c
 }
 
-// SetNillableGalleryToken sets the "gallery_token" field if the given value is not nil.
-func (_c *PrefillJobCreate) SetNillableGalleryToken(v *string) *PrefillJobCreate {
+// SetNillableToken sets the "token" field if the given value is not nil.
+func (_c *PrefillJobCreate) SetNillableToken(v *string) *PrefillJobCreate {
 	if v != nil {
-		_c.SetGalleryToken(*v)
+		_c.SetToken(*v)
 	}
 	return _c
 }
@@ -194,9 +194,9 @@ func (_c *PrefillJobCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *PrefillJobCreate) defaults() {
-	if _, ok := _c.mutation.GalleryToken(); !ok {
-		v := prefilljob.DefaultGalleryToken
-		_c.mutation.SetGalleryToken(v)
+	if _, ok := _c.mutation.Token(); !ok {
+		v := prefilljob.DefaultToken
+		_c.mutation.SetToken(v)
 	}
 	if _, ok := _c.mutation.Title(); !ok {
 		v := prefilljob.DefaultTitle
@@ -226,8 +226,8 @@ func (_c *PrefillJobCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *PrefillJobCreate) check() error {
-	if _, ok := _c.mutation.GalleryToken(); !ok {
-		return &ValidationError{Name: "gallery_token", err: errors.New(`ent: missing required field "PrefillJob.gallery_token"`)}
+	if _, ok := _c.mutation.Token(); !ok {
+		return &ValidationError{Name: "token", err: errors.New(`ent: missing required field "PrefillJob.token"`)}
 	}
 	if _, ok := _c.mutation.Title(); !ok {
 		return &ValidationError{Name: "title", err: errors.New(`ent: missing required field "PrefillJob.title"`)}
@@ -280,9 +280,9 @@ func (_c *PrefillJobCreate) createSpec() (*PrefillJob, *sqlgraph.CreateSpec) {
 		_spec.SetField(prefilljob.FieldGalleryID, field.TypeInt64, value)
 		_node.GalleryID = &value
 	}
-	if value, ok := _c.mutation.GalleryToken(); ok {
-		_spec.SetField(prefilljob.FieldGalleryToken, field.TypeString, value)
-		_node.GalleryToken = value
+	if value, ok := _c.mutation.Token(); ok {
+		_spec.SetField(prefilljob.FieldToken, field.TypeString, value)
+		_node.Token = value
 	}
 	if value, ok := _c.mutation.Title(); ok {
 		_spec.SetField(prefilljob.FieldTitle, field.TypeString, value)

@@ -21,8 +21,8 @@ type PrefillJob struct {
 	ID int `json:"id,omitempty"`
 	// GalleryID holds the value of the "gallery_id" field.
 	GalleryID *int64 `json:"gallery_id,omitempty"`
-	// GalleryToken holds the value of the "gallery_token" field.
-	GalleryToken string `json:"gallery_token,omitempty"`
+	// Token holds the value of the "token" field.
+	Token string `json:"token,omitempty"`
 	// Title holds the value of the "title" field.
 	Title string `json:"title,omitempty"`
 	// Urls holds the value of the "urls" field.
@@ -53,7 +53,7 @@ func (*PrefillJob) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case prefilljob.FieldID, prefilljob.FieldGalleryID, prefilljob.FieldTotal, prefilljob.FieldFailedCount:
 			values[i] = new(sql.NullInt64)
-		case prefilljob.FieldGalleryToken, prefilljob.FieldTitle, prefilljob.FieldStatus:
+		case prefilljob.FieldToken, prefilljob.FieldTitle, prefilljob.FieldStatus:
 			values[i] = new(sql.NullString)
 		case prefilljob.FieldCreatedAt, prefilljob.FieldUpdatedAt, prefilljob.FieldFinishedAt:
 			values[i] = new(sql.NullTime)
@@ -85,11 +85,11 @@ func (_m *PrefillJob) assignValues(columns []string, values []any) error {
 				_m.GalleryID = new(int64)
 				*_m.GalleryID = value.Int64
 			}
-		case prefilljob.FieldGalleryToken:
+		case prefilljob.FieldToken:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field gallery_token", values[i])
+				return fmt.Errorf("unexpected type %T for field token", values[i])
 			} else if value.Valid {
-				_m.GalleryToken = value.String
+				_m.Token = value.String
 			}
 		case prefilljob.FieldTitle:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -191,8 +191,8 @@ func (_m *PrefillJob) String() string {
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
-	builder.WriteString("gallery_token=")
-	builder.WriteString(_m.GalleryToken)
+	builder.WriteString("token=")
+	builder.WriteString(_m.Token)
 	builder.WriteString(", ")
 	builder.WriteString("title=")
 	builder.WriteString(_m.Title)

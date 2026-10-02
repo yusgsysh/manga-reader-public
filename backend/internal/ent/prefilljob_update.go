@@ -57,16 +57,16 @@ func (_u *PrefillJobUpdate) ClearGalleryID() *PrefillJobUpdate {
 	return _u
 }
 
-// SetGalleryToken sets the "gallery_token" field.
-func (_u *PrefillJobUpdate) SetGalleryToken(v string) *PrefillJobUpdate {
-	_u.mutation.SetGalleryToken(v)
+// SetToken sets the "token" field.
+func (_u *PrefillJobUpdate) SetToken(v string) *PrefillJobUpdate {
+	_u.mutation.SetToken(v)
 	return _u
 }
 
-// SetNillableGalleryToken sets the "gallery_token" field if the given value is not nil.
-func (_u *PrefillJobUpdate) SetNillableGalleryToken(v *string) *PrefillJobUpdate {
+// SetNillableToken sets the "token" field if the given value is not nil.
+func (_u *PrefillJobUpdate) SetNillableToken(v *string) *PrefillJobUpdate {
 	if v != nil {
-		_u.SetGalleryToken(*v)
+		_u.SetToken(*v)
 	}
 	return _u
 }
@@ -256,8 +256,8 @@ func (_u *PrefillJobUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if _u.mutation.GalleryIDCleared() {
 		_spec.ClearField(prefilljob.FieldGalleryID, field.TypeInt64)
 	}
-	if value, ok := _u.mutation.GalleryToken(); ok {
-		_spec.SetField(prefilljob.FieldGalleryToken, field.TypeString, value)
+	if value, ok := _u.mutation.Token(); ok {
+		_spec.SetField(prefilljob.FieldToken, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Title(); ok {
 		_spec.SetField(prefilljob.FieldTitle, field.TypeString, value)
@@ -352,16 +352,16 @@ func (_u *PrefillJobUpdateOne) ClearGalleryID() *PrefillJobUpdateOne {
 	return _u
 }
 
-// SetGalleryToken sets the "gallery_token" field.
-func (_u *PrefillJobUpdateOne) SetGalleryToken(v string) *PrefillJobUpdateOne {
-	_u.mutation.SetGalleryToken(v)
+// SetToken sets the "token" field.
+func (_u *PrefillJobUpdateOne) SetToken(v string) *PrefillJobUpdateOne {
+	_u.mutation.SetToken(v)
 	return _u
 }
 
-// SetNillableGalleryToken sets the "gallery_token" field if the given value is not nil.
-func (_u *PrefillJobUpdateOne) SetNillableGalleryToken(v *string) *PrefillJobUpdateOne {
+// SetNillableToken sets the "token" field if the given value is not nil.
+func (_u *PrefillJobUpdateOne) SetNillableToken(v *string) *PrefillJobUpdateOne {
 	if v != nil {
-		_u.SetGalleryToken(*v)
+		_u.SetToken(*v)
 	}
 	return _u
 }
@@ -581,8 +581,8 @@ func (_u *PrefillJobUpdateOne) sqlSave(ctx context.Context) (_node *PrefillJob, 
 	if _u.mutation.GalleryIDCleared() {
 		_spec.ClearField(prefilljob.FieldGalleryID, field.TypeInt64)
 	}
-	if value, ok := _u.mutation.GalleryToken(); ok {
-		_spec.SetField(prefilljob.FieldGalleryToken, field.TypeString, value)
+	if value, ok := _u.mutation.Token(); ok {
+		_spec.SetField(prefilljob.FieldToken, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Title(); ok {
 		_spec.SetField(prefilljob.FieldTitle, field.TypeString, value)

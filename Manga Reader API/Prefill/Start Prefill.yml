@@ -14,7 +14,7 @@ http:
     data: |-
       {
         "gallery_id": 3138775,
-        "gallery_token": "30b0285f9b",
+        "token": "30b0285f9b",
         "title": "Test Gallery",
         "urls": [
           "https://exhentai.org/s/abc/3138775-1",
@@ -61,7 +61,7 @@ docs: |-
   images serially and writes them to MinIO; no image data is returned here.
 
   If a `queued`/`running` job already exists for the same
-  `gallery_id` + `gallery_token`, it is returned with HTTP 200 instead of
+  `gallery_id` + `token`, it is returned with HTTP 200 instead of
   creating a duplicate (HTTP 202 on create).
 
   The job id is captured into `{{prefillId}}` for the other Prefill requests.

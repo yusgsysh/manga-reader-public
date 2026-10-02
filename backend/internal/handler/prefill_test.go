@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	json "encoding/json/v2"
 	"encoding/json/jsontext"
+	json "encoding/json/v2"
 
 	"github.com/gin-gonic/gin"
 
@@ -126,13 +126,13 @@ type prefillItemErrorResp struct {
 }
 
 type prefillJobResp struct {
-	ID           int    `json:"id"`
-	GalleryID    *int64 `json:"gallery_id"`
-	GalleryToken string `json:"gallery_token"`
-	Title        string `json:"title"`
-	Status       string `json:"status"`
-	Total        int    `json:"total"`
-	Progress     *struct {
+	ID        int    `json:"id"`
+	GalleryID *int64 `json:"gallery_id"`
+	Token     string `json:"token"`
+	Title     string `json:"title"`
+	Status    string `json:"status"`
+	Total     int    `json:"total"`
+	Progress  *struct {
 		Done    int `json:"done"`
 		Cached  int `json:"cached"`
 		Fetched int `json:"fetched"`
@@ -184,7 +184,7 @@ func insertPrefillJob(t *testing.T, client *ent.Client, status string, urls []st
 	create := client.PrefillJob.Create().
 		SetStatus(status).
 		SetUrls(urls).
-		SetGalleryToken("").
+		SetToken("").
 		SetTitle("job")
 	for _, fn := range mut {
 		fn(create)
@@ -262,10 +262,10 @@ func TestPrefillStart_CompletesSerially(t *testing.T) {
 	r, _, imgCache := newPrefillTestServer(t, up)
 
 	code, body := doJSON(t, r, http.MethodPost, "/api/prefill", map[string]any{
-		"gallery_id":    4242,
-		"gallery_token": "tok4242",
-		"title":         "Serial Test",
-		"urls":          pageURLs("s1", "s2", "s3"),
+		"gallery_id": 4242,
+		"token":      "tok4242",
+		"title":      "Serial Test",
+		"urls":       pageURLs("s1", "s2", "s3"),
 	})
 	if code != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202, body: %s", code, body)
@@ -335,15 +335,15 @@ func TestPrefillStart_DedupeActiveGallery(t *testing.T) {
 
 	existing := insertPrefillJob(t, server.DB.Client, prefillStatusQueued, pageURLs("d1"), func(c *ent.PrefillJobCreate) {
 		c.SetGalleryID(99)
-		c.SetGalleryToken("tok99")
+		c.SetToken("tok99")
 		c.SetTitle("existing")
 	})
 
 	code, body := doJSON(t, r, http.MethodPost, "/api/prefill", map[string]any{
-		"gallery_id":    99,
-		"gallery_token": "tok99",
-		"title":         "again",
-		"urls":          pageURLs("d1", "d2"),
+		"gallery_id": 99,
+		"token":      "tok99",
+		"title":      "again",
+		"urls":       pageURLs("d1", "d2"),
 	})
 	if code != http.StatusOK {
 		t.Fatalf("dedupe status = %d, want 200, body: %s", code, body)
@@ -365,14 +365,14 @@ func TestPrefillStart_NoDedupeWithoutOrAfterGallery(t *testing.T) {
 	// Finished job for the gallery does not block a new job.
 	insertPrefillJob(t, server.DB.Client, prefillStatusCompleted, pageURLs("old1"), func(c *ent.PrefillJobCreate) {
 		c.SetGalleryID(7)
-		c.SetGalleryToken("tok7")
+		c.SetToken("tok7")
 		c.SetFinishedAt(time.Now())
 	})
 
 	code, body := doJSON(t, r, http.MethodPost, "/api/prefill", map[string]any{
-		"gallery_id":    7,
-		"gallery_token": "tok7",
-		"urls":          pageURLs("n1"),
+		"gallery_id": 7,
+		"token":      "tok7",
+		"urls":       pageURLs("n1"),
 	})
 	if code != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202, body: %s", code, body)

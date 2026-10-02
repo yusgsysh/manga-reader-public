@@ -20,7 +20,7 @@ export interface PrefillItemError {
 export interface PrefillJob {
   id: number;
   gallery_id: number | null;
-  gallery_token: string;
+  token: string;
   title: string;
   status: PrefillStatus;
   total: number;
@@ -38,7 +38,7 @@ export interface PrefillListResponse {
 
 export interface PrefillStartRequest {
   gallery_id?: number;
-  gallery_token?: string;
+  token?: string;
   title?: string;
   urls: string[];
 }

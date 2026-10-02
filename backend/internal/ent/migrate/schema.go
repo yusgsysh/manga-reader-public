@@ -74,7 +74,7 @@ var (
 	PrefillJobColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "gallery_id", Type: field.TypeInt64, Nullable: true},
-		{Name: "gallery_token", Type: field.TypeString, Default: ""},
+		{Name: "token", Type: field.TypeString, Default: ""},
 		{Name: "title", Type: field.TypeString, Default: ""},
 		{Name: "urls", Type: field.TypeJSON},
 		{Name: "status", Type: field.TypeString, Default: "queued"},
@@ -95,6 +95,11 @@ var (
 				Name:    "prefilljob_status_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{PrefillJobColumns[5], PrefillJobColumns[9]},
+			},
+			{
+				Name:    "prefilljob_gallery_id_token",
+				Unique:  false,
+				Columns: []*schema.Column{PrefillJobColumns[1], PrefillJobColumns[2]},
 			},
 		},
 	}
