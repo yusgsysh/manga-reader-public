@@ -10,7 +10,7 @@ import type {
 
 // URL keys that make up a listing's filter state. Kept in sync with
 // advancedToParams in api/gallery.ts so a pasted URL reproduces the request.
-export const LISTING_FILTER_KEYS = [
+const LISTING_FILTER_KEYS = [
   "tags",
   "categories",
   "min_pages",
@@ -23,7 +23,7 @@ export const LISTING_FILTER_KEYS = [
   "disable_tag_filter",
 ] as const;
 
-export const LISTING_NAV_KEYS = ["seek", "jump"] as const;
+const LISTING_NAV_KEYS = ["seek", "jump"] as const;
 
 function parseCsv(value: string | null): string[] {
   if (!value) return [];

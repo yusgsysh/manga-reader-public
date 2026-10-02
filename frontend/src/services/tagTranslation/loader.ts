@@ -3,7 +3,7 @@ import { readCachedDb, writeCachedDb } from "./database";
 const LOCAL_DB_URL =
   import.meta.env.VITE_TAG_TRANSLATION_DB_URL || "/db.text.js";
 
-export const REMOTE_DB_URL =
+const REMOTE_DB_URL =
   import.meta.env.VITE_TAG_TRANSLATION_REMOTE_URL ||
   "https://github.com/EhTagTranslation/Database/releases/latest/download/db.text.js";
 

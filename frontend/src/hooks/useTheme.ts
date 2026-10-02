@@ -3,7 +3,7 @@ import type { ThemeMode } from "../lib/theme";
 
 export type ResolvedTheme = "light" | "dark";
 
-export interface ThemeContextValue {
+interface ThemeContextValue {
   mode: ThemeMode;
   resolvedMode: ResolvedTheme;
   setMode: (mode: ThemeMode) => void;

@@ -46,12 +46,12 @@ export function pageThumbnailIndex(url: string): number | null {
   }
 }
 
-export interface QueueItem {
+interface QueueItem {
   img: HTMLImageElement;
   url: string;
 }
 
-export interface ThumbnailQueue {
+interface ThumbnailQueue {
   enqueue: (item: QueueItem) => void;
   cancel: (img: HTMLImageElement) => void;
   stop: () => void;
@@ -111,7 +111,7 @@ export function createThumbnailQueue(concurrency = 5): ThumbnailQueue {
   };
 }
 
-export interface LoadThumbnailsOptions {
+interface LoadThumbnailsOptions {
   concurrency?: number;
   /**
    * When set, only thumbnails with a page index below the returned count are

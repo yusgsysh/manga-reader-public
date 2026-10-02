@@ -4,7 +4,7 @@ import type { GalleryCategory } from "../types/gallery";
 // Category colors are copied from the ExHentai/E-Hentai stylesheet
 // (https://e-hentai.org/z/0381/g.css): `.ct1`–`.cta`. The two sites share the
 // same frontend, so these match the source category pills exactly.
-export interface CategoryMeta {
+interface CategoryMeta {
   label: string;
   from: string;
   to: string;
@@ -39,7 +39,7 @@ export const ALL_CATEGORY_VALUES: GalleryCategory[] = [
   "misc",
 ];
 
-export function categoryMeta(category?: string): CategoryMeta {
+function categoryMeta(category?: string): CategoryMeta {
   if (category && category in CATEGORY_META) {
     return CATEGORY_META[category as GalleryCategory];
   }

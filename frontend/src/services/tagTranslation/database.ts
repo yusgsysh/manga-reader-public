@@ -55,19 +55,4 @@ export async function writeCachedDb(data: unknown): Promise<boolean> {
   }
 }
 
-export async function clearCachedDb(): Promise<boolean> {
-  try {
-    const db = await openDb();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      tx.objectStore(STORE_NAME).delete(KEY);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error ?? new Error("clear IndexedDB failed"));
-    });
-    db.close();
-    return true;
-  } catch (error) {
-    console.warn("Failed to clear tag translation cache", error);
-    return false;
-  }
-}
+

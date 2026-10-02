@@ -1,4 +1,4 @@
-export interface AccentPreset {
+interface AccentPreset {
   id: string;
   label: string;
   color: string;
@@ -54,7 +54,7 @@ function normalizeHex(value: string): string {
 }
 
 // WCAG relative luminance, used to pick readable text on top of the accent.
-export function relativeLuminance(hex: string): number {
+function relativeLuminance(hex: string): number {
   const rgb = parseHex(hex);
   if (!rgb) return 0;
   const channel = (c: number) => {

@@ -5,7 +5,7 @@ export function fetchBookshelf(page: number): Promise<BookshelfListResponse> {
   return apiGet<BookshelfListResponse>("/api/bookshelf", { page });
 }
 
-export interface BookshelfMutationResult {
+interface BookshelfMutationResult {
   success: boolean;
   in_bookshelf: boolean;
   // True when the add was satisfied from cached metadata because the upstream

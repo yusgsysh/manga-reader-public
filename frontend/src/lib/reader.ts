@@ -100,7 +100,7 @@ export function galleryPageSlotsToManga(
   };
 }
 
-export type SlotPageSrcResolver = (context: {
+type SlotPageSrcResolver = (context: {
   page: ImagePage;
   pageIndex: number;
   isSpread: boolean;

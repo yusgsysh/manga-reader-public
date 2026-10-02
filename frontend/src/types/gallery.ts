@@ -159,6 +159,4 @@ export interface Tag {
   name: string;
 }
 
-export interface ApiError {
-  error: string;
-}
+

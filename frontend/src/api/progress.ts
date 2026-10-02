@@ -19,7 +19,7 @@ export function updateReadingProgress(
   return apiPut<ReadingProgress>(`/api/progress/${id}/${token}`, body);
 }
 
-export interface CleanupReadingProgressResponse {
+interface CleanupReadingProgressResponse {
   days: number;
   deleted: number;
 }

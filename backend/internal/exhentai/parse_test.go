@@ -97,6 +97,3 @@ func BenchmarkBuildCategoryFilter(b *testing.B) {
 		BuildCategoryFilter(cats)
 	}
 }
-
-//go:fix inline
-func intPtr(v int) *int { return new(v) }

@@ -5,7 +5,7 @@ import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { Popover, Tooltip } from "@cloudflare/kumo";
 import { Chip } from "../ui";
 
-export interface TagBadgeProps {
+interface TagBadgeProps {
   tag: Tag;
   showNamespace?: boolean;
 }

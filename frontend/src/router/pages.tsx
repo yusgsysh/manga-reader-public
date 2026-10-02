@@ -34,7 +34,7 @@ export const GalleryDetailPage = lazy(() =>
     default: m.GalleryDetailPage,
   })),
 );
-export const ReaderPage = lazy(() =>
+const ReaderPage = lazy(() =>
   import("../pages/ReaderPage").then((m) => ({ default: m.ReaderPage })),
 );
 export const SettingsPage = lazy(() =>

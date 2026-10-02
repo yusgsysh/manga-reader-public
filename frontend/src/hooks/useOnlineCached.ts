@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-export type DataSource = "online" | "cache";
+type DataSource = "online" | "cache";
 
-export function useOnlineStatus(): boolean {
+function useOnlineStatus(): boolean {
   const [online, setOnline] = useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
@@ -40,7 +40,7 @@ interface UseOnlineThenCachedOptions<T> {
   useCacheAsPlaceholder?: boolean;
 }
 
-export interface UseOnlineThenCachedResult<T> {
+interface UseOnlineThenCachedResult<T> {
   data: T | undefined;
   source: DataSource | null;
   isLoading: boolean;

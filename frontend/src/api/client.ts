@@ -84,15 +84,6 @@ export function apiDelete<T>(path: string): Promise<T> {
   return request<T>(buildApiUrl(path), { method: "DELETE" });
 }
 
-export async function apiBlob(
-  path: string,
-  params?: Record<string, string | number | undefined>,
-  init?: RequestInit,
-): Promise<Blob> {
-  const res = await fetchChecked(buildApiUrl(path, params), init);
-  return res.blob();
-}
-
 export async function apiHead(
   path: string,
   params?: Record<string, string | number | undefined>,

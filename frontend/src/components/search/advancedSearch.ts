@@ -25,7 +25,7 @@ export const ADVANCED_LABELS: Record<string, string> = {
   disable_tag_filter: "不过滤标签",
 };
 
-export const ADVANCED_KEYS = Object.keys(ADVANCED_LABELS) as Array<
+const ADVANCED_KEYS = Object.keys(ADVANCED_LABELS) as Array<
   keyof AdvancedSearchOptions
 >;
 

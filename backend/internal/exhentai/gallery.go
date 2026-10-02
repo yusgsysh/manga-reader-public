@@ -268,22 +268,6 @@ func StreamGalleryPages(ctx context.Context, client *http.Client, galleryURL str
 	return nil
 }
 
-// ScrapeGalleryPages fetches the full list of gallery pages. It reports an
-// error instead of returning a partial list, so callers only ever cache a
-// complete result.
-func ScrapeGalleryPages(ctx context.Context, client *http.Client, galleryURL string) ([]string, []model.GalleryPageThumb, error) {
-	var pageURLs []string
-	var thumbnails []model.GalleryPageThumb
-	if err := StreamGalleryPages(ctx, client, galleryURL, func(_ int, urls []string, thumbs []model.GalleryPageThumb) error {
-		pageURLs = append(pageURLs, urls...)
-		thumbnails = append(thumbnails, thumbs...)
-		return nil
-	}); err != nil {
-		return nil, nil, err
-	}
-	return pageURLs, thumbnails, nil
-}
-
 // ScrapeGalleryTotal fetches the gallery document and returns the ".gpc" image
 // count without walking the thumbnail pages. It is a lightweight freshness probe
 // used to detect a page-count change against the cache.

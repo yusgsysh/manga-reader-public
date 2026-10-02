@@ -42,10 +42,6 @@ func ThumbnailCacheKey(rawURL string) string {
 	return thumbnailCachePrefix + hex.EncodeToString(sum[:])
 }
 
-func isNotFound(err error) bool {
-	return cache.IsNotFound(err)
-}
-
 func fetchThumbnail(ctx context.Context, client *http.Client, thumbnailURL string) (data []byte, contentType string, err error) {
 	data, contentType, err = exhentai.ProxyImage(ctx, client, thumbnailURL)
 	if err == nil {
@@ -210,10 +206,7 @@ func (s *Server) loadOrFetchImage(ctx context.Context, key string, decodedURL st
 	return v.(*imageResult), nil
 }
 
-const (
-	pageFetchMaxAttempts = 3
-	pageFetchRetryDelay  = 500 * time.Millisecond
-)
+const pageFetchRetryDelay = 500 * time.Millisecond
 
 // loadOrFetchThumbnail returns the cached thumbnail for key, fetching it from
 // the upstream on a cache miss. Concurrent calls for the same key are coalesced.
@@ -253,35 +246,6 @@ func (s *Server) loadOrFetchThumbnail(ctx context.Context, key string, rawURL st
 		return nil, sfErr
 	}
 	return v.(*imageResult), nil
-}
-
-// fetchWithRetry loads an image through loadOrFetchImage, retrying transient
-// failures up to pageFetchMaxAttempts times. It respects ctx cancellation and
-// never retries after the context is done. Permanent upstream errors (IP banned,
-// sad panda, 4xx errors) are not retried.
-func (s *Server) fetchWithRetry(ctx context.Context, key string, decodedURL string) (*imageResult, error) {
-	var lastErr error
-	for attempt := range pageFetchMaxAttempts {
-		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(pageFetchRetryDelay):
-			}
-		}
-		result, err := s.loadOrFetchImage(ctx, key, decodedURL)
-		if err == nil {
-			return result, nil
-		}
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		lastErr = err
-		if exhentai.IsPermanentUpstreamError(err) {
-			return nil, err
-		}
-	}
-	return nil, lastErr
 }
 
 // triggerPageRefresh maps a permanently failed page URL back to its gallery and

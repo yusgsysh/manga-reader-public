@@ -1,9 +1,7 @@
 package exhentai
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
@@ -17,16 +15,6 @@ const ExhentaiBase = "https://exhentai.org"
 
 // CookieConfig stores cookie configuration.
 type CookieConfig = config.CookieConfig
-
-// LoadCookieConfig loads cookie configuration from environment variables.
-// Deprecated: use config.Load() instead.
-func LoadCookieConfig() *CookieConfig {
-	cfg, err := config.Load()
-	if err != nil {
-		return &CookieConfig{}
-	}
-	return &cfg.Cookie
-}
 
 // IsValid checks whether the required cookies are present.
 func IsValidCookieConfig(c *CookieConfig) bool {
@@ -74,26 +62,4 @@ func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 		Jar:       jar,
 		Transport: transport,
 	}, nil
-}
-
-// MakeRequest sends an HTTP GET request with ExHentai headers.
-func MakeRequest(ctx context.Context, client *http.Client, reqURL string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36")
-	req.Header.Set("Referer", ExhentaiBase+"/")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-
-	return io.ReadAll(resp.Body)
 }

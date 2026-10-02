@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
-	"strconv"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -37,31 +35,8 @@ type MinIOConfig struct {
 	Region    string
 }
 
-func LoadMinIOConfig() *MinIOConfig {
-	return &MinIOConfig{
-		Endpoint:  os.Getenv("MINIO_ENDPOINT"),
-		AccessKey: os.Getenv("MINIO_ACCESS_KEY"),
-		SecretKey: os.Getenv("MINIO_SECRET_KEY"),
-		Bucket:    os.Getenv("MINIO_BUCKET"),
-		UseSSL:    parseBoolEnv("MINIO_USE_SSL", false),
-		Region:    os.Getenv("MINIO_REGION"),
-	}
-}
-
 func (c *MinIOConfig) IsValid() bool {
 	return c.Endpoint != "" && c.AccessKey != "" && c.SecretKey != "" && c.Bucket != ""
-}
-
-func parseBoolEnv(key string, defaultVal bool) bool {
-	v := os.Getenv(key)
-	if v == "" {
-		return defaultVal
-	}
-	b, err := strconv.ParseBool(v)
-	if err != nil {
-		return defaultVal
-	}
-	return b
 }
 
 func NewMinIOCache(cfg *MinIOConfig) (*MinIOCache, error) {

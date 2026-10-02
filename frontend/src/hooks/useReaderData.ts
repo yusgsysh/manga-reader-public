@@ -125,7 +125,7 @@ function buildItem(
 // recently-read infinite query so the correct order renders immediately when
 // navigating back, before the background refetch confirms it. Enrichment
 // metadata (title/thumbnail/pages/category) is preserved for existing items.
-export function updateRecentlyReadCache(
+function updateRecentlyReadCache(
   queryClient: QueryClient,
   id: number,
   token: string,

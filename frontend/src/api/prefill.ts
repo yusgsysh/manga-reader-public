@@ -22,10 +22,6 @@ export function fetchPrefillJobs(): Promise<PrefillListResponse> {
   return apiGet<PrefillListResponse>("/api/prefill");
 }
 
-export function fetchPrefillJob(id: number): Promise<PrefillJob> {
-  return apiGet<PrefillJob>(`/api/prefill/${id}`);
-}
-
 export function cancelPrefillJob(id: number): Promise<PrefillJob> {
   return apiPost<PrefillJob>(`/api/prefill/${id}/cancel`);
 }

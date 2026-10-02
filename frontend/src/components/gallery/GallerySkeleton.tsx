@@ -24,7 +24,7 @@ function useGridColumnCount(): number {
   return columns;
 }
 
-export function GallerySkeleton() {
+function GallerySkeleton() {
   return (
     <div>
       <Skeleton className="aspect-[3/4] rounded-xl" />

@@ -6,7 +6,7 @@ const DATE_RE = /^\d{2,4}-\d{1,2}(-\d{1,2})?$/;
 const YEAR_RE = /^\d{4}$/;
 const JUMP_RE = /^\d+[dwmy-]?$/;
 
-export type JumpSeek = { kind: "seek"; value: string } | { kind: "jump"; value: string };
+type JumpSeek = { kind: "seek"; value: string } | { kind: "jump"; value: string };
 
 function isSeek(value: string): boolean {
   if (DATE_RE.test(value)) return true;

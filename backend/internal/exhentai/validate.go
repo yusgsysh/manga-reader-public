@@ -26,10 +26,6 @@ func ValidatePageThumbnailURL(rawURL string) error {
 	return validatePageThumbnailURL(rawURL)
 }
 
-func IsBlockedInternalHost(host string) bool {
-	return isBlockedInternalHost(host)
-}
-
 var allowedThumbnailHosts = map[string]struct{}{
 	"s.exhentai.org":  {},
 	"ehgt.org":        {},

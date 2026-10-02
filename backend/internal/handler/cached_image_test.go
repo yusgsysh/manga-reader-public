@@ -172,27 +172,6 @@ func TestCachedImageURLDecode_WithSpecialChars(t *testing.T) {
 	}
 }
 
-// ==================== isNotFound Tests ====================
-
-func TestIsNotFound(t *testing.T) {
-	tests := []struct {
-		name   string
-		err    error
-		expect bool
-	}{
-		{"nil error", nil, false},
-		{"generic error", fmt.Errorf("some error"), false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := cache.IsNotFound(tt.err); got != tt.expect {
-				t.Errorf("isNotFound(%v) = %v, want %v", tt.err, got, tt.expect)
-			}
-		})
-	}
-}
-
 // ==================== Handler Tests (Mock HTTP) ====================
 
 func TestCachedImage_MissingURL(t *testing.T) {
