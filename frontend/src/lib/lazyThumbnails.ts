@@ -7,6 +7,9 @@ const PLACEHOLDER =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
 const LAZY_FLAG = "lazyThumb";
+// The original URL is kept on the node so a later run (effect re-run,
+// re-parented node) can adopt images that a previous run already deferred.
+const LAZY_SRC = "lazyThumbSrc";
 
 export function isPageThumbnailURL(url: string): boolean {
   try {
@@ -88,6 +91,12 @@ export function observeLazyThumbnails(
   const queue = createThumbnailQueue(concurrency);
   const pending = new WeakMap<HTMLImageElement, string>();
 
+  // The IO root must be the viewport, never `root` itself: in fullscreen
+  // comimi makes `.comimi-root` a viewport-fixed box, and Chromium reports a
+  // 0x0 rootBounds for every *ancestor* of such an element (including the
+  // fullscreen element), so nothing would ever intersect and the placeholders
+  // would stick forever. The viewport root keeps the ancestor clipping that
+  // actually gates loading (the height-0 menu, the page-list scroller).
   const observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
@@ -98,18 +107,25 @@ export function observeLazyThumbnails(
         if (url) queue.enqueue({ img, url });
       }
     },
-    { root, rootMargin },
+    { root: null, rootMargin },
   );
 
   const defer = (node: Node) => {
     if (!(node instanceof HTMLImageElement)) return;
-    const url = node.src;
-    if (!url || !isPageThumbnailURL(url) || node.dataset[LAZY_FLAG] === "1") {
-      return;
+    const alreadyDeferred = node.dataset[LAZY_FLAG] === "1";
+    const url = alreadyDeferred ? node.dataset[LAZY_SRC] : node.src;
+    if (!url || !isPageThumbnailURL(url)) return;
+    if (alreadyDeferred) {
+      // Re-adopt an image deferred by an earlier run: its observer is gone,
+      // so without this it would sit on the placeholder for good. Skip images
+      // that already carry a real src — those are loading or loaded.
+      if (node.getAttribute("src") !== PLACEHOLDER) return;
+    } else {
+      node.dataset[LAZY_FLAG] = "1";
+      node.dataset[LAZY_SRC] = url;
+      node.src = PLACEHOLDER;
     }
-    node.dataset[LAZY_FLAG] = "1";
     pending.set(node, url);
-    node.src = PLACEHOLDER;
     observer.observe(node);
   };
 

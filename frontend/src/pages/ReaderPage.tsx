@@ -43,6 +43,15 @@ export function ReaderPage() {
   const { resolvedMode } = useTheme();
   const viewerRef = useRef<MangaViewerHandle>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // The shell mounts only once the reader data is ready, which can happen
+  // after `manga` is already set — keying observation off the element itself
+  // guarantees it starts with the shell instead of riding data changes (and
+  // avoids tearing the observer down every time `manga` changes identity).
+  const [shellEl, setShellEl] = useState<HTMLDivElement | null>(null);
+  const attachShell = useCallback((el: HTMLDivElement | null) => {
+    containerRef.current = el;
+    setShellEl(el);
+  }, []);
   // The page the reader is actually on. The library resets to page 0 whenever
   // its `manga` prop changes (storage is disabled), so we keep the real index
   // here and restore it after the one-time completion update.
@@ -214,10 +223,11 @@ export function ReaderPage() {
   // Throttle comimi's page-list / seek-preview thumbnails: load them lazily
   // through a bounded queue instead of requesting every page at once.
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    return observeLazyThumbnails(el, { concurrency: THUMBNAIL_CONCURRENCY });
-  }, [manga]);
+    if (!shellEl) return;
+    return observeLazyThumbnails(shellEl, {
+      concurrency: THUMBNAIL_CONCURRENCY,
+    });
+  }, [shellEl]);
 
   useEffect(() => {
     if (gallery?.title) {
@@ -288,7 +298,7 @@ export function ReaderPage() {
 
   return (
     <div
-      ref={containerRef}
+      ref={attachShell}
       className="reader-shell flex h-[100dvh] flex-col bg-kumo-base"
     >
       {/* Top bar：全屏时由 comimi 接管，控件交给库内 dock */}

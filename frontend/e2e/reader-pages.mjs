@@ -174,6 +174,115 @@ try {
     await page.close();
   }
 
+  console.log("reader: page-list thumbnails load lazily");
+  {
+    // Opens the reader (optionally in fullscreen) with the page list showing
+    // and returns helpers to sample the deferred/loaded thumbnail state.
+    const openReader = async (fullscreen) => {
+      const page = await browser.newPage();
+      let thumbRequests = 0;
+      page.on("request", (req) => {
+        if (req.url().includes("/api/image-cache/page-thumbnail")) thumbRequests++;
+      });
+      await page.goto(`${BASE}/reader/1001/tok`, { waitUntil: "domcontentloaded" });
+      await page.waitForSelector(".reader-shell", { timeout: 30000 });
+      await sleep(1500);
+      if (fullscreen) {
+        await page.locator('.reader-topbar button[aria-label="全屏"]').click();
+        await sleep(500);
+      }
+      await page.keyboard.press("m");
+      await page.waitForSelector(".comimi-menu-link", { timeout: 10000 });
+      await page.locator(".comimi-menu-link").first().click();
+      await page.waitForSelector(".comimi-menu-view-page-list", { timeout: 10000 });
+      await sleep(1500);
+      const state = () =>
+        page.evaluate(() => {
+          // "Visible" = fully inside the page-list scroller: its overflow
+          // clips the list, so viewport bounds alone would count the
+          // thumbnails hidden below the scroll window too.
+          const box = document
+            .querySelector(".comimi-page-list-inner")
+            .getBoundingClientRect();
+          const win = {
+            l: box.left + 4,
+            r: box.right - 4,
+            t: box.top + 4,
+            b: box.bottom - 4,
+          };
+          const imgs = [
+            ...document.querySelectorAll(".comimi-page-list-item img"),
+          ];
+          const visible = imgs.filter((img) => {
+            const r = img.getBoundingClientRect();
+            return (
+              r.width > 0 &&
+              r.left >= win.l &&
+              r.right <= win.r &&
+              r.top >= win.t &&
+              r.bottom <= win.b
+            );
+          });
+          return {
+            layout:
+              document.querySelector(".comimi-root")?.dataset.layout ?? null,
+            visible: visible.length,
+            deferred: visible.filter((img) =>
+              img.src.startsWith("data:"),
+            ).length,
+            loaded: imgs.filter((img) => !img.src.startsWith("data:")).length,
+          };
+        });
+      return { page, state, requests: () => thumbRequests };
+    };
+
+    const inline = await openReader(false);
+    const inlineState = await inline.state();
+    check(
+      "visible thumbnails load in the inline layout",
+      inlineState.visible > 0 && inlineState.deferred === 0,
+      JSON.stringify(inlineState),
+    );
+    await inline.page.close();
+
+    // Fullscreen makes comimi's root a viewport-fixed box, which collapsed the
+    // IntersectionObserver root bounds and left every thumbnail on the
+    // placeholder. Open the list only after entering fullscreen so the check
+    // sees thumbnails that have never loaded before.
+    const full = await openReader(true);
+    const fullState = await full.state();
+    check(
+      "reader entered the fullscreen layout",
+      fullState.layout === "browserFullscreen" ||
+        fullState.layout === "nativeFullscreen",
+      String(fullState.layout),
+    );
+    check(
+      "visible thumbnails load in fullscreen (no stuck placeholder)",
+      fullState.visible > 0 && fullState.deferred === 0,
+      JSON.stringify(fullState),
+    );
+    check(
+      "page thumbnails were requested",
+      full.requests() > 0,
+      `${full.requests()} requests`,
+    );
+
+    // The queue must keep feeding while the list scrolls in fullscreen.
+    await full.page.evaluate(() => {
+      const inner = document.querySelector(".comimi-page-list-inner");
+      inner.scrollTop = inner.scrollHeight;
+    });
+    await sleep(1500);
+    const scrolled = await full.state();
+    check(
+      "scrolling the page list loads more thumbnails",
+      scrolled.deferred === 0 && scrolled.loaded > fullState.loaded,
+      JSON.stringify(scrolled),
+    );
+    await full.page.close();
+  }
+
   console.log("settings: dev tools section");
   {
     // Enabled backend: the switch is shown.
