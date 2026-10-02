@@ -717,6 +717,7 @@ Cache-Control: public, max-age=31536000, immutable
 
 - **直接裁剪**：精灵图 MinIO read-through，Key 为 `sprite/<sha256(url)>`；每次请求基于缓存的精灵图现场裁剪，裁剪结果不持久化。
 - **按索引**：几何优先取 `gallery_cache` 的 `pages[].thumbnail`；未命中时**订阅共享的 `/pages` 抓取流**（与上文 singleflight 合并同一条 walk），并发 index 请求共用一次上游抓取，walk 完成后自动把完整列表回填 `gallery_cache`。若 15 秒内 walk 尚未推进到该页，则回退为单页直抓（1~2 个文档），避免请求长时间挂起；图片本身仍走 MinIO read-through。
+- **过期精灵图自愈（按索引）**：命中缓存的几何但 sprite 返回 404（URL 过期）时，整条按索引流程（`galleryID:token:index`）合并执行：① 整份刷新 `gallery_cache`；② 重新解析，若 sprite URL 未变（仍落在 10 秒上游文档短共享窗口内），改用单页直抓绕过短共享取新 URL，并按 index 回填；③ 重试一次。并发请求共享同一次刷新、直抓与图片下载，因此过期后首个请求即返回 200，而非 502。
 
 **Headers:**
 
@@ -1322,7 +1323,8 @@ read-through，**流式 NDJSON**，与在线 `/pages` 格式一致：命中时�
 ### 缓存写入与刷新时机
 
 - 缓存端点 miss 时完整成功后整份替换 `pages` + `thumbnails`（允许缩短）
-- 图片永久失败（旧 page URL 失效）时，从 URL 解析 `gallery_id`，按 `gallery_id` 反查 token，后台整份刷新
+- 图片永久失败（旧 page URL 失效，含页面响应的非 200，如 404）时，从 URL 解析 `gallery_id`，按 `gallery_id` 反查 token，后台整份刷新；5xx 视为瞬态不触发
+- 缓存精灵图 404（URL 过期）时，在该次 `/api/image-cache/page-thumbnail` 请求内整份刷新 + 单页直抓新 URL 并重试（见第 11 节）
 - 缓存 `/pages` 命中后后台比对 `.gpc` 总页数，变化时整份替换
 - 单页缩略图几何缺失 / 解析超时直抓时，按 index 稀疏补洞
 - `POST /api/bookshelf/:id/:token` 成功后后台异步预取元数据、详情与页面列表（页面列表同样仅在完整成功时写入）

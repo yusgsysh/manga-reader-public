@@ -1,4 +1,7 @@
-# ExHentai 精灵图过期导致缩略图加载失败 - 问题分析与复现测试
+# ExHentai 精灵图过期导致缩略图加载失败 - 问题分析与修复
+
+> 状态：**已修复**（`fix(backend): recover expired exhentai sprite thumbnails`）。
+> 本文档保留问题背景与修复前的失败分析，并记录最终实现与验证方式。
 
 ## 问题背景
 
@@ -20,12 +23,12 @@ ExHentai 画廊缩略图使用精灵图存储：多张缩略图打包在一张�
 
 **根因**：Gallery cache 存储的 sprite URL 有过期时间（通常几小时），缓存未失效时前端读取到过期 URL，导致缩略图加载失败。
 
-## 当前架构
+## 修复前架构
 
 ```
 Frontend (PageThumbnailGrid)
     → GET /api/image-cache/page-thumbnail?id={id}&token={token}&index={index}
-        → handleCachedPageThumbnail (page_thumbnail.go:192)
+        → handleCachedPageThumbnail
             → resolveGalleryPageThumb (从 gallery_cache 读取 sprite 几何信息)
             → loadOrCropThumbnail
                 → loadOrFetchSprite (从 MinIO 读取 sprite，miss 时回源)
@@ -44,11 +47,11 @@ Frontend (PageThumbnailGrid)
 - Request thumbnail by index
 - Expect: 200 OK, new sprite cached, gallery_cache updated
 
-### TestCachedPageThumbnail_SpriteExpired_ConcurrentRequests  
+### TestCachedPageThumbnail_SpriteExpired_ConcurrentRequests
 - Same setup, fire N concurrent requests
 - Expect: only 1 gallery re-scrape, all requests succeed
 
-## 失败现象分析
+## 修复前失败现象（保留作背景）
 
 测试运行时，`refreshPages` 触发但 gallery cache 未更新。日志显示：
 ```
@@ -66,26 +69,54 @@ WARN gallery page-thumbnail cache read failed id=999001 error="context deadline 
 6. 轮询超时（15s），cache 仍为旧 sprite URL
 7. 最终重试仍使用旧 URL，返回 502
 
-## 关键阻塞点
+## 关键阻塞点（修复前分析）
 
 1. **Refresh 触发时机**：初始 resolve 从 cache 读取到旧 sprite URL，不触发 scrape；refresh 时需强制重新 scrape
 2. **Singleflight 去重**：`galleryPagesFillGroup` 和 `galleryPagesHub` 两层去重可能导致 refresh 复用旧 stream，无法触发新 scrape
-3. **Cache 更新可见性**：refresh 完成写入 cache 后，handler 的 polling loop 需能立即读到新数据
-4. **Context 生命周期**：背景 goroutine 使用 `context.Background()` 与测试主线程的 context 生命周期冲突
+3. **Cache 更新可见性**：refresh 完成写入 cache 后，handler 需能立即读到新数据
+4. **Context 生命周期**：背景 goroutine 使用 `context.Background()` 与请求的 context 生命周期冲突
 
-## 运行复现测试
+## 修复方案（已实现）
+
+1. **错误携带 HTTP 状态码**（`internal/exhentai/error.go`、`image.go`、`api.go`）
+   `ProxyImage`/`postGalleryMetadata` 返回 `&httpStatusError{code: ...}`，使 `HTTPStatusCode` 与 `IsPermanentUpstreamError` 对 4xx 生效。此前 `httpStatusError` 在生产代码中从未构造，导致 404 被当作瞬态错误。
+
+2. **不再重试永久性 4xx**（`internal/handler/image.go`）
+   `fetchThumbnail` 首次请求即对 `IsPermanentUpstreamError` 短路，一次过期 sprite 只打 1 次上游（与测试期望一致）。
+
+3. **有界恢复 + 按索引合并**（`internal/handler/page_thumbnail.go`）
+   按索引的整条 resolve + crop + 恢复流程用 `pageThumbGroup`（key = `galleryID:token:index`）合并。缓存命中但 sprite 404 时：
+   1. `refreshPagesSync` 全量刷新 gallery cache（写完后返回）；
+   2. 重新从 cache 解析；
+   3. 若 sprite URL 未变（共享文档去重窗口内仍是旧文档），用 `ScrapeGalleryPageThumb`（`httpGetDocDirect`，绕过 10s 文档去重）直连抓取新 URL 并回填；
+   4. 重试一次，否则返回原 502。
+   这样并发请求共享一次刷新、一次直连抓取、一次旧/新 sprite 下载。
+
+4. **同步刷新辅助**（`internal/handler/gallery.go`）
+   新增 `refreshPagesSync`：复用 `galleryPagesFillGroup` + `scrapeAndCache`，返回前保证缓存已写入，超时受调用方 ctx 约束。
+
+## 页面缓存（同类问题排查与后续加固）
+
+- **页面图片缓存**（`/api/image-cache/page`）：MinIO key = SHA256(稳定的页面 URL)，临时的图片 URL 从不落盘，每次 miss 重新抓页面取图，**不存在同类过期问题**。
+- **页面列表缓存**（`/api/gallery-cache/.../pages`）：页面 URL 稳定；缩略图几何部分由上述恢复处理。若页面 URL 轮换且总数不变，旧 URL 会 502。
+- **加固（已实现）**：`ScrapePageImageURL` 对非 200 返回 `&httpStatusError{...}`，从而激活已有的 `triggerPageRefresh`，让永久失败的页面 URL 触发 gallery 缓存刷新。
+
+## 运行测试
 
 ```bash
 cd /home/abc/manga-reader/backend
 go test -v -run "TestCachedPageThumbnail_SpriteExpired" ./internal/handler/
+go test -count=1 ./internal/handler/ ./internal/exhentai/
 ```
 
-预期：测试失败，展示上述超时行为。
+预期：全部通过（两个 SpriteExpired 用例各只打印一次 `cached sprite expired`，证明并发已合并）。
 
 ## 相关文件
 
-- `internal/handler/page_thumbnail.go` - handleCachedPageThumbnail, loadOrFetchSprite
-- `internal/handler/gallery.go` - refreshPages, scrapeAndCache
-- `internal/handler/page_thumbnail_test.go` - 复现测试用例
-- `internal/exhentai/gallery.go` - StreamGalleryPages, extractGalleryPages
-- `internal/exhentai/error.go` - HTTPStatusCode 错误码提取
+- `internal/handler/page_thumbnail.go` - handleCachedPageThumbnail, loadCachedIndexThumbnail, loadOrFetchSprite
+- `internal/handler/gallery.go` - refreshPages, refreshPagesSync, scrapeAndCache
+- `internal/handler/page_thumbnail_test.go` - 复现与回归测试
+- `internal/handler/gallery_cache_test.go` - 页面 URL 自愈测试
+- `internal/exhentai/image.go` - ProxyImage, ScrapePageImageURL (状态码分类)
+- `internal/exhentai/error.go` - HTTPStatusCode / IsPermanentUpstreamError
+- `internal/exhentai/gallery.go` - StreamGalleryPages, ScrapeGalleryPageThumb, extractGalleryPages
