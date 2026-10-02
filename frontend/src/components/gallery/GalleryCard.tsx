@@ -200,10 +200,7 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
         {typeof gallery.rating === "number" && (
           <div className="pointer-events-none absolute right-0 top-0">
             <span className="inline-flex items-center gap-0.5 px-2 py-1 text-[11px] font-medium text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]">
-              <Star
-                className="size-3 text-kumo-warning drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
-                weight="fill"
-              />
+              <Star className="size-3 text-kumo-warning" weight="fill" />
               {gallery.rating.toFixed(1)}
             </span>
           </div>
@@ -248,7 +245,7 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
           </div>
 
           {gallery.posted && (
-            <p className="truncate text-xs text-kumo-inactive">
+            <p className="truncate text-right text-xs text-kumo-inactive">
               {formatPosted(gallery.posted)}
             </p>
           )}
