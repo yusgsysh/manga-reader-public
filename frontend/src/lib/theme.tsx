@@ -11,19 +11,14 @@ import {
   ACCENT_STORAGE_KEY,
   accentContrast,
   isValidHexColor,
+  mixHex,
   normalizeAccent,
+  resolveAccent,
 } from "./accent";
 
 export type ThemeMode = "light" | "dark" | "system";
 
 const STORAGE_KEY = "manga-reader-theme";
-
-const ACCENT_PROPS = [
-  "--app-accent",
-  "--app-accent-contrast",
-  "--color-kumo-brand",
-  "--color-kumo-brand-hover",
-] as const;
 
 function getInitialMode(): ThemeMode {
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -60,24 +55,29 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(STORAGE_KEY, mode);
   }, [mode, resolvedMode]);
 
-  // Apply the accent override on the root element. Derived tokens such as
-  // --app-accent-soft and --app-ring are color-mix() expressions over
-  // --app-accent, so they follow automatically. Removing the properties falls
-  // back to the per-mode defaults defined in index.css.
+  // Apply the accent override on the root element. Every accent (including the
+  // default) resolves to a concrete per-mode color, so the behavior is uniform.
+  // Derived tokens such as --app-accent-soft and --app-ring are color-mix()
+  // expressions over --app-accent, so they follow automatically.
+  const appliedAccent = resolveAccent(accent, resolvedMode);
+
   useLayoutEffect(() => {
     const root = document.documentElement;
-    if (!accent) {
-      for (const prop of ACCENT_PROPS) root.style.removeProperty(prop);
-      return;
-    }
-    root.style.setProperty("--app-accent", accent);
-    root.style.setProperty("--app-accent-contrast", accentContrast(accent));
-    root.style.setProperty("--color-kumo-brand", accent);
+    root.style.setProperty("--app-accent", appliedAccent);
+    root.style.setProperty(
+      "--app-accent-contrast",
+      accentContrast(appliedAccent),
+    );
+    root.style.setProperty("--color-kumo-brand", appliedAccent);
     root.style.setProperty(
       "--color-kumo-brand-hover",
-      `color-mix(in oklab, ${accent} 82%, ${resolvedMode === "dark" ? "white" : "black"})`,
+      mixHex(
+        appliedAccent,
+        resolvedMode === "dark" ? "#ffffff" : "#000000",
+        0.18,
+      ),
     );
-  }, [accent, resolvedMode]);
+  }, [appliedAccent, resolvedMode]);
 
   const setMode = useCallback((next: ThemeMode) => {
     setModeState(next);

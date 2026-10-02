@@ -76,6 +76,30 @@ export function normalizeAccent(value: string): string {
   return normalizeHex(value);
 }
 
+// Mixes two hex colors in sRGB. Returns the first color unchanged if either
+// input cannot be parsed.
+export function mixHex(from: string, to: string, weight: number): string {
+  const a = parseHex(from);
+  const b = parseHex(to);
+  if (!a || !b) return from;
+  const t = Math.min(1, Math.max(0, weight));
+  const mix = (x: number, y: number) => Math.round(x + (y - x) * t);
+  const hex = (n: number) => n.toString(16).padStart(2, "0");
+  return `#${hex(mix(a.r, b.r))}${hex(mix(a.g, b.g))}${hex(mix(a.b, b.b))}`;
+}
+
+// Which accent to actually apply for a given mode. Every accent — the built-in
+// default, presets and custom colors — goes through the same rule: light mode
+// uses the color as-is, dark mode uses a lightened variant so it stays legible
+// on dark surfaces.
+export function resolveAccent(
+  accent: string | null,
+  mode: "light" | "dark",
+): string {
+  const base = accent ?? DEFAULT_ACCENT;
+  return mode === "dark" ? mixHex(base, "#ffffff", 0.3) : base;
+}
+
 export function isPresetAccent(accent: string | null): boolean {
   if (!accent) return false;
   const normalized = normalizeHex(accent);

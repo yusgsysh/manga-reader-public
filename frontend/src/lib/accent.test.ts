@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   ACCENT_PRESETS,
+  DEFAULT_ACCENT,
   accentContrast,
   isPresetAccent,
   isValidHexColor,
+  mixHex,
   normalizeAccent,
+  resolveAccent,
 } from "./accent";
 
 describe("isValidHexColor", () => {
@@ -42,5 +45,27 @@ describe("isPresetAccent", () => {
     expect(isPresetAccent(ACCENT_PRESETS[0].color.toUpperCase())).toBe(true);
     expect(isPresetAccent("#123456")).toBe(false);
     expect(isPresetAccent(null)).toBe(false);
+  });
+});
+
+describe("mixHex / resolveAccent", () => {
+  it("mixes toward the target color", () => {
+    expect(mixHex("#000000", "#ffffff", 0.5)).toBe("#808080");
+  });
+
+  it("keeps the accent unchanged in light mode", () => {
+    expect(resolveAccent("#16a34a", "light")).toBe("#16a34a");
+  });
+
+  it("lightens the accent in dark mode", () => {
+    const light = resolveAccent("#16a34a", "dark");
+    expect(light).not.toBe("#16a34a");
+  });
+
+  it("treats null as the default accent with the same rule", () => {
+    expect(resolveAccent(null, "light")).toBe(DEFAULT_ACCENT);
+    expect(resolveAccent(null, "dark")).toBe(
+      mixHex(DEFAULT_ACCENT, "#ffffff", 0.3),
+    );
   });
 });
