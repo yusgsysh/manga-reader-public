@@ -124,7 +124,18 @@ func ScrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 	doc, err := fetchListingDoc(ctx, client, firstURL, page)
 	if err != nil {
 		if errors.Is(err, errNoNextPage) {
-			return 0, nil, ListingNav{}, fmt.Errorf("no results")
+			if page == 0 {
+				return 0, []model.SearchResult{}, ListingNav{}, nil
+			}
+			firstDoc, ferr := httpGetDoc(ctx, client, firstURL)
+			if ferr != nil {
+				return 0, []model.SearchResult{}, ListingNav{}, nil
+			}
+			total, ok := parseSearchTotal(firstDoc)
+			if !ok || total == 0 {
+				return 0, []model.SearchResult{}, ListingNav{}, nil
+			}
+			return total, []model.SearchResult{}, ListingNav{}, nil
 		}
 		return 0, nil, ListingNav{}, err
 	}
@@ -136,9 +147,6 @@ func ScrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 
 	total, ok := parseSearchTotal(doc)
 	if !ok && page > 0 {
-		// The result count banner is expected on every page, but fall back to
-		// page 0 (a single extra request) if it is missing so callers still get
-		// a correct total_pages for pagination.
 		if firstDoc, ferr := httpGetDoc(ctx, client, firstURL); ferr == nil {
 			total, ok = parseSearchTotal(firstDoc)
 		}
@@ -147,7 +155,7 @@ func ScrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 		return 0, nil, ListingNav{}, fmt.Errorf("could not parse result count")
 	}
 	if total == 0 {
-		return 0, nil, ListingNav{}, fmt.Errorf("no results")
+		return 0, []model.SearchResult{}, ListingNav{}, nil
 	}
 
 	results, err = parseSearchResults(doc)
