@@ -96,7 +96,7 @@ function toReading(progress: ReadingProgress): ProgressReading {
     current_page: progress.current_page,
     progress: progress.progress,
     completed: progress.completed,
-    started_at: progress.started_at ?? undefined,
+    created_at: progress.created_at ?? undefined,
     updated_at: progress.updated_at ?? undefined,
   };
 }

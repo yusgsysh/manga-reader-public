@@ -37,7 +37,7 @@ runtime:
 
         test("missing records return null timestamps", function () {
           if (res.body.current_page === 0 && res.body.progress === 0) {
-            expect(res.body.started_at).to.equal(null);
+            expect(res.body.created_at).to.equal(null);
           }
         });
 
@@ -49,4 +49,4 @@ settings:
 
 docs: |-
   Fetch reading progress for a gallery. When no record exists all numeric
-  fields are zero and `started_at` / `updated_at` are `null`.
+  fields are zero and `created_at` / `updated_at` are `null`.

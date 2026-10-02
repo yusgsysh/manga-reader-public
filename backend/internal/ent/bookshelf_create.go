@@ -32,16 +32,16 @@ func (_c *BookshelfCreate) SetToken(v string) *BookshelfCreate {
 	return _c
 }
 
-// SetAddedAt sets the "added_at" field.
-func (_c *BookshelfCreate) SetAddedAt(v time.Time) *BookshelfCreate {
-	_c.mutation.SetAddedAt(v)
+// SetCreatedAt sets the "created_at" field.
+func (_c *BookshelfCreate) SetCreatedAt(v time.Time) *BookshelfCreate {
+	_c.mutation.SetCreatedAt(v)
 	return _c
 }
 
-// SetNillableAddedAt sets the "added_at" field if the given value is not nil.
-func (_c *BookshelfCreate) SetNillableAddedAt(v *time.Time) *BookshelfCreate {
+// SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
+func (_c *BookshelfCreate) SetNillableCreatedAt(v *time.Time) *BookshelfCreate {
 	if v != nil {
-		_c.SetAddedAt(*v)
+		_c.SetCreatedAt(*v)
 	}
 	return _c
 }
@@ -95,9 +95,9 @@ func (_c *BookshelfCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *BookshelfCreate) defaults() {
-	if _, ok := _c.mutation.AddedAt(); !ok {
-		v := bookshelf.DefaultAddedAt()
-		_c.mutation.SetAddedAt(v)
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		v := bookshelf.DefaultCreatedAt()
+		_c.mutation.SetCreatedAt(v)
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		v := bookshelf.DefaultUpdatedAt()
@@ -113,8 +113,8 @@ func (_c *BookshelfCreate) check() error {
 	if _, ok := _c.mutation.Token(); !ok {
 		return &ValidationError{Name: "token", err: errors.New(`ent: missing required field "Bookshelf.token"`)}
 	}
-	if _, ok := _c.mutation.AddedAt(); !ok {
-		return &ValidationError{Name: "added_at", err: errors.New(`ent: missing required field "Bookshelf.added_at"`)}
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Bookshelf.created_at"`)}
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Bookshelf.updated_at"`)}
@@ -153,9 +153,9 @@ func (_c *BookshelfCreate) createSpec() (*Bookshelf, *sqlgraph.CreateSpec) {
 		_spec.SetField(bookshelf.FieldToken, field.TypeString, value)
 		_node.Token = value
 	}
-	if value, ok := _c.mutation.AddedAt(); ok {
-		_spec.SetField(bookshelf.FieldAddedAt, field.TypeTime, value)
-		_node.AddedAt = value
+	if value, ok := _c.mutation.CreatedAt(); ok {
+		_spec.SetField(bookshelf.FieldCreatedAt, field.TypeTime, value)
+		_node.CreatedAt = value
 	}
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(bookshelf.FieldUpdatedAt, field.TypeTime, value)

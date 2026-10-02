@@ -218,7 +218,7 @@ const server = Bun.serve({
         current_page: 0,
         progress: 0,
         completed: false,
-        started_at: null,
+        created_at: null,
         updated_at: null,
       });
     }

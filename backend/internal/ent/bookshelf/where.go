@@ -64,9 +64,9 @@ func Token(v string) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldEQ(FieldToken, v))
 }
 
-// AddedAt applies equality check predicate on the "added_at" field. It's identical to AddedAtEQ.
-func AddedAt(v time.Time) predicate.Bookshelf {
-	return predicate.Bookshelf(sql.FieldEQ(FieldAddedAt, v))
+// CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
+func CreatedAt(v time.Time) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldEQ(FieldCreatedAt, v))
 }
 
 // UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
@@ -179,44 +179,44 @@ func TokenContainsFold(v string) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldContainsFold(FieldToken, v))
 }
 
-// AddedAtEQ applies the EQ predicate on the "added_at" field.
-func AddedAtEQ(v time.Time) predicate.Bookshelf {
-	return predicate.Bookshelf(sql.FieldEQ(FieldAddedAt, v))
+// CreatedAtEQ applies the EQ predicate on the "created_at" field.
+func CreatedAtEQ(v time.Time) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldEQ(FieldCreatedAt, v))
 }
 
-// AddedAtNEQ applies the NEQ predicate on the "added_at" field.
-func AddedAtNEQ(v time.Time) predicate.Bookshelf {
-	return predicate.Bookshelf(sql.FieldNEQ(FieldAddedAt, v))
+// CreatedAtNEQ applies the NEQ predicate on the "created_at" field.
+func CreatedAtNEQ(v time.Time) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldNEQ(FieldCreatedAt, v))
 }
 
-// AddedAtIn applies the In predicate on the "added_at" field.
-func AddedAtIn(vs ...time.Time) predicate.Bookshelf {
-	return predicate.Bookshelf(sql.FieldIn(FieldAddedAt, vs...))
+// CreatedAtIn applies the In predicate on the "created_at" field.
+func CreatedAtIn(vs ...time.Time) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldIn(FieldCreatedAt, vs...))
 }
 
-// AddedAtNotIn applies the NotIn predicate on the "added_at" field.
-func AddedAtNotIn(vs ...time.Time) predicate.Bookshelf {
-	return predicate.Bookshelf(sql.FieldNotIn(FieldAddedAt, vs...))
+// CreatedAtNotIn applies the NotIn predicate on the "created_at" field.
+func CreatedAtNotIn(vs ...time.Time) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldNotIn(FieldCreatedAt, vs...))
 }
 
-// AddedAtGT applies the GT predicate on the "added_at" field.
-func AddedAtGT(v time.Time) predicate.Bookshelf {
-	return predicate.Bookshelf(sql.FieldGT(FieldAddedAt, v))
+// CreatedAtGT applies the GT predicate on the "created_at" field.
+func CreatedAtGT(v time.Time) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldGT(FieldCreatedAt, v))
 }
 
-// AddedAtGTE applies the GTE predicate on the "added_at" field.
-func AddedAtGTE(v time.Time) predicate.Bookshelf {
-	return predicate.Bookshelf(sql.FieldGTE(FieldAddedAt, v))
+// CreatedAtGTE applies the GTE predicate on the "created_at" field.
+func CreatedAtGTE(v time.Time) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldGTE(FieldCreatedAt, v))
 }
 
-// AddedAtLT applies the LT predicate on the "added_at" field.
-func AddedAtLT(v time.Time) predicate.Bookshelf {
-	return predicate.Bookshelf(sql.FieldLT(FieldAddedAt, v))
+// CreatedAtLT applies the LT predicate on the "created_at" field.
+func CreatedAtLT(v time.Time) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldLT(FieldCreatedAt, v))
 }
 
-// AddedAtLTE applies the LTE predicate on the "added_at" field.
-func AddedAtLTE(v time.Time) predicate.Bookshelf {
-	return predicate.Bookshelf(sql.FieldLTE(FieldAddedAt, v))
+// CreatedAtLTE applies the LTE predicate on the "created_at" field.
+func CreatedAtLTE(v time.Time) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldLTE(FieldCreatedAt, v))
 }
 
 // UpdatedAtEQ applies the EQ predicate on the "updated_at" field.

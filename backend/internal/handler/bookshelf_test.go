@@ -284,8 +284,8 @@ func TestHandleBookshelfStatus_InBookshelf(t *testing.T) {
 	if !resp.InBookshelf {
 		t.Error("InBookshelf should be true")
 	}
-	if resp.AddedAt == nil {
-		t.Error("AddedAt should be set")
+	if resp.CreatedAt == nil {
+		t.Error("CreatedAt should be set")
 	}
 }
 
@@ -309,8 +309,8 @@ func TestHandleBookshelfStatus_NotInBookshelf(t *testing.T) {
 	if resp.InBookshelf {
 		t.Error("InBookshelf should be false")
 	}
-	if resp.AddedAt != nil {
-		t.Error("AddedAt should be nil")
+	if resp.CreatedAt != nil {
+		t.Error("CreatedAt should be nil")
 	}
 }
 

@@ -26,10 +26,10 @@ runtime:
   scripts:
     - type: tests
       code: |-
-        test("reports membership and (when present) added_at", function () {
+        test("reports membership and (when present) created_at", function () {
           expect(res.body).to.have.property("in_bookshelf");
           if (res.body.in_bookshelf) {
-            expect(res.body).to.have.property("added_at");
+            expect(res.body).to.have.property("created_at");
           }
         });
 
@@ -40,5 +40,5 @@ settings:
   maxRedirects: 5
 
 docs: |-
-  Check whether a gallery is in the bookshelf. When present, `added_at` is an
+  Check whether a gallery is in the bookshelf. When present, `created_at` is an
   RFC3339 timestamp.

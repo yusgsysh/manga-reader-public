@@ -79,9 +79,9 @@ func Completed(v bool) predicate.ReadingProgress {
 	return predicate.ReadingProgress(sql.FieldEQ(FieldCompleted, v))
 }
 
-// StartedAt applies equality check predicate on the "started_at" field. It's identical to StartedAtEQ.
-func StartedAt(v time.Time) predicate.ReadingProgress {
-	return predicate.ReadingProgress(sql.FieldEQ(FieldStartedAt, v))
+// CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
+func CreatedAt(v time.Time) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEQ(FieldCreatedAt, v))
 }
 
 // UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
@@ -284,54 +284,44 @@ func CompletedNEQ(v bool) predicate.ReadingProgress {
 	return predicate.ReadingProgress(sql.FieldNEQ(FieldCompleted, v))
 }
 
-// StartedAtEQ applies the EQ predicate on the "started_at" field.
-func StartedAtEQ(v time.Time) predicate.ReadingProgress {
-	return predicate.ReadingProgress(sql.FieldEQ(FieldStartedAt, v))
+// CreatedAtEQ applies the EQ predicate on the "created_at" field.
+func CreatedAtEQ(v time.Time) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldEQ(FieldCreatedAt, v))
 }
 
-// StartedAtNEQ applies the NEQ predicate on the "started_at" field.
-func StartedAtNEQ(v time.Time) predicate.ReadingProgress {
-	return predicate.ReadingProgress(sql.FieldNEQ(FieldStartedAt, v))
+// CreatedAtNEQ applies the NEQ predicate on the "created_at" field.
+func CreatedAtNEQ(v time.Time) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldNEQ(FieldCreatedAt, v))
 }
 
-// StartedAtIn applies the In predicate on the "started_at" field.
-func StartedAtIn(vs ...time.Time) predicate.ReadingProgress {
-	return predicate.ReadingProgress(sql.FieldIn(FieldStartedAt, vs...))
+// CreatedAtIn applies the In predicate on the "created_at" field.
+func CreatedAtIn(vs ...time.Time) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldIn(FieldCreatedAt, vs...))
 }
 
-// StartedAtNotIn applies the NotIn predicate on the "started_at" field.
-func StartedAtNotIn(vs ...time.Time) predicate.ReadingProgress {
-	return predicate.ReadingProgress(sql.FieldNotIn(FieldStartedAt, vs...))
+// CreatedAtNotIn applies the NotIn predicate on the "created_at" field.
+func CreatedAtNotIn(vs ...time.Time) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldNotIn(FieldCreatedAt, vs...))
 }
 
-// StartedAtGT applies the GT predicate on the "started_at" field.
-func StartedAtGT(v time.Time) predicate.ReadingProgress {
-	return predicate.ReadingProgress(sql.FieldGT(FieldStartedAt, v))
+// CreatedAtGT applies the GT predicate on the "created_at" field.
+func CreatedAtGT(v time.Time) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldGT(FieldCreatedAt, v))
 }
 
-// StartedAtGTE applies the GTE predicate on the "started_at" field.
-func StartedAtGTE(v time.Time) predicate.ReadingProgress {
-	return predicate.ReadingProgress(sql.FieldGTE(FieldStartedAt, v))
+// CreatedAtGTE applies the GTE predicate on the "created_at" field.
+func CreatedAtGTE(v time.Time) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldGTE(FieldCreatedAt, v))
 }
 
-// StartedAtLT applies the LT predicate on the "started_at" field.
-func StartedAtLT(v time.Time) predicate.ReadingProgress {
-	return predicate.ReadingProgress(sql.FieldLT(FieldStartedAt, v))
+// CreatedAtLT applies the LT predicate on the "created_at" field.
+func CreatedAtLT(v time.Time) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldLT(FieldCreatedAt, v))
 }
 
-// StartedAtLTE applies the LTE predicate on the "started_at" field.
-func StartedAtLTE(v time.Time) predicate.ReadingProgress {
-	return predicate.ReadingProgress(sql.FieldLTE(FieldStartedAt, v))
-}
-
-// StartedAtIsNil applies the IsNil predicate on the "started_at" field.
-func StartedAtIsNil() predicate.ReadingProgress {
-	return predicate.ReadingProgress(sql.FieldIsNull(FieldStartedAt))
-}
-
-// StartedAtNotNil applies the NotNil predicate on the "started_at" field.
-func StartedAtNotNil() predicate.ReadingProgress {
-	return predicate.ReadingProgress(sql.FieldNotNull(FieldStartedAt))
+// CreatedAtLTE applies the LTE predicate on the "created_at" field.
+func CreatedAtLTE(v time.Time) predicate.ReadingProgress {
+	return predicate.ReadingProgress(sql.FieldLTE(FieldCreatedAt, v))
 }
 
 // UpdatedAtEQ applies the EQ predicate on the "updated_at" field.
@@ -372,16 +362,6 @@ func UpdatedAtLT(v time.Time) predicate.ReadingProgress {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.ReadingProgress {
 	return predicate.ReadingProgress(sql.FieldLTE(FieldUpdatedAt, v))
-}
-
-// UpdatedAtIsNil applies the IsNil predicate on the "updated_at" field.
-func UpdatedAtIsNil() predicate.ReadingProgress {
-	return predicate.ReadingProgress(sql.FieldIsNull(FieldUpdatedAt))
-}
-
-// UpdatedAtNotNil applies the NotNil predicate on the "updated_at" field.
-func UpdatedAtNotNil() predicate.ReadingProgress {
-	return predicate.ReadingProgress(sql.FieldNotNull(FieldUpdatedAt))
 }
 
 // And groups predicates with the AND operator between them.

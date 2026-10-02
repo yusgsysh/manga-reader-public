@@ -17,8 +17,8 @@ const (
 	FieldGalleryID = "gallery_id"
 	// FieldToken holds the string denoting the token field in the database.
 	FieldToken = "token"
-	// FieldAddedAt holds the string denoting the added_at field in the database.
-	FieldAddedAt = "added_at"
+	// FieldCreatedAt holds the string denoting the created_at field in the database.
+	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
 	// Table holds the table name of the bookshelf in the database.
@@ -30,7 +30,7 @@ var Columns = []string{
 	FieldID,
 	FieldGalleryID,
 	FieldToken,
-	FieldAddedAt,
+	FieldCreatedAt,
 	FieldUpdatedAt,
 }
 
@@ -45,8 +45,8 @@ func ValidColumn(column string) bool {
 }
 
 var (
-	// DefaultAddedAt holds the default value on creation for the "added_at" field.
-	DefaultAddedAt func() time.Time
+	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
+	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
@@ -71,9 +71,9 @@ func ByToken(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldToken, opts...).ToFunc()
 }
 
-// ByAddedAt orders the results by the added_at field.
-func ByAddedAt(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldAddedAt, opts...).ToFunc()
+// ByCreatedAt orders the results by the created_at field.
+func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCreatedAt, opts...).ToFunc()
 }
 
 // ByUpdatedAt orders the results by the updated_at field.

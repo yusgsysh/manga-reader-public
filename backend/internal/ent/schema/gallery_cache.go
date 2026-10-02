@@ -30,6 +30,7 @@ func (GalleryCache) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("gallery_id"),
 		field.String("token"),
+		field.Time("created_at").Default(time.Now).Immutable(),
 		field.String("title").Default(""),
 		field.String("title_jpn").Default(""),
 		field.String("category").Default(""),

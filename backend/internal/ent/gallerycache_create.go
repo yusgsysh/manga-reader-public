@@ -33,6 +33,20 @@ func (_c *GalleryCacheCreate) SetToken(v string) *GalleryCacheCreate {
 	return _c
 }
 
+// SetCreatedAt sets the "created_at" field.
+func (_c *GalleryCacheCreate) SetCreatedAt(v time.Time) *GalleryCacheCreate {
+	_c.mutation.SetCreatedAt(v)
+	return _c
+}
+
+// SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
+func (_c *GalleryCacheCreate) SetNillableCreatedAt(v *time.Time) *GalleryCacheCreate {
+	if v != nil {
+		_c.SetCreatedAt(*v)
+	}
+	return _c
+}
+
 // SetTitle sets the "title" field.
 func (_c *GalleryCacheCreate) SetTitle(v string) *GalleryCacheCreate {
 	_c.mutation.SetTitle(v)
@@ -346,6 +360,10 @@ func (_c *GalleryCacheCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *GalleryCacheCreate) defaults() {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		v := gallerycache.DefaultCreatedAt()
+		_c.mutation.SetCreatedAt(v)
+	}
 	if _, ok := _c.mutation.Title(); !ok {
 		v := gallerycache.DefaultTitle
 		_c.mutation.SetTitle(v)
@@ -415,6 +433,9 @@ func (_c *GalleryCacheCreate) check() error {
 	}
 	if _, ok := _c.mutation.Token(); !ok {
 		return &ValidationError{Name: "token", err: errors.New(`ent: missing required field "GalleryCache.token"`)}
+	}
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "GalleryCache.created_at"`)}
 	}
 	if _, ok := _c.mutation.Title(); !ok {
 		return &ValidationError{Name: "title", err: errors.New(`ent: missing required field "GalleryCache.title"`)}
@@ -494,6 +515,10 @@ func (_c *GalleryCacheCreate) createSpec() (*GalleryCache, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.Token(); ok {
 		_spec.SetField(gallerycache.FieldToken, field.TypeString, value)
 		_node.Token = value
+	}
+	if value, ok := _c.mutation.CreatedAt(); ok {
+		_spec.SetField(gallerycache.FieldCreatedAt, field.TypeTime, value)
+		_node.CreatedAt = value
 	}
 	if value, ok := _c.mutation.Title(); ok {
 		_spec.SetField(gallerycache.FieldTitle, field.TypeString, value)

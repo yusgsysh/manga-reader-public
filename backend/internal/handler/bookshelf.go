@@ -89,7 +89,7 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 	totalPages := (total + pageSize - 1) / pageSize
 
 	items, err := s.DB.Client.Bookshelf.Query().
-		Order(ent.Desc(bookshelf.FieldAddedAt)).
+		Order(ent.Desc(bookshelf.FieldCreatedAt)).
 		Offset(offset).
 		Limit(pageSize).
 		All(ctx)
@@ -136,10 +136,10 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 		progress := progressByKey[galleryRef{id: b.GalleryID, token: b.Token}]
 
 		item := model.BookshelfItem{
-			ID:        b.GalleryID,
-			Token:     b.Token,
-			AddedAt:   b.AddedAt,
-			UpdatedAt: b.UpdatedAt,
+			ID:         b.GalleryID,
+			Token:      b.Token,
+			CreatedAt:  b.CreatedAt,
+			UpdatedAt:  b.UpdatedAt,
 		}
 
 		if meta := metaByRef[gallerycache.Ref{GalleryID: b.GalleryID, Token: b.Token}]; meta != nil {
@@ -150,15 +150,17 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 			item.Pages = meta.PageCount
 		}
 
-		if progress != nil && progress.UpdatedAt != nil {
+		if progress != nil {
+			createdAt := progress.CreatedAt
+			updatedAt := progress.UpdatedAt
 			item.Reading = &model.ReadingProgress{
 				GalleryID:   progress.GalleryID,
 				Token:       progress.Token,
 				CurrentPage: progress.CurrentPage,
 				Progress:    progress.Progress,
 				Completed:   progress.Completed,
-				StartedAt:   progress.StartedAt,
-				UpdatedAt:   progress.UpdatedAt,
+				CreatedAt:   &createdAt,
+				UpdatedAt:   &updatedAt,
 			}
 		}
 
@@ -326,9 +328,9 @@ func (s *Server) handleBookshelfStatus(c *gin.Context) {
 		return
 	}
 
-	addedAt := b.AddedAt
+	createdAt := b.CreatedAt
 	c.JSON(http.StatusOK, model.BookshelfStatus{
 		InBookshelf: true,
-		AddedAt:     &addedAt,
+		CreatedAt:   &createdAt,
 	})
 }

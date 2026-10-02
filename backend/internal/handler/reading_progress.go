@@ -49,13 +49,13 @@ func (s *Server) handleGetProgress(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, &model.ReadingProgress{
-		GalleryID:   p.GalleryID,
-		Token:       p.Token,
+		GalleryID:  p.GalleryID,
+		Token:      p.Token,
 		CurrentPage: p.CurrentPage,
-		Progress:    p.Progress,
-		Completed:   p.Completed,
-		StartedAt:   p.StartedAt,
-		UpdatedAt:   p.UpdatedAt,
+		Progress:   p.Progress,
+		Completed:  p.Completed,
+		CreatedAt:  &p.CreatedAt,
+		UpdatedAt:  &p.UpdatedAt,
 	})
 }
 
@@ -114,7 +114,7 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 			SetCurrentPage(req.CurrentPage).
 			SetProgress(req.Progress).
 			SetCompleted(req.Completed).
-			SetStartedAt(now).
+			SetCreatedAt(now).
 			SetUpdatedAt(now).
 			Save(ctx)
 	} else {
@@ -147,13 +147,13 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, &model.ReadingProgress{
-		GalleryID:   p.GalleryID,
-		Token:       p.Token,
+		GalleryID:  p.GalleryID,
+		Token:      p.Token,
 		CurrentPage: p.CurrentPage,
-		Progress:    p.Progress,
-		Completed:   p.Completed,
-		StartedAt:   p.StartedAt,
-		UpdatedAt:   p.UpdatedAt,
+		Progress:   p.Progress,
+		Completed:  p.Completed,
+		CreatedAt:  &p.CreatedAt,
+		UpdatedAt:  &p.UpdatedAt,
 	})
 }
 

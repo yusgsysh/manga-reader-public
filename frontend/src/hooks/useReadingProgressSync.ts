@@ -73,7 +73,7 @@ export function useReadingProgressSync(
       current_page: body.current_page,
       progress: body.progress,
       completed: body.completed,
-      started_at: previous?.started_at ?? null,
+      created_at: previous?.created_at ?? null,
       updated_at: new Date().toISOString(),
     });
 

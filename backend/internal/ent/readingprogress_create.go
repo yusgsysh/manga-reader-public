@@ -74,16 +74,16 @@ func (_c *ReadingProgressCreate) SetNillableCompleted(v *bool) *ReadingProgressC
 	return _c
 }
 
-// SetStartedAt sets the "started_at" field.
-func (_c *ReadingProgressCreate) SetStartedAt(v time.Time) *ReadingProgressCreate {
-	_c.mutation.SetStartedAt(v)
+// SetCreatedAt sets the "created_at" field.
+func (_c *ReadingProgressCreate) SetCreatedAt(v time.Time) *ReadingProgressCreate {
+	_c.mutation.SetCreatedAt(v)
 	return _c
 }
 
-// SetNillableStartedAt sets the "started_at" field if the given value is not nil.
-func (_c *ReadingProgressCreate) SetNillableStartedAt(v *time.Time) *ReadingProgressCreate {
+// SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
+func (_c *ReadingProgressCreate) SetNillableCreatedAt(v *time.Time) *ReadingProgressCreate {
 	if v != nil {
-		_c.SetStartedAt(*v)
+		_c.SetCreatedAt(*v)
 	}
 	return _c
 }
@@ -149,6 +149,14 @@ func (_c *ReadingProgressCreate) defaults() {
 		v := readingprogress.DefaultCompleted
 		_c.mutation.SetCompleted(v)
 	}
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		v := readingprogress.DefaultCreatedAt()
+		_c.mutation.SetCreatedAt(v)
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		v := readingprogress.DefaultUpdatedAt()
+		_c.mutation.SetUpdatedAt(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -177,6 +185,12 @@ func (_c *ReadingProgressCreate) check() error {
 	}
 	if _, ok := _c.mutation.Completed(); !ok {
 		return &ValidationError{Name: "completed", err: errors.New(`ent: missing required field "ReadingProgress.completed"`)}
+	}
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "ReadingProgress.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "ReadingProgress.updated_at"`)}
 	}
 	return nil
 }
@@ -224,13 +238,13 @@ func (_c *ReadingProgressCreate) createSpec() (*ReadingProgress, *sqlgraph.Creat
 		_spec.SetField(readingprogress.FieldCompleted, field.TypeBool, value)
 		_node.Completed = value
 	}
-	if value, ok := _c.mutation.StartedAt(); ok {
-		_spec.SetField(readingprogress.FieldStartedAt, field.TypeTime, value)
-		_node.StartedAt = &value
+	if value, ok := _c.mutation.CreatedAt(); ok {
+		_spec.SetField(readingprogress.FieldCreatedAt, field.TypeTime, value)
+		_node.CreatedAt = value
 	}
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(readingprogress.FieldUpdatedAt, field.TypeTime, value)
-		_node.UpdatedAt = &value
+		_node.UpdatedAt = value
 	}
 	return _node, _spec
 }

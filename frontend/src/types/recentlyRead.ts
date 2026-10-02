@@ -14,7 +14,7 @@ export interface RecentlyReadItem {
     current_page: number;
     progress: number;
     completed: boolean;
-    started_at?: string;
+    created_at?: string;
     updated_at?: string;
   };
 }

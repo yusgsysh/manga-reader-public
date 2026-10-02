@@ -95,7 +95,7 @@ func insertProgressWithTimestamp(t *testing.T, client *ent.Client, galleryID int
 		SetCurrentPage(1).
 		SetProgress(0.1).
 		SetCompleted(false).
-		SetStartedAt(updatedAt).
+		SetCreatedAt(updatedAt).
 		SetUpdatedAt(updatedAt).
 		Save(t.Context())
 	if err != nil {

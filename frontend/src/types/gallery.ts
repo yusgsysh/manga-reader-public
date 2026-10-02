@@ -88,7 +88,7 @@ export interface BookshelfItem {
   category: GalleryCategory;
   thumbnail: string;
   pages: number;
-  added_at: string;
+  created_at: string;
   updated_at: string;
   reading?: {
     gallery_id: number;
@@ -96,7 +96,7 @@ export interface BookshelfItem {
     current_page: number;
     progress: number;
     completed: boolean;
-    started_at?: string;
+    created_at?: string;
     updated_at?: string;
   };
 }

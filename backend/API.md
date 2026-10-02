@@ -708,7 +708,7 @@ Cache-Control: public, max-age=31536000, immutable
       "category": "doujinshi",
       "thumbnail": "https://example.com/thumb.webp",
       "pages": 24,
-      "added_at": "2026-08-29T10:00:00Z",
+      "created_at": "2026-08-29T10:00:00Z",
       "updated_at": "2026-08-29T10:00:00Z",
       "reading": {
         "gallery_id": 123456,
@@ -716,7 +716,7 @@ Cache-Control: public, max-age=31536000, immutable
         "current_page": 10,
         "progress": 0.416,
         "completed": false,
-        "started_at": "2026-08-29T10:00:00Z",
+        "created_at": "2026-08-29T10:00:00Z",
         "updated_at": "2026-08-29T12:00:00Z"
       }
     }
@@ -806,7 +806,7 @@ Cache-Control: public, max-age=31536000, immutable
 ```json
 {
   "in_bookshelf": true,
-  "added_at": "2026-08-29T10:00:00Z"
+  "created_at": "2026-08-29T10:00:00Z"
 }
 ```
 
@@ -842,12 +842,12 @@ Cache-Control: public, max-age=31536000, immutable
   "current_page": 10,
   "progress": 0.416,
   "completed": false,
-  "started_at": "2026-08-29T10:00:00Z",
+  "created_at": "2026-08-29T10:00:00Z",
   "updated_at": "2026-08-29T12:00:00Z"
 }
 ```
 
-> 无阅读记录时 `started_at` 和 `updated_at` 为 `null`。
+> 无阅读记录时 `created_at` 和 `updated_at` 为 `null`。
 
 ---
 
@@ -855,7 +855,7 @@ Cache-Control: public, max-age=31536000, immutable
 
 `PUT /api/progress/:id/:token`
 
-更新 Gallery 的阅读进度。首次保存自动设置 `started_at`，后续更新只修改 `updated_at`。
+更新 Gallery 的阅读进度。首次保存自动设置 `created_at`，后续更新只修改 `updated_at`。
 
 **Path Parameters:**
 
@@ -880,7 +880,7 @@ Cache-Control: public, max-age=31536000, immutable
 | progress | float | yes | 阅读进度 (0.0 ~ 1.0) |
 | completed | bool | yes | 是否读完。设为 `true` 时 `progress` 自动设为 `1` |
 
-> 阅读记录只保存进度本身（`current_page`/`progress`/`completed`/`started_at`/`updated_at`）。「最近阅读」所需的元数据来自 `gallery_cache`（见文末「离线缓存」）。
+> 阅读记录只保存进度本身（`current_page`/`progress`/`completed`/`created_at`/`updated_at`）。「最近阅读」所需的元数据来自 `gallery_cache`（见文末「离线缓存」）。
 
 **Response (200):**
 
@@ -891,7 +891,7 @@ Cache-Control: public, max-age=31536000, immutable
   "current_page": 10,
   "progress": 0.416,
   "completed": false,
-  "started_at": "2026-08-29T10:00:00Z",
+  "created_at": "2026-08-29T10:00:00Z",
   "updated_at": "2026-08-29T12:00:00Z"
 }
 ```
@@ -962,7 +962,7 @@ GET /api/recently-read?page=1
         "current_page": 10,
         "progress": 0.416,
         "completed": false,
-        "started_at": "2026-08-29T10:00:00Z",
+        "created_at": "2026-08-29T10:00:00Z",
         "updated_at": "2026-08-29T12:00:00Z"
       }
     }

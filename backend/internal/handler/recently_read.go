@@ -59,17 +59,19 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 	items := make([]model.RecentlyReadItem, 0, len(entities))
 
 	for _, rp := range entities {
+		createdAt := rp.CreatedAt
+		updatedAt := rp.UpdatedAt
 		item := model.RecentlyReadItem{
 			ID:    rp.GalleryID,
 			Token: rp.Token,
 			Reading: model.ReadingProgress{
-				GalleryID:   rp.GalleryID,
-				Token:       rp.Token,
+				GalleryID:  rp.GalleryID,
+				Token:      rp.Token,
 				CurrentPage: rp.CurrentPage,
-				Progress:    rp.Progress,
-				Completed:   rp.Completed,
-				StartedAt:   rp.StartedAt,
-				UpdatedAt:   rp.UpdatedAt,
+				Progress:   rp.Progress,
+				Completed:  rp.Completed,
+				CreatedAt:  &createdAt,
+				UpdatedAt:  &updatedAt,
 			},
 		}
 

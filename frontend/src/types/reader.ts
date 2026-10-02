@@ -49,7 +49,7 @@ export interface ReadingProgress {
   current_page: number;
   progress: number;
   completed: boolean;
-  started_at: string | null;
+  created_at: string | null;
   updated_at: string | null;
 }
 

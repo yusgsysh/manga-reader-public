@@ -23,6 +23,8 @@ type GalleryCache struct {
 	GalleryID int64 `json:"gallery_id,omitempty"`
 	// Token holds the value of the "token" field.
 	Token string `json:"token,omitempty"`
+	// CreatedAt holds the value of the "created_at" field.
+	CreatedAt time.Time `json:"created_at,omitempty"`
 	// Title holds the value of the "title" field.
 	Title string `json:"title,omitempty"`
 	// TitleJpn holds the value of the "title_jpn" field.
@@ -83,7 +85,7 @@ func (*GalleryCache) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case gallerycache.FieldToken, gallerycache.FieldTitle, gallerycache.FieldTitleJpn, gallerycache.FieldCategory, gallerycache.FieldThumbnail, gallerycache.FieldUploader, gallerycache.FieldPosted, gallerycache.FieldLanguage, gallerycache.FieldFileSize:
 			values[i] = new(sql.NullString)
-		case gallerycache.FieldPostedAt, gallerycache.FieldMetaFetchedAt, gallerycache.FieldDetailsFetchedAt, gallerycache.FieldPagesFetchedAt, gallerycache.FieldUpdatedAt:
+		case gallerycache.FieldCreatedAt, gallerycache.FieldPostedAt, gallerycache.FieldMetaFetchedAt, gallerycache.FieldDetailsFetchedAt, gallerycache.FieldPagesFetchedAt, gallerycache.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -117,6 +119,12 @@ func (_m *GalleryCache) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field token", values[i])
 			} else if value.Valid {
 				_m.Token = value.String
+			}
+		case gallerycache.FieldCreatedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field created_at", values[i])
+			} else if value.Valid {
+				_m.CreatedAt = value.Time
 			}
 		case gallerycache.FieldTitle:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -293,6 +301,9 @@ func (_m *GalleryCache) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("token=")
 	builder.WriteString(_m.Token)
+	builder.WriteString(", ")
+	builder.WriteString("created_at=")
+	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))
 	builder.WriteString(", ")
 	builder.WriteString("title=")
 	builder.WriteString(_m.Title)

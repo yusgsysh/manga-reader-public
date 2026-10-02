@@ -28,28 +28,28 @@ http:
       }
 
 runtime:
-  assertions:
-    - expression: res.status
-      operator: eq
-      value: "200"
-    - expression: res.body.current_page
-      operator: eq
-      value: "10"
-    - expression: res.body.progress
-      operator: eq
-      value: "0.416"
-    - expression: res.body.completed
-      operator: eq
-      value: "false"
-    - expression: res.body.started_at
-      operator: isString
-  scripts:
-    - type: tests
-      code: |-
-        test("echoes the stored progress", function () {
-          expect(res.body.current_page).to.equal(10);
-          expect(res.body.progress).to.be.closeTo(0.416, 0.001);
-        });
+assertions:
+  - expression: res.status
+    operator: eq
+    value: "200"
+  - expression: res.body.current_page
+    operator: eq
+    value: "10"
+  - expression: res.body.progress
+    operator: eq
+    value: "0.416"
+  - expression: res.body.completed
+    operator: eq
+    value: "false"
+  - expression: res.body.created_at
+    operator: isString
+scripts:
+  - type: tests
+    code: |-
+      test("echoes the stored progress", function () {
+        expect(res.body.current_page).to.equal(10);
+        expect(res.body.progress).to.be.closeTo(0.416, 0.001);
+      });
 
 settings:
   encodeUrl: true
@@ -58,11 +58,11 @@ settings:
   maxRedirects: 5
 
 docs: |-
-  Create or update reading progress. The first save sets `started_at`;
+  Create or update reading progress. The first save sets `created_at`;
   subsequent saves only bump `updated_at`.
 
   Only progress fields are stored (`current_page`, `progress`, `completed`,
-  `started_at`, `updated_at`). Gallery metadata lives in `gallery_cache`.
+  `created_at`, `updated_at`). Gallery metadata lives in `gallery_cache`.
 
   Validation: `current_page >= 0` and `0 <= progress <= 1`, otherwise HTTP 400.
   Setting `completed` to `true` forces `progress` to `1`.

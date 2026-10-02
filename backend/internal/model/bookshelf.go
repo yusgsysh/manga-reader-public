@@ -5,10 +5,10 @@ import "time"
 // Bookshelf is a bookshelf record in the database. It stores only the gallery
 // reference; metadata is joined from gallery_cache when the list is served.
 type Bookshelf struct {
-	GalleryID int64     `json:"gallery_id"`
-	Token     string    `json:"token"`
-	AddedAt   time.Time `json:"added_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	GalleryID  int64     `json:"gallery_id"`
+	Token      string    `json:"token"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 // ReadingProgress is a reading progress record in the database.
@@ -19,7 +19,7 @@ type ReadingProgress struct {
 	Progress    float64 `json:"progress"`
 	Completed   bool    `json:"completed"`
 
-	StartedAt *time.Time `json:"started_at,omitempty"`
+	CreatedAt *time.Time `json:"created_at,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 }
 
@@ -33,7 +33,7 @@ type BookshelfItem struct {
 	Thumbnail string          `json:"thumbnail"`
 	Pages     int             `json:"pages"`
 
-	AddedAt   time.Time        `json:"added_at"`
+	CreatedAt time.Time        `json:"created_at"`
 	UpdatedAt time.Time        `json:"updated_at"`
 	Reading   *ReadingProgress `json:"reading,omitempty"`
 }
@@ -50,7 +50,7 @@ type BookshelfListResponse struct {
 // BookshelfStatus is the response for bookshelf status queries.
 type BookshelfStatus struct {
 	InBookshelf bool       `json:"in_bookshelf"`
-	AddedAt     *time.Time `json:"added_at,omitempty"`
+	CreatedAt   *time.Time `json:"created_at,omitempty"`
 }
 
 // BookshelfMutationResponse is the response for add/remove bookshelf operations.

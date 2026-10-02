@@ -30,6 +30,6 @@ export function removeFromBookshelf(
 export function getBookshelfStatus(
   id: number,
   token: string,
-): Promise<{ in_bookshelf: boolean; added_at?: string }> {
+): Promise<{ in_bookshelf: boolean; created_at?: string }> {
   return apiGet(`/api/bookshelf/${id}/${token}/status`);
 }

@@ -43,7 +43,7 @@ type BookshelfMutation struct {
 	gallery_id    *int64
 	addgallery_id *int64
 	token         *string
-	added_at      *time.Time
+	created_at    *time.Time
 	updated_at    *time.Time
 	clearedFields map[string]struct{}
 	done          bool
@@ -241,40 +241,40 @@ func (m *BookshelfMutation) ResetToken() {
 	m.token = nil
 }
 
-// SetAddedAt sets the "added_at" field.
-func (m *BookshelfMutation) SetAddedAt(t time.Time) {
-	m.added_at = &t
+// SetCreatedAt sets the "created_at" field.
+func (m *BookshelfMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
 }
 
-// AddedAt returns the value of the "added_at" field in the mutation.
-func (m *BookshelfMutation) AddedAt() (r time.Time, exists bool) {
-	v := m.added_at
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *BookshelfMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldAddedAt returns the old "added_at" field's value of the Bookshelf entity.
+// OldCreatedAt returns the old "created_at" field's value of the Bookshelf entity.
 // If the Bookshelf object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *BookshelfMutation) OldAddedAt(ctx context.Context) (v time.Time, err error) {
+func (m *BookshelfMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldAddedAt is only allowed on UpdateOne operations")
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldAddedAt requires an ID field in the mutation")
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldAddedAt: %w", err)
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
 	}
-	return oldValue.AddedAt, nil
+	return oldValue.CreatedAt, nil
 }
 
-// ResetAddedAt resets all changes to the "added_at" field.
-func (m *BookshelfMutation) ResetAddedAt() {
-	m.added_at = nil
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *BookshelfMutation) ResetCreatedAt() {
+	m.created_at = nil
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -354,8 +354,8 @@ func (m *BookshelfMutation) Fields() []string {
 	if m.token != nil {
 		fields = append(fields, bookshelf.FieldToken)
 	}
-	if m.added_at != nil {
-		fields = append(fields, bookshelf.FieldAddedAt)
+	if m.created_at != nil {
+		fields = append(fields, bookshelf.FieldCreatedAt)
 	}
 	if m.updated_at != nil {
 		fields = append(fields, bookshelf.FieldUpdatedAt)
@@ -372,8 +372,8 @@ func (m *BookshelfMutation) Field(name string) (ent.Value, bool) {
 		return m.GalleryID()
 	case bookshelf.FieldToken:
 		return m.Token()
-	case bookshelf.FieldAddedAt:
-		return m.AddedAt()
+	case bookshelf.FieldCreatedAt:
+		return m.CreatedAt()
 	case bookshelf.FieldUpdatedAt:
 		return m.UpdatedAt()
 	}
@@ -389,8 +389,8 @@ func (m *BookshelfMutation) OldField(ctx context.Context, name string) (ent.Valu
 		return m.OldGalleryID(ctx)
 	case bookshelf.FieldToken:
 		return m.OldToken(ctx)
-	case bookshelf.FieldAddedAt:
-		return m.OldAddedAt(ctx)
+	case bookshelf.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
 	case bookshelf.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
 	}
@@ -416,12 +416,12 @@ func (m *BookshelfMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetToken(v)
 		return nil
-	case bookshelf.FieldAddedAt:
+	case bookshelf.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetAddedAt(v)
+		m.SetCreatedAt(v)
 		return nil
 	case bookshelf.FieldUpdatedAt:
 		v, ok := value.(time.Time)
@@ -500,8 +500,8 @@ func (m *BookshelfMutation) ResetField(name string) error {
 	case bookshelf.FieldToken:
 		m.ResetToken()
 		return nil
-	case bookshelf.FieldAddedAt:
-		m.ResetAddedAt()
+	case bookshelf.FieldCreatedAt:
+		m.ResetCreatedAt()
 		return nil
 	case bookshelf.FieldUpdatedAt:
 		m.ResetUpdatedAt()
@@ -567,6 +567,7 @@ type GalleryCacheMutation struct {
 	gallery_id         *int64
 	addgallery_id      *int64
 	token              *string
+	created_at         *time.Time
 	title              *string
 	title_jpn          *string
 	category           *string
@@ -788,6 +789,42 @@ func (m *GalleryCacheMutation) OldToken(ctx context.Context) (v string, err erro
 // ResetToken resets all changes to the "token" field.
 func (m *GalleryCacheMutation) ResetToken() {
 	m.token = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *GalleryCacheMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *GalleryCacheMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *GalleryCacheMutation) ResetCreatedAt() {
+	m.created_at = nil
 }
 
 // SetTitle sets the "title" field.
@@ -1770,12 +1807,15 @@ func (m *GalleryCacheMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GalleryCacheMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 24)
 	if m.gallery_id != nil {
 		fields = append(fields, gallerycache.FieldGalleryID)
 	}
 	if m.token != nil {
 		fields = append(fields, gallerycache.FieldToken)
+	}
+	if m.created_at != nil {
+		fields = append(fields, gallerycache.FieldCreatedAt)
 	}
 	if m.title != nil {
 		fields = append(fields, gallerycache.FieldTitle)
@@ -1852,6 +1892,8 @@ func (m *GalleryCacheMutation) Field(name string) (ent.Value, bool) {
 		return m.GalleryID()
 	case gallerycache.FieldToken:
 		return m.Token()
+	case gallerycache.FieldCreatedAt:
+		return m.CreatedAt()
 	case gallerycache.FieldTitle:
 		return m.Title()
 	case gallerycache.FieldTitleJpn:
@@ -1907,6 +1949,8 @@ func (m *GalleryCacheMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldGalleryID(ctx)
 	case gallerycache.FieldToken:
 		return m.OldToken(ctx)
+	case gallerycache.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
 	case gallerycache.FieldTitle:
 		return m.OldTitle(ctx)
 	case gallerycache.FieldTitleJpn:
@@ -1971,6 +2015,13 @@ func (m *GalleryCacheMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetToken(v)
+		return nil
+	case gallerycache.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
 		return nil
 	case gallerycache.FieldTitle:
 		v, ok := value.(string)
@@ -2275,6 +2326,9 @@ func (m *GalleryCacheMutation) ResetField(name string) error {
 		return nil
 	case gallerycache.FieldToken:
 		m.ResetToken()
+		return nil
+	case gallerycache.FieldCreatedAt:
+		m.ResetCreatedAt()
 		return nil
 	case gallerycache.FieldTitle:
 		m.ResetTitle()
@@ -3467,7 +3521,7 @@ type ReadingProgressMutation struct {
 	progress        *float64
 	addprogress     *float64
 	completed       *bool
-	started_at      *time.Time
+	created_at      *time.Time
 	updated_at      *time.Time
 	clearedFields   map[string]struct{}
 	done            bool
@@ -3813,53 +3867,40 @@ func (m *ReadingProgressMutation) ResetCompleted() {
 	m.completed = nil
 }
 
-// SetStartedAt sets the "started_at" field.
-func (m *ReadingProgressMutation) SetStartedAt(t time.Time) {
-	m.started_at = &t
+// SetCreatedAt sets the "created_at" field.
+func (m *ReadingProgressMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
 }
 
-// StartedAt returns the value of the "started_at" field in the mutation.
-func (m *ReadingProgressMutation) StartedAt() (r time.Time, exists bool) {
-	v := m.started_at
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *ReadingProgressMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldStartedAt returns the old "started_at" field's value of the ReadingProgress entity.
+// OldCreatedAt returns the old "created_at" field's value of the ReadingProgress entity.
 // If the ReadingProgress object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ReadingProgressMutation) OldStartedAt(ctx context.Context) (v *time.Time, err error) {
+func (m *ReadingProgressMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldStartedAt is only allowed on UpdateOne operations")
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldStartedAt requires an ID field in the mutation")
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldStartedAt: %w", err)
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
 	}
-	return oldValue.StartedAt, nil
+	return oldValue.CreatedAt, nil
 }
 
-// ClearStartedAt clears the value of the "started_at" field.
-func (m *ReadingProgressMutation) ClearStartedAt() {
-	m.started_at = nil
-	m.clearedFields[readingprogress.FieldStartedAt] = struct{}{}
-}
-
-// StartedAtCleared returns if the "started_at" field was cleared in this mutation.
-func (m *ReadingProgressMutation) StartedAtCleared() bool {
-	_, ok := m.clearedFields[readingprogress.FieldStartedAt]
-	return ok
-}
-
-// ResetStartedAt resets all changes to the "started_at" field.
-func (m *ReadingProgressMutation) ResetStartedAt() {
-	m.started_at = nil
-	delete(m.clearedFields, readingprogress.FieldStartedAt)
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *ReadingProgressMutation) ResetCreatedAt() {
+	m.created_at = nil
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -3879,7 +3920,7 @@ func (m *ReadingProgressMutation) UpdatedAt() (r time.Time, exists bool) {
 // OldUpdatedAt returns the old "updated_at" field's value of the ReadingProgress entity.
 // If the ReadingProgress object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ReadingProgressMutation) OldUpdatedAt(ctx context.Context) (v *time.Time, err error) {
+func (m *ReadingProgressMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
 	}
@@ -3893,22 +3934,9 @@ func (m *ReadingProgressMutation) OldUpdatedAt(ctx context.Context) (v *time.Tim
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *ReadingProgressMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[readingprogress.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *ReadingProgressMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[readingprogress.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *ReadingProgressMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, readingprogress.FieldUpdatedAt)
 }
 
 // Where appends a list predicates to the ReadingProgressMutation builder.
@@ -3961,8 +3989,8 @@ func (m *ReadingProgressMutation) Fields() []string {
 	if m.completed != nil {
 		fields = append(fields, readingprogress.FieldCompleted)
 	}
-	if m.started_at != nil {
-		fields = append(fields, readingprogress.FieldStartedAt)
+	if m.created_at != nil {
+		fields = append(fields, readingprogress.FieldCreatedAt)
 	}
 	if m.updated_at != nil {
 		fields = append(fields, readingprogress.FieldUpdatedAt)
@@ -3985,8 +4013,8 @@ func (m *ReadingProgressMutation) Field(name string) (ent.Value, bool) {
 		return m.Progress()
 	case readingprogress.FieldCompleted:
 		return m.Completed()
-	case readingprogress.FieldStartedAt:
-		return m.StartedAt()
+	case readingprogress.FieldCreatedAt:
+		return m.CreatedAt()
 	case readingprogress.FieldUpdatedAt:
 		return m.UpdatedAt()
 	}
@@ -4008,8 +4036,8 @@ func (m *ReadingProgressMutation) OldField(ctx context.Context, name string) (en
 		return m.OldProgress(ctx)
 	case readingprogress.FieldCompleted:
 		return m.OldCompleted(ctx)
-	case readingprogress.FieldStartedAt:
-		return m.OldStartedAt(ctx)
+	case readingprogress.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
 	case readingprogress.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
 	}
@@ -4056,12 +4084,12 @@ func (m *ReadingProgressMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetCompleted(v)
 		return nil
-	case readingprogress.FieldStartedAt:
+	case readingprogress.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetStartedAt(v)
+		m.SetCreatedAt(v)
 		return nil
 	case readingprogress.FieldUpdatedAt:
 		v, ok := value.(time.Time)
@@ -4138,14 +4166,7 @@ func (m *ReadingProgressMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *ReadingProgressMutation) ClearedFields() []string {
-	var fields []string
-	if m.FieldCleared(readingprogress.FieldStartedAt) {
-		fields = append(fields, readingprogress.FieldStartedAt)
-	}
-	if m.FieldCleared(readingprogress.FieldUpdatedAt) {
-		fields = append(fields, readingprogress.FieldUpdatedAt)
-	}
-	return fields
+	return nil
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -4158,14 +4179,6 @@ func (m *ReadingProgressMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *ReadingProgressMutation) ClearField(name string) error {
-	switch name {
-	case readingprogress.FieldStartedAt:
-		m.ClearStartedAt()
-		return nil
-	case readingprogress.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
-	}
 	return fmt.Errorf("unknown ReadingProgress nullable field %s", name)
 }
 
@@ -4188,8 +4201,8 @@ func (m *ReadingProgressMutation) ResetField(name string) error {
 	case readingprogress.FieldCompleted:
 		m.ResetCompleted()
 		return nil
-	case readingprogress.FieldStartedAt:
-		m.ResetStartedAt()
+	case readingprogress.FieldCreatedAt:
+		m.ResetCreatedAt()
 		return nil
 	case readingprogress.FieldUpdatedAt:
 		m.ResetUpdatedAt()

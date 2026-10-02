@@ -14,7 +14,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "gallery_id", Type: field.TypeInt64},
 		{Name: "token", Type: field.TypeString},
-		{Name: "added_at", Type: field.TypeTime},
+		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}
 	// BookshelfTable holds the schema information for the "bookshelf" table.
@@ -35,6 +35,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "gallery_id", Type: field.TypeInt64},
 		{Name: "token", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
 		{Name: "title", Type: field.TypeString, Default: ""},
 		{Name: "title_jpn", Type: field.TypeString, Default: ""},
 		{Name: "category", Type: field.TypeString, Default: ""},
@@ -111,8 +112,8 @@ var (
 		{Name: "current_page", Type: field.TypeInt, Default: 0},
 		{Name: "progress", Type: field.TypeFloat64, Default: 0},
 		{Name: "completed", Type: field.TypeBool, Default: false},
-		{Name: "started_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
 	}
 	// ReadingProgressTable holds the schema information for the "reading_progress" table.
 	ReadingProgressTable = &schema.Table{

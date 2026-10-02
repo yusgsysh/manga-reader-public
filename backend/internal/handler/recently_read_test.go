@@ -75,7 +75,7 @@ func TestHandleRecentlyRead_WithRecords(t *testing.T) {
 		SetCurrentPage(5).
 		SetProgress(0.2).
 		SetCompleted(false).
-		SetStartedAt(time.Now().UTC()).
+		SetCreatedAt(time.Now().UTC()).
 		SetUpdatedAt(time.Now().UTC()).
 		Save(t.Context())
 
@@ -87,7 +87,7 @@ func TestHandleRecentlyRead_WithRecords(t *testing.T) {
 		SetCurrentPage(10).
 		SetProgress(0.4).
 		SetCompleted(false).
-		SetStartedAt(time.Now().UTC()).
+		SetCreatedAt(time.Now().UTC()).
 		SetUpdatedAt(time.Now().UTC()).
 		Save(t.Context())
 
@@ -139,7 +139,7 @@ func TestHandleRecentlyRead_MetadataSurvivesBookshelfRemove(t *testing.T) {
 		SetCurrentPage(5).
 		SetProgress(0.2).
 		SetCompleted(false).
-		SetStartedAt(time.Now().UTC()).
+		SetCreatedAt(time.Now().UTC()).
 		SetUpdatedAt(time.Now().UTC()).
 		Save(t.Context())
 

@@ -17,6 +17,8 @@ const (
 	FieldGalleryID = "gallery_id"
 	// FieldToken holds the string denoting the token field in the database.
 	FieldToken = "token"
+	// FieldCreatedAt holds the string denoting the created_at field in the database.
+	FieldCreatedAt = "created_at"
 	// FieldTitle holds the string denoting the title field in the database.
 	FieldTitle = "title"
 	// FieldTitleJpn holds the string denoting the title_jpn field in the database.
@@ -68,6 +70,7 @@ var Columns = []string{
 	FieldID,
 	FieldGalleryID,
 	FieldToken,
+	FieldCreatedAt,
 	FieldTitle,
 	FieldTitleJpn,
 	FieldCategory,
@@ -102,6 +105,8 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
+	DefaultCreatedAt func() time.Time
 	// DefaultTitle holds the default value on creation for the "title" field.
 	DefaultTitle string
 	// DefaultTitleJpn holds the default value on creation for the "title_jpn" field.
@@ -152,6 +157,11 @@ func ByGalleryID(opts ...sql.OrderTermOption) OrderOption {
 // ByToken orders the results by the token field.
 func ByToken(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldToken, opts...).ToFunc()
+}
+
+// ByCreatedAt orders the results by the created_at field.
+func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCreatedAt, opts...).ToFunc()
 }
 
 // ByTitle orders the results by the title field.

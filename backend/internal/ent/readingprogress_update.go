@@ -119,35 +119,9 @@ func (_u *ReadingProgressUpdate) SetNillableCompleted(v *bool) *ReadingProgressU
 	return _u
 }
 
-// SetStartedAt sets the "started_at" field.
-func (_u *ReadingProgressUpdate) SetStartedAt(v time.Time) *ReadingProgressUpdate {
-	_u.mutation.SetStartedAt(v)
-	return _u
-}
-
-// SetNillableStartedAt sets the "started_at" field if the given value is not nil.
-func (_u *ReadingProgressUpdate) SetNillableStartedAt(v *time.Time) *ReadingProgressUpdate {
-	if v != nil {
-		_u.SetStartedAt(*v)
-	}
-	return _u
-}
-
-// ClearStartedAt clears the value of the "started_at" field.
-func (_u *ReadingProgressUpdate) ClearStartedAt() *ReadingProgressUpdate {
-	_u.mutation.ClearStartedAt()
-	return _u
-}
-
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *ReadingProgressUpdate) SetUpdatedAt(v time.Time) *ReadingProgressUpdate {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *ReadingProgressUpdate) ClearUpdatedAt() *ReadingProgressUpdate {
-	_u.mutation.ClearUpdatedAt()
 	return _u
 }
 
@@ -186,7 +160,7 @@ func (_u *ReadingProgressUpdate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *ReadingProgressUpdate) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := readingprogress.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -243,17 +217,8 @@ func (_u *ReadingProgressUpdate) sqlSave(ctx context.Context) (_node int, err er
 	if value, ok := _u.mutation.Completed(); ok {
 		_spec.SetField(readingprogress.FieldCompleted, field.TypeBool, value)
 	}
-	if value, ok := _u.mutation.StartedAt(); ok {
-		_spec.SetField(readingprogress.FieldStartedAt, field.TypeTime, value)
-	}
-	if _u.mutation.StartedAtCleared() {
-		_spec.ClearField(readingprogress.FieldStartedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(readingprogress.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(readingprogress.FieldUpdatedAt, field.TypeTime)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -366,35 +331,9 @@ func (_u *ReadingProgressUpdateOne) SetNillableCompleted(v *bool) *ReadingProgre
 	return _u
 }
 
-// SetStartedAt sets the "started_at" field.
-func (_u *ReadingProgressUpdateOne) SetStartedAt(v time.Time) *ReadingProgressUpdateOne {
-	_u.mutation.SetStartedAt(v)
-	return _u
-}
-
-// SetNillableStartedAt sets the "started_at" field if the given value is not nil.
-func (_u *ReadingProgressUpdateOne) SetNillableStartedAt(v *time.Time) *ReadingProgressUpdateOne {
-	if v != nil {
-		_u.SetStartedAt(*v)
-	}
-	return _u
-}
-
-// ClearStartedAt clears the value of the "started_at" field.
-func (_u *ReadingProgressUpdateOne) ClearStartedAt() *ReadingProgressUpdateOne {
-	_u.mutation.ClearStartedAt()
-	return _u
-}
-
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *ReadingProgressUpdateOne) SetUpdatedAt(v time.Time) *ReadingProgressUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *ReadingProgressUpdateOne) ClearUpdatedAt() *ReadingProgressUpdateOne {
-	_u.mutation.ClearUpdatedAt()
 	return _u
 }
 
@@ -446,7 +385,7 @@ func (_u *ReadingProgressUpdateOne) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *ReadingProgressUpdateOne) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := readingprogress.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -520,17 +459,8 @@ func (_u *ReadingProgressUpdateOne) sqlSave(ctx context.Context) (_node *Reading
 	if value, ok := _u.mutation.Completed(); ok {
 		_spec.SetField(readingprogress.FieldCompleted, field.TypeBool, value)
 	}
-	if value, ok := _u.mutation.StartedAt(); ok {
-		_spec.SetField(readingprogress.FieldStartedAt, field.TypeTime, value)
-	}
-	if _u.mutation.StartedAtCleared() {
-		_spec.ClearField(readingprogress.FieldStartedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(readingprogress.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(readingprogress.FieldUpdatedAt, field.TypeTime)
 	}
 	_node = &ReadingProgress{config: _u.config}
 	_spec.Assign = _node.assignValues

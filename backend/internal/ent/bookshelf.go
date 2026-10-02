@@ -21,8 +21,8 @@ type Bookshelf struct {
 	GalleryID int64 `json:"gallery_id,omitempty"`
 	// Token holds the value of the "token" field.
 	Token string `json:"token,omitempty"`
-	// AddedAt holds the value of the "added_at" field.
-	AddedAt time.Time `json:"added_at,omitempty"`
+	// CreatedAt holds the value of the "created_at" field.
+	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt    time.Time `json:"updated_at,omitempty"`
 	selectValues sql.SelectValues
@@ -37,7 +37,7 @@ func (*Bookshelf) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case bookshelf.FieldToken:
 			values[i] = new(sql.NullString)
-		case bookshelf.FieldAddedAt, bookshelf.FieldUpdatedAt:
+		case bookshelf.FieldCreatedAt, bookshelf.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -72,11 +72,11 @@ func (_m *Bookshelf) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Token = value.String
 			}
-		case bookshelf.FieldAddedAt:
+		case bookshelf.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
-				return fmt.Errorf("unexpected type %T for field added_at", values[i])
+				return fmt.Errorf("unexpected type %T for field created_at", values[i])
 			} else if value.Valid {
-				_m.AddedAt = value.Time
+				_m.CreatedAt = value.Time
 			}
 		case bookshelf.FieldUpdatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -126,8 +126,8 @@ func (_m *Bookshelf) String() string {
 	builder.WriteString("token=")
 	builder.WriteString(_m.Token)
 	builder.WriteString(", ")
-	builder.WriteString("added_at=")
-	builder.WriteString(_m.AddedAt.Format(time.ANSIC))
+	builder.WriteString("created_at=")
+	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))

@@ -23,8 +23,8 @@ const (
 	FieldProgress = "progress"
 	// FieldCompleted holds the string denoting the completed field in the database.
 	FieldCompleted = "completed"
-	// FieldStartedAt holds the string denoting the started_at field in the database.
-	FieldStartedAt = "started_at"
+	// FieldCreatedAt holds the string denoting the created_at field in the database.
+	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
 	// Table holds the table name of the readingprogress in the database.
@@ -39,7 +39,7 @@ var Columns = []string{
 	FieldCurrentPage,
 	FieldProgress,
 	FieldCompleted,
-	FieldStartedAt,
+	FieldCreatedAt,
 	FieldUpdatedAt,
 }
 
@@ -64,6 +64,10 @@ var (
 	ProgressValidator func(float64) error
 	// DefaultCompleted holds the default value on creation for the "completed" field.
 	DefaultCompleted bool
+	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
+	DefaultCreatedAt func() time.Time
+	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
+	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
 )
@@ -101,9 +105,9 @@ func ByCompleted(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCompleted, opts...).ToFunc()
 }
 
-// ByStartedAt orders the results by the started_at field.
-func ByStartedAt(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldStartedAt, opts...).ToFunc()
+// ByCreatedAt orders the results by the created_at field.
+func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCreatedAt, opts...).ToFunc()
 }
 
 // ByUpdatedAt orders the results by the updated_at field.

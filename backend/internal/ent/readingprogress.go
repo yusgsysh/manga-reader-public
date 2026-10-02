@@ -27,10 +27,10 @@ type ReadingProgress struct {
 	Progress float64 `json:"progress,omitempty"`
 	// Completed holds the value of the "completed" field.
 	Completed bool `json:"completed,omitempty"`
-	// StartedAt holds the value of the "started_at" field.
-	StartedAt *time.Time `json:"started_at,omitempty"`
+	// CreatedAt holds the value of the "created_at" field.
+	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
-	UpdatedAt    *time.Time `json:"updated_at,omitempty"`
+	UpdatedAt    time.Time `json:"updated_at,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -47,7 +47,7 @@ func (*ReadingProgress) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case readingprogress.FieldToken:
 			values[i] = new(sql.NullString)
-		case readingprogress.FieldStartedAt, readingprogress.FieldUpdatedAt:
+		case readingprogress.FieldCreatedAt, readingprogress.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -100,19 +100,17 @@ func (_m *ReadingProgress) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Completed = value.Bool
 			}
-		case readingprogress.FieldStartedAt:
+		case readingprogress.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
-				return fmt.Errorf("unexpected type %T for field started_at", values[i])
+				return fmt.Errorf("unexpected type %T for field created_at", values[i])
 			} else if value.Valid {
-				_m.StartedAt = new(time.Time)
-				*_m.StartedAt = value.Time
+				_m.CreatedAt = value.Time
 			}
 		case readingprogress.FieldUpdatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
-				_m.UpdatedAt = new(time.Time)
-				*_m.UpdatedAt = value.Time
+				_m.UpdatedAt = value.Time
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -165,15 +163,11 @@ func (_m *ReadingProgress) String() string {
 	builder.WriteString("completed=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Completed))
 	builder.WriteString(", ")
-	if v := _m.StartedAt; v != nil {
-		builder.WriteString("started_at=")
-		builder.WriteString(v.Format(time.ANSIC))
-	}
+	builder.WriteString("created_at=")
+	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))
 	builder.WriteString(", ")
-	if v := _m.UpdatedAt; v != nil {
-		builder.WriteString("updated_at=")
-		builder.WriteString(v.Format(time.ANSIC))
-	}
+	builder.WriteString("updated_at=")
+	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
 	builder.WriteByte(')')
 	return builder.String()
 }

@@ -19,7 +19,7 @@ function progressFor(id: number, updatedAt: string): ReadingProgress {
     current_page: 9,
     progress: 1,
     completed: true,
-    started_at: "2026-01-01T00:00:00Z",
+    created_at: "2026-01-01T00:00:00Z",
     updated_at: updatedAt,
   };
 }
@@ -39,6 +39,7 @@ function item(id: number, updatedAt: string): RecentlyReadItem {
       current_page: 1,
       progress: 0.5,
       completed: false,
+      created_at: updatedAt,
       updated_at: updatedAt,
     },
   };

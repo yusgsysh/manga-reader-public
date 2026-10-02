@@ -30,7 +30,7 @@ func (Bookshelf) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("gallery_id"),
 		field.String("token"),
-		field.Time("added_at").Default(time.Now).Immutable(),
+		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}
 }

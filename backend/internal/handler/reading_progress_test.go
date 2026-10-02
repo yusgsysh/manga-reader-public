@@ -49,7 +49,7 @@ func TestHandleGetProgress_Exists(t *testing.T) {
 		SetCurrentPage(10).
 		SetProgress(0.416).
 		SetCompleted(false).
-		SetStartedAt(time.Now().UTC()).
+		SetCreatedAt(time.Now().UTC()).
 		SetUpdatedAt(time.Now().UTC()).
 		Save(t.Context())
 
@@ -102,8 +102,8 @@ func TestHandleUpdateProgress_First(t *testing.T) {
 	if resp.CurrentPage != 5 {
 		t.Errorf("CurrentPage = %d, want 5", resp.CurrentPage)
 	}
-	if resp.StartedAt == nil {
-		t.Error("StartedAt should be set on first insert")
+	if resp.CreatedAt == nil {
+		t.Error("CreatedAt should be set on first insert")
 	}
 }
 
@@ -137,8 +137,8 @@ func TestHandleUpdateProgress_Update(t *testing.T) {
 	if second.CurrentPage != 10 {
 		t.Errorf("CurrentPage = %d, want 10", second.CurrentPage)
 	}
-	if first.StartedAt != nil && second.StartedAt != nil && !first.StartedAt.Equal(*second.StartedAt) {
-		t.Error("started_at should not change")
+	if first.CreatedAt != nil && second.CreatedAt != nil && !first.CreatedAt.Equal(*second.CreatedAt) {
+		t.Error("created_at should not change")
 	}
 }
 
