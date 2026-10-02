@@ -229,25 +229,109 @@ func (s *Server) handleCachedPageThumbnail(c *gin.Context) {
 	c.Data(http.StatusOK, "image/webp", data)
 }
 
-// resolveGalleryPageThumb returns the sprite geometry for a page index, using
-// the gallery cache when it holds the thumbnail metadata and scraping upstream
-// otherwise.
+// pageThumbResolveTimeout bounds how long an index resolve waits for the
+// shared /pages walk to deliver the requested page before falling back to a
+// direct scrape. It is a var so tests can shorten it.
+var pageThumbResolveTimeout = 15 * time.Second
+
+// errThumbResolved stops the pages-stream drain once the requested index has
+// been seen (or proven absent from the walk). emit's error is returned as-is
+// by drain, so the sentinel is how the subscriber reports "stop, we are done".
+var errThumbResolved = errors.New("page thumbnail resolved from pages stream")
+
+// resolveGalleryPageThumb returns the sprite geometry for a page index. The
+// gallery cache is the fast path; on a miss the resolve subscribes to the
+// shared /pages walk instead of scraping on its own, so concurrent index
+// requests (and the /pages stream itself) share a single upstream walk, which
+// also backfills the cache once complete. Only when the walk does not reach
+// the page within pageThumbResolveTimeout does it fall back to a direct
+// one-page scrape, so a cold, far-away index cannot stall the request.
 func (s *Server) resolveGalleryPageThumb(ctx context.Context, galleryID int64, token string, index int) (model.GalleryPageThumb, bool, error) {
 	if db := s.cacheDB(); db != nil {
 		row, found, err := gallerycache.Get(ctx, db, galleryID, token)
 		if err != nil {
 			slog.Warn("gallery page-thumbnail cache read failed", "id", galleryID, "error", err)
 		} else if found {
+			behindStoredList := false
 			for _, p := range row.Pages {
-				if p.Index == index && p.Thumbnail != nil {
+				if p.Index != index {
+					continue
+				}
+				if p.Thumbnail != nil {
 					return *p.Thumbnail, true, nil
 				}
+				// Present but without geometry: fall through to a fresh walk,
+				// which upgrades the row through UpsertPages once complete.
+				behindStoredList = true
+				break
+			}
+			// Only verified, complete walks are ever written, and they emit
+			// pages in ascending order — so an index past the stored end does
+			// not exist upstream either. Without this, probing an invalid
+			// index on a warm gallery would start a full walk every time.
+			if !behindStoredList && len(row.Pages) > 0 && index > row.Pages[len(row.Pages)-1].Index {
+				return model.GalleryPageThumb{}, false, nil
 			}
 		}
 	}
 
-	u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
-	return exhentai.ScrapeGalleryPageThumb(ctx, s.Client, u, index)
+	resolveCtx, cancel := context.WithTimeout(ctx, pageThumbResolveTimeout)
+	defer cancel()
+
+	thumb, found, err := s.resolveGalleryPageThumbFromStream(resolveCtx, galleryID, token, index)
+	if errors.Is(err, context.DeadlineExceeded) {
+		u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
+		return exhentai.ScrapeGalleryPageThumb(ctx, s.Client, u, index)
+	}
+	if err != nil {
+		return model.GalleryPageThumb{}, false, err
+	}
+	return thumb, found, nil
+}
+
+// resolveGalleryPageThumbFromStream finds the sprite geometry for index in the
+// shared pages walk. The walk delivers pages in order, so the requested index
+// either arrives in the replayed prefix (the common case: the frontend only
+// requests thumbnails for pages it already received from /pages) or once the
+// walk reaches it. It returns found=false when the walk completes without the
+// page or the page carries no thumbnail geometry.
+func (s *Server) resolveGalleryPageThumbFromStream(
+	ctx context.Context,
+	galleryID int64,
+	token string,
+	index int,
+) (model.GalleryPageThumb, bool, error) {
+	var thumb model.GalleryPageThumb
+	found := false
+
+	_, err := s.scrapeGalleryPages(ctx, galleryID, token, func(total int, batch []model.CachedPage) error {
+		if total > 0 && index >= total {
+			// The walk already knows the gallery size: no need to wait for the
+			// remaining pages to conclude the index does not exist.
+			return errThumbResolved
+		}
+		for _, p := range batch {
+			if p.Index != index {
+				continue
+			}
+			if p.Thumbnail != nil {
+				thumb, found = *p.Thumbnail, true
+			}
+			// Each index appears exactly once per walk, so this is final.
+			return errThumbResolved
+		}
+		return nil
+	})
+
+	switch {
+	case errors.Is(err, errThumbResolved):
+		return thumb, found, nil
+	case err != nil:
+		return model.GalleryPageThumb{}, false, err
+	default:
+		// Walk finished: index out of range, or no thumbnail metadata.
+		return model.GalleryPageThumb{}, false, nil
+	}
 }
 
 // cropLive fetches the sprite from upstream and crops it, without touching

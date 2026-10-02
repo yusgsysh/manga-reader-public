@@ -332,7 +332,7 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 
 - 抓取与请求上下文**解绑**：客户端中途断开不会取消上游抓取，只要最终完整成功，列表仍会写入 `gallery_cache`（客户端断开时后续行自然丢失）。整次抓取有 10 分钟硬上限。
 - `?p=N` 续页抓取按 `meta.total` 动态限时：`30s + 0.5s/页`，钳制在 `[1 分钟, 10 分钟]`；首个文档与缓存写入不在此预算内。
-- 同一 `(id, token)` 的并发请求通过 singleflight 合并为一次上游抓取：首个请求边抓边推流，其余请求等抓取完成后**一次性**收到完整的 `meta` + 全部 `page` + `done`。
+- 同一 `(id, token)` 的并发请求通过 singleflight 合并为一次上游抓取：首个请求边抓边推流，其余请求等抓取完成后**一次性**收到完整的 `meta` + 全部 `page` + `done`。缩略图索引解析（`/api/image-cache/page-thumbnail` 的 `id`+`token`+`index`）也订阅这条共享抓取流。
 
 > `thumbnail` 描述该页缩略图在精灵图中的位置（源站用一张大图 + CSS `background-position` 切割）。用 `sprite_url` + `x/y/width/height` 调用 `/api/image-cache/page-thumbnail` 获取单张缩略图。无缩略图元数据时该字段省略。
 
@@ -658,7 +658,7 @@ Cache-Control: public, max-age=31536000, immutable
 **行为:**
 
 - **直接裁剪**：MinIO read-through，精灵图 `page-sprite/<sha256(url)>`、裁剪结果 `page-thumb/<sha256(url|x|y|w|h)>`。
-- **按索引**：几何优先取 `gallery_cache` 的 `pages[].thumbnail`，未命中则回源抓取；图片走 MinIO read-through。
+- **按索引**：几何优先取 `gallery_cache` 的 `pages[].thumbnail`；未命中时**订阅共享的 `/pages` 抓取流**（与上文 singleflight 合并同一条 walk），并发 index 请求共用一次上游抓取，walk 完成后自动把完整列表回填 `gallery_cache`。若 15 秒内 walk 尚未推进到该页，则回退为单页直抓（1~2 个文档），避免请求长时间挂起；图片本身仍走 MinIO read-through。
 
 **Headers:**
 

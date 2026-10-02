@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"image"
 	"image/color"
@@ -59,6 +60,12 @@ func directThumbPath(base, rawURL string) string {
 
 func indexThumbPath(base string, index int) string {
 	return fmt.Sprintf("%s?id=%s&token=%s&index=%d", base, testGalleryIDStr, thumbToken, index)
+}
+
+// indexThumbPathFor addresses a specific gallery so tests that exercise the
+// shared pages-walk hub do not collide with each other's in-flight streams.
+func indexThumbPathFor(base, id, token string, index int) string {
+	return fmt.Sprintf("%s?id=%s&token=%s&index=%d", base, id, token, index)
 }
 
 func decodeSize(t *testing.T, body []byte) image.Point {
@@ -373,5 +380,249 @@ func TestPageThumbnail_InvalidRequests(t *testing.T) {
 				t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
 			}
 		})
+	}
+}
+
+// ==================== index resolve via the shared pages walk ====================
+
+// gallerySpriteServer serves the two-page gallery HTML (with sprite geometry)
+// on /g/ requests and the sprite image on everything else. onGalleryHit, when
+// non-nil, is closed before the first gallery HTML is answered and that first
+// answer blocks until release is closed — keeping the shared walk in flight so
+// a second resolve is guaranteed to subscribe to it.
+func gallerySpriteServer(
+	t *testing.T,
+	galleryHits *atomic.Int32,
+	onFirstHit func(),
+	release chan struct{},
+) *httptest.Server {
+	t.Helper()
+	sprite := makeTestSprite(t)
+	srv := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/g/") {
+			if galleryHits.Add(1) == 1 && onFirstHit != nil {
+				onFirstHit()
+				<-release
+			}
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, testGalleryThumbHTML)
+			return
+		}
+		w.Header().Set("Content-Type", "image/webp")
+		_, _ = w.Write(sprite)
+	})
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+type thumbResponse struct {
+	code int
+	body string
+}
+
+func requestThumb(r http.Handler, path string) thumbResponse {
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+	return thumbResponse{code: w.Code, body: w.Body.String()}
+}
+
+// Concurrent index resolves for the same gallery must share one upstream walk
+// instead of each scraping the gallery page on its own.
+func TestCachedPageThumbnail_ByIndexCoalescesWithPagesStream(t *testing.T) {
+	var galleryHits atomic.Int32
+	firstHit := make(chan struct{})
+	release := make(chan struct{})
+	srv := gallerySpriteServer(t, &galleryHits, func() { close(firstHit) }, release)
+
+	const id, token = "777001", "coalesce"
+	db := newTestDB(t)
+	server := &Server{
+		Client: newMockClient(srv.URL),
+		DB:     &database.DB{Client: db},
+		Cache:  newMockImageCache(),
+	}
+	r := setupMockRouter(server)
+
+	first := make(chan thumbResponse, 1)
+	go func() {
+		first <- requestThumb(r, indexThumbPathFor(cachedThumbPath, id, token, 0))
+	}()
+
+	select {
+	case <-firstHit:
+	case <-time.After(2 * time.Second):
+		t.Fatal("leader never started the shared pages walk")
+	}
+
+	second := make(chan thumbResponse, 1)
+	go func() {
+		second <- requestThumb(r, indexThumbPathFor(cachedThumbPath, id, token, 1))
+	}()
+
+	// The walk is still blocked in its gallery fetch, so the second resolve
+	// has time to subscribe to the in-flight stream before it completes.
+	time.Sleep(200 * time.Millisecond)
+	close(release)
+
+	for name, ch := range map[string]chan thumbResponse{"first": first, "second": second} {
+		select {
+		case res := <-ch:
+			if res.code != http.StatusOK {
+				t.Errorf("%s: status = %d, want 200. body: %s", name, res.code, res.body)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: request never finished", name)
+		}
+	}
+
+	if got := galleryHits.Load(); got != 1 {
+		t.Errorf("gallery page fetches = %d, want 1 (shared walk)", got)
+	}
+
+	// Drain the detached walk before teardown so its cache write does not
+	// race the database close.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if row, found, err := gallerycache.Get(t.Context(), db, 777001, token); err == nil && found && len(row.Pages) == 2 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Error("shared walk never backfilled gallery_cache")
+}
+
+// Completing the shared walk backfills gallery_cache, so later index resolves
+// are served from the database without touching upstream.
+func TestCachedPageThumbnail_ByIndexWalkPopulatesCache(t *testing.T) {
+	var galleryHits atomic.Int32
+	srv := gallerySpriteServer(t, &galleryHits, nil, nil)
+
+	db := newTestDB(t)
+	server := &Server{
+		Client: newMockClient(srv.URL),
+		DB:     &database.DB{Client: db},
+		Cache:  newMockImageCache(),
+	}
+	r := setupMockRouter(server)
+
+	const id, token = "777002", "cachefill"
+	res := requestThumb(r, indexThumbPathFor(cachedThumbPath, id, token, 0))
+	if res.code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", res.code, res.body)
+	}
+
+	// The resolve returns as soon as its batch arrives; the detached walk
+	// persists the list afterwards.
+	backfilled := false
+	deadline := time.Now().Add(3 * time.Second)
+	for !backfilled && time.Now().Before(deadline) {
+		row, found, err := gallerycache.Get(t.Context(), db, 777002, token)
+		if err != nil || !found || len(row.Pages) != 2 {
+			time.Sleep(20 * time.Millisecond)
+			continue
+		}
+		backfilled = true
+		for _, p := range row.Pages {
+			if p.Thumbnail == nil {
+				t.Errorf("page %d cached without thumbnail geometry", p.Index)
+			}
+		}
+	}
+	if !backfilled {
+		t.Fatal("shared walk did not backfill gallery_cache")
+	}
+	if got := galleryHits.Load(); got != 1 {
+		t.Errorf("gallery page fetches = %d, want 1", got)
+	}
+}
+
+// An index past the gallery total resolves to 404 as soon as the walk reports
+// the total, without waiting for the remaining pages.
+func TestCachedPageThumbnail_ByIndexOutOfRangeCached(t *testing.T) {
+	var galleryHits atomic.Int32
+	srv := gallerySpriteServer(t, &galleryHits, nil, nil)
+
+	server := &Server{
+		Client: newMockClient(srv.URL),
+		Cache:  newMockImageCache(),
+	}
+	r := setupMockRouter(server)
+
+	res := requestThumb(r, indexThumbPathFor(cachedThumbPath, "777003", "range", 5))
+	if res.code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404. body: %s", res.code, res.body)
+	}
+	if got := galleryHits.Load(); got != 1 {
+		t.Errorf("gallery page fetches = %d, want 1", got)
+	}
+}
+
+// When the shared walk does not deliver the page within pageThumbResolveTimeout
+// the resolve falls back to a direct one-page scrape instead of stalling.
+func TestCachedPageThumbnail_ByIndexResolveTimeoutFallsBack(t *testing.T) {
+	prev := pageThumbResolveTimeout
+	pageThumbResolveTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { pageThumbResolveTimeout = prev })
+
+	db := newTestDB(t)
+
+	var galleryHits atomic.Int32
+	firstHit := make(chan struct{})
+	release := make(chan struct{})
+	srv := gallerySpriteServer(t, &galleryHits, func() { close(firstHit) }, release)
+	t.Cleanup(func() {
+		// Let the stuck walk finish before the database teardown so its cache
+		// write does not race a closed connection.
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			// t.Context() is already cancelled inside cleanup, so the detached
+			// walk's cache write must be observed with a live context.
+			row, found, err := gallerycache.Get(context.Background(), db, 777004, "fallback")
+			if err == nil && found && len(row.Pages) == 2 {
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		t.Error("shared walk never backfilled gallery_cache")
+	})
+
+	server := &Server{
+		Client: newMockClient(srv.URL),
+		DB:     &database.DB{Client: db},
+		Cache:  newMockImageCache(),
+	}
+	r := setupMockRouter(server)
+
+	// The resolve is issued in the background: the walk's gallery fetch must
+	// be the blocked first hit while the resolve itself is still waiting on
+	// its (shortened) timeout.
+	resCh := make(chan thumbResponse, 1)
+	go func() {
+		resCh <- requestThumb(r, indexThumbPathFor(cachedThumbPath, "777004", "fallback", 0))
+	}()
+
+	select {
+	case <-firstHit:
+	case <-time.After(2 * time.Second):
+		t.Fatal("leader never started the shared pages walk")
+	}
+
+	// The direct scrape is the second gallery fetch; the first (the blocked
+	// walk) only completes after the resolve already fell back.
+	select {
+	case res := <-resCh:
+		if res.code != http.StatusOK {
+			t.Fatalf("status = %d, want 200. body: %s", res.code, res.body)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("resolve never fell back to the direct scrape")
+	}
+	if got := galleryHits.Load(); got != 2 {
+		t.Errorf("gallery page fetches = %d, want 2 (walk + fallback scrape)", got)
 	}
 }

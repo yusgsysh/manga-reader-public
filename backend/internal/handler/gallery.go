@@ -310,16 +310,34 @@ func (s *galleryPagesStream) finish(err error) {
 }
 
 // drain calls emit for every page appended after cursor, blocking until the
-// scrape finishes. It returns the number of pages the request received and the
-// terminal error. emit must not call back into the stream.
+// scrape finishes or ctx is cancelled. It returns the number of pages the
+// request received and the terminal error (ctx.Err() when cancelled). emit
+// must not call back into the stream.
+//
+// A cancelled subscriber must be able to wake out of cond.Wait, so ctx
+// cancellation broadcasts the condition variable; the walk itself keeps
+// running detached for the remaining subscribers.
 func (s *galleryPagesStream) drain(
+	ctx context.Context,
 	cursor int,
 	emit func(total int, batch []model.CachedPage) error,
 ) (int, error) {
+	stopWake := context.AfterFunc(ctx, func() {
+		s.mu.Lock()
+		s.cond.Broadcast()
+		s.mu.Unlock()
+	})
+	defer stopWake()
+
 	for {
 		s.mu.Lock()
-		for cursor >= len(s.pages) && !s.done {
+		for cursor >= len(s.pages) && !s.done && ctx.Err() == nil {
 			s.cond.Wait()
+		}
+		if ctx.Err() != nil {
+			err := ctx.Err()
+			s.mu.Unlock()
+			return cursor, err
 		}
 		if cursor >= len(s.pages) {
 			err := s.err
@@ -378,9 +396,11 @@ func (h *pagesHub) release(key string, s *galleryPagesStream) {
 // the hub and streams it to the caller through emit. The first caller (leader)
 // starts a detached background walk that appends every batch to the shared
 // stream and caches the verified list; concurrent callers subscribe to the same
-// stream and immediately receive the already-scraped pages. It returns the
-// number of pages streamed and the terminal error.
+// stream and immediately receive the already-scraped pages. Cancelling ctx only
+// detaches this subscriber — the walk keeps running for everyone else. It
+// returns the number of pages streamed and the terminal error.
 func (s *Server) scrapeGalleryPages(
+	ctx context.Context,
 	galleryID int64,
 	token string,
 	emit func(total int, batch []model.CachedPage) error,
@@ -390,7 +410,7 @@ func (s *Server) scrapeGalleryPages(
 	if leader {
 		s.runGalleryPagesScrape(key, stream, galleryID, token)
 	}
-	return stream.drain(0, emit)
+	return stream.drain(ctx, 0, emit)
 }
 
 // runGalleryPagesScrape drives one detached page-list walk and publishes it to
@@ -559,7 +579,12 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 		return nil
 	}
 
-	count, err := s.scrapeGalleryPages(galleryID, token, emit)
+	// Drain on a background context: a vanished client is handled by writeLine
+	// swallowing write errors, and the subscriber must keep following the walk
+	// so the terminal line is written and the detached scrape is never cut
+	// loose early. (Thumbnail resolves, by contrast, drain on their request
+	// context so an abandoned request stops waiting.)
+	count, err := s.scrapeGalleryPages(context.Background(), galleryID, token, emit)
 
 	if !started {
 		// Nothing was streamed. Surface the scrape failure as a plain 502 so

@@ -583,7 +583,7 @@ func TestGalleryPagesStream_ReplaysPrefixToLateSubscriber(t *testing.T) {
 	batches := make(chan int, 4)
 	drainErr := make(chan error, 1)
 	go func() {
-		_, err := stream.drain(0, func(_ int, batch []model.CachedPage) error {
+		_, err := stream.drain(t.Context(), 0, func(_ int, batch []model.CachedPage) error {
 			batches <- len(batch)
 			return nil
 		})
@@ -613,6 +613,40 @@ func TestGalleryPagesStream_ReplaysPrefixToLateSubscriber(t *testing.T) {
 
 	if err := <-drainErr; err != nil {
 		t.Fatalf("drain error = %v, want nil", err)
+	}
+}
+
+// A subscriber whose context is cancelled (e.g. an abandoned thumbnail
+// request) must stop waiting on the shared stream instead of blocking until
+// the detached walk finishes — without disturbing the stream itself.
+func TestPagesStream_DrainContextCancel(t *testing.T) {
+	stream := newGalleryPagesStream() // empty and never finished
+
+	ctx, cancel := context.WithCancel(t.Context())
+	drainErr := make(chan error, 1)
+	go func() {
+		_, err := stream.drain(ctx, 0, func(int, []model.CachedPage) error { return nil })
+		drainErr <- err
+	}()
+
+	// Give the drain a moment to park on the condition variable.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-drainErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("drain error = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("drain kept waiting after its context was cancelled")
+	}
+
+	// The stream is unaffected: later subscribers still drain normally.
+	stream.append(1, []model.CachedPage{{Index: 0, PageURL: "p0"}})
+	stream.finish(nil)
+	if _, err := stream.drain(t.Context(), 0, nil); err != nil {
+		t.Fatalf("drain after cancellation = %v, want nil", err)
 	}
 }
 

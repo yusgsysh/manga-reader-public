@@ -48,7 +48,7 @@ func (s *Server) prefetchGallery(galleryID int64, token string, seed *model.Gall
 
 		// Shares the in-flight scrape with the streaming /pages handler so a
 		// gallery is never fetched from upstream twice at the same time.
-		if _, scrapeErr := s.scrapeGalleryPages(galleryID, token, nil); scrapeErr != nil {
+		if _, scrapeErr := s.scrapeGalleryPages(ctx, galleryID, token, nil); scrapeErr != nil {
 			slog.Debug("gallery prefetch pages failed", "id", galleryID, "error", scrapeErr)
 		}
 
