@@ -734,8 +734,8 @@ func TestMockGalleryDetails_Success(t *testing.T) {
 	if got := reqCount.Load(); got != 1 {
 		t.Errorf("upstream requests = %d, want 1 (details must not fetch thumbnail pages)", got)
 	}
-	if strings.Contains(w.Body.String(), "page_urls") {
-		t.Error("details response should not contain page_urls")
+	if strings.Contains(w.Body.String(), "\"pages\"") {
+		t.Error("details response should not contain pages")
 	}
 
 	var details struct {

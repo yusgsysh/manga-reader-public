@@ -159,6 +159,11 @@ func PagesFetchedAt(v time.Time) predicate.GalleryCache {
 	return predicate.GalleryCache(sql.FieldEQ(FieldPagesFetchedAt, v))
 }
 
+// ThumbnailFetchedAt applies equality check predicate on the "thumbnail_fetched_at" field. It's identical to ThumbnailFetchedAtEQ.
+func ThumbnailFetchedAt(v time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldEQ(FieldThumbnailFetchedAt, v))
+}
+
 // UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
 func UpdatedAt(v time.Time) predicate.GalleryCache {
 	return predicate.GalleryCache(sql.FieldEQ(FieldUpdatedAt, v))
@@ -1069,14 +1074,14 @@ func TagsNotNil() predicate.GalleryCache {
 	return predicate.GalleryCache(sql.FieldNotNull(FieldTags))
 }
 
-// PageUrlsIsNil applies the IsNil predicate on the "page_urls" field.
-func PageUrlsIsNil() predicate.GalleryCache {
-	return predicate.GalleryCache(sql.FieldIsNull(FieldPageUrls))
+// PagesIsNil applies the IsNil predicate on the "pages" field.
+func PagesIsNil() predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldIsNull(FieldPages))
 }
 
-// PageUrlsNotNil applies the NotNil predicate on the "page_urls" field.
-func PageUrlsNotNil() predicate.GalleryCache {
-	return predicate.GalleryCache(sql.FieldNotNull(FieldPageUrls))
+// PagesNotNil applies the NotNil predicate on the "pages" field.
+func PagesNotNil() predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldNotNull(FieldPages))
 }
 
 // ThumbnailsIsNil applies the IsNil predicate on the "thumbnails" field.
@@ -1237,6 +1242,56 @@ func PagesFetchedAtIsNil() predicate.GalleryCache {
 // PagesFetchedAtNotNil applies the NotNil predicate on the "pages_fetched_at" field.
 func PagesFetchedAtNotNil() predicate.GalleryCache {
 	return predicate.GalleryCache(sql.FieldNotNull(FieldPagesFetchedAt))
+}
+
+// ThumbnailFetchedAtEQ applies the EQ predicate on the "thumbnail_fetched_at" field.
+func ThumbnailFetchedAtEQ(v time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldEQ(FieldThumbnailFetchedAt, v))
+}
+
+// ThumbnailFetchedAtNEQ applies the NEQ predicate on the "thumbnail_fetched_at" field.
+func ThumbnailFetchedAtNEQ(v time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldNEQ(FieldThumbnailFetchedAt, v))
+}
+
+// ThumbnailFetchedAtIn applies the In predicate on the "thumbnail_fetched_at" field.
+func ThumbnailFetchedAtIn(vs ...time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldIn(FieldThumbnailFetchedAt, vs...))
+}
+
+// ThumbnailFetchedAtNotIn applies the NotIn predicate on the "thumbnail_fetched_at" field.
+func ThumbnailFetchedAtNotIn(vs ...time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldNotIn(FieldThumbnailFetchedAt, vs...))
+}
+
+// ThumbnailFetchedAtGT applies the GT predicate on the "thumbnail_fetched_at" field.
+func ThumbnailFetchedAtGT(v time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldGT(FieldThumbnailFetchedAt, v))
+}
+
+// ThumbnailFetchedAtGTE applies the GTE predicate on the "thumbnail_fetched_at" field.
+func ThumbnailFetchedAtGTE(v time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldGTE(FieldThumbnailFetchedAt, v))
+}
+
+// ThumbnailFetchedAtLT applies the LT predicate on the "thumbnail_fetched_at" field.
+func ThumbnailFetchedAtLT(v time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldLT(FieldThumbnailFetchedAt, v))
+}
+
+// ThumbnailFetchedAtLTE applies the LTE predicate on the "thumbnail_fetched_at" field.
+func ThumbnailFetchedAtLTE(v time.Time) predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldLTE(FieldThumbnailFetchedAt, v))
+}
+
+// ThumbnailFetchedAtIsNil applies the IsNil predicate on the "thumbnail_fetched_at" field.
+func ThumbnailFetchedAtIsNil() predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldIsNull(FieldThumbnailFetchedAt))
+}
+
+// ThumbnailFetchedAtNotNil applies the NotNil predicate on the "thumbnail_fetched_at" field.
+func ThumbnailFetchedAtNotNil() predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldNotNull(FieldThumbnailFetchedAt))
 }
 
 // UpdatedAtEQ applies the EQ predicate on the "updated_at" field.

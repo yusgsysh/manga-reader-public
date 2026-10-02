@@ -531,8 +531,8 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 	if db := s.cacheDB(); db != nil {
 		if row, found, err := gallerycache.Get(c.Request.Context(), db, galleryID, token); err != nil {
 			slog.Warn("gallery cache read failed", "id", galleryID, "error", err)
-		} else if found && len(row.PageUrls) > 0 && cacheFresh(row.PagesFetchedAt, galleryCacheTTL) {
-			if replayErr := replayGalleryPages(c, idParam, token, len(row.PageUrls), row.PageUrls, row.Thumbnails); replayErr != nil {
+		} else if found && len(row.Pages) > 0 && cacheFresh(row.PagesFetchedAt, galleryCacheTTL) {
+			if replayErr := replayGalleryPages(c, idParam, token, len(row.Pages), row.Pages, row.Thumbnails); replayErr != nil {
 				slog.Warn("gallery pages cache replay failed", "id", galleryID, "error", replayErr)
 			}
 			return
@@ -677,18 +677,32 @@ func (s *Server) handleCachedGalleryPages(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("read gallery cache failed: %v", err)})
 		return
 	}
-	if !found || len(row.PageUrls) == 0 {
+	if !found || len(row.Pages) == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "no cached pages"})
 		return
+	}
+
+	pages := make([]galleryPagesLine, len(row.Pages))
+	for i, pageURL := range row.Pages {
+		index := i
+		thumb := model.GalleryPageThumb{}
+		if i < len(row.Thumbnails) {
+			thumb = row.Thumbnails[i]
+		}
+		pages[i] = galleryPagesLine{
+			Type:      "page",
+			PageURL:   pageURL,
+			Index:     &index,
+			Thumbnail: &thumb,
+		}
 	}
 
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{
 		"id":    c.Param("id"),
 		"token": token,
-		"total": len(row.PageUrls),
-		"page_urls": row.PageUrls,
-		"thumbnails": row.Thumbnails,
+		"total": len(row.Pages),
+		"pages": pages,
 	})
 }
 

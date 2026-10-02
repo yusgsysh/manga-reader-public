@@ -57,8 +57,8 @@ type GalleryCache struct {
 	Expunged bool `json:"expunged,omitempty"`
 	// Tags holds the value of the "tags" field.
 	Tags []model.Tag `json:"tags,omitempty"`
-	// PageUrls holds the value of the "page_urls" field.
-	PageUrls []string `json:"page_urls,omitempty"`
+	// Pages holds the value of the "pages" field.
+	Pages []string `json:"pages,omitempty"`
 	// Thumbnails holds the value of the "thumbnails" field.
 	Thumbnails []model.GalleryPageThumb `json:"thumbnails,omitempty"`
 	// MetaFetchedAt holds the value of the "meta_fetched_at" field.
@@ -67,6 +67,8 @@ type GalleryCache struct {
 	DetailsFetchedAt *time.Time `json:"details_fetched_at,omitempty"`
 	// PagesFetchedAt holds the value of the "pages_fetched_at" field.
 	PagesFetchedAt *time.Time `json:"pages_fetched_at,omitempty"`
+	// ThumbnailFetchedAt holds the value of the "thumbnail_fetched_at" field.
+	ThumbnailFetchedAt *time.Time `json:"thumbnail_fetched_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt    time.Time `json:"updated_at,omitempty"`
 	selectValues sql.SelectValues
@@ -77,7 +79,7 @@ func (*GalleryCache) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case gallerycache.FieldTags, gallerycache.FieldPageUrls, gallerycache.FieldThumbnails:
+		case gallerycache.FieldTags, gallerycache.FieldPages, gallerycache.FieldThumbnails:
 			values[i] = new([]byte)
 		case gallerycache.FieldTranslated, gallerycache.FieldExpunged:
 			values[i] = new(sql.NullBool)
@@ -87,7 +89,7 @@ func (*GalleryCache) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case gallerycache.FieldToken, gallerycache.FieldTitle, gallerycache.FieldTitleJpn, gallerycache.FieldCategory, gallerycache.FieldThumbnail, gallerycache.FieldUploader, gallerycache.FieldPosted, gallerycache.FieldLanguage, gallerycache.FieldFileSize:
 			values[i] = new(sql.NullString)
-		case gallerycache.FieldCreatedAt, gallerycache.FieldPostedAt, gallerycache.FieldMetaFetchedAt, gallerycache.FieldDetailsFetchedAt, gallerycache.FieldPagesFetchedAt, gallerycache.FieldUpdatedAt:
+		case gallerycache.FieldCreatedAt, gallerycache.FieldPostedAt, gallerycache.FieldMetaFetchedAt, gallerycache.FieldDetailsFetchedAt, gallerycache.FieldPagesFetchedAt, gallerycache.FieldThumbnailFetchedAt, gallerycache.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -227,12 +229,12 @@ func (_m *GalleryCache) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field tags: %w", err)
 				}
 			}
-		case gallerycache.FieldPageUrls:
+		case gallerycache.FieldPages:
 			if value, ok := values[i].(*[]byte); !ok {
-				return fmt.Errorf("unexpected type %T for field page_urls", values[i])
+				return fmt.Errorf("unexpected type %T for field pages", values[i])
 			} else if value != nil && len(*value) > 0 {
-				if err := json.Unmarshal(*value, &_m.PageUrls); err != nil {
-					return fmt.Errorf("unmarshal field page_urls: %w", err)
+				if err := json.Unmarshal(*value, &_m.Pages); err != nil {
+					return fmt.Errorf("unmarshal field pages: %w", err)
 				}
 			}
 		case gallerycache.FieldThumbnails:
@@ -263,6 +265,13 @@ func (_m *GalleryCache) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.PagesFetchedAt = new(time.Time)
 				*_m.PagesFetchedAt = value.Time
+			}
+		case gallerycache.FieldThumbnailFetchedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field thumbnail_fetched_at", values[i])
+			} else if value.Valid {
+				_m.ThumbnailFetchedAt = new(time.Time)
+				*_m.ThumbnailFetchedAt = value.Time
 			}
 		case gallerycache.FieldUpdatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -365,8 +374,8 @@ func (_m *GalleryCache) String() string {
 	builder.WriteString("tags=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Tags))
 	builder.WriteString(", ")
-	builder.WriteString("page_urls=")
-	builder.WriteString(fmt.Sprintf("%v", _m.PageUrls))
+	builder.WriteString("pages=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Pages))
 	builder.WriteString(", ")
 	builder.WriteString("thumbnails=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Thumbnails))
@@ -383,6 +392,11 @@ func (_m *GalleryCache) String() string {
 	builder.WriteString(", ")
 	if v := _m.PagesFetchedAt; v != nil {
 		builder.WriteString("pages_fetched_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.ThumbnailFetchedAt; v != nil {
+		builder.WriteString("thumbnail_fetched_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")

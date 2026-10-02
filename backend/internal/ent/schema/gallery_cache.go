@@ -47,11 +47,12 @@ func (GalleryCache) Fields() []ent.Field {
 		field.Int("favorited").Default(0),
 		field.Bool("expunged").Default(false),
 		field.JSON("tags", []model.Tag{}).Optional(),
-		field.JSON("page_urls", []string{}).Optional(),
+		field.JSON("pages", []string{}).Optional(),
 		field.JSON("thumbnails", []model.GalleryPageThumb{}).Optional(),
 		field.Time("meta_fetched_at").Optional().Nillable(),
 		field.Time("details_fetched_at").Optional().Nillable(),
 		field.Time("pages_fetched_at").Optional().Nillable(),
+		field.Time("thumbnail_fetched_at").Optional().Nillable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}
 }

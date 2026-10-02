@@ -115,8 +115,8 @@ func TestGalleryPages_WritesCache(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("cache lookup: found=%v err=%v", found, err)
 	}
-	if len(row.PageUrls) != 3 {
-		t.Errorf("cached pages = %d, want 3", len(row.PageUrls))
+	if len(row.Pages) != 3 {
+		t.Errorf("cached pages = %d, want 3", len(row.Pages))
 	}
 	if row.PagesFetchedAt == nil {
 		t.Error("pages_fetched_at should be set")
@@ -377,8 +377,8 @@ func TestGalleryPages_CacheSurvivesClientDisconnect(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("cache lookup after disconnect: found=%v err=%v", found, err)
 	}
-	if len(row.PageUrls) != 3 {
-		t.Errorf("cached pages = %d, want 3", len(row.PageUrls))
+	if len(row.Pages) != 3 {
+		t.Errorf("cached pages = %d, want 3", len(row.Pages))
 	}
 }
 
@@ -424,8 +424,8 @@ func TestGalleryPages_MultiBatchWriteFailureStillCaches(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("cache lookup after write failure: found=%v err=%v", found, err)
 	}
-	if len(row.PageUrls) != 100 {
-		t.Errorf("cached pages = %d, want 100", len(row.PageUrls))
+	if len(row.Pages) != 100 {
+		t.Errorf("cached pages = %d, want 100", len(row.Pages))
 	}
 }
 
@@ -761,15 +761,18 @@ func TestCachedGalleryPages_Hit(t *testing.T) {
 		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
 	}
 	var resp struct {
-		Total       int                      `json:"total"`
-		PageURLs    []string                 `json:"page_urls"`
-		Thumbnails  []model.GalleryPageThumb `json:"thumbnails"`
+		Total int `json:"total"`
+		Pages []struct {
+			PageURL   string                 `json:"page_url"`
+			Index     int                    `json:"index"`
+			Thumbnail model.GalleryPageThumb `json:"thumbnail"`
+		} `json:"pages"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.Total != 2 || len(resp.PageURLs) != 2 {
-		t.Errorf("pages = %d (total %d), want 2", len(resp.PageURLs), resp.Total)
+	if resp.Total != 2 || len(resp.Pages) != 2 {
+		t.Errorf("pages = %d (total %d), want 2", len(resp.Pages), resp.Total)
 	}
 	if got := w.Header().Get("Cache-Control"); got != "no-store" {
 		t.Errorf("Cache-Control = %q, want no-store", got)
@@ -901,8 +904,8 @@ func TestPrefetchGallery_WritesCache(t *testing.T) {
 	if row.Title != "Prefetch Test" {
 		t.Errorf("title = %q, want %q", row.Title, "Prefetch Test")
 	}
-	if len(row.PageUrls) != 4 {
-		t.Errorf("cached pages = %d, want 4", len(row.PageUrls))
+	if len(row.Pages) != 4 {
+		t.Errorf("cached pages = %d, want 4", len(row.Pages))
 	}
 }
 
@@ -935,8 +938,8 @@ func TestPrefetchGallery_IncompletePagesNotCached(t *testing.T) {
 	if row.PagesFetchedAt != nil {
 		t.Error("pages_fetched_at must not be set on a failed scrape")
 	}
-	if len(row.PageUrls) != 0 {
-		t.Errorf("cached pages = %d, want 0", len(row.PageUrls))
+	if len(row.Pages) != 0 {
+		t.Errorf("cached pages = %d, want 0", len(row.Pages))
 	}
 }
 
@@ -996,8 +999,8 @@ func TestGalleryCache_MetaTracksApiPagesFirstWrite(t *testing.T) {
 		t.Fatalf("second pages write: %v", err)
 	}
 	row, _, _ = gallerycache.Get(ctx, client, 9001, "tok")
-	if len(row.PageUrls) != 1 {
-		t.Errorf("pages = %d, want 1 (no overwrite)", len(row.PageUrls))
+	if len(row.Pages) != 1 {
+		t.Errorf("pages = %d, want 1 (no overwrite)", len(row.Pages))
 	}
 }
 

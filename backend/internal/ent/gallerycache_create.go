@@ -263,9 +263,9 @@ func (_c *GalleryCacheCreate) SetTags(v []model.Tag) *GalleryCacheCreate {
 	return _c
 }
 
-// SetPageUrls sets the "page_urls" field.
-func (_c *GalleryCacheCreate) SetPageUrls(v []string) *GalleryCacheCreate {
-	_c.mutation.SetPageUrls(v)
+// SetPages sets the "pages" field.
+func (_c *GalleryCacheCreate) SetPages(v []string) *GalleryCacheCreate {
+	_c.mutation.SetPages(v)
 	return _c
 }
 
@@ -313,6 +313,20 @@ func (_c *GalleryCacheCreate) SetPagesFetchedAt(v time.Time) *GalleryCacheCreate
 func (_c *GalleryCacheCreate) SetNillablePagesFetchedAt(v *time.Time) *GalleryCacheCreate {
 	if v != nil {
 		_c.SetPagesFetchedAt(*v)
+	}
+	return _c
+}
+
+// SetThumbnailFetchedAt sets the "thumbnail_fetched_at" field.
+func (_c *GalleryCacheCreate) SetThumbnailFetchedAt(v time.Time) *GalleryCacheCreate {
+	_c.mutation.SetThumbnailFetchedAt(v)
+	return _c
+}
+
+// SetNillableThumbnailFetchedAt sets the "thumbnail_fetched_at" field if the given value is not nil.
+func (_c *GalleryCacheCreate) SetNillableThumbnailFetchedAt(v *time.Time) *GalleryCacheCreate {
+	if v != nil {
+		_c.SetThumbnailFetchedAt(*v)
 	}
 	return _c
 }
@@ -590,9 +604,9 @@ func (_c *GalleryCacheCreate) createSpec() (*GalleryCache, *sqlgraph.CreateSpec)
 		_spec.SetField(gallerycache.FieldTags, field.TypeJSON, value)
 		_node.Tags = value
 	}
-	if value, ok := _c.mutation.PageUrls(); ok {
-		_spec.SetField(gallerycache.FieldPageUrls, field.TypeJSON, value)
-		_node.PageUrls = value
+	if value, ok := _c.mutation.Pages(); ok {
+		_spec.SetField(gallerycache.FieldPages, field.TypeJSON, value)
+		_node.Pages = value
 	}
 	if value, ok := _c.mutation.Thumbnails(); ok {
 		_spec.SetField(gallerycache.FieldThumbnails, field.TypeJSON, value)
@@ -609,6 +623,10 @@ func (_c *GalleryCacheCreate) createSpec() (*GalleryCache, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.PagesFetchedAt(); ok {
 		_spec.SetField(gallerycache.FieldPagesFetchedAt, field.TypeTime, value)
 		_node.PagesFetchedAt = &value
+	}
+	if value, ok := _c.mutation.ThumbnailFetchedAt(); ok {
+		_spec.SetField(gallerycache.FieldThumbnailFetchedAt, field.TypeTime, value)
+		_node.ThumbnailFetchedAt = &value
 	}
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(gallerycache.FieldUpdatedAt, field.TypeTime, value)

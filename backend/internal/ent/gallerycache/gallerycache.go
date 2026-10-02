@@ -51,8 +51,8 @@ const (
 	FieldExpunged = "expunged"
 	// FieldTags holds the string denoting the tags field in the database.
 	FieldTags = "tags"
-	// FieldPageUrls holds the string denoting the page_urls field in the database.
-	FieldPageUrls = "page_urls"
+	// FieldPages holds the string denoting the pages field in the database.
+	FieldPages = "pages"
 	// FieldThumbnails holds the string denoting the thumbnails field in the database.
 	FieldThumbnails = "thumbnails"
 	// FieldMetaFetchedAt holds the string denoting the meta_fetched_at field in the database.
@@ -61,6 +61,8 @@ const (
 	FieldDetailsFetchedAt = "details_fetched_at"
 	// FieldPagesFetchedAt holds the string denoting the pages_fetched_at field in the database.
 	FieldPagesFetchedAt = "pages_fetched_at"
+	// FieldThumbnailFetchedAt holds the string denoting the thumbnail_fetched_at field in the database.
+	FieldThumbnailFetchedAt = "thumbnail_fetched_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
 	// Table holds the table name of the gallerycache in the database.
@@ -89,11 +91,12 @@ var Columns = []string{
 	FieldFavorited,
 	FieldExpunged,
 	FieldTags,
-	FieldPageUrls,
+	FieldPages,
 	FieldThumbnails,
 	FieldMetaFetchedAt,
 	FieldDetailsFetchedAt,
 	FieldPagesFetchedAt,
+	FieldThumbnailFetchedAt,
 	FieldUpdatedAt,
 }
 
@@ -255,6 +258,11 @@ func ByDetailsFetchedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByPagesFetchedAt orders the results by the pages_fetched_at field.
 func ByPagesFetchedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPagesFetchedAt, opts...).ToFunc()
+}
+
+// ByThumbnailFetchedAt orders the results by the thumbnail_fetched_at field.
+func ByThumbnailFetchedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldThumbnailFetchedAt, opts...).ToFunc()
 }
 
 // ByUpdatedAt orders the results by the updated_at field.

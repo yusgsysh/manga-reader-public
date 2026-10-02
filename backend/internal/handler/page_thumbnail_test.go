@@ -514,7 +514,7 @@ func TestCachedPageThumbnail_ByIndexCoalescesWithPagesStream(t *testing.T) {
 	// race the database close.
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		if row, found, err := gallerycache.Get(t.Context(), db, 777001, token); err == nil && found && len(row.PageUrls) == 2 {
+		if row, found, err := gallerycache.Get(t.Context(), db, 777001, token); err == nil && found && len(row.Pages) == 2 {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -548,12 +548,12 @@ func TestCachedPageThumbnail_ByIndexWalkPopulatesCache(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 	for !backfilled && time.Now().Before(deadline) {
 		row, found, err := gallerycache.Get(t.Context(), db, 777002, token)
-		if err != nil || !found || len(row.PageUrls) != 2 {
+		if err != nil || !found || len(row.Pages) != 2 {
 			time.Sleep(20 * time.Millisecond)
 			continue
 		}
 		backfilled = true
-		for i := range row.PageUrls {
+		for i := range row.Pages {
 			if row.Thumbnails[i].SpriteURL == "" {
 				t.Errorf("page %d cached without thumbnail geometry", i)
 			}
@@ -614,7 +614,7 @@ func TestCachedPageThumbnail_ByIndexResolveTimeoutFallsBack(t *testing.T) {
 			// t.Context() is already cancelled inside cleanup, so the detached
 			// walk's cache write must be observed with a live context.
 			row, found, err := gallerycache.Get(context.Background(), db, 777004, "fallback")
-			if err == nil && found && len(row.PageUrls) == 2 {
+			if err == nil && found && len(row.Pages) == 2 {
 				return
 			}
 			time.Sleep(20 * time.Millisecond)
