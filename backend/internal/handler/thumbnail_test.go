@@ -281,6 +281,16 @@ func (m *mockImageCache) PutWithMeta(_ context.Context, key string, data []byte,
 	return nil
 }
 
+func (m *mockImageCache) keys() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]string, 0, len(m.objects))
+	for k := range m.objects {
+		out = append(out, k)
+	}
+	return out
+}
+
 // ==================== Cached Thumbnail Handler Tests ====================
 
 func TestCachedThumbnail_MissingURL(t *testing.T) {

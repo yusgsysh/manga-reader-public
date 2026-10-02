@@ -156,9 +156,9 @@ Schema 文件：
 | `/api/image/page-thumbnail` | ExHentai | ❌ | 页面缩略图裁剪（live） |
 | `/api/image-cache/page` | MinIO / ExHentai | ✅ | 阅读页图片缓存 |
 | `/api/image-cache/thumbnail` | MinIO / ExHentai | ✅ | 封面缩略图缓存（前端使用） |
-| `/api/image-cache/page-thumbnail` | MinIO / ExHentai | ✅ | 页面缩略图裁剪缓存（前端使用） |
+| `/api/image-cache/page-thumbnail` | MinIO / ExHentai | ✅ | 页面缩略图（精灵图缓存 + 现场裁剪，前端使用） |
 
-缩略图缓存 Key 为 `thumbnail/<sha256(完整 URL)>`，与页面图片缓存（`images/`）相互独立。`/api/image/page-thumbnail` 与 `/api/image-cache/page-thumbnail` 支持两种寻址：`url`+`x/y/w/h`，或 `id`+`token`+`index`；裁剪缓存 Key 为 `page-sprite/<sha256(精灵图 URL)>` 与 `page-thumb/<sha256(URL+矩形)>`。
+缩略图缓存 Key 为 `thumbnail/<sha256(完整 URL)>`，与页面图片缓存（`images/`）相互独立。`/api/image/page-thumbnail` 与 `/api/image-cache/page-thumbnail` 支持两种寻址：`url`+`x/y/w/h`，或 `id`+`token`+`index`；精灵图缓存 Key 为 `sprite/<sha256(精灵图 URL)>`，裁剪结果不持久化，每次请求基于缓存的精灵图现场裁剪。
 
 ### 阅读记录清理
 

@@ -22,22 +22,24 @@ import (
 )
 
 const (
-	pageSpriteCachePrefix = "page-sprite/"
-	pageThumbCachePrefix  = "page-thumb/"
+	spriteCachePrefix = "sprite/"
 	// maxPageThumbDimension bounds a single crop request so a malicious caller
 	// cannot ask the server to allocate an enormous image.
 	maxPageThumbDimension = 4096
 )
 
-func pageSpriteCacheKey(spriteURL string) string {
+func spriteCacheKey(spriteURL string) string {
 	sum := sha256.Sum256([]byte(spriteURL))
-	return pageSpriteCachePrefix + hex.EncodeToString(sum[:])
+	return spriteCachePrefix + hex.EncodeToString(sum[:])
 }
 
-func pageThumbCacheKey(spriteURL string, rect image.Rectangle) string {
+// cropSingleflightKey identifies a (sprite URL, rect) crop for in-flight
+// coalescing. Crops themselves are not persisted: every request re-reads the
+// cached sprite and crops it fresh, so the key carries no cache prefix.
+func cropSingleflightKey(spriteURL string, rect image.Rectangle) string {
 	raw := fmt.Sprintf("%s|%d|%d|%d|%d", spriteURL, rect.Min.X, rect.Min.Y, rect.Dx(), rect.Dy())
 	sum := sha256.Sum256([]byte(raw))
-	return pageThumbCachePrefix + hex.EncodeToString(sum[:])
+	return hex.EncodeToString(sum[:])
 }
 
 // pageThumbRequest addresses a page thumbnail either directly (sprite URL +
@@ -184,8 +186,9 @@ func (s *Server) handlePageThumbnail(c *gin.Context) {
 }
 
 // handleCachedPageThumbnail is the MinIO-backed page-thumbnail endpoint. It
-// reads through the cache (sprite + crop) and resolves gallery-index requests
-// from gallery_cache first, scraping upstream on a miss.
+// reads the sprite through the cache and crops it on every request, and
+// resolves gallery-index requests from gallery_cache first, scraping upstream
+// on a miss.
 func (s *Server) handleCachedPageThumbnail(c *gin.Context) {
 	if s.Cache == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
@@ -337,7 +340,7 @@ func (s *Server) resolveGalleryPageThumbFromStream(
 // cropLive fetches the sprite from upstream and crops it, without touching
 // MinIO. Concurrent identical requests are coalesced.
 func (s *Server) cropLive(ctx context.Context, spriteURL string, rect image.Rectangle) ([]byte, error) {
-	key := "live:" + pageThumbCacheKey(spriteURL, rect)
+	key := "live:" + cropSingleflightKey(spriteURL, rect)
 	v, sfErr, _ := cachedImageGroup.Do(key, func() (any, error) {
 		fetchCtx := context.WithoutCancel(ctx)
 		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
@@ -355,43 +358,22 @@ func (s *Server) cropLive(ctx context.Context, spriteURL string, rect image.Rect
 	return v.([]byte), nil
 }
 
-// loadOrCropThumbnail returns the cropped thumbnail, fetching the sprite and
-// cropping on a cache miss. Concurrent calls for the same crop are coalesced.
+// loadOrCropThumbnail returns the crop of the cached sprite. The sprite is
+// read through the MinIO cache and cropped on every request; the crop itself
+// is never persisted. Concurrent calls for the same crop are coalesced.
 func (s *Server) loadOrCropThumbnail(ctx context.Context, spriteURL string, rect image.Rectangle) ([]byte, error) {
-	key := pageThumbCacheKey(spriteURL, rect)
+	key := cropSingleflightKey(spriteURL, rect)
 	v, sfErr, _ := cachedImageGroup.Do(key, func() (any, error) {
 		fetchCtx := context.WithoutCancel(ctx)
 		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
 		defer cancel()
-
-		if s.Cache != nil {
-			if data, _, getErr := s.Cache.Get(fetchCtx, key); getErr == nil {
-				return data, nil
-			} else if !cache.IsNotFound(getErr) {
-				return nil, getErr
-			}
-		}
 
 		sprite, err := s.loadOrFetchSprite(fetchCtx, spriteURL)
 		if err != nil {
 			return nil, err
 		}
 
-		cropped, err := imageproc.CropWEBP(sprite, rect)
-		if err != nil {
-			return nil, err
-		}
-
-		if s.Cache != nil {
-			meta := map[string]string{
-				"source-url": spriteURL,
-				"crop":       fmt.Sprintf("%d,%d,%d,%d", rect.Min.X, rect.Min.Y, rect.Dx(), rect.Dy()),
-			}
-			if putErr := s.Cache.PutWithMeta(fetchCtx, key, cropped, "image/webp", meta, cacheControlHeader); putErr != nil {
-				slog.Error("page-thumbnail store failed", "key", key[:16], "error", putErr)
-			}
-		}
-		return cropped, nil
+		return imageproc.CropWEBP(sprite, rect)
 	})
 	if sfErr != nil {
 		return nil, sfErr
@@ -405,7 +387,7 @@ func (s *Server) loadOrCropThumbnail(ctx context.Context, spriteURL string, rect
 // the same sprite are coalesced on the sprite key, so a cold cache downloads
 // each sheet once even when many crop (or index) requests arrive together.
 func (s *Server) loadOrFetchSprite(ctx context.Context, spriteURL string) ([]byte, error) {
-	key := pageSpriteCacheKey(spriteURL)
+	key := spriteCacheKey(spriteURL)
 
 	if s.Cache != nil {
 		if data, _, getErr := s.Cache.Get(ctx, key); getErr == nil {
@@ -437,7 +419,7 @@ func (s *Server) loadOrFetchSprite(ctx context.Context, spriteURL string) ([]byt
 			if putErr := s.Cache.PutWithMeta(fetchCtx, key, data, contentType, map[string]string{
 				"source-url": spriteURL,
 			}, cacheControlHeader); putErr != nil {
-				slog.Error("page-sprite store failed", "key", key[:16], "error", putErr)
+				slog.Error("sprite store failed", "key", key[:16], "error", putErr)
 			}
 		}
 		return data, nil

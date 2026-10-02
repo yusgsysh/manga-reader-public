@@ -198,6 +198,39 @@ func TestCachedPageThumbnail_CacheHitAvoidsUpstream(t *testing.T) {
 	}
 }
 
+// Crops are never persisted: each request re-reads the sprite from MinIO and
+// crops it fresh, so the only object the endpoint writes is the sprite itself.
+func TestCachedPageThumbnail_CachesSpriteOnly(t *testing.T) {
+	var requests atomic.Int32
+	srv := spriteServer(t, &requests)
+	cache := newMockImageCache()
+	server := &Server{Client: newMockClient(srv.URL), Cache: cache}
+	r := setupMockRouter(server)
+
+	// Distinct crop rects plus a repeat: one sprite download, one cache object.
+	paths := []string{
+		fmt.Sprintf("%s?url=%s&x=0&y=0&w=1&h=1", cachedThumbPath, url.QueryEscape(testSpriteURL)),
+		fmt.Sprintf("%s?url=%s&x=1&y=0&w=1&h=1", cachedThumbPath, url.QueryEscape(testSpriteURL)),
+	}
+	for _, path := range append(paths, paths[0]) {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+		}
+	}
+	if got := requests.Load(); got != 1 {
+		t.Errorf("upstream requests = %d, want 1 (sprite cached)", got)
+	}
+	keys := cache.keys()
+	if len(keys) != 1 {
+		t.Fatalf("cache objects = %d (%v), want 1 (sprite only)", len(keys), keys)
+	}
+	if !strings.HasPrefix(keys[0], spriteCachePrefix) {
+		t.Errorf("cache key = %q, want %q prefix", keys[0], spriteCachePrefix)
+	}
+}
+
 func TestCachedPageThumbnail_ConcurrentCropsShareSpriteDownload(t *testing.T) {
 	var requests atomic.Int32
 	sprite := makeTestSprite(t)
@@ -220,7 +253,7 @@ func TestCachedPageThumbnail_ConcurrentCropsShareSpriteDownload(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			// Distinct crop rects => distinct tile cache keys, so only the
+			// Distinct crop rects => distinct singleflight keys, so only the
 			// shared sprite fetch can be coalesced.
 			path := fmt.Sprintf("%s?url=%s&x=%d&y=0&w=1&h=1", cachedThumbPath, url.QueryEscape(testSpriteURL), i)
 			w := httptest.NewRecorder()

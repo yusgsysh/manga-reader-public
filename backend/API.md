@@ -657,7 +657,7 @@ Cache-Control: public, max-age=31536000, immutable
 
 **行为:**
 
-- **直接裁剪**：MinIO read-through，精灵图 `page-sprite/<sha256(url)>`、裁剪结果 `page-thumb/<sha256(url|x|y|w|h)>`。
+- **直接裁剪**：精灵图 MinIO read-through，Key 为 `sprite/<sha256(url)>`；每次请求基于缓存的精灵图现场裁剪，裁剪结果不持久化。
 - **按索引**：几何优先取 `gallery_cache` 的 `pages[].thumbnail`；未命中时**订阅共享的 `/pages` 抓取流**（与上文 singleflight 合并同一条 walk），并发 index 请求共用一次上游抓取，walk 完成后自动把完整列表回填 `gallery_cache`。若 15 秒内 walk 尚未推进到该页，则回退为单页直抓（1~2 个文档），避免请求长时间挂起；图片本身仍走 MinIO read-through。
 
 **Headers:**

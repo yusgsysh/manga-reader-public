@@ -69,8 +69,9 @@ docs: |-
   MinIO-backed page thumbnail crop (read-through). Same addressing as
   **Page Thumbnail**:
 
-  - `url` + `x`/`y`/`w`/`h`: sprite cached under `page-sprite/<sha256(url)>`,
-    crop under `page-thumb/<sha256(url|x|y|w|h)>`.
+  - `url` + `x`/`y`/`w`/`h`: sprite cached under `sprite/<sha256(url)>`; the
+    crop is produced from the cached sprite on every request and is never
+    persisted.
   - `id` + `token` + `index`: geometry from `gallery_cache`, scraping upstream
     on a miss.
 
