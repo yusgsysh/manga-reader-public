@@ -223,34 +223,35 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
       </div>
 
       <Link to={galleryHref} className="block">
-        <div className="mt-2 space-y-1">
+        <div className="mt-2 space-y-1.5">
           <h3 className="line-clamp-2 min-h-10 text-sm font-medium leading-5">
             {gallery.title}
           </h3>
 
-          <div className="flex items-center gap-x-1.5 text-[11px] text-kumo-subtle">
-            {gallery.category && (
-              <CategoryChip
-                category={gallery.category}
-                className="shrink-0 px-1.5 text-[11px]"
-              />
-            )}
-            {typeof gallery.rating === "number" && (
-              <span className="inline-flex shrink-0 items-center gap-0.5">
-                <Star className="size-3 text-kumo-warning" weight="fill" />
-                {gallery.rating.toFixed(1)}
+          {gallery.category && (
+            <div className="flex">
+              <CategoryChip category={gallery.category} />
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-2 text-xs text-kumo-subtle">
+            <span className="flex items-center gap-2">
+              {typeof gallery.rating === "number" && (
+                <span className="inline-flex items-center gap-0.5">
+                  <Star className="size-3.5 text-kumo-warning" weight="fill" />
+                  {gallery.rating.toFixed(1)}
+                </span>
+              )}
+              {typeof gallery.pages === "number" && gallery.pages > 0 && (
+                <span className="tnum">{gallery.pages}p</span>
+              )}
+            </span>
+            {gallery.posted && (
+              <span className="truncate text-kumo-inactive">
+                {formatPosted(gallery.posted)}
               </span>
             )}
-            {typeof gallery.pages === "number" && gallery.pages > 0 && (
-              <span className="tnum shrink-0">{gallery.pages}p</span>
-            )}
           </div>
-
-          {gallery.posted && (
-            <p className="truncate text-xs text-kumo-inactive">
-              {formatPosted(gallery.posted)}
-            </p>
-          )}
         </div>
       </Link>
     </div>
