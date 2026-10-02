@@ -224,7 +224,7 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
 
       <Link to={galleryHref} className="block">
         <div className="mt-2 space-y-1">
-          <h3 className="line-clamp-2 min-h-10 text-sm font-medium leading-snug">
+          <h3 className="line-clamp-2 min-h-10 text-sm font-medium leading-5">
             {gallery.title}
           </h3>
 
