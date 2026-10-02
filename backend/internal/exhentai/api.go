@@ -63,7 +63,7 @@ func postGalleryMetadata(ctx context.Context, client *http.Client, gid int64, to
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return model.GalleryMetadata{}, fmt.Errorf("%w: HTTP %d", ErrNonOKStatus, resp.StatusCode)
+		return model.GalleryMetadata{}, &httpStatusError{code: resp.StatusCode}
 	}
 
 	var result response

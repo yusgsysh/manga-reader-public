@@ -489,6 +489,28 @@ func (s *Server) refreshPages(galleryID int64, token string) {
 	})
 }
 
+// refreshPagesSync is refreshPages for callers that must observe the result:
+// it runs (or joins) the same cache-filling walk and returns only once the
+// cache write has completed. The caller's context bounds the walk (capped by
+// galleryPagesHardCap), so a request-path recovery can time-box it instead of
+// waiting on the full background budget.
+func (s *Server) refreshPagesSync(ctx context.Context, galleryID int64, token string) error {
+	if s.cacheDB() == nil || s.Client == nil {
+		return nil
+	}
+	key := fmt.Sprintf("%d:%s", galleryID, token)
+	_, err, _ := galleryPagesFillGroup.Do(key, func() (any, error) {
+		ctx, cancel := context.WithTimeout(ctx, galleryPagesHardCap)
+		defer cancel()
+		_, err := s.scrapeAndCache(ctx, galleryID, token, nil)
+		if err != nil {
+			slog.Debug("gallery page cache refresh failed", "id", galleryID, "error", err)
+		}
+		return nil, err
+	})
+	return err
+}
+
 // writeNDJSONLine marshal line and writes it followed by a newline.
 func writeNDJSONLine(c *gin.Context, line galleryPagesLine) error {
 	data, err := json.Marshal(line)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -658,5 +659,239 @@ func TestCachedPageThumbnail_ByIndexResolveTimeoutFallsBack(t *testing.T) {
 	}
 	if got := galleryHits.Load(); got != 2 {
 		t.Errorf("gallery page fetches = %d, want 2 (walk + fallback scrape)", got)
+	}
+}
+
+// ==================== Sprite Expiration Retry Tests ====================
+
+// galleryHTMLWithSprite returns a gallery HTML snippet with the given sprite URL.
+func galleryHTMLWithSprite(spriteURL string) string {
+	return fmt.Sprintf(`<html><body>
+<div class="gpc">Showing 1 - 2 of 2 images</div>
+<div id="gdt" class="gt200">
+<a href="https://exhentai.org/s/a/1-1"><div><div title="Page 1" style="width:4px;height:4px;background:transparent url(%s) -0px 0 no-repeat"></div></div></a>
+<a href="https://exhentai.org/s/b/1-2"><div><div title="Page 2" style="width:4px;height:4px;background:transparent url(%s) -4px 0 no-repeat"></div></div></a>
+</div></body></html>`, spriteURL, spriteURL)
+}
+
+// TestCachedPageThumbnail_SpriteExpired_RefetchAndRetry tests that when a cached
+// sprite URL returns 404 (expired), the handler triggers a gallery cache refresh,
+// re-resolves the sprite URL from the updated gallery cache, and retries the
+// thumbnail request successfully.
+func TestCachedPageThumbnail_SpriteExpired_RefetchAndRetry(t *testing.T) {
+	const id, token = "999001", "sprite-expire-retry"
+
+	// 1. Seed gallery_cache with OLD sprite URL
+	db := newTestDB(t)
+	oldSpriteURL := "https://cdn.hath.network/c2/OLD/123-0.webp"
+	if err := gallerycache.UpsertPages(t.Context(), db, 999001, token,
+		[]string{"https://exhentai.org/s/a/1-1", "https://exhentai.org/s/b/1-2"}); err != nil {
+		t.Fatalf("seed pages: %v", err)
+	}
+	if err := gallerycache.UpsertThumbnails(t.Context(), db, 999001, token,
+		[]model.GalleryPageThumb{
+			{SpriteURL: oldSpriteURL, X: 0, Y: 0, Width: 4, Height: 4},
+			{SpriteURL: oldSpriteURL, X: 4, Y: 0, Width: 4, Height: 4},
+		}); err != nil {
+		t.Fatalf("seed thumbnails: %v", err)
+	}
+
+	// 2. Mock upstream server
+	var spriteFetchCount atomic.Int32
+	var galleryScrapeCount atomic.Int32
+
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		slog.Debug("mock server request", "path", r.URL.Path, "query", r.URL.RawQuery)
+		switch {
+		case strings.Contains(r.URL.Path, "/g/"): // Gallery page scrape
+			galleryScrapeCount.Add(1)
+			count := galleryScrapeCount.Load()
+			if count == 1 {
+				// First scrape returns OLD sprite (matches cache)
+				w.Header().Set("Content-Type", "text/html")
+				fmt.Fprint(w, galleryHTMLWithSprite(oldSpriteURL))
+			} else {
+				// Second scrape (after refresh) returns NEW sprite
+				newSpriteURL := "https://cdn.hath.network/c2/NEW/123-0.webp"
+				w.Header().Set("Content-Type", "text/html")
+				fmt.Fprint(w, galleryHTMLWithSprite(newSpriteURL))
+			}
+
+		case strings.HasSuffix(r.URL.Path, "-0.webp"): // Sprite image
+			spriteFetchCount.Add(1)
+			requestedURL := r.URL.String()
+			if strings.Contains(requestedURL, "OLD") {
+				// First sprite fetch: 404 (expired)
+				w.WriteHeader(http.StatusNotFound)
+			} else if strings.Contains(requestedURL, "NEW") {
+				// Second sprite fetch: 200
+				sprite := makeTestSprite(t)
+				w.Header().Set("Content-Type", "image/webp")
+				_, _ = w.Write(sprite)
+			} else {
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}
+	})
+	defer mockServer.Close()
+
+	// 3. Server with mock cache (empty = miss on sprite)
+	cache := newMockImageCache()
+	server := &Server{
+		Client: newMockClient(mockServer.URL),
+		DB:     &database.DB{Client: db},
+		Cache:  cache,
+	}
+	r := setupMockRouter(server)
+
+	// 4. Request thumbnail by index (first page, index 0)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("GET", indexThumbPathFor(cachedThumbPath, id, token, 0), nil))
+
+	// 5. Wait for refresh to complete by polling gallery cache
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if got := galleryScrapeCount.Load(); got >= 2 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// 6. Assertions
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+	if got := decodeSize(t, w.Body.Bytes()); got.X != 4 || got.Y != 4 {
+		t.Errorf("cropped size = %v, want 4x4", got)
+	}
+	// Gallery should have been re-scraped twice (initial resolve + refresh)
+	if got := galleryScrapeCount.Load(); got != 2 {
+		t.Errorf("gallery scrapes = %d, want 2 (initial + refresh)", got)
+	}
+	// Sprite should have been fetched twice (OLD=404, NEW=200)
+	if got := spriteFetchCount.Load(); got != 2 {
+		t.Errorf("sprite fetches = %d, want 2", got)
+	}
+	// Gallery cache should now have NEW sprite URL
+	row, found, err := gallerycache.Get(t.Context(), db, 999001, token)
+	if err != nil || !found {
+		t.Fatalf("gallery cache get failed: %v, found=%v", err, found)
+	}
+	if row.Thumbnails[0].SpriteURL != "https://cdn.hath.network/c2/NEW/123-0.webp" {
+		t.Errorf("gallery cache not updated with new sprite URL: got %q", row.Thumbnails[0].SpriteURL)
+	}
+}
+
+// TestCachedPageThumbnail_SpriteExpired_ConcurrentRequests tests that concurrent
+// requests for the same expired sprite only trigger one gallery refresh.
+func TestCachedPageThumbnail_SpriteExpired_ConcurrentRequests(t *testing.T) {
+	const id, token = "999002", "sprite-expire-concurrent"
+
+	// 1. Seed gallery_cache with OLD sprite URL
+	db := newTestDB(t)
+	oldSpriteURL := "https://cdn.hath.network/c2/OLD/456-0.webp"
+	if err := gallerycache.UpsertPages(t.Context(), db, 999002, token,
+		[]string{"https://exhentai.org/s/a/1-1"}); err != nil {
+		t.Fatalf("seed pages: %v", err)
+	}
+	if err := gallerycache.UpsertThumbnails(t.Context(), db, 999002, token,
+		[]model.GalleryPageThumb{
+			{SpriteURL: oldSpriteURL, X: 0, Y: 0, Width: 4, Height: 4},
+		}); err != nil {
+		t.Fatalf("seed thumbnails: %v", err)
+	}
+
+	// 2. Mock upstream server
+	var spriteFetchCount atomic.Int32
+	var galleryScrapeCount atomic.Int32
+
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/g/"):
+			galleryScrapeCount.Add(1)
+			if galleryScrapeCount.Load() == 1 {
+				w.Header().Set("Content-Type", "text/html")
+				fmt.Fprint(w, galleryHTMLWithSprite(oldSpriteURL))
+			} else {
+				newSpriteURL := "https://cdn.hath.network/c2/NEW/456-0.webp"
+				w.Header().Set("Content-Type", "text/html")
+				fmt.Fprint(w, galleryHTMLWithSprite(newSpriteURL))
+			}
+
+		case strings.HasSuffix(r.URL.Path, "-0.webp"):
+			spriteFetchCount.Add(1)
+			requestedURL := r.URL.String()
+			if strings.Contains(requestedURL, "OLD") {
+				w.WriteHeader(http.StatusNotFound)
+			} else if strings.Contains(requestedURL, "NEW") {
+				sprite := makeTestSprite(t)
+				w.Header().Set("Content-Type", "image/webp")
+				_, _ = w.Write(sprite)
+			} else {
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}
+	})
+	defer mockServer.Close()
+
+	// 3. Server with mock cache
+	cache := newMockImageCache()
+	server := &Server{
+		Client: newMockClient(mockServer.URL),
+		DB:     &database.DB{Client: db},
+		Cache:  cache,
+	}
+	r := setupMockRouter(server)
+
+	// 4. Fire concurrent requests
+	const n = 5
+	var wg sync.WaitGroup
+	results := make(chan int, n)
+	for range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, httptest.NewRequest("GET", indexThumbPathFor(cachedThumbPath, id, token, 0), nil))
+			results <- w.Code
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	// 5. Wait for refresh to complete (poll gallery scrape count)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if got := galleryScrapeCount.Load(); got >= 2 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// 6. Assertions
+	successCount := 0
+	for code := range results {
+		if code == http.StatusOK {
+			successCount++
+		}
+	}
+	if successCount != n {
+		t.Errorf("successful requests = %d, want %d", successCount, n)
+	}
+	// Only ONE gallery re-scrape should happen (the refresh) - initial + one refresh
+	if got := galleryScrapeCount.Load(); got != 2 {
+		t.Errorf("gallery scrapes = %d, want 2 (initial + one refresh)", got)
+	}
+	// Sprite fetched twice (OLD=404 once, NEW=200 once due to singleflight)
+	if got := spriteFetchCount.Load(); got != 2 {
+		t.Errorf("sprite fetches = %d, want 2", got)
+	}
+	// Gallery cache should have NEW sprite URL
+	row, found, err := gallerycache.Get(t.Context(), db, 999002, token)
+	if err != nil || !found {
+		t.Fatalf("gallery cache get failed: %v, found=%v", err, found)
+	}
+	if row.Thumbnails[0].SpriteURL != "https://cdn.hath.network/c2/NEW/456-0.webp" {
+		t.Errorf("gallery cache not updated with new sprite URL: got %q", row.Thumbnails[0].SpriteURL)
 	}
 }

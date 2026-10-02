@@ -105,7 +105,7 @@ func ProxyImage(ctx context.Context, client *http.Client, imgURL string) (data [
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("HTTP %d: %w", resp.StatusCode, ErrNonOKStatus)
+		return nil, "", &httpStatusError{code: resp.StatusCode}
 	}
 
 	contentType = resp.Header.Get("Content-Type")

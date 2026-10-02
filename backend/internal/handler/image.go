@@ -51,6 +51,9 @@ func fetchThumbnail(ctx context.Context, client *http.Client, thumbnailURL strin
 	if err == nil {
 		return data, contentType, nil
 	}
+	if exhentai.IsPermanentUpstreamError(err) {
+		return nil, "", err
+	}
 	for range maxThumbnailRetries {
 		select {
 		case <-ctx.Done():

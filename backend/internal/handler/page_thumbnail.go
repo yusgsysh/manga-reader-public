@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/singleflight"
 
 	"manga-reader/internal/cache"
 	"manga-reader/internal/exhentai"
@@ -185,6 +186,34 @@ func (s *Server) handlePageThumbnail(c *gin.Context) {
 	c.Data(http.StatusOK, "image/webp", data)
 }
 
+// pageThumbGroup coalesces the entire resolve + crop + expiry-recovery flow for
+// one gallery page, so a burst of identical index requests shares a single
+// sprite fetch and, when the cached sprite has expired, a single gallery
+// refresh.
+var pageThumbGroup singleflight.Group
+
+// pageThumbFlowTimeout bounds one detached index-thumbnail flow. Each inner
+// operation is bounded on its own (sprite fetch 60s, resolve 15s, recovery
+// refresh spriteRecoveryTimeout); this is the outer backstop.
+const pageThumbFlowTimeout = 2 * time.Minute
+
+// spriteRecoveryTimeout bounds the request-path gallery refresh attempted when
+// a cached sprite URL has expired; the direct single-page scrape that follows
+// is bounded by its own upstream document timeout.
+const spriteRecoveryTimeout = 30 * time.Second
+
+// errPageThumbNotFound signals that the requested page index has no thumbnail
+// geometry, so the handler can answer 404 rather than treating it as an
+// upstream failure.
+var errPageThumbNotFound = errors.New("page thumbnail not found")
+
+// isExpiredSprite reports whether err is a permanent 404 for a sprite URL,
+// which means the cached sprite reference has expired and the gallery must be
+// re-scraped for a fresh URL.
+func isExpiredSprite(err error) bool {
+	return exhentai.HTTPStatusCode(err) == http.StatusNotFound
+}
+
 // handleCachedPageThumbnail is the MinIO-backed page-thumbnail endpoint. It
 // reads the sprite through the cache and crops it on every request, and
 // resolves gallery-index requests from gallery_cache first, scraping upstream
@@ -202,34 +231,109 @@ func (s *Server) handleCachedPageThumbnail(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	spriteURL, rect := req.spriteURL, req.rect
+	var data []byte
 	if req.byIndex {
-		thumb, found, err := s.resolveGalleryPageThumb(ctx, req.galleryID, req.token, req.index)
-		if err != nil {
-			slog.Error("cached page-thumbnail resolve failed", "id", req.galleryID, "index", req.index, "error", err)
-			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("resolve page thumbnail failed: %v", err)})
-			return
-		}
-		if !found {
-			c.JSON(http.StatusNotFound, gin.H{"error": "page thumbnail not found"})
-			return
-		}
-		spriteURL, rect = thumb.SpriteURL, thumbRect(thumb)
+		data, err = s.loadCachedIndexThumbnail(ctx, req)
+	} else {
+		data, err = s.loadOrCropThumbnail(ctx, req.spriteURL, req.rect)
 	}
-
-	data, err := s.loadOrCropThumbnail(ctx, spriteURL, rect)
 	if err != nil {
-		if errors.Is(err, imageproc.ErrOutOfBounds) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		slog.Error("cached page-thumbnail crop failed", "url", spriteURL, "error", err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("crop page thumbnail failed: %v", err)})
+		s.writeCachedThumbError(c, req, err)
 		return
 	}
 
 	c.Header("Cache-Control", cacheControlHeader)
 	c.Data(http.StatusOK, "image/webp", data)
+}
+
+// writeCachedThumbError maps a page-thumbnail failure to its HTTP response.
+func (s *Server) writeCachedThumbError(c *gin.Context, req pageThumbRequest, err error) {
+	switch {
+	case errors.Is(err, errPageThumbNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "page thumbnail not found"})
+	case errors.Is(err, imageproc.ErrOutOfBounds):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	default:
+		slog.Error("cached page-thumbnail failed", "id", req.galleryID, "index", req.index, "error", err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("crop page thumbnail failed: %v", err)})
+	}
+}
+
+// loadCachedIndexThumbnail resolves and crops a gallery-index thumbnail,
+// coalescing the whole flow per page. Coalescing the resolution too (not just
+// the sprite fetch) is what keeps a burst of expired-sprite requests down to a
+// single gallery refresh.
+func (s *Server) loadCachedIndexThumbnail(ctx context.Context, req pageThumbRequest) ([]byte, error) {
+	key := fmt.Sprintf("%d:%s:%d", req.galleryID, req.token, req.index)
+	v, err, _ := pageThumbGroup.Do(key, func() (any, error) {
+		flowCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), pageThumbFlowTimeout)
+		defer cancel()
+		return s.loadCachedIndexThumbnailOnce(flowCtx, req)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.([]byte), nil
+}
+
+// loadCachedIndexThumbnailOnce resolves the page geometry and crops the sprite,
+// self-healing an expired sprite URL: it refreshes the gallery cache, and when
+// the shared document cache still serves the expired reference, forces a fresh
+// single-page scrape that bypasses that cache before retrying once.
+func (s *Server) loadCachedIndexThumbnailOnce(ctx context.Context, req pageThumbRequest) ([]byte, error) {
+	thumb, found, err := s.resolveGalleryPageThumb(ctx, req.galleryID, req.token, req.index)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, errPageThumbNotFound
+	}
+
+	expiredURL := thumb.SpriteURL
+	data, err := s.loadOrCropThumbnail(ctx, expiredURL, thumbRect(thumb))
+	if err == nil {
+		return data, nil
+	}
+	if !isExpiredSprite(err) {
+		return nil, err
+	}
+
+	slog.Info("cached sprite expired; refreshing gallery cache",
+		"id", req.galleryID, "token", req.token, "index", req.index)
+
+	refreshCtx, cancel := context.WithTimeout(ctx, spriteRecoveryTimeout)
+	defer cancel()
+	if rerr := s.refreshPagesSync(refreshCtx, req.galleryID, req.token); rerr != nil {
+		slog.Warn("sprite expiry refresh failed", "id", req.galleryID, "error", rerr)
+	}
+
+	if refreshed, found, rerr := s.resolveGalleryPageThumb(ctx, req.galleryID, req.token, req.index); rerr == nil && found {
+		thumb = refreshed
+	}
+	if thumb.SpriteURL == expiredURL {
+		// The gallery document is still inside its short-lived dedup window, so
+		// the refresh saw the expired reference. Force a fresh single-page
+		// scrape, which bypasses that window.
+		fresh, ok, ferr := s.scrapeFreshPageThumb(ctx, req.galleryID, req.token, req.index)
+		if ferr != nil {
+			slog.Warn("sprite expiry fresh scrape failed", "id", req.galleryID, "error", ferr)
+		} else if ok {
+			thumb = fresh
+			s.backfillThumbnail(ctx, req.galleryID, req.token, req.index, fresh)
+		}
+	}
+	if thumb.SpriteURL == expiredURL {
+		return nil, err
+	}
+	return s.loadOrCropThumbnail(ctx, thumb.SpriteURL, thumbRect(thumb))
+}
+
+// scrapeFreshPageThumb fetches the geometry for one page index directly,
+// bypassing the shared document dedup window so an expired sprite reference is
+// never re-read.
+func (s *Server) scrapeFreshPageThumb(ctx context.Context, galleryID int64, token string, index int) (model.GalleryPageThumb, bool, error) {
+	u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
+	return exhentai.ScrapeGalleryPageThumb(ctx, s.Client, u, index)
 }
 
 // pageThumbResolveTimeout bounds how long an index resolve waits for the

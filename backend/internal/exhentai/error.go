@@ -26,7 +26,7 @@ type httpStatusError struct {
 }
 
 func (e *httpStatusError) Error() string {
-	return fmt.Sprintf("HTTP %d", e.code)
+	return fmt.Sprintf("HTTP %d: %v", e.code, ErrNonOKStatus)
 }
 
 func (e *httpStatusError) Is(target error) bool {
