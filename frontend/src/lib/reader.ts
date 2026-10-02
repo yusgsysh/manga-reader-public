@@ -19,7 +19,10 @@ export function galleryPagesToManga(
       id: `${page.index}`,
       type: "image" as const,
       src: getReaderImageURL(page.page_url),
-      thumbnailSrc: page.thumbnail ? pageThumbnailUrl(page.thumbnail) : undefined,
+      thumbnailSrc:
+        page.thumbnail && token
+          ? pageThumbnailUrl(id, token, page.index)
+          : undefined,
       alt: `${title} - ${page.index + 1}`,
     })),
   };

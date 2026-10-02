@@ -19,6 +19,11 @@ describe("isPageThumbnailURL", () => {
         "http://localhost:8080/api/image/page-thumbnail?id=1&token=tok&index=0",
       ),
     ).toBe(true);
+    expect(
+      isPageThumbnailURL(
+        "http://localhost:8080/api/image-cache/page-thumbnail?id=1&token=tok&index=0",
+      ),
+    ).toBe(true);
   });
 
   it("rejects unrelated image endpoints", () => {

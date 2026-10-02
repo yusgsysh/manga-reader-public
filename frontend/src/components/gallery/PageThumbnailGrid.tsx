@@ -23,7 +23,8 @@ function PageThumbnail({
   page: GalleryPage;
 }) {
   const [loaded, setLoaded] = useState(false);
-  const src = page.thumbnail ? pageThumbnailUrl(page.thumbnail) : "";
+  const src =
+    page.thumbnail && token ? pageThumbnailUrl(id, token, page.index) : "";
   const showShimmer = src !== "" && !loaded;
 
   return (

@@ -97,13 +97,23 @@ describe("galleryPagesToManga", () => {
     if (first.type !== "image") throw new Error("expected image page");
     expect(first.src).toContain("/api/image-cache/page?url=");
     expect(first.thumbnailSrc).toContain("/api/image-cache/page-thumbnail?");
-    expect(first.thumbnailSrc).toContain(
-      encodeURIComponent("https://cdn.hath.network/c2/hash/1-0.webp"),
-    );
-    expect(first.thumbnailSrc).toContain("x=200");
+    expect(first.thumbnailSrc).toContain("id=123");
+    expect(first.thumbnailSrc).toContain("token=token");
+    expect(first.thumbnailSrc).toContain("index=0");
+    expect(first.thumbnailSrc).not.toContain("url=");
+    expect(first.thumbnailSrc).not.toContain("x=200");
 
     const second = manga.pages[1];
     if (second.type !== "image") throw new Error("expected image page");
     expect(second.thumbnailSrc).toBeUndefined();
+  });
+
+  it("skips thumbnails when the gallery token is missing", () => {
+    const manga = galleryPagesToManga("123", "", "Title", [
+      { page_url: "https://e.org/s/1", index: 0, thumbnail: thumb },
+    ]);
+    const page = manga.pages[0];
+    if (page.type !== "image") throw new Error("expected image page");
+    expect(page.thumbnailSrc).toBeUndefined();
   });
 });

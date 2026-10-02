@@ -135,6 +135,12 @@ try {
   console.log("gallery thumbnails: loading shimmer");
   {
     const page = await browser.newPage();
+    const thumbRequests = [];
+    page.on("request", (req) => {
+      if (req.url().includes("/api/image-cache/page-thumbnail")) {
+        thumbRequests.push(req.url());
+      }
+    });
     // Delay the page thumbnails so the loading shimmer stays observable.
     await page.route("**/api/image-cache/page-thumbnail**", async (route) => {
       await sleep(1500);
@@ -152,6 +158,18 @@ try {
       "page thumbnail shimmer is visible while loading",
       !!box && box.w > 0 && box.h > 0,
       JSON.stringify(box),
+    );
+
+    await sleep(300);
+    const first = thumbRequests[0] ? new URL(thumbRequests[0]) : null;
+    check(
+      "thumbnails are addressed by id+token+index",
+      !!first &&
+        first.searchParams.get("id") === "1001" &&
+        first.searchParams.get("token") === "tok" &&
+        first.searchParams.has("index") &&
+        !first.searchParams.has("url"),
+      first ? first.search : `no requests (${thumbRequests.length})`,
     );
     await page.close();
   }
