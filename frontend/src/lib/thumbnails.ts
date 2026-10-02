@@ -1,7 +1,8 @@
 // comimi renders every page-list / seek-preview thumbnail eagerly, so a large
 // gallery fires hundreds of `/image-cache/page-thumbnail` requests at once. This
-// module defers those images and feeds them through a small concurrency-limited
-// queue, loading only what is (nearly) on screen.
+// module intercepts those images and feeds all of them through a small
+// concurrency-limited queue: every thumbnail is loaded as soon as it appears,
+// never gated on the viewport, but only `concurrency` requests are in flight.
 
 const PLACEHOLDER =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -32,17 +33,20 @@ export interface QueueItem {
 
 export interface ThumbnailQueue {
   enqueue: (item: QueueItem) => void;
+  cancel: (img: HTMLImageElement) => void;
   stop: () => void;
 }
 
 /**
  * Runs image loads with at most `concurrency` in flight. A slot is freed when
- * the image fires `load` or `error`.
+ * the image fires `load` or `error`, or when it is cancelled (e.g. removed from
+ * the DOM before it finished).
  */
 export function createThumbnailQueue(concurrency = 5): ThumbnailQueue {
   let active = 0;
   let stopped = false;
   const waiting: QueueItem[] = [];
+  const inFlight = new Map<HTMLImageElement, () => void>();
 
   const pump = () => {
     while (!stopped && active < concurrency && waiting.length > 0) {
@@ -50,11 +54,13 @@ export function createThumbnailQueue(concurrency = 5): ThumbnailQueue {
       active++;
 
       const release = () => {
+        if (!inFlight.delete(item.img)) return;
         item.img.removeEventListener("load", release);
         item.img.removeEventListener("error", release);
         active--;
         pump();
       };
+      inFlight.set(item.img, release);
       item.img.addEventListener("load", release);
       item.img.addEventListener("error", release);
 
@@ -65,8 +71,18 @@ export function createThumbnailQueue(concurrency = 5): ThumbnailQueue {
   return {
     enqueue(item) {
       if (stopped) return;
+      if (inFlight.has(item.img)) return;
+      if (waiting.some((queued) => queued.img === item.img)) return;
       waiting.push(item);
       pump();
+    },
+    cancel(img) {
+      const waitingIndex = waiting.findIndex((item) => item.img === img);
+      if (waitingIndex !== -1) {
+        waiting.splice(waitingIndex, 1);
+        return;
+      }
+      inFlight.get(img)?.();
     },
     stop() {
       stopped = true;
@@ -75,58 +91,36 @@ export function createThumbnailQueue(concurrency = 5): ThumbnailQueue {
   };
 }
 
-export interface LazyThumbnailOptions {
+export interface LoadThumbnailsOptions {
   concurrency?: number;
-  rootMargin?: string;
 }
 
 /**
- * Observes `root` for comimi thumbnails and loads them lazily through a
- * concurrency-limited queue. Returns a cleanup function.
+ * Watches `root` for comimi thumbnails and loads every one of them through a
+ * concurrency-limited queue as soon as it appears. Returns a cleanup function.
  */
-export function observeLazyThumbnails(
+export function loadThumbnails(
   root: HTMLElement,
-  { concurrency = 5, rootMargin = "300px" }: LazyThumbnailOptions = {},
+  { concurrency = 5 }: LoadThumbnailsOptions = {},
 ): () => void {
   const queue = createThumbnailQueue(concurrency);
-  const pending = new WeakMap<HTMLImageElement, string>();
-
-  // The IO root must be the viewport, never `root` itself: in fullscreen
-  // comimi makes `.comimi-root` a viewport-fixed box, and Chromium reports a
-  // 0x0 rootBounds for every *ancestor* of such an element (including the
-  // fullscreen element), so nothing would ever intersect and the placeholders
-  // would stick forever. The viewport root keeps the ancestor clipping that
-  // actually gates loading (the height-0 menu, the page-list scroller).
-  const observer = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        const img = entry.target as HTMLImageElement;
-        observer.unobserve(img);
-        const url = pending.get(img);
-        if (url) queue.enqueue({ img, url });
-      }
-    },
-    { root: null, rootMargin },
-  );
 
   const defer = (node: Node) => {
     if (!(node instanceof HTMLImageElement)) return;
-    const alreadyDeferred = node.dataset[LAZY_FLAG] === "1";
-    const url = alreadyDeferred ? node.dataset[LAZY_SRC] : node.src;
+    const stored = node.dataset[LAZY_SRC];
+    const url = stored ?? node.src;
     if (!url || !isPageThumbnailURL(url)) return;
-    if (alreadyDeferred) {
-      // Re-adopt an image deferred by an earlier run: its observer is gone,
-      // so without this it would sit on the placeholder for good. Skip images
-      // that already carry a real src — those are loading or loaded.
-      if (node.getAttribute("src") !== PLACEHOLDER) return;
-    } else {
+    if (node.dataset[LAZY_FLAG] !== "1") {
       node.dataset[LAZY_FLAG] = "1";
       node.dataset[LAZY_SRC] = url;
       node.src = PLACEHOLDER;
+    } else if (node.getAttribute("src") !== PLACEHOLDER) {
+      // Already loading or loaded (possibly by a previous run).
+      return;
     }
-    pending.set(node, url);
-    observer.observe(node);
+    // Still a placeholder: queue it now, or re-queue it if an earlier run was
+    // cleaned up while it was waiting.
+    queue.enqueue({ img: node, url });
   };
 
   const scan = (node: Node) => {
@@ -138,9 +132,9 @@ export function observeLazyThumbnails(
 
   const unbind = (node: Node) => {
     if (node instanceof HTMLImageElement) {
-      observer.unobserve(node);
+      queue.cancel(node);
     } else if (node instanceof Element) {
-      node.querySelectorAll("img").forEach((img) => observer.unobserve(img));
+      node.querySelectorAll("img").forEach((img) => queue.cancel(img));
     }
   };
 
@@ -156,7 +150,6 @@ export function observeLazyThumbnails(
 
   return () => {
     mutations.disconnect();
-    observer.disconnect();
     queue.stop();
   };
 }

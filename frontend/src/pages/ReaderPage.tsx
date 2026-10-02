@@ -25,14 +25,14 @@ import {
   galleryPagesToManga,
   parsePageParam,
 } from "../lib/reader";
-import { observeLazyThumbnails } from "../lib/lazyThumbnails";
+import { loadThumbnails } from "../lib/thumbnails";
 import { ErrorState } from "../components/common/ErrorState";
 import type { GalleryPage } from "../types/reader";
 
 type LayoutMode = ViewerSettings["layoutMode"];
 
-// Max concurrent page-thumbnail loads; keeps large galleries from firing
-// hundreds of requests at once.
+// Every page thumbnail loads eagerly, but at most this many requests are in
+// flight at once; keeps large galleries from firing hundreds at once.
 const THUMBNAIL_CONCURRENCY = 5;
 
 export function ReaderPage() {
@@ -44,9 +44,9 @@ export function ReaderPage() {
   const viewerRef = useRef<MangaViewerHandle>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   // The shell mounts only once the reader data is ready, which can happen
-  // after `manga` is already set — keying observation off the element itself
-  // guarantees it starts with the shell instead of riding data changes (and
-  // avoids tearing the observer down every time `manga` changes identity).
+  // after `manga` is already set — keying the thumbnail watcher off the element
+  // itself guarantees it starts with the shell instead of riding data changes
+  // (and avoids restarting it every time `manga` changes identity).
   const [shellEl, setShellEl] = useState<HTMLDivElement | null>(null);
   const attachShell = useCallback((el: HTMLDivElement | null) => {
     containerRef.current = el;
@@ -220,11 +220,11 @@ export function ReaderPage() {
   const error =
     galleryQuery.error ?? pagesQuery.error ?? progressQuery.error;
 
-  // Throttle comimi's page-list / seek-preview thumbnails: load them lazily
-  // through a bounded queue instead of requesting every page at once.
+  // Route comimi's page-list / seek-preview thumbnails through a bounded
+  // queue: all of them load immediately, but concurrency stays capped.
   useEffect(() => {
     if (!shellEl) return;
-    return observeLazyThumbnails(shellEl, {
+    return loadThumbnails(shellEl, {
       concurrency: THUMBNAIL_CONCURRENCY,
     });
   }, [shellEl]);

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createThumbnailQueue,
   isPageThumbnailURL,
-} from "./lazyThumbnails";
+} from "./thumbnails";
 
 describe("isPageThumbnailURL", () => {
   it("matches the cached page thumbnail endpoint", () => {
@@ -99,5 +99,57 @@ describe("createThumbnailQueue", () => {
 
     queue.enqueue({ img: second, url: "b" });
     expect(second.src).toBe("");
+  });
+
+  it("drops a waiting item on cancel() so it never loads", () => {
+    const queue = createThumbnailQueue(1);
+    const first = fakeImage();
+    const second = fakeImage();
+    const third = fakeImage();
+
+    queue.enqueue({ img: first, url: "a" });
+    queue.enqueue({ img: second, url: "b" });
+    queue.cancel(second);
+
+    first.fire("load");
+    expect(second.src).toBe("");
+
+    queue.enqueue({ img: third, url: "c" });
+    expect(third.src).toBe("c");
+
+    queue.stop();
+  });
+
+  it("frees an in-flight slot on cancel()", () => {
+    const queue = createThumbnailQueue(1);
+    const first = fakeImage();
+    const second = fakeImage();
+    const third = fakeImage();
+
+    queue.enqueue({ img: first, url: "a" });
+    queue.enqueue({ img: second, url: "b" });
+    expect(first.src).toBe("a");
+    expect(second.src).toBe("");
+
+    queue.cancel(first);
+    expect(second.src).toBe("b");
+
+    // The cancelled image must no longer release slots it does not hold.
+    first.fire("load");
+    queue.enqueue({ img: third, url: "c" });
+    expect(third.src).toBe("");
+
+    queue.stop();
+  });
+
+  it("ignores duplicate enqueues of the same image", () => {
+    const queue = createThumbnailQueue(1);
+    const img = fakeImage();
+
+    queue.enqueue({ img, url: "a" });
+    queue.enqueue({ img, url: "a" });
+    expect(img.src).toBe("a");
+
+    queue.stop();
   });
 });

@@ -174,10 +174,10 @@ try {
     await page.close();
   }
 
-  console.log("reader: page-list thumbnails load lazily");
+  console.log("reader: page-list thumbnails load eagerly");
   {
     // Opens the reader (optionally in fullscreen) with the page list showing
-    // and returns helpers to sample the deferred/loaded thumbnail state.
+    // and returns helpers to sample the loaded thumbnail state.
     const openReader = async (fullscreen) => {
       const page = await browser.newPage();
       let thumbRequests = 0;
@@ -223,14 +223,15 @@ try {
               r.bottom <= win.b
             );
           });
+          const placeholder = (img) => img.src.startsWith("data:");
           return {
             layout:
               document.querySelector(".comimi-root")?.dataset.layout ?? null,
+            total: imgs.length,
             visible: visible.length,
-            deferred: visible.filter((img) =>
-              img.src.startsWith("data:"),
-            ).length,
-            loaded: imgs.filter((img) => !img.src.startsWith("data:")).length,
+            deferred: visible.filter(placeholder).length,
+            placeholders: imgs.filter(placeholder).length,
+            loaded: imgs.filter((img) => !placeholder(img)).length,
           };
         });
       return { page, state, requests: () => thumbRequests };
@@ -243,12 +244,19 @@ try {
       inlineState.visible > 0 && inlineState.deferred === 0,
       JSON.stringify(inlineState),
     );
+    // Eager mode: off-screen thumbnails in the list must load too, not just
+    // the ones inside the scroller.
+    check(
+      "every page-list thumbnail loads without scrolling",
+      inlineState.total > 0 && inlineState.placeholders === 0,
+      JSON.stringify(inlineState),
+    );
     await inline.page.close();
 
-    // Fullscreen makes comimi's root a viewport-fixed box, which collapsed the
-    // IntersectionObserver root bounds and left every thumbnail on the
-    // placeholder. Open the list only after entering fullscreen so the check
-    // sees thumbnails that have never loaded before.
+    // Fullscreen makes comimi's root a viewport-fixed box, which used to
+    // collapse the IntersectionObserver root bounds and leave every thumbnail
+    // on the placeholder. Open the list only after entering fullscreen so the
+    // check sees thumbnails that have never loaded before.
     const full = await openReader(true);
     const fullState = await full.state();
     check(
@@ -277,7 +285,7 @@ try {
     const scrolled = await full.state();
     check(
       "scrolling the page list loads more thumbnails",
-      scrolled.deferred === 0 && scrolled.loaded > fullState.loaded,
+      scrolled.placeholders === 0 && scrolled.loaded >= fullState.loaded,
       JSON.stringify(scrolled),
     );
     await full.page.close();
