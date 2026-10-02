@@ -70,6 +70,19 @@ function fullList(id) {
   };
 }
 
+// The cached /pages endpoint streams the same NDJSON as the live one.
+function cachedPagesStream(id) {
+  const list = fullList(id);
+  let body = `${JSON.stringify({ type: "meta", id: list.id, token: list.token, total: list.total })}\n`;
+  for (const p of list.pages) {
+    body += `${JSON.stringify({ type: "page", ...p })}\n`;
+  }
+  body += `${JSON.stringify({ type: "done", total: list.total })}\n`;
+  return new Response(body, {
+    headers: { ...CORS, "Content-Type": "application/x-ndjson; charset=utf-8" },
+  });
+}
+
 function galleryMeta(id) {
   return {
     id: Number(id),
@@ -174,7 +187,7 @@ const server = Bun.serve({
     let m = path.match(/^\/api\/gallery-cache\/(\d+)\/tok\/pages$/);
     if (m) {
       if (noCache(m[1])) return json({ error: "no cached pages" }, 404);
-      return json(fullList(m[1]));
+      return cachedPagesStream(m[1]);
     }
     m = path.match(/^\/api\/gallery-cache\/(\d+)\/tok\/details$/);
     if (m) {

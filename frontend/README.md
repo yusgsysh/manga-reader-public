@@ -158,7 +158,9 @@ bun run build
 
 ## 缓存与 staleTime
 
-react-query 的 `staleTime` 统一集中在 `src/lib/cacheConfig.ts`（与根 `README.md` 的「缓存与过期时间」对应）：
+后端 `gallery_cache` **无 TTL、read-through**（详见根 `README.md` 的「缓存模型」）：在线端点始终回源、不写缓存；缓存端点在入口命中时由前端优先渲染，未命中时后端流式回源并回填。图片加载失败时前端**直接失败、不自动重试**，失败已触发后端后台刷新，重新打开页面即可拿到新列表。
+
+react-query 的 `staleTime` 仅用于客户端节流，统一集中在 `src/lib/cacheConfig.ts`：
 
 | 场景 | 值 |
 |------|----|

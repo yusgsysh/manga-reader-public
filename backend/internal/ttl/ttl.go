@@ -10,20 +10,6 @@ import (
 )
 
 const (
-	// GalleryMeta is how long a cached metadata snapshot (meta_fetched_at) may
-	// be served before the online endpoint re-fetches upstream.
-	GalleryMeta = 30 * time.Minute
-	// GalleryDetails is the equivalent window for the details scrape
-	// (details_fetched_at).
-	GalleryDetails = 30 * time.Minute
-	// GalleryPages is the equivalent window for the page list
-	// (pages_fetched_at).
-	GalleryPages = 30 * time.Minute
-	// GalleryThumbnail is the equivalent window for page-thumbnail geometry
-	// (thumbnail_fetched_at). Sprite geometry changes rarely, so it is longer
-	// than the page list window.
-	GalleryThumbnail = 6 * time.Hour
-
 	// ListingCursor is how long an in-memory ExHentai next-page cursor stays
 	// valid before it must be re-walked.
 	ListingCursor = 10 * time.Minute

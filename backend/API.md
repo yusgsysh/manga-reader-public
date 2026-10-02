@@ -1232,45 +1232,44 @@ Cache-Control: no-store
 
 ---
 
-## 离线缓存（gallery-cache）
+## 缓存（gallery-cache，无 TTL + read-through）
 
-在线端点（`/api/gallery/:id/:token`、`/details`、`/pages`）**先读 `gallery_cache`**：行足够新（`meta_fetched_at` / `details_fetched_at` / `pages_fetched_at` 在各自 TTL 内，默认均为 30 分钟）时直接返回缓存，不再访问上游；过期或未命中才回源，**完整成功**时把结果写回缓存（`/pages` 只有整份列表抓取成功才写入，失败绝不写入部分数据）。页面缩略图几何另有独立窗口 `thumbnail_fetched_at`（默认 6 小时）：索引解析命中缓存几何时仅在该窗口内直接返回，过期则回源并回填。TTL 常量集中定义于 `internal/ttl`。
+后端缓存**没有 TTL**：`gallery_cache` 一旦写入即被永久信任，命中直接返回，不再按时间回源。
 
-因此：重复打开不再每次回源（省上游、更快），同时不会像固定 1 天代理缓存那样陈旧。回源失败时在线端点仍返回 502（**不**自行回退到缓存），由前端编排回退：请求在线端点失败或浏览器离线时再请求下面的只读缓存端点，并展示“离线数据”。
-
-前端在此基础上还做“缓存占位”：命中缓存时先渲染，在线结果到达后替换。
+- **在线端点**（`/api/gallery/:id/:token`、`/details`、`/pages`）：**每次回源上游，只读不写缓存**。`/pages` 以 NDJSON 流式返回。
+- **缓存端点**（`/api/gallery-cache/*`）：**read-through** —— 命中直接返回；未命中则回源，**完整成功**时回填（`/pages` 只有整份列表抓取成功才写入，失败绝不写入部分数据）。在线端点在回源失败时返回 502，不再自行回退到缓存。
+- 前端在请求在线端点时用缓存端点做**占位**：命中缓存先渲染，在线结果到达后替换。
 
 ### Cached Gallery
 
 `GET /api/gallery-cache/:id/:token`
 
-只读 `gallery_cache` 中的元数据快照，响应结构与 `/api/gallery/:id/:token` 相同。
+read-through：命中返回缓存的元数据快照；未命中回源并回填，响应结构与 `/api/gallery/:id/:token` 相同。
 
 ### Cached Gallery Details
 
 `GET /api/gallery-cache/:id/:token/details`
 
-只读缓存的详情快照，响应结构与 `/api/gallery/:id/:token/details` 相同；`domain`/`parent`/`visible` 等未缓存字段返回零值。
+read-through：命中返回缓存的详情快照；未命中回源并回填。响应结构与 `/api/gallery/:id/:token/details` 相同；`domain`/`parent`/`visible` 等未缓存字段返回零值。
 
 ### Cached Gallery Pages
 
 `GET /api/gallery-cache/:id/:token/pages`
 
-返回缓存的页面列表（**普通 JSON，非流式**）：`{ "id", "token", "total", "pages": [...] }`，`pages` 元素结构与在线 `/pages` 流中的 `page` 行一致。
+read-through，**流式 NDJSON**，与在线 `/pages` 格式一致：命中时回放缓存的 `meta`/`page`/`done` 行；未命中时流式回源并在完整成功后回填。
 
-**说明：**
-
-- 不访问上游、不重试；无缓存时返回 `404`
 - 响应头 `Cache-Control: no-store`（反向代理不应缓存）
+- 命中后会在后台异步校验上游 `.gpc` 总页数（SWR）：页数变化时整份替换缓存
 
-### 缓存写入时机
+### 缓存写入与刷新时机
 
-- 在线端点完整成功时（元数据 / 详情 / 页面列表；`/pages` 抓取不完整时**不写入**）
-- 页面 URL（`pages`）与缩略图几何（`thumbnails`）独立写入、按索引合并：非空条目覆盖、空条目保留、列表不缩短，因此可对单页几何做修复/回填而不重写整份页面列表
-- 索引解析在缩略图窗口过期时会回源并把单页几何回填缓存
-- `POST /api/bookshelf/:id/:token` 成功后后台异步预取元数据与页面列表（页面列表同样仅在完整成功时写入）
+- 缓存端点 miss 时完整成功后整份替换 `pages` + `thumbnails`（允许缩短）
+- 图片永久失败（旧 page URL 失效）时，从 URL 解析 `gallery_id`，按 `gallery_id` 反查 token，后台整份刷新
+- 缓存 `/pages` 命中后后台比对 `.gpc` 总页数，变化时整份替换
+- 单页缩略图几何缺失 / 解析超时直抓时，按 index 稀疏补洞
+- `POST /api/bookshelf/:id/:token` 成功后后台异步预取元数据、详情与页面列表（页面列表同样仅在完整成功时写入）
 
-缓存采用「非空优先」策略：元数据的非空字段覆盖旧值、空值不覆盖；页面 URL 与缩略图几何按索引合并（非空条目覆盖、空条目保留、列表不缩短）。
+缓存采用「非空优先」策略：元数据的非空字段覆盖旧值、空值不覆盖；页面 URL 与缩略图几何按索引合并（非空条目覆盖、空条目保留、列表不缩短）；页数变化时改为整份替换。`*_fetched_at` 仅作观测写入，不参与命中/刷新判定。
 
 图片本身由 `/api/image-cache/*` 图片代理提供（MinIO 缓存，见第 9-11 节），离线可读的前提是对应页面图片此前已被浏览或下载过。
 

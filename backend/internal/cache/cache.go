@@ -126,8 +126,7 @@ func IsNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-	var minioErr minio.ErrorResponse
-	if errors.As(err, &minioErr) {
+	if minioErr, ok := errors.AsType[minio.ErrorResponse](err); ok {
 		return minioErr.Code == "NoSuchKey" || minioErr.Code == "NoSuchBucket" || minioErr.Code == "NotFound"
 	}
 	return false

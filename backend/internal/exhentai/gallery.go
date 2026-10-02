@@ -275,6 +275,44 @@ func ScrapeGalleryPages(ctx context.Context, client *http.Client, galleryURL str
 	return pageURLs, thumbnails, nil
 }
 
+// ScrapeGalleryTotal fetches the gallery document and returns the ".gpc" image
+// count without walking the thumbnail pages. It is a lightweight freshness probe
+// used to detect a page-count change against the cache.
+func ScrapeGalleryTotal(ctx context.Context, client *http.Client, galleryURL string) (int, error) {
+	doc, err := httpGetDoc(ctx, client, galleryURL)
+	if err != nil {
+		return 0, err
+	}
+	total := galleryTotalImages(doc)
+	if total <= 0 {
+		return 0, fmt.Errorf("cannot determine gallery total: %q counter missing or invalid", ".gpc")
+	}
+	return total, nil
+}
+
+// PageURLGalleryID extracts the gallery id from an ExHentai page URL of the form
+// https://exhentai.org/s/<hash>/<gallery-id>-<page>. It maps a failed cached page
+// URL back to its gallery so the cache can be refreshed.
+func PageURLGalleryID(rawURL string) (int64, bool) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return 0, false
+	}
+	seg := u.Path
+	if i := strings.LastIndex(seg, "/"); i >= 0 {
+		seg = seg[i+1:]
+	}
+	dash := strings.LastIndex(seg, "-")
+	if dash <= 0 {
+		return 0, false
+	}
+	id, err := strconv.ParseInt(seg[:dash], 10, 64)
+	if err != nil || id <= 0 {
+		return 0, false
+	}
+	return id, true
+}
+
 // ScrapeGalleryPageThumb returns the sprite thumbnail geometry for a single
 // gallery page index. Unlike ScrapeGalleryPages it fetches only the thumbnail
 // page that contains the requested index instead of walking the whole gallery.

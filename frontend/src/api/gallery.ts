@@ -72,7 +72,24 @@ export function fetchGallery(id: number, token: string): Promise<Gallery> {
   return apiGet<Gallery>(`/api/gallery/${id}/${token}`);
 }
 
-// fetchGalleryPages reads the streaming NDJSON page list. The protocol state
+// fetchGalleryPages reads the streaming NDJSON page list from the online
+// endpoint. The online endpoint always scrapes upstream and never writes cache.
+export function fetchGalleryPages(
+  id: number,
+  token: string,
+  onPage?: (partial: GalleryPagesResponse) => void,
+  signal?: AbortSignal,
+): Promise<GalleryPagesResponse> {
+  return readGalleryPagesStream(
+    buildApiUrl(`/api/gallery/${id}/${token}/pages`),
+    id,
+    token,
+    onPage,
+    signal,
+  );
+}
+
+// readGalleryPagesStream parses a streaming NDJSON page list. The protocol state
 // machine is meta → page* → (done | error):
 //   - meta appears exactly once and must come first; its `total` is the
 //     gallery's declared page count and stays constant for the whole stream;
@@ -84,17 +101,16 @@ export function fetchGallery(id: number, token: string): Promise<Gallery> {
 // pages = received so far) so callers can render progressively; the resolved
 // promise carries the aggregated response. The stream fails (throws) on the
 // error line or when it ends without a terminal line, so partial data is
-// never mistaken for success.
-export async function fetchGalleryPages(
+// never mistaken for success. Shared by the online and read-through cache
+// page endpoints, which return the same format.
+async function readGalleryPagesStream(
+  url: string,
   id: number,
   token: string,
   onPage?: (partial: GalleryPagesResponse) => void,
   signal?: AbortSignal,
 ): Promise<GalleryPagesResponse> {
-  const res = await fetchChecked(
-    buildApiUrl(`/api/gallery/${id}/${token}/pages`),
-    signal ? { signal } : undefined,
-  );
+  const res = await fetchChecked(url, signal ? { signal } : undefined);
   if (!res.body) {
     throw new Error("gallery pages stream has no body");
   }
@@ -223,8 +239,8 @@ export function fetchGalleryDetail(
   return apiGet<GalleryDetail>(`/api/gallery/${id}/${token}/details`);
 }
 
-// Offline cache endpoints (read-only). Used by the frontend as a fallback when
-// the online endpoints above fail.
+// Cache endpoints (read-through). A hit is served from the backend cache; a
+// miss makes the backend fetch upstream and backfill.
 
 export function fetchGalleryCached(
   id: number,
@@ -240,12 +256,20 @@ export function fetchGalleryDetailCached(
   return apiGet<GalleryDetail>(`/api/gallery-cache/${id}/${token}/details`);
 }
 
+// The cached /pages endpoint streams the same NDJSON format as the online one:
+// a hit replays the cached list, a miss reads through upstream and backfills.
 export function fetchGalleryPagesCached(
   id: number,
   token: string,
+  onPage?: (partial: GalleryPagesResponse) => void,
+  signal?: AbortSignal,
 ): Promise<GalleryPagesResponse> {
-  return apiGet<GalleryPagesResponse>(
-    `/api/gallery-cache/${id}/${token}/pages`,
+  return readGalleryPagesStream(
+    buildApiUrl(`/api/gallery-cache/${id}/${token}/pages`),
+    id,
+    token,
+    onPage,
+    signal,
   );
 }
 

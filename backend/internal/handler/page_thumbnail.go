@@ -19,7 +19,6 @@ import (
 	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/imageproc"
 	"manga-reader/internal/model"
-	"manga-reader/internal/ttl"
 )
 
 const (
@@ -258,19 +257,12 @@ func (s *Server) resolveGalleryPageThumb(ctx context.Context, galleryID int64, t
 		} else if found {
 			behindStoredList := false
 			if index < len(row.Thumbnails) {
-				thumb := row.Thumbnails[index]
-				if thumb.SpriteURL != "" {
-					// Serve cached geometry only while its thumbnail window is
-					// fresh; a stale entry falls through to a walk that
-					// refreshes the row.
-					if cacheFresh(row.ThumbnailFetchedAt, ttl.GalleryThumbnail) {
-						return thumb, true, nil
-					}
-				} else {
-					// Present but without geometry: fall through to a fresh
-					// walk, which upgrades the row through UpsertThumbnails.
-					behindStoredList = true
+				if thumb := row.Thumbnails[index]; thumb.SpriteURL != "" {
+					return thumb, true, nil
 				}
+				// Present but without geometry: fall through to a fresh walk,
+				// which upgrades the row through UpsertThumbnails.
+				behindStoredList = true
 			}
 			// Only verified, complete walks are ever written, and they emit
 			// pages in ascending order — so an index past the stored end does
@@ -281,6 +273,11 @@ func (s *Server) resolveGalleryPageThumb(ctx context.Context, galleryID int64, t
 			}
 		}
 	}
+
+	// Cache miss or missing geometry: fill the cache in the background from the
+	// same shared walk this resolve subscribes to, so the verified list is
+	// persisted even though the resolve itself only waits for one page.
+	go s.refreshPages(galleryID, token)
 
 	resolveCtx, cancel := context.WithTimeout(ctx, pageThumbResolveTimeout)
 	defer cancel()

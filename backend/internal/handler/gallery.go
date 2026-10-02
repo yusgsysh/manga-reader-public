@@ -15,12 +15,12 @@ import (
 	json "encoding/json/v2"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/singleflight"
 
 	"manga-reader/internal/ent"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/model"
-	"manga-reader/internal/ttl"
 )
 
 // galleryPagesHardCap bounds an entire /pages scrape (including the detached
@@ -35,10 +35,10 @@ const galleryPagesHardCap = 10 * time.Minute
 // Shared by the streaming handler and the bookshelf prefetch.
 var galleryPagesHub = newPagesHub()
 
-// cacheFresh reports whether a fetched-at timestamp is within its TTL window.
-func cacheFresh(at *time.Time, window time.Duration) bool {
-	return at != nil && time.Since(*at) < window
-}
+// galleryPagesFillGroup coalesces cache-fill refreshes (read-through miss,
+// page-count change, image-failure recovery) for the same gallery so a burst of
+// triggers runs a single upstream walk and a single cache write.
+var galleryPagesFillGroup singleflight.Group
 
 // cacheDB returns the ent client when a database is configured. Some tests
 // construct a Server without a DB; callers must tolerate a nil result.
@@ -132,6 +132,36 @@ func galleryDetailsFromCache(row *ent.GalleryCache) gin.H {
 	}
 }
 
+// galleryDetailsJSON shapes a scraped gallery detail for the JSON response. It
+// is shared by the online details endpoint and the cache read-through path.
+func galleryDetailsJSON(details model.GalleryDetail) gin.H {
+	tags := make([]model.Tag, len(details.Tags))
+	for i, t := range details.Tags {
+		tags[i] = model.Tag{Namespace: t.Namespace, Name: t.Name}
+	}
+	return gin.H{
+		"id":           details.GalleryID,
+		"token":        details.Token,
+		"domain":       details.Domain,
+		"title":        details.Title,
+		"title_jpn":    details.TitleJpn,
+		"cover":        details.Cover,
+		"category":     model.MapCategory(details.Cat),
+		"uploader":     details.Uploader,
+		"posted":       details.Posted,
+		"parent":       details.Parent,
+		"visible":      details.Visible,
+		"language":     details.Language,
+		"translated":   details.Translated == "TR",
+		"file_size":    details.FileSize,
+		"page_count":   details.Length,
+		"favorited":    details.Favorited,
+		"rating_count": details.RatingCount,
+		"rating":       details.Rating,
+		"tags":         tags,
+	}
+}
+
 // parseGalleryIDToken reads and validates the :id/:token path params.
 func parseGalleryIDToken(c *gin.Context) (int64, string, bool) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -156,43 +186,27 @@ func (s *Server) cacheUnavailable(c *gin.Context) bool {
 	return false
 }
 
+// handleGetGallery is the online metadata endpoint. It always fetches upstream
+// and never reads or writes the gallery cache; the cache endpoint is the
+// read-through path and the frontend uses this one to stay fresh.
 func (s *Server) handleGetGallery(c *gin.Context) {
 	id, token, ok := parseGalleryIDToken(c)
 	if !ok {
 		return
 	}
 
-	ctx := c.Request.Context()
-
-	// Serve recent cache without touching upstream; stale/missing rows fall
-	// through to the live fetch (and a failed fetch still returns 502 so the
-	// frontend falls back to the cache endpoint).
-	if db := s.cacheDB(); db != nil {
-		if row, found, err := gallerycache.Get(ctx, db, id, token); err != nil {
-			slog.Warn("gallery cache read failed", "id", id, "error", err)
-		} else if found && row.Title != "" && cacheFresh(row.MetaFetchedAt, ttl.GalleryMeta) {
-			c.JSON(http.StatusOK, galleryFromCache(row))
-			return
-		}
-	}
-
-	meta, err := exhentai.PostGalleryMetadata(ctx, s.Client, id, token)
+	meta, err := exhentai.PostGalleryMetadata(c.Request.Context(), s.Client, id, token)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
 	}
-
-	gallery := model.ConvertMetadataToGallery(meta)
-	if db := s.cacheDB(); db != nil {
-		if cacheErr := gallerycache.UpsertMeta(ctx, db, id, token, cacheMetaFromGallery(gallery)); cacheErr != nil {
-			slog.Warn("gallery cache meta upsert failed", "id", id, "error", cacheErr)
-		}
-	}
-	c.JSON(http.StatusOK, gallery)
+	c.JSON(http.StatusOK, model.ConvertMetadataToGallery(meta))
 }
 
+// handleGalleryDetails is the online details endpoint. Like handleGetGallery it
+// always scrapes upstream and never touches the cache.
 func (s *Server) handleGalleryDetails(c *gin.Context) {
-	galleryID, token, ok := parseGalleryIDToken(c)
+	_, token, ok := parseGalleryIDToken(c)
 	if !ok {
 		return
 	}
@@ -200,55 +214,13 @@ func (s *Server) handleGalleryDetails(c *gin.Context) {
 	u := exhentai.GalleryURL(c.Param("id"), token)
 	ctx := c.Request.Context()
 
-	// Serve recent details cache; only rows written by a details scrape count
-	// (details_fetched_at), so metadata-only rows still trigger the scrape.
-	if db := s.cacheDB(); db != nil {
-		if row, found, err := gallerycache.Get(ctx, db, galleryID, token); err != nil {
-			slog.Warn("gallery cache read failed", "id", galleryID, "error", err)
-		} else if found && row.Title != "" && cacheFresh(row.DetailsFetchedAt, ttl.GalleryDetails) {
-			c.JSON(http.StatusOK, galleryDetailsFromCache(row))
-			return
-		}
-	}
-
 	details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
 		return
 	}
 
-	tags := make([]model.Tag, len(details.Tags))
-	for i, t := range details.Tags {
-		tags[i] = model.Tag{Namespace: t.Namespace, Name: t.Name}
-	}
-
-	if db := s.cacheDB(); db != nil {
-		if cacheErr := gallerycache.UpsertDetails(ctx, db, galleryID, token, cacheMetaFromDetails(details)); cacheErr != nil {
-			slog.Warn("gallery cache details upsert failed", "id", galleryID, "error", cacheErr)
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"id":           details.GalleryID,
-		"token":        details.Token,
-		"domain":       details.Domain,
-		"title":        details.Title,
-		"title_jpn":    details.TitleJpn,
-		"cover":        details.Cover,
-		"category":     model.MapCategory(details.Cat),
-		"uploader":     details.Uploader,
-		"posted":       details.Posted,
-		"parent":       details.Parent,
-		"visible":      details.Visible,
-		"language":     details.Language,
-		"translated":   details.Translated == "TR",
-		"file_size":    details.FileSize,
-		"page_count":   details.Length,
-		"favorited":    details.Favorited,
-		"rating_count": details.RatingCount,
-		"rating":       details.Rating,
-		"tags":         tags,
-	})
+	c.JSON(http.StatusOK, galleryDetailsJSON(details))
 }
 
 // galleryPagesLine is one NDJSON line of the streaming /pages response.
@@ -424,9 +396,9 @@ func (s *Server) scrapeGalleryPages(
 }
 
 // runGalleryPagesScrape drives one detached page-list walk and publishes it to
-// stream. The walk is never aborted by an emit failure so it continues after
-// every subscriber disconnects, letting the verified list still reach the
-// cache. A complete scrape is the only thing ever persisted.
+// stream. It has no cache side effects: the online endpoint must not write the
+// cache, and cache-filling subscribers persist the verified list themselves
+// once the walk completes.
 func (s *Server) runGalleryPagesScrape(
 	key string,
 	stream *galleryPagesStream,
@@ -456,21 +428,63 @@ func (s *Server) runGalleryPagesScrape(
 			// verified, complete list is ever persisted.
 			err = fmt.Errorf("incomplete page list: got %d pages, want %d", len(pageURLs), total)
 		}
-		if err == nil {
-			// The complete list is written only after a verified walk. Page
-			// URLs and thumbnail geometry are persisted independently so the
-			// geometry can be refreshed without rewriting a stable page list.
-			if db := s.cacheDB(); db != nil {
-				if cacheErr := gallerycache.UpsertPages(ctx, db, galleryID, token, pageURLs); cacheErr != nil {
-					slog.Warn("gallery cache pages upsert failed", "id", galleryID, "error", cacheErr)
-				}
-				if cacheErr := gallerycache.UpsertThumbnails(ctx, db, galleryID, token, thumbnails); cacheErr != nil {
-					slog.Warn("gallery cache thumbnails upsert failed", "id", galleryID, "error", cacheErr)
-				}
-			}
-		}
 		stream.finish(err)
 	}()
+}
+
+// scrapeAndCache streams the shared page walk to emit (when non-nil) and, on a
+// complete verified walk, replaces the cached page list and thumbnail geometry
+// wholesale. It is the only cache-writing page path: the cache endpoints and
+// prefetch use it, while the online endpoint uses scrapeGalleryPages and never
+// writes. The write happens after drain returns nil (a verified complete walk),
+// so a failed or partial walk never touches the cache.
+func (s *Server) scrapeAndCache(
+	ctx context.Context,
+	galleryID int64,
+	token string,
+	emit func(total int, pageURLs []string, thumbnails []model.GalleryPageThumb) error,
+) (int, error) {
+	var pageURLs []string
+	var thumbnails []model.GalleryPageThumb
+	count, err := s.scrapeGalleryPages(ctx, galleryID, token, func(total int, urls []string, thumbs []model.GalleryPageThumb) error {
+		pageURLs = append(pageURLs, urls...)
+		thumbnails = append(thumbnails, thumbs...)
+		if emit != nil {
+			return emit(total, urls, thumbs)
+		}
+		return nil
+	})
+	if err != nil {
+		return count, err
+	}
+	if db := s.cacheDB(); db != nil {
+		if cacheErr := gallerycache.ReplacePages(ctx, db, galleryID, token, pageURLs); cacheErr != nil {
+			slog.Warn("gallery cache pages replace failed", "id", galleryID, "error", cacheErr)
+		}
+		if cacheErr := gallerycache.ReplaceThumbnails(ctx, db, galleryID, token, thumbnails); cacheErr != nil {
+			slog.Warn("gallery cache thumbnails replace failed", "id", galleryID, "error", cacheErr)
+		}
+	}
+	return count, nil
+}
+
+// refreshPages runs a cache-filling walk for (galleryID, token) in the
+// background. Concurrent triggers for the same gallery collapse into one walk
+// and one write via galleryPagesFillGroup. It is used by the page-count check,
+// image-failure recovery and thumbnail-resolve cache fill.
+func (s *Server) refreshPages(galleryID int64, token string) {
+	if s.cacheDB() == nil || s.Client == nil {
+		return
+	}
+	key := fmt.Sprintf("%d:%s", galleryID, token)
+	galleryPagesFillGroup.Do(key, func() (any, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), galleryPagesHardCap)
+		defer cancel()
+		if _, err := s.scrapeAndCache(ctx, galleryID, token, nil); err != nil {
+			slog.Debug("gallery page cache refresh failed", "id", galleryID, "error", err)
+		}
+		return nil, nil
+	})
 }
 
 // writeNDJSONLine marshal line and writes it followed by a newline.
@@ -516,39 +530,17 @@ func replayGalleryPages(c *gin.Context, id, token string, total int, pageURLs []
 	return writeNDJSONLine(c, galleryPagesLine{Type: "done", Total: &done})
 }
 
-// handleGalleryPages streams the page list as NDJSON: a meta line (gallery
-// id/token plus the total image count), one line per page as it is scraped,
-// then a terminal done line or an error line. The response is committed only
-// after the first upstream document loads, so a failure there still returns
-// plain 502 JSON. The gallery cache is written only when the complete list
-// was scraped — failures never cache partial data.
-//
-// The scrape is detached from the request context and given a hard cap, so a
-// client disconnect no longer aborts the upstream work or loses an otherwise
-// complete cache write. Concurrent requests for the same gallery share one
-// scrape and each streams the already-scraped prefix immediately, so a request
-// that joins mid-scrape renders progressively instead of blocking.
-func (s *Server) handleGalleryPages(c *gin.Context) {
-	galleryID, token, ok := parseGalleryIDToken(c)
-	if !ok {
-		return
-	}
-
-	idParam := c.Param("id")
-
-	// Serve a recently verified cached list immediately instead of re-scraping
-	// every page. Stale or missing rows fall through to the live stream.
-	if db := s.cacheDB(); db != nil {
-		if row, found, err := gallerycache.Get(c.Request.Context(), db, galleryID, token); err != nil {
-			slog.Warn("gallery cache read failed", "id", galleryID, "error", err)
-		} else if found && len(row.Pages) > 0 && cacheFresh(row.PagesFetchedAt, ttl.GalleryPages) {
-			if replayErr := replayGalleryPages(c, idParam, token, len(row.Pages), row.Pages, row.Thumbnails); replayErr != nil {
-				slog.Warn("gallery pages cache replay failed", "id", galleryID, "error", replayErr)
-			}
-			return
-		}
-	}
-
+// streamGalleryPagesNDJSON writes the NDJSON page stream to c using run to
+// produce the pages. It is shared by the online endpoint and the cache
+// read-through path; only run differs (the online run never writes the cache).
+// The response is committed only after the first batch arrives, so a failure
+// before that still returns a plain 502. A client disconnect is swallowed so a
+// cache-filling drain still reaches completion and can write.
+func streamGalleryPagesNDJSON(
+	c *gin.Context,
+	idParam, token string,
+	run func(ctx context.Context, emit func(total int, pageURLs []string, thumbnails []model.GalleryPageThumb) error) (int, error),
+) {
 	started := false
 	clientGone := false
 
@@ -557,8 +549,6 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 			return nil
 		}
 		if err := writeNDJSONLine(c, line); err != nil {
-			// The client went away; the shared scrape (and cache write)
-			// continues for the other subscribers.
 			clientGone = true
 			return nil
 		}
@@ -575,12 +565,7 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 			c.Header("X-Accel-Buffering", "no")
 			c.Status(http.StatusOK)
 			started = true
-			if writeErr := writeLine(galleryPagesLine{
-				Type:  "meta",
-				ID:    idParam,
-				Token: token,
-				Total: &total,
-			}); writeErr != nil {
+			if writeErr := writeLine(galleryPagesLine{Type: "meta", ID: idParam, Token: token, Total: &total}); writeErr != nil {
 				return writeErr
 			}
 		}
@@ -603,11 +588,10 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 	}
 
 	// Drain on a background context: a vanished client is handled by writeLine
-	// swallowing write errors, and the subscriber must keep following the walk
-	// so the terminal line is written and the detached scrape is never cut
-	// loose early. (Thumbnail resolves, by contrast, drain on their request
-	// context so an abandoned request stops waiting.)
-	count, err := s.scrapeGalleryPages(context.Background(), galleryID, token, emit)
+	// swallowing write errors, and a cache subscriber must keep following the
+	// walk so the terminal line is written and the detached scrape is never cut
+	// loose early.
+	count, err := run(context.Background(), emit)
 
 	if !started {
 		// Nothing was streamed. Surface the scrape failure as a plain 502 so
@@ -616,44 +600,63 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		// Headers are already on the wire: report the failure as a terminal
-		// error line (the client discards what it received) and cache nothing.
-		slog.Warn("gallery pages stream failed", "id", galleryID, "error", err)
+		slog.Warn("gallery pages stream failed", "id", idParam, "error", err)
 		_ = writeLine(galleryPagesLine{Type: "error", Error: fmt.Sprintf("fetch gallery pages failed: %v", err)})
 		return
 	}
-
-	// The complete list has already been cached by the detached scrape; the
-	// terminal line is written last so callers finalize immediately.
 	total := count
 	if writeErr := writeLine(galleryPagesLine{Type: "done", Total: &total}); writeErr != nil {
-		slog.Warn("gallery pages done write failed", "id", galleryID, "error", writeErr)
+		slog.Warn("gallery pages done write failed", "id", idParam, "error", writeErr)
 	}
 }
 
-// ==================== Offline cache endpoints ====================
+// handleGalleryPages is the online page endpoint: it always scrapes upstream
+// (via the shared, side-effect-free walk) and never reads or writes the cache.
+func (s *Server) handleGalleryPages(c *gin.Context) {
+	galleryID, token, ok := parseGalleryIDToken(c)
+	if !ok {
+		return
+	}
+	idParam := c.Param("id")
+	streamGalleryPagesNDJSON(c, idParam, token, func(ctx context.Context, emit func(int, []string, []model.GalleryPageThumb) error) (int, error) {
+		return s.scrapeGalleryPages(ctx, galleryID, token, emit)
+	})
+}
+
+// ==================== Cache (read-through) endpoints ====================
 //
-// These read straight from gallery_cache. They never touch the upstream and
-// never retry; the frontend orchestrates the fallback and retries.
+// These are the read-through cache: a hit is served from gallery_cache, a miss
+// fetches upstream and backfills. The online endpoints stay fresh and never
+// write, so every cache write flows through here or a background refresher.
 
 func (s *Server) handleCachedGallery(c *gin.Context) {
 	id, token, ok := parseGalleryIDToken(c)
 	if !ok || s.cacheUnavailable(c) {
 		return
 	}
+	ctx := c.Request.Context()
 
-	row, found, err := gallerycache.Get(c.Request.Context(), s.cacheDB(), id, token)
+	if row, found, err := gallerycache.Get(ctx, s.cacheDB(), id, token); err != nil {
+		slog.Warn("gallery cache read failed", "id", id, "error", err)
+	} else if found && row.Title != "" {
+		c.Header("Cache-Control", "no-store")
+		c.JSON(http.StatusOK, galleryFromCache(row))
+		return
+	}
+
+	meta, err := exhentai.PostGalleryMetadata(ctx, s.Client, id, token)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("read gallery cache failed: %v", err)})
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
 	}
-	if !found || row.Title == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "no cached gallery metadata"})
-		return
+	gallery := model.ConvertMetadataToGallery(meta)
+	if db := s.cacheDB(); db != nil {
+		if cacheErr := gallerycache.UpsertMeta(ctx, db, id, token, cacheMetaFromGallery(gallery)); cacheErr != nil {
+			slog.Warn("gallery cache meta upsert failed", "id", id, "error", cacheErr)
+		}
 	}
-
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, galleryFromCache(row))
+	c.JSON(http.StatusOK, gallery)
 }
 
 func (s *Server) handleCachedGalleryDetails(c *gin.Context) {
@@ -661,19 +664,32 @@ func (s *Server) handleCachedGalleryDetails(c *gin.Context) {
 	if !ok || s.cacheUnavailable(c) {
 		return
 	}
+	ctx := c.Request.Context()
 
-	row, found, err := gallerycache.Get(c.Request.Context(), s.cacheDB(), id, token)
+	// A details hit requires that details were actually scraped at least once
+	// (DetailsFetchedAt is a completeness flag here, not a TTL); a metadata-only
+	// row falls through and reads through upstream.
+	if row, found, err := gallerycache.Get(ctx, s.cacheDB(), id, token); err != nil {
+		slog.Warn("gallery cache read failed", "id", id, "error", err)
+	} else if found && row.Title != "" && row.DetailsFetchedAt != nil {
+		c.Header("Cache-Control", "no-store")
+		c.JSON(http.StatusOK, galleryDetailsFromCache(row))
+		return
+	}
+
+	u := exhentai.GalleryURL(c.Param("id"), token)
+	details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("read gallery cache failed: %v", err)})
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
 		return
 	}
-	if !found || row.Title == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "no cached gallery details"})
-		return
+	if db := s.cacheDB(); db != nil {
+		if cacheErr := gallerycache.UpsertDetails(ctx, db, id, token, cacheMetaFromDetails(details)); cacheErr != nil {
+			slog.Warn("gallery cache details upsert failed", "id", id, "error", cacheErr)
+		}
 	}
-
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, galleryDetailsFromCache(row))
+	c.JSON(http.StatusOK, galleryDetailsJSON(details))
 }
 
 func (s *Server) handleCachedGalleryPages(c *gin.Context) {
@@ -681,38 +697,56 @@ func (s *Server) handleCachedGalleryPages(c *gin.Context) {
 	if !ok || s.cacheUnavailable(c) {
 		return
 	}
+	ctx := c.Request.Context()
 
-	row, found, err := gallerycache.Get(c.Request.Context(), s.cacheDB(), id, token)
+	row, found, err := gallerycache.Get(ctx, s.cacheDB(), id, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("read gallery cache failed: %v", err)})
 		return
 	}
-	if !found || len(row.Pages) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "no cached pages"})
+	if found && len(row.Pages) > 0 {
+		if replayErr := replayGalleryPages(c, c.Param("id"), token, len(row.Pages), row.Pages, row.Thumbnails); replayErr != nil {
+			slog.Warn("cached gallery pages replay failed", "id", id, "error", replayErr)
+		}
+		// Serve immediately, then verify the upstream page count in the
+		// background (stale-while-revalidate): a gallery that gained or lost
+		// pages is replaced without blocking the hit.
+		go s.verifyCachedPageCount(id, token, len(row.Pages))
 		return
 	}
 
-	pages := make([]galleryPagesLine, len(row.Pages))
-	for i, pageURL := range row.Pages {
-		index := i
-		thumb := model.GalleryPageThumb{}
-		if i < len(row.Thumbnails) {
-			thumb = row.Thumbnails[i]
-		}
-		pages[i] = galleryPagesLine{
-			Type:      "page",
-			PageURL:   pageURL,
-			Index:     &index,
-			Thumbnail: thumbPtr(thumb),
-		}
-	}
+	// Miss: stream upstream and backfill on a complete walk.
+	streamGalleryPagesNDJSON(c, c.Param("id"), token, func(ctx context.Context, emit func(int, []string, []model.GalleryPageThumb) error) (int, error) {
+		return s.scrapeAndCache(ctx, id, token, emit)
+	})
+}
 
-	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, gin.H{
-		"id":    c.Param("id"),
-		"token": token,
-		"total": len(row.Pages),
-		"pages": pages,
+// verifyCachedPageCount is the background stale-while-revalidate probe: it
+// fetches only the gallery's ".gpc" total and, when it no longer matches the
+// cached page count, runs a full cache-fill walk. Concurrent probes for the
+// same gallery collapse via galleryPagesFillGroup.
+func (s *Server) verifyCachedPageCount(galleryID int64, token string, cached int) {
+	if s.cacheDB() == nil || s.Client == nil {
+		return
+	}
+	key := fmt.Sprintf("%d:%s", galleryID, token)
+	galleryPagesFillGroup.Do(key, func() (any, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
+		total, err := exhentai.ScrapeGalleryTotal(ctx, s.Client, u)
+		if err != nil {
+			slog.Debug("cached page-count check failed", "id", galleryID, "error", err)
+			return nil, nil
+		}
+		if total == cached {
+			return nil, nil
+		}
+		slog.Info("cached page count changed; refreshing", "id", galleryID, "cached", cached, "upstream", total)
+		if _, err := s.scrapeAndCache(ctx, galleryID, token, nil); err != nil {
+			slog.Warn("cached page-count refresh failed", "id", galleryID, "error", err)
+		}
+		return nil, nil
 	})
 }
 

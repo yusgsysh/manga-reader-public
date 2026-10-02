@@ -37,6 +37,22 @@ func Get(ctx context.Context, client *ent.Client, galleryID int64, token string)
 	return row, true, nil
 }
 
+// GetByGalleryID returns the cached row for a gallery id. It is used to map a
+// failed cached page URL (which only carries the gallery id) back to the row so
+// the cache can be refreshed. Returns found=false when no row exists.
+func GetByGalleryID(ctx context.Context, client *ent.Client, galleryID int64) (*ent.GalleryCache, bool, error) {
+	row, err := client.GalleryCache.Query().
+		Where(gallerycache.GalleryID(galleryID)).
+		First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	return row, true, nil
+}
+
 // GetMany returns the cached rows for the given refs, keyed by ref.
 func GetMany(ctx context.Context, client *ent.Client, refs []Ref) (map[Ref]*ent.GalleryCache, error) {
 	result := make(map[Ref]*ent.GalleryCache, len(refs))
@@ -225,10 +241,7 @@ func countThumbnails(thumbnails []model.GalleryPageThumb) int {
 // result never shrinks, so a shorter (partial) scrape cannot truncate the
 // cache.
 func mergeStrings(stored, incoming []string) []string {
-	n := len(stored)
-	if len(incoming) > n {
-		n = len(incoming)
-	}
+	n := max(len(incoming), len(stored))
 	merged := make([]string, n)
 	copy(merged, stored)
 	for i, v := range incoming {
@@ -244,10 +257,7 @@ func mergeStrings(stored, incoming []string) []string {
 // SpriteURL replaces the stored geometry at the same index; empty entries leave
 // the stored value untouched. The result never shrinks.
 func mergeThumbs(stored, incoming []model.GalleryPageThumb, limit int) []model.GalleryPageThumb {
-	n := len(incoming)
-	if n > limit {
-		n = limit
-	}
+	n := min(len(incoming), limit)
 	if n < len(stored) {
 		n = len(stored)
 	}
@@ -317,4 +327,50 @@ func UpsertThumbnails(ctx context.Context, client *ent.Client, galleryID int64, 
 		}
 	}
 	return update.Exec(ctx)
+}
+
+// ReplacePages overwrites the cached page URL list wholesale, allowing it to
+// grow or shrink. It is the authoritative write for a verified walk (cache
+// read-through, page-count change, image-failure recovery), where merging would
+// leave stale trailing entries behind after the gallery shrinks.
+func ReplacePages(ctx context.Context, client *ent.Client, galleryID int64, token string, pageURLs []string) error {
+	existing, found, err := Get(ctx, client, galleryID, token)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	if !found {
+		return client.GalleryCache.Create().
+			SetGalleryID(galleryID).
+			SetToken(token).
+			SetPages(pageURLs).
+			SetPagesFetchedAt(now).
+			Exec(ctx)
+	}
+	return client.GalleryCache.UpdateOneID(existing.ID).
+		SetPages(pageURLs).
+		SetPagesFetchedAt(now).
+		Exec(ctx)
+}
+
+// ReplaceThumbnails overwrites the cached thumbnail geometry wholesale and
+// stamps thumbnail_fetched_at. Like ReplacePages it allows the list to shrink.
+func ReplaceThumbnails(ctx context.Context, client *ent.Client, galleryID int64, token string, thumbnails []model.GalleryPageThumb) error {
+	existing, found, err := Get(ctx, client, galleryID, token)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	if !found {
+		return client.GalleryCache.Create().
+			SetGalleryID(galleryID).
+			SetToken(token).
+			SetThumbnails(thumbnails).
+			SetThumbnailFetchedAt(now).
+			Exec(ctx)
+	}
+	return client.GalleryCache.UpdateOneID(existing.ID).
+		SetThumbnails(thumbnails).
+		SetThumbnailFetchedAt(now).
+		Exec(ctx)
 }

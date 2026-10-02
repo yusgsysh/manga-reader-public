@@ -47,8 +47,9 @@ func (s *Server) prefetchGallery(galleryID int64, token string, seed *model.Gall
 		u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
 
 		// Shares the in-flight scrape with the streaming /pages handler so a
-		// gallery is never fetched from upstream twice at the same time.
-		if _, scrapeErr := s.scrapeGalleryPages(ctx, galleryID, token, nil); scrapeErr != nil {
+		// gallery is never fetched from upstream twice at the same time, and
+		// persists the verified list (the walk itself has no cache side effect).
+		if _, scrapeErr := s.scrapeAndCache(ctx, galleryID, token, nil); scrapeErr != nil {
 			slog.Debug("gallery prefetch pages failed", "id", galleryID, "error", scrapeErr)
 		}
 

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-apperrors "manga-reader/internal/errors"
+	apperrors "manga-reader/internal/errors"
 )
 
 var (
@@ -71,8 +71,7 @@ func ToAppError(err error) *apperrors.AppError {
 		return nil
 	}
 
-	var appErr *apperrors.AppError
-	if errors.As(err, &appErr) {
+	if appErr, ok := errors.AsType[*apperrors.AppError](err); ok {
 		return appErr
 	}
 

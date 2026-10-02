@@ -4,13 +4,6 @@ import type { GalleryPagesResponse } from "../types/reader";
 
 const BASE = "http://localhost:8080";
 
-const pages: GalleryPagesResponse = {
-  id: "123",
-  token: "tok",
-  total: 1,
-  pages: [{ page_url: "https://exhentai.org/s/a/1", index: 0 }],
-};
-
 const fetchMock = vi.fn();
 const originalFetch = globalThis.fetch;
 
@@ -274,11 +267,16 @@ describe("fetchGalleryPagesWithFallback", () => {
   it("falls back to the cached page list when the live endpoint fails", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ error: "upstream down" }, 502))
-      .mockResolvedValueOnce(jsonResponse(pages));
+      .mockResolvedValueOnce(ndjsonResponse(meta(1), page(0), done(1)));
 
     const result = await fetchGalleryPagesWithFallback(123, "tok");
 
-    expect(result).toEqual(pages);
+    expect(result).toEqual({
+      id: "123",
+      token: "tok",
+      total: 1,
+      pages: [expectedPage(0)],
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1][0]).toBe(
       `${BASE}/api/gallery-cache/123/tok/pages`,
@@ -294,11 +292,16 @@ describe("fetchGalleryPagesWithFallback", () => {
           { type: "error", error: "fetch gallery pages failed: gave up" },
         ),
       )
-      .mockResolvedValueOnce(jsonResponse(pages));
+      .mockResolvedValueOnce(ndjsonResponse(meta(1), page(0), done(1)));
 
     const result = await fetchGalleryPagesWithFallback(123, "tok");
 
-    expect(result).toEqual(pages);
+    expect(result).toEqual({
+      id: "123",
+      token: "tok",
+      total: 1,
+      pages: [expectedPage(0)],
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1][0]).toBe(
       `${BASE}/api/gallery-cache/123/tok/pages`,

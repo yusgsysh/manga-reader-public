@@ -64,7 +64,7 @@ func (t *failPaginatedTransport) RoundTrip(req *http.Request) (*http.Response, e
 
 func seedGalleryCache(t *testing.T, client *ent.Client, id int64, token string) {
 	t.Helper()
-	if err := gallerycache.UpsertMeta(t.Context(), client, id, token, model.GalleryCacheSnapshot{
+	if err := gallerycache.UpsertDetails(t.Context(), client, id, token, model.GalleryCacheSnapshot{
 		Title:       "Cached Gallery",
 		TitleJPN:    "キャッシュ",
 		Category:    string(model.CategoryManga),
@@ -90,9 +90,9 @@ func seedGalleryCache(t *testing.T, client *ent.Client, id int64, token string) 
 	}
 }
 
-// ==================== Online endpoints: write cache, no fallback ====================
+// ==================== Online endpoints: no cache side effects ====================
 
-func TestGalleryPages_WritesCache(t *testing.T) {
+func TestGalleryPages_OnlineDoesNotWriteCache(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, mockGalleryDetailHTML(12345, "Pages Test", 3))
@@ -114,6 +114,38 @@ func TestGalleryPages_WritesCache(t *testing.T) {
 		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
 	}
 
+	// The online endpoint always scrapes upstream and never writes the cache.
+	if _, found, err := gallerycache.Get(t.Context(), client, 12345, "tok12345"); err != nil || found {
+		t.Fatalf("online /pages must not write cache: found=%v err=%v", found, err)
+	}
+}
+
+func TestCachedGalleryPages_MissWritesCache(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryDetailHTML(12345, "Pages Test", 3))
+	})
+	defer mockServer.Close()
+
+	client := newTestDB(t)
+	server := &Server{
+		Client: newMockClient(mockServer.URL),
+		DB:     &database.DB{Client: client},
+	}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/gallery-cache/12345/tok12345/pages", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+	stream := parsePagesStream(t, w.Body.Bytes())
+	if !stream.Done || len(stream.PageURLs) != 3 {
+		t.Fatalf("stream done=%v pages=%d, want done with 3", stream.Done, len(stream.PageURLs))
+	}
+
 	row, found, err := gallerycache.Get(t.Context(), client, 12345, "tok12345")
 	if err != nil || !found {
 		t.Fatalf("cache lookup: found=%v err=%v", found, err)
@@ -126,24 +158,24 @@ func TestGalleryPages_WritesCache(t *testing.T) {
 	}
 }
 
-func TestGalleryPages_FreshCacheServedWithoutUpstream(t *testing.T) {
+func TestCachedGalleryPages_HitServedWithoutUpstream(t *testing.T) {
 	client := newTestDB(t)
 	seedGalleryCache(t, client, 12345, "tok12345")
 
-	// errorClient makes any upstream call fail; a fresh cached list must still
-	// be served.
+	// errorClient makes any upstream call fail; a cache hit must still be
+	// served without touching upstream.
 	server := &Server{
 		Client: errorClient(),
 		DB:     &database.DB{Client: client},
 	}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345/pages", nil)
+	req := httptest.NewRequest("GET", "/api/gallery-cache/12345/tok12345/pages", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (fresh cache). body: %s", w.Code, w.Body.String())
+		t.Fatalf("status = %d, want 200 (cache hit). body: %s", w.Code, w.Body.String())
 	}
 	stream := parsePagesStream(t, w.Body.Bytes())
 	if !stream.Done || len(stream.PageURLs) != 2 {
@@ -359,7 +391,7 @@ func TestGalleryPages_CacheSurvivesClientDisconnect(t *testing.T) {
 	}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/gallery/12345/tok12345/pages", nil)
+	req := httptest.NewRequest("GET", "/api/gallery-cache/12345/tok12345/pages", nil)
 	ctx, cancel := context.WithCancel(req.Context())
 	defer cancel()
 	req = req.WithContext(ctx)
@@ -415,7 +447,7 @@ func TestGalleryPages_MultiBatchWriteFailureStillCaches(t *testing.T) {
 	}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/gallery/91001/tok91001/pages", nil)
+	req := httptest.NewRequest("GET", "/api/gallery-cache/91001/tok91001/pages", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(&failWritesResponseWriter{ResponseWriter: w}, req)
 
@@ -530,12 +562,10 @@ func TestGalleryPages_FollowerStreamsBeforeScrapeCompletes(t *testing.T) {
 
 	var wg sync.WaitGroup
 	leaderW := httptest.NewRecorder()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		req := httptest.NewRequest("GET", "/api/gallery/91003/tok91003/pages", nil)
 		r.ServeHTTP(leaderW, req)
-	}()
+	})
 
 	select {
 	case <-firstServed:
@@ -548,12 +578,10 @@ func TestGalleryPages_FollowerStreamsBeforeScrapeCompletes(t *testing.T) {
 	followerGotPage := make(chan struct{})
 	followerW := httptest.NewRecorder()
 	fw := &signalOnWrite{ResponseWriter: followerW, marker: `"index":0`, ch: followerGotPage}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		req := httptest.NewRequest("GET", "/api/gallery/91003/tok91003/pages", nil)
 		r.ServeHTTP(fw, req)
-	}()
+	})
 
 	select {
 	case <-followerGotPage:
@@ -682,10 +710,12 @@ func TestPagesHub_AcquireAfterFinishStartsFresh(t *testing.T) {
 	}
 }
 
-func TestGetGallery_FreshCacheServedWithoutUpstream(t *testing.T) {
+func TestGetGallery_OnlineIgnoresCache(t *testing.T) {
 	client := newTestDB(t)
 	seedGalleryCache(t, client, 12345, "tok12345")
 
+	// The online metadata endpoint always scrapes upstream; a populated cache
+	// must not short-circuit it.
 	server := &Server{
 		Client: errorClient(),
 		DB:     &database.DB{Client: client},
@@ -696,15 +726,8 @@ func TestGetGallery_FreshCacheServedWithoutUpstream(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (fresh cache). body: %s", w.Code, w.Body.String())
-	}
-	var gallery model.Gallery
-	if err := json.Unmarshal(w.Body.Bytes(), &gallery); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if gallery.Title != "Cached Gallery" {
-		t.Errorf("title = %q, want Cached Gallery", gallery.Title)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502 (online ignores cache). body: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -763,36 +786,30 @@ func TestCachedGalleryPages_Hit(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
 	}
-	var resp struct {
-		Total int `json:"total"`
-		Pages []struct {
-			PageURL   string                 `json:"page_url"`
-			Index     int                    `json:"index"`
-			Thumbnail model.GalleryPageThumb `json:"thumbnail"`
-		} `json:"pages"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if resp.Total != 2 || len(resp.Pages) != 2 {
-		t.Errorf("pages = %d (total %d), want 2", len(resp.Pages), resp.Total)
+	stream := parsePagesStream(t, w.Body.Bytes())
+	if !stream.Done || len(stream.PageURLs) != 2 {
+		t.Fatalf("pages = %d done=%v, want done with 2", len(stream.PageURLs), stream.Done)
 	}
 	if got := w.Header().Get("Cache-Control"); got != "no-store" {
 		t.Errorf("Cache-Control = %q, want no-store", got)
 	}
 }
 
-func TestCachedGalleryPages_Miss(t *testing.T) {
+func TestCachedGalleryPages_MissUpstreamFailure(t *testing.T) {
 	client := newTestDB(t)
-	server := &Server{DB: &database.DB{Client: client}}
+	server := &Server{
+		Client: errorClient(),
+		DB:     &database.DB{Client: client},
+	}
 	r := setupMockRouter(server)
 
+	// A miss reads through upstream; when that fails the request returns 502.
 	req := httptest.NewRequest("GET", "/api/gallery-cache/12345/tok12345/pages", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", w.Code)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", w.Code)
 	}
 }
 
@@ -861,17 +878,20 @@ func TestCachedGalleryDetails(t *testing.T) {
 	}
 }
 
-func TestCachedGallery_Miss(t *testing.T) {
+func TestCachedGallery_MissUpstreamFailure(t *testing.T) {
 	client := newTestDB(t)
-	server := &Server{DB: &database.DB{Client: client}}
+	server := &Server{
+		Client: errorClient(),
+		DB:     &database.DB{Client: client},
+	}
 	r := setupMockRouter(server)
 
 	req := httptest.NewRequest("GET", "/api/gallery-cache/12345/tok12345", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", w.Code)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", w.Code)
 	}
 }
 
@@ -1068,6 +1088,97 @@ func TestUpsertThumbnails_NoPagesIsNoop(t *testing.T) {
 	}
 	if _, found, err := gallerycache.Get(ctx, client, 9003, "tok"); err != nil || found {
 		t.Errorf("upsert without pages must not create a row: found=%v err=%v", found, err)
+	}
+}
+
+func TestReplacePages_Shrinks(t *testing.T) {
+	client := newTestDB(t)
+	ctx := t.Context()
+
+	if err := gallerycache.UpsertPages(ctx, client, 9004, "tok", []string{"a", "b", "c"}); err != nil {
+		t.Fatalf("seed pages: %v", err)
+	}
+	if err := gallerycache.ReplacePages(ctx, client, 9004, "tok", []string{"x", "y"}); err != nil {
+		t.Fatalf("replace pages: %v", err)
+	}
+
+	row, found, err := gallerycache.Get(ctx, client, 9004, "tok")
+	if err != nil || !found {
+		t.Fatalf("cache lookup: found=%v err=%v", found, err)
+	}
+	if len(row.Pages) != 2 || row.Pages[0] != "x" || row.Pages[1] != "y" {
+		t.Errorf("pages = %v, want [x y] (shrunk)", row.Pages)
+	}
+}
+
+func TestGetByGalleryID(t *testing.T) {
+	client := newTestDB(t)
+	ctx := t.Context()
+
+	if err := gallerycache.UpsertMeta(ctx, client, 9100, "tokg", model.GalleryCacheSnapshot{Title: "By ID"}); err != nil {
+		t.Fatalf("seed meta: %v", err)
+	}
+	row, found, err := gallerycache.GetByGalleryID(ctx, client, 9100)
+	if err != nil || !found {
+		t.Fatalf("GetByGalleryID: found=%v err=%v", found, err)
+	}
+	if row.Token != "tokg" {
+		t.Errorf("token = %q, want tokg", row.Token)
+	}
+	if _, found, err := gallerycache.GetByGalleryID(ctx, client, 424242); err != nil || found {
+		t.Errorf("missing gallery: found=%v err=%v, want false/nil", found, err)
+	}
+}
+
+// refreshPages is the cache-fill path used by the page-count check and image
+// self-heal: it replaces the cached list wholesale, so a gallery that lost
+// pages shrinks instead of keeping stale trailing entries.
+func TestRefreshPages_Shrinks(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryDetailHTML(12345, "Shorter", 2))
+	})
+	defer mockServer.Close()
+
+	client := newTestDB(t)
+	if err := gallerycache.UpsertPages(t.Context(), client, 12345, "tok12345",
+		[]string{"a", "b", "c", "d", "e"}); err != nil {
+		t.Fatalf("seed pages: %v", err)
+	}
+
+	server := &Server{Client: newMockClient(mockServer.URL), DB: &database.DB{Client: client}}
+	server.refreshPages(12345, "tok12345")
+
+	row, found, err := gallerycache.Get(t.Context(), client, 12345, "tok12345")
+	if err != nil || !found {
+		t.Fatalf("cache lookup: found=%v err=%v", found, err)
+	}
+	if len(row.Pages) != 2 {
+		t.Errorf("pages = %d, want 2 (replaced)", len(row.Pages))
+	}
+}
+
+// verifyCachedPageCount is the stale-while-revalidate probe: when upstream's
+// ".gpc" total no longer matches the cached count it refreshes the list.
+func TestVerifyCachedPageCount_RefreshesOnChange(t *testing.T) {
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryDetailHTML(12345, "Changed", 4))
+	})
+	defer mockServer.Close()
+
+	client := newTestDB(t)
+	seedGalleryCache(t, client, 12345, "tok12345") // cached 2 pages
+
+	server := &Server{Client: newMockClient(mockServer.URL), DB: &database.DB{Client: client}}
+	server.verifyCachedPageCount(12345, "tok12345", 2)
+
+	row, found, err := gallerycache.Get(t.Context(), client, 12345, "tok12345")
+	if err != nil || !found {
+		t.Fatalf("cache lookup: found=%v err=%v", found, err)
+	}
+	if len(row.Pages) != 4 {
+		t.Errorf("pages = %d, want 4 (refreshed on count change)", len(row.Pages))
 	}
 }
 

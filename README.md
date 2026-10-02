@@ -160,14 +160,29 @@ Schema 文件：
 
 缩略图缓存 Key 为 `thumbnail/<sha256(完整 URL)>`，与页面图片缓存（`images/`）相互独立。`/api/image/page-thumbnail` 与 `/api/image-cache/page-thumbnail` 支持两种寻址：`url`+`x/y/w/h`，或 `id`+`token`+`index`；精灵图缓存 Key 为 `sprite/<sha256(精灵图 URL)>`，裁剪结果不持久化，每次请求基于缓存的精灵图现场裁剪。
 
-### 缓存与过期时间（TTL）
+### 缓存模型（无 TTL + read-through）
 
-所有后端缓存寿命统一集中在 `backend/internal/ttl`（单一来源），前端 react-query 的 `staleTime` 集中在 `frontend/src/lib/cacheConfig.ts`。
+后端缓存**没有 TTL**：`gallery_cache` 一旦写入就被永久信任，命中即返回，不再按时间回源。
+
+- **在线端点**（`/api/gallery/*`）：**每次回源上游**，只读不写缓存 —— 保证在线时永远是最新数据。
+- **缓存端点**（`/api/gallery-cache/*`）：**read-through** —— 命中直接返回（`/pages` 以与在线一致的 NDJSON 流回放），未命中则流式回源，完整成功后整份回填。
+- **图片**统一走 `/api/image-cache/*`。
+
+缓存只在以下事件发生时更新：
+
+| 触发 | 动作 |
+|------|------|
+| 缓存端点 miss | 流式回源，完整成功后整份替换 `pages` + `thumbnails` |
+| 图片永久失败（旧 page URL 失效） | 从 URL 解析 gid → 按 `gallery_id` 反查 token → 后台整份刷新 |
+| 打开时 `.gpc` 页数变化 | 后台异步（SWR）比对总页数，变化则整份替换（允许缩短） |
+| 单页缩略图几何缺失 / 解析超时直抓 | 按 index 稀疏补洞 |
+
+页面 URL 与缩略图几何都支持**按 index 增量合并**（非空覆盖、空保留、不缩短）；页数变化时改为整份替换。`*_fetched_at` 仅作观测写入，不参与命中/刷新判定。
+
+前端图片加载失败时**直接失败、不自动重试**；失败已触发后端后台刷新，用户重新打开页面即可拿到新列表。
 
 | 层 | 项 | 值 | 说明 |
 |----|----|----|------|
-| 后端 `gallery_cache` | `meta_fetched_at` / `details_fetched_at` / `pages_fetched_at` | 30 分钟 | 在线端点在此窗口内直接回放缓存，过期回源 |
-| 后端 `gallery_cache` | `thumbnail_fetched_at` | 6 小时 | 页面缩略图几何独立窗口，过期后由索引解析回填 |
 | 后端 | ExHentai listing cursor | 10 分钟 | 内存中的下一页游标 |
 | HTTP | live 图片代理（`/api/image/*`） | `max-age=3600` | `Cache-Control` |
 | HTTP | MinIO 内容寻址图片（`/api/image-cache/*`） | `max-age=31536000, immutable` | `Cache-Control` |
@@ -175,7 +190,7 @@ Schema 文件：
 | MinIO | 页面图片对象 | 约 30 天 | 由 MinIO bucket 生命周期策略控制，非代码常量 |
 | 前端 | react-query `staleTime` | 见 `cacheConfig.ts` | 全局 30s；pages 10m；gallery / detail / search 5m；bookshelf / recently-read / list 2m；progress / prefill 30s；settings 0 |
 
-> 注：代码中另有一批**超时/预算**常量（如 `/pages` 抓取硬上限、缩略图解析超时、上游文档超时），它们限制单次操作的耗时，并非缓存 TTL。
+> 注：`backend/internal/ttl` 现在只保留 HTTP `Cache-Control` 与 listing cursor；代码中另有一批**超时/预算**常量（如 `/pages` 抓取硬上限、缩略图解析超时、上游文档超时），它们限制单次操作的耗时，并非缓存 TTL。
 
 ### 阅读记录清理
 

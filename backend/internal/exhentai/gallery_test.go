@@ -100,3 +100,47 @@ func TestScrapeGalleryPageThumb(t *testing.T) {
 		t.Error("index beyond total should not be found")
 	}
 }
+
+func TestPageURLGalleryID(t *testing.T) {
+	cases := []struct {
+		url string
+		id  int64
+		ok  bool
+	}{
+		{"https://exhentai.org/s/aaa/123-38", 123, true},
+		{"https://exhentai.org/s/bbb/999999-1", 999999, true},
+		{"https://exhentai.org/g/123/tok/", 0, false},
+		{"https://exhentai.org/s/aaa/notanumber-1", 0, false},
+		{"", 0, false},
+	}
+	for _, tc := range cases {
+		id, ok := PageURLGalleryID(tc.url)
+		if ok != tc.ok || id != tc.id {
+			t.Errorf("PageURLGalleryID(%q) = (%d, %v), want (%d, %v)", tc.url, id, ok, tc.id, tc.ok)
+		}
+	}
+}
+
+func TestScrapeGalleryTotal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<html><body><div class="gpc">Showing 1 - 40 of 123 images</div></body></html>`)
+	}))
+	t.Cleanup(srv.Close)
+
+	total, err := ScrapeGalleryTotal(t.Context(), srv.Client(), srv.URL+"/g/1/tok/")
+	if err != nil {
+		t.Fatalf("ScrapeGalleryTotal: %v", err)
+	}
+	if total != 123 {
+		t.Errorf("total = %d, want 123", total)
+	}
+
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<html><body>no counter</body></html>`)
+	}))
+	t.Cleanup(bad.Close)
+	if _, err := ScrapeGalleryTotal(t.Context(), bad.Client(), bad.URL+"/g/1/tok/"); err == nil {
+		t.Error("missing .gpc counter should error")
+	}
+}

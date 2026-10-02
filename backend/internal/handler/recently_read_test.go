@@ -212,7 +212,7 @@ func TestHandleRecentlyRead_Pagination(t *testing.T) {
 
 	const records = 30
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	for i := 0; i < records; i++ {
+	for i := range records {
 		insertProgressWithTimestamp(t, client, int64(1000+i), fmt.Sprintf("tok-%d", i), base.Add(time.Duration(i)*time.Minute))
 	}
 
