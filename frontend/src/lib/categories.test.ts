@@ -4,6 +4,8 @@ import {
   CATEGORY_META,
   categoryLabel,
   categoryPillStyle,
+  normalizeIncludedCategories,
+  toggleIncludedCategory,
 } from "./categories";
 
 describe("category metadata", () => {
@@ -17,15 +19,12 @@ describe("category metadata", () => {
     }
   });
 
-  it("uses the source poster colors", () => {
-    expect(categoryPillStyle("doujinshi").backgroundImage).toBe(
-      "radial-gradient(#fc4e4e, #f26f5f)",
-    );
-    expect(categoryPillStyle("doujinshi").borderColor).toBe("#fc4e4e");
-    expect(categoryPillStyle("image-set").backgroundImage).toBe(
-      "radial-gradient(#2756aa, #5f5fff)",
-    );
-    expect(categoryPillStyle("asianporn").borderColor).toBe("#b452a5");
+  it("uses the source category colors as a solid fill", () => {
+    expect(categoryPillStyle("doujinshi").backgroundColor).toBe("#fc4e4e");
+    expect(categoryPillStyle("manga").backgroundColor).toBe("#e78c1a");
+    expect(categoryPillStyle("image-set").backgroundColor).toBe("#2756aa");
+    expect(categoryPillStyle("asianporn").backgroundColor).toBe("#b452a5");
+    expect(categoryPillStyle("doujinshi").color).toBe("#ffffff");
   });
 
   it("resolves labels and falls back to Other", () => {
@@ -34,6 +33,26 @@ describe("category metadata", () => {
     expect(categoryLabel("image-set")).toBe("Image Set");
     expect(categoryLabel("unknown-cat")).toBe("Other");
     expect(categoryLabel(undefined)).toBe("Other");
+  });
+
+  it("normalizes included categories to source order, defaulting to all", () => {
+    expect(normalizeIncludedCategories(undefined)).toEqual(ALL_CATEGORY_VALUES);
+    expect(normalizeIncludedCategories([])).toEqual(ALL_CATEGORY_VALUES);
+    expect(normalizeIncludedCategories(["misc", "doujinshi"])).toEqual([
+      "doujinshi",
+      "misc",
+    ]);
+  });
+
+  it("toggles inclusion and never removes the last category", () => {
+    expect(toggleIncludedCategory([...ALL_CATEGORY_VALUES], "doujinshi")).toEqual(
+      ALL_CATEGORY_VALUES.filter((value) => value !== "doujinshi"),
+    );
+    expect(toggleIncludedCategory(["misc"], "doujinshi")).toEqual([
+      "doujinshi",
+      "misc",
+    ]);
+    expect(toggleIncludedCategory(["misc"], "misc")).toEqual(["misc"]);
   });
 
   it("lists all source categories in source order", () => {

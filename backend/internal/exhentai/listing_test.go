@@ -46,7 +46,7 @@ func TestScrapeGalleryList_SequentialPagesUseCachedCursor(t *testing.T) {
 	})
 
 	for page := range 4 {
-		results, _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", page, nil, nil)
+		results, _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", page, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("page %d: %v", page, err)
 		}
@@ -64,13 +64,13 @@ func TestScrapeGalleryList_RandomAccessWalksThenCaches(t *testing.T) {
 		return listingHTML(nextHref)
 	})
 
-	if _, _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 2, nil, nil); err != nil {
+	if _, _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 2, nil, nil, nil); err != nil {
 		t.Fatalf("page 2: %v", err)
 	}
 	if got := requests.Load(); got != 3 {
 		t.Errorf("after random page 2: requests = %d, want 3 (walk 0..2)", got)
 	}
-	if _, _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 3, nil, nil); err != nil {
+	if _, _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 3, nil, nil, nil); err != nil {
 		t.Fatalf("page 3: %v", err)
 	}
 	if got := requests.Load(); got != 4 {
@@ -193,7 +193,7 @@ func TestScrapeGalleryList_ForwardsNavParams(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	results, _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 0, nil, &ListingNavOptions{Jump: "3d"})
+	results, _, err := ScrapeGalleryList(t.Context(), srv.Client(), srv.URL+"/", 0, nil, nil, &ListingNavOptions{Jump: "3d"})
 	if err != nil {
 		t.Fatalf("ScrapeGalleryList: %v", err)
 	}

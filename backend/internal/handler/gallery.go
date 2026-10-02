@@ -870,9 +870,14 @@ func (s *Server) handleGalleryList(listURL string) gin.HandlerFunc {
 			return
 		}
 
+		var categories []string
+		if categoryStr := c.Query("categories"); categoryStr != "" {
+			categories = strings.Split(categoryStr, ",")
+		}
+
 		ctx := c.Request.Context()
 
-		results, nav, err := exhentai.ScrapeGalleryList(ctx, s.Client, listURL, page, opts, navOpts)
+		results, nav, err := exhentai.ScrapeGalleryList(ctx, s.Client, listURL, page, categories, opts, navOpts)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery list failed: %v", err)})
 			return

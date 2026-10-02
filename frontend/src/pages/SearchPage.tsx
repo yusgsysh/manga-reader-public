@@ -6,7 +6,7 @@ import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
 import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";
 import { JumpSeekPanel } from "../components/common/JumpSeekPanel";
-import { Input, Button, cn } from "@cloudflare/kumo";
+import { Input, Button } from "@cloudflare/kumo";
 import {
   MagnifyingGlass,
   CaretDown,
@@ -16,15 +16,15 @@ import { useState } from "react";
 import { PageHeader } from "../components/ui";
 import { AdvancedFilterFields } from "../components/search/AdvancedFilterFields";
 import { TagFilterInput } from "../components/search/TagFilterInput";
+import { CategoryFilter } from "../components/search/CategoryFilter";
 import {
-  CATEGORIES,
   ADVANCED_LABELS,
   parseAdvancedParams,
   isActiveValue,
   countActiveFilters,
 } from "../components/search/advancedSearch";
 import { FilterChip } from "../components/search/FilterChip";
-import { ALL_CATEGORY_VALUES, categoryPillStyle } from "../lib/categories";
+import { ALL_CATEGORY_VALUES } from "../lib/categories";
 import type {
   AdvancedSearchOptions,
   ListingNavOptions,
@@ -237,32 +237,17 @@ export function SearchPage() {
 
       {/* Filters */}
       <div className="card-surface p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-1.5">
-            {CATEGORIES.map((cat) => {
-              const active = includedCategories.includes(cat.value);
-              return (
-                <button
-                  key={cat.value}
-                  type="button"
-                  onClick={() => toggleCategory(cat.value)}
-                  aria-pressed={active}
-                  style={categoryPillStyle(cat.value)}
-                  className={cn(
-                    "rounded-[3px] border px-2.5 py-1 text-xs font-bold tracking-[1px] transition-opacity",
-                    active ? "" : "opacity-40 hover:opacity-60",
-                  )}
-                >
-                  {cat.label}
-                </button>
-              );
-            })}
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <CategoryFilter
+            included={includedCategories}
+            onToggle={toggleCategory}
+            className="min-w-0 flex-1"
+          />
 
           <button
             type="button"
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="flex items-center gap-2 text-sm font-medium text-kumo-subtle transition-colors hover:text-kumo-default"
+            className="flex shrink-0 items-center gap-2 text-sm font-medium text-kumo-subtle transition-colors hover:text-kumo-default"
           >
             {showAdvanced ? (
               <CaretUp className="size-4" weight="bold" />

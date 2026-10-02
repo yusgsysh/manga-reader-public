@@ -49,8 +49,8 @@ export function AdvancedFilterFields({
             layout === "responsive" && "sm:grid-cols-2",
           )}
         >
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-kumo-subtle">
+          <div className="space-y-3">
+            <label className="block text-xs font-medium text-kumo-subtle">
               页数范围
             </label>
             <div className="flex items-center gap-2">
@@ -87,8 +87,8 @@ export function AdvancedFilterFields({
               />
             </div>
           </div>
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-kumo-subtle">
+          <div className="space-y-3">
+            <label className="block text-xs font-medium text-kumo-subtle">
               最低评分
             </label>
             <Select

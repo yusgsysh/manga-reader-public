@@ -1482,6 +1482,35 @@ func TestMockGalleries_TagsParam(t *testing.T) {
 	}
 }
 
+func TestMockGalleries_CategoriesParam(t *testing.T) {
+	var requestedURL string
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		requestedURL = r.URL.String()
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryListHTML(1))
+	})
+	defer mockServer.Close()
+
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/galleries?categories=doujinshi", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	parsedURL, _ := url.Parse(requestedURL)
+	q := parsedURL.Query()
+
+	// doujinshi = 1<<1 = 2; f_cats is the complement (categories to exclude).
+	if got := q.Get("f_cats"); got != "1021" {
+		t.Errorf("f_cats = %q, want %q", got, "1021")
+	}
+}
+
 func TestMockWatched_NoAdvancedWhenEmptyOpts(t *testing.T) {
 	var requestedURL string
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {

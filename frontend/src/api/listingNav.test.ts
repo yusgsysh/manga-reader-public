@@ -106,4 +106,37 @@ describe("listing jump/seek parameters", () => {
     const url = lastUrl();
     expect(url.searchParams.has("tags")).toBe(false);
   });
+
+  it("forwards categories on the homepage list", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ page: 0, page_size: 0, results: [] }),
+    );
+
+    await fetchGalleries(0, { categories: ["doujinshi", "manga"] });
+
+    const url = lastUrl();
+    expect(url.searchParams.get("categories")).toBe("doujinshi,manga");
+  });
+
+  it("forwards categories on the watched list", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ page: 0, page_size: 0, results: [] }),
+    );
+
+    await fetchWatched(0, { categories: ["misc"] });
+
+    const url = lastUrl();
+    expect(url.searchParams.get("categories")).toBe("misc");
+  });
+
+  it("omits categories when the list is empty", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ page: 0, page_size: 0, results: [] }),
+    );
+
+    await fetchGalleries(0, { categories: [] });
+
+    const url = lastUrl();
+    expect(url.searchParams.has("categories")).toBe(false);
+  });
 });

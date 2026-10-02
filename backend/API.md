@@ -105,11 +105,11 @@ Search / Homepage / Watched 支持上游 ExHentai 的 Jump/Seek 定位，通过�
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | q | string | yes | - | Search keyword (空字符串返回全站) |
-| categories | string | no | - | 逗号分隔的分类，如 `"doujinshi,manga"` |
 | page | int | no | `0` | 页码 (0-indexed) |
 | seek | string | no | - | Jump/Seek: 定位到日期，如 `2020`、`2020-01`、`20-01-01` |
 | jump | string | no | - | Jump/Seek: 相对偏移，如 `3d`、`1w`、`6m`、`1y` |
 | tags | string | no | - | 逗号分隔的标签，如 `"female:yuri,full color"`，转换为 `tag:<tag>` |
+| categories | string | no | - | 逗号分隔的分类，如 `"doujinshi,manga"` |
 | min_pages | int | no | - | 最小页数 (>= 0) |
 | max_pages | int | no | - | 最大页数 (>= 0) |
 | min_rating | int | no | - | 最低评分: `2`, `3`, `4`, `5` |
@@ -449,6 +449,7 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 | seek | string | no | - | Jump/Seek: 定位到日期，如 `2020`、`2020-01` |
 | jump | string | no | - | Jump/Seek: 相对偏移，如 `3d`、`1w`、`6m`、`1y` |
 | tags | string | no | - | 逗号分隔的标签，如 `"female:yuri,full color"`，转换为 `tag:<tag>` |
+| categories | string | no | - | 逗号分隔的分类，如 `"doujinshi,manga"` |
 | min_pages | int | no | - | 最小页数 (>= 0) |
 | max_pages | int | no | - | 最大页数 (>= 0) |
 | min_rating | int | no | - | 最低评分: `2`, `3`, `4`, `5` |
@@ -515,6 +516,7 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 | seek | string | no | - | Jump/Seek: 定位到日期，如 `2020`、`2020-01` |
 | jump | string | no | - | Jump/Seek: 相对偏移，如 `3d`、`1w`、`6m`、`1y` |
 | tags | string | no | - | 逗号分隔的标签，如 `"female:yuri,full color"`，转换为 `tag:<tag>` |
+| categories | string | no | - | 逗号分隔的分类，如 `"doujinshi,manga"` |
 | min_pages | int | no | - | 最小页数 (>= 0) |
 | max_pages | int | no | - | 最大页数 (>= 0) |
 | min_rating | int | no | - | 最低评分: `2`, `3`, `4`, `5` |

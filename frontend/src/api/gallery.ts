@@ -20,6 +20,10 @@ function advancedToParams(filters?: GalleryListFilters) {
   if (!filters) return {};
   return {
     tags: filters.tags && filters.tags.length > 0 ? filters.tags.join(",") : undefined,
+    categories:
+      filters.categories && filters.categories.length > 0
+        ? filters.categories.join(",")
+        : undefined,
     min_pages: filters.min_pages,
     max_pages: filters.max_pages,
     min_rating: filters.min_rating,

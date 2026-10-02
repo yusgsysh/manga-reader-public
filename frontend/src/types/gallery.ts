@@ -75,6 +75,7 @@ export interface AdvancedSearchOptions {
 
 export interface GalleryListFilters extends AdvancedSearchOptions {
   tags?: string[];
+  categories?: string[];
 }
 
 export interface SearchParams extends AdvancedSearchOptions, ListingNavOptions {

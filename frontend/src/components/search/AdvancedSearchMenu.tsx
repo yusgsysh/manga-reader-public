@@ -1,10 +1,16 @@
 import { useState } from "react";
 import { Button, Popover } from "@cloudflare/kumo";
 import { Funnel } from "@phosphor-icons/react";
-import { IconButton } from "../ui";
+import { IconButton, Section } from "../ui";
 import { AdvancedFilterFields } from "./AdvancedFilterFields";
 import { TagFilterInput } from "./TagFilterInput";
+import { CategoryFilter } from "./CategoryFilter";
 import { countActiveFilters, pickAdvancedOptions } from "./advancedSearch";
+import {
+  ALL_CATEGORY_VALUES,
+  normalizeIncludedCategories,
+  toggleIncludedCategory,
+} from "../../lib/categories";
 import type {
   AdvancedSearchOptions,
   GalleryListFilters,
@@ -17,7 +23,12 @@ interface AdvancedSearchMenuProps {
 }
 
 function countFilters(filters: GalleryListFilters): number {
-  return countActiveFilters(filters) + (filters.tags?.length ?? 0);
+  const excluded =
+    ALL_CATEGORY_VALUES.length -
+    normalizeIncludedCategories(filters.categories).length;
+  return (
+    countActiveFilters(filters) + (filters.tags?.length ?? 0) + excluded
+  );
 }
 
 export function AdvancedSearchMenu({
@@ -30,11 +41,15 @@ export function AdvancedSearchMenu({
     () => pickAdvancedOptions(value),
   );
   const [pendingTags, setPendingTags] = useState<string[]>(value.tags ?? []);
+  const [pendingCategories, setPendingCategories] = useState<string[]>(() =>
+    normalizeIncludedCategories(value.categories),
+  );
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
       setPendingOptions(pickAdvancedOptions(value));
       setPendingTags(value.tags ?? []);
+      setPendingCategories(normalizeIncludedCategories(value.categories));
     }
     setOpen(next);
   };
@@ -57,6 +72,9 @@ export function AdvancedSearchMenu({
   const handleApply = () => {
     const next: GalleryListFilters = { ...pendingOptions };
     if (pendingTags.length > 0) next.tags = pendingTags;
+    if (pendingCategories.length < ALL_CATEGORY_VALUES.length) {
+      next.categories = pendingCategories;
+    }
     onApply(next);
     setOpen(false);
   };
@@ -64,6 +82,7 @@ export function AdvancedSearchMenu({
   const handleReset = () => {
     setPendingOptions({});
     setPendingTags([]);
+    setPendingCategories([...ALL_CATEGORY_VALUES]);
   };
 
   const activeCount = countFilters(value);
@@ -96,6 +115,18 @@ export function AdvancedSearchMenu({
         className="max-h-[70vh] w-[min(94vw,30rem)] overflow-y-auto p-4"
       >
         <div className="space-y-6">
+          <Section title="分类">
+            <CategoryFilter
+              included={pendingCategories}
+              onToggle={(category) =>
+                setPendingCategories((prev) =>
+                  toggleIncludedCategory(prev, category),
+                )
+              }
+              disabled={disabled}
+            />
+          </Section>
+
           <TagFilterInput
             pendingTags={pendingTags}
             onAddTag={(tag) => setPendingTags((prev) => [...prev, tag])}

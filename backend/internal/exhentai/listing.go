@@ -228,7 +228,7 @@ func fetchListingDoc(ctx context.Context, client *http.Client, firstURL string, 
 	return doc, nil
 }
 
-func ScrapeGalleryList(ctx context.Context, client *http.Client, listURL string, page int, opts *SearchOptions, navOpts *ListingNavOptions) (results []model.SearchResult, nav ListingNav, err error) {
+func ScrapeGalleryList(ctx context.Context, client *http.Client, listURL string, page int, categories []string, opts *SearchOptions, navOpts *ListingNavOptions) (results []model.SearchResult, nav ListingNav, err error) {
 	u, err := url.Parse(listURL)
 	if err != nil {
 		return nil, ListingNav{}, err
@@ -236,7 +236,7 @@ func ScrapeGalleryList(ctx context.Context, client *http.Client, listURL string,
 
 	existing := u.Query()
 	if opts != nil {
-		newParams := BuildSearchQuery("", nil, opts)
+		newParams := BuildSearchQuery("", categories, opts)
 		for k, vs := range newParams {
 			for _, v := range vs {
 				existing.Set(k, v)

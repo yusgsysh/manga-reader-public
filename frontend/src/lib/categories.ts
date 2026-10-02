@@ -50,16 +50,35 @@ export function categoryLabel(category?: string): string {
   return categoryMeta(category).label;
 }
 
-// Mirrors the source `.cs`/`.cn` pill: colored radial gradient with a same-hue
-// border, bold white text with a soft shadow.
+// Returns the included categories in source order. An empty/undefined list
+// means "all included" (ExHentai includes every category by default).
+export function normalizeIncludedCategories(
+  categories?: string[],
+): GalleryCategory[] {
+  if (!categories || categories.length === 0) return [...ALL_CATEGORY_VALUES];
+  const set = new Set(categories);
+  return ALL_CATEGORY_VALUES.filter((value) => set.has(value));
+}
+
+// Toggles one category's inclusion, keeping source order and never allowing
+// the last included category to be removed.
+export function toggleIncludedCategory(
+  included: string[],
+  category: string,
+): string[] {
+  const next = included.includes(category)
+    ? included.filter((value) => value !== category)
+    : [...included, category];
+  if (next.length === 0) return included;
+  return ALL_CATEGORY_VALUES.filter((value) => next.includes(value));
+}
+
+// Mirrors the source category color. The app keeps its own pill shape and
+// typography; only the fill color is taken from the source `.ct*` classes.
 export function categoryPillStyle(category?: string): CSSProperties {
   const meta = categoryMeta(category);
   return {
-    backgroundImage: `radial-gradient(${meta.from}, ${meta.to})`,
     backgroundColor: meta.from,
-    borderColor: meta.border,
-    color: "#f1f1f1",
-    textShadow: "2px 2px 3px rgba(0,0,0,.3)",
-    boxShadow: "0 1px 3px rgba(0,0,0,.3)",
+    color: "#ffffff",
   };
 }
