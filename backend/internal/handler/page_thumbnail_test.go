@@ -339,14 +339,17 @@ func TestPageThumbnail_Live_ByIndexOutOfRange(t *testing.T) {
 func TestCachedPageThumbnail_ByIndexUsesCachedGeometry(t *testing.T) {
 	client := newTestDB(t)
 	if err := gallerycache.UpsertPages(t.Context(), client, testGalleryIDInt, thumbToken,
-		[]string{"https://exhentai.org/s/a/1-1"},
+		[]string{"https://exhentai.org/s/a/1-1"}); err != nil {
+		t.Fatalf("seed pages: %v", err)
+	}
+	if err := gallerycache.UpsertThumbnails(t.Context(), client, testGalleryIDInt, thumbToken,
 		[]model.GalleryPageThumb{
 			{
 				SpriteURL: testSpriteURLTwo,
 				X:         0, Y: 0, Width: 4, Height: 4,
 			},
 		}); err != nil {
-		t.Fatalf("seed pages: %v", err)
+		t.Fatalf("seed thumbnails: %v", err)
 	}
 
 	sprite := makeTestSprite(t)
@@ -548,7 +551,7 @@ func TestCachedPageThumbnail_ByIndexWalkPopulatesCache(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 	for !backfilled && time.Now().Before(deadline) {
 		row, found, err := gallerycache.Get(t.Context(), db, 777002, token)
-		if err != nil || !found || len(row.Pages) != 2 {
+		if err != nil || !found || len(row.Pages) != 2 || len(row.Thumbnails) != 2 {
 			time.Sleep(20 * time.Millisecond)
 			continue
 		}

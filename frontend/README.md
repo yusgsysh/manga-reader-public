@@ -156,6 +156,19 @@ bun run build
 - SPA 路由靠 `try_files ... /index.html` 回退。
 - `db.text.js`（翻译库）同源加载，更新按钮仍从 GitHub 拉取。
 
+## 缓存与 staleTime
+
+react-query 的 `staleTime` 统一集中在 `src/lib/cacheConfig.ts`（与根 `README.md` 的「缓存与过期时间」对应）：
+
+| 场景 | 值 |
+|------|----|
+| 全局默认 | 30s |
+| pages | 10m |
+| gallery / gallery-detail / search / download-pages | 5m |
+| bookshelf / recently-read / gallery-list | 2m |
+| progress / prefill | 30s |
+| settings | 0 |
+
 ## 列表渲染
 
 首页 / 订阅 / 热门 / 搜索 / 书架 / 最近阅读等列表页统一使用：

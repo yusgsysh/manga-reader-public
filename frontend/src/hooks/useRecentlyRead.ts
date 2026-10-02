@@ -2,9 +2,8 @@ import { useMemo } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchRecentlyRead } from "../api/recentlyRead";
 import { cleanupReadingProgress } from "../api/progress";
+import { RECENTLY_READ_STALE_TIME } from "../lib/cacheConfig";
 import { whenProgressSavesSettled } from "../lib/progressSave";
-
-const RECENTLY_READ_STALE_TIME = 2 * 60_000;
 
 export function useRecentlyRead() {
   const listQuery = useInfiniteQuery({

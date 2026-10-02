@@ -5,6 +5,7 @@ package gallerycache
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"manga-reader/internal/ent"
@@ -218,15 +219,55 @@ func countThumbnails(thumbnails []model.GalleryPageThumb) int {
 	return n
 }
 
-// UpsertPages stores the page URLs and thumbnail geometries.
-// If the gallery already has pages, the incoming list replaces the stored one
-// only when it carries more thumbnail geometries (more entries in thumbnails).
-// pages are stable for a gallery; thumbnails were added later, so rows
-// cached before thumbnail support are refreshed when a scrape supplies the
-// richer data. A list with equal or fewer thumbnails never overwrites.
-// pages_fetched_at and thumbnail_fetched_at are always refreshed so the online
-// endpoint can treat a recently verified list as fresh.
-func UpsertPages(ctx context.Context, client *ent.Client, galleryID int64, token string, pageURLs []string, thumbnails []model.GalleryPageThumb) error {
+// mergeStrings merges incoming page URLs over the stored list index by index. A
+// non-empty incoming URL replaces the stored one at the same index; empty
+// entries leave the stored value untouched. New indices are appended. The
+// result never shrinks, so a shorter (partial) scrape cannot truncate the
+// cache.
+func mergeStrings(stored, incoming []string) []string {
+	n := len(stored)
+	if len(incoming) > n {
+		n = len(incoming)
+	}
+	merged := make([]string, n)
+	copy(merged, stored)
+	for i, v := range incoming {
+		if v != "" {
+			merged[i] = v
+		}
+	}
+	return merged
+}
+
+// mergeThumbs merges incoming thumbnail geometry over the stored list index by
+// index, capped at limit (the number of known pages). An entry with a non-empty
+// SpriteURL replaces the stored geometry at the same index; empty entries leave
+// the stored value untouched. The result never shrinks.
+func mergeThumbs(stored, incoming []model.GalleryPageThumb, limit int) []model.GalleryPageThumb {
+	n := len(incoming)
+	if n > limit {
+		n = limit
+	}
+	if n < len(stored) {
+		n = len(stored)
+	}
+	merged := make([]model.GalleryPageThumb, n)
+	copy(merged, stored)
+	for i := 0; i < len(incoming) && i < n; i++ {
+		if incoming[i].SpriteURL != "" {
+			merged[i] = incoming[i]
+		}
+	}
+	return merged
+}
+
+// UpsertPages stores the page URL list. Page URLs are stable for a gallery, so
+// the stored list is merged index by index: non-empty incoming URLs overwrite,
+// empty entries are ignored, and new indices are appended. The list never
+// shrinks. pages_fetched_at is always refreshed so the online endpoint can treat
+// a recently verified list as fresh; the JSON column is only rewritten when the
+// list actually changed.
+func UpsertPages(ctx context.Context, client *ent.Client, galleryID int64, token string, pageURLs []string) error {
 	existing, found, err := Get(ctx, client, galleryID, token)
 	if err != nil {
 		return err
@@ -238,29 +279,42 @@ func UpsertPages(ctx context.Context, client *ent.Client, galleryID int64, token
 			SetGalleryID(galleryID).
 			SetToken(token).
 			SetPages(pageURLs).
-			SetThumbnails(thumbnails).
 			SetPagesFetchedAt(now).
-			SetThumbnailFetchedAt(now).
 			Exec(ctx)
 	}
 
-	// First-write-wins for page URLs: if we already have a page list, don't
-	// overwrite it unless the incoming list carries MORE thumbnail geometries.
-	// This preserves the original page list while allowing backfilling of
-	// thumbnail geometries when they become available.
-	if len(existing.Pages) > 0 &&
-		countThumbnails(thumbnails) <= countThumbnails(existing.Thumbnails) {
-		// Keep the stored list but mark this scrape as freshly verified.
-		return client.GalleryCache.UpdateOneID(existing.ID).
-			SetPagesFetchedAt(now).
-			SetThumbnailFetchedAt(now).
-			Exec(ctx)
+	merged := mergeStrings(existing.Pages, pageURLs)
+	update := client.GalleryCache.UpdateOneID(existing.ID).SetPagesFetchedAt(now)
+	if !slices.Equal(merged, existing.Pages) {
+		update.SetPages(merged)
 	}
+	return update.Exec(ctx)
+}
 
-	return client.GalleryCache.UpdateOneID(existing.ID).
-		SetPages(pageURLs).
-		SetThumbnails(thumbnails).
-		SetPagesFetchedAt(now).
-		SetThumbnailFetchedAt(now).
-		Exec(ctx)
+// UpsertThumbnails stores page-thumbnail geometry independently of the page
+// list. Geometry is index-aligned with pages, so it is merged index by index
+// (non-empty SpriteURL overwrites, empty leaves the stored value, new indices
+// are appended) and capped at the number of known pages. The result never
+// shrinks, so a partial scrape cannot drop known geometry. thumbnail_fetched_at
+// is always refreshed; the JSON column is only rewritten when the geometry
+// changed. A gallery with no cached pages has nothing to align to, so the call
+// is a no-op.
+func UpsertThumbnails(ctx context.Context, client *ent.Client, galleryID int64, token string, thumbnails []model.GalleryPageThumb) error {
+	existing, found, err := Get(ctx, client, galleryID, token)
+	if err != nil {
+		return err
+	}
+	if !found || len(existing.Pages) == 0 {
+		return nil
+	}
+	now := time.Now().UTC()
+
+	update := client.GalleryCache.UpdateOneID(existing.ID).SetThumbnailFetchedAt(now)
+	if countThumbnails(thumbnails) > 0 {
+		merged := mergeThumbs(existing.Thumbnails, thumbnails, len(existing.Pages))
+		if !slices.Equal(merged, existing.Thumbnails) {
+			update.SetThumbnails(merged)
+		}
+	}
+	return update.Exec(ctx)
 }

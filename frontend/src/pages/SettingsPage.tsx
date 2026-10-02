@@ -17,6 +17,7 @@ import { fetchUpstreamDown, setUpstreamDown } from "../api/dev";
 import { ApiRequestError } from "../api/client";
 import { useTheme } from "../hooks/useTheme";
 import { useTagTranslation } from "../hooks/useTagTranslation";
+import { SETTINGS_STALE_TIME } from "../lib/cacheConfig";
 import { formatDateTime } from "../lib/time";
 import type { ThemeMode } from "../lib/theme";
 import { PageHeader, Section } from "../components/ui";
@@ -128,7 +129,7 @@ function DevToolsSection() {
     queryKey: ["dev-upstream-down"],
     queryFn: fetchUpstreamDown,
     retry: false,
-    staleTime: 0,
+    staleTime: SETTINGS_STALE_TIME,
   });
 
   const mutation = useMutation({

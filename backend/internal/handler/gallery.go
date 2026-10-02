@@ -20,6 +20,7 @@ import (
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/model"
+	"manga-reader/internal/ttl"
 )
 
 // galleryPagesHardCap bounds an entire /pages scrape (including the detached
@@ -34,13 +35,9 @@ const galleryPagesHardCap = 10 * time.Minute
 // Shared by the streaming handler and the bookshelf prefetch.
 var galleryPagesHub = newPagesHub()
 
-// galleryCacheTTL bounds how long the online endpoints may serve a cached
-// metadata / details / pages row before re-fetching upstream. Short enough to
-// stay fresh, long enough that repeated views do not scrape ExHentai.
-const galleryCacheTTL = 30 * time.Minute
-
-func cacheFresh(at *time.Time, ttl time.Duration) bool {
-	return at != nil && time.Since(*at) < ttl
+// cacheFresh reports whether a fetched-at timestamp is within its TTL window.
+func cacheFresh(at *time.Time, window time.Duration) bool {
+	return at != nil && time.Since(*at) < window
 }
 
 // cacheDB returns the ent client when a database is configured. Some tests
@@ -173,7 +170,7 @@ func (s *Server) handleGetGallery(c *gin.Context) {
 	if db := s.cacheDB(); db != nil {
 		if row, found, err := gallerycache.Get(ctx, db, id, token); err != nil {
 			slog.Warn("gallery cache read failed", "id", id, "error", err)
-		} else if found && row.Title != "" && cacheFresh(row.MetaFetchedAt, galleryCacheTTL) {
+		} else if found && row.Title != "" && cacheFresh(row.MetaFetchedAt, ttl.GalleryMeta) {
 			c.JSON(http.StatusOK, galleryFromCache(row))
 			return
 		}
@@ -208,7 +205,7 @@ func (s *Server) handleGalleryDetails(c *gin.Context) {
 	if db := s.cacheDB(); db != nil {
 		if row, found, err := gallerycache.Get(ctx, db, galleryID, token); err != nil {
 			slog.Warn("gallery cache read failed", "id", galleryID, "error", err)
-		} else if found && row.Title != "" && cacheFresh(row.DetailsFetchedAt, galleryCacheTTL) {
+		} else if found && row.Title != "" && cacheFresh(row.DetailsFetchedAt, ttl.GalleryDetails) {
 			c.JSON(http.StatusOK, galleryDetailsFromCache(row))
 			return
 		}
@@ -267,6 +264,16 @@ type galleryPagesLine struct {
 	// terminal fields
 	Total *int   `json:"total,omitempty"`
 	Error string `json:"error,omitempty"`
+}
+
+// thumbPtr returns a pointer to the thumbnail geometry, or nil when the page has
+// no geometry, so the JSON field is omitted instead of serialized as a
+// present-but-empty object.
+func thumbPtr(t model.GalleryPageThumb) *model.GalleryPageThumb {
+	if t.SpriteURL == "" {
+		return nil
+	}
+	return &t
 }
 
 // galleryPagesStream is one in-flight page-list scrape that any number of
@@ -450,12 +457,15 @@ func (s *Server) runGalleryPagesScrape(
 			err = fmt.Errorf("incomplete page list: got %d pages, want %d", len(pageURLs), total)
 		}
 		if err == nil {
-			// UpsertPages stores the whole list in a single row write, so this
-			// is the one and only cache write for the scrape: it either commits
-			// in full or leaves the previous value untouched.
+			// The complete list is written only after a verified walk. Page
+			// URLs and thumbnail geometry are persisted independently so the
+			// geometry can be refreshed without rewriting a stable page list.
 			if db := s.cacheDB(); db != nil {
-				if cacheErr := gallerycache.UpsertPages(ctx, db, galleryID, token, pageURLs, thumbnails); cacheErr != nil {
+				if cacheErr := gallerycache.UpsertPages(ctx, db, galleryID, token, pageURLs); cacheErr != nil {
 					slog.Warn("gallery cache pages upsert failed", "id", galleryID, "error", cacheErr)
+				}
+				if cacheErr := gallerycache.UpsertThumbnails(ctx, db, galleryID, token, thumbnails); cacheErr != nil {
+					slog.Warn("gallery cache thumbnails upsert failed", "id", galleryID, "error", cacheErr)
 				}
 			}
 		}
@@ -497,7 +507,7 @@ func replayGalleryPages(c *gin.Context, id, token string, total int, pageURLs []
 			Type:      "page",
 			PageURL:   pageURLs[i],
 			Index:     &index,
-			Thumbnail: &thumb,
+			Thumbnail: thumbPtr(thumb),
 		}); err != nil {
 			return err
 		}
@@ -531,7 +541,7 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 	if db := s.cacheDB(); db != nil {
 		if row, found, err := gallerycache.Get(c.Request.Context(), db, galleryID, token); err != nil {
 			slog.Warn("gallery cache read failed", "id", galleryID, "error", err)
-		} else if found && len(row.Pages) > 0 && cacheFresh(row.PagesFetchedAt, galleryCacheTTL) {
+		} else if found && len(row.Pages) > 0 && cacheFresh(row.PagesFetchedAt, ttl.GalleryPages) {
 			if replayErr := replayGalleryPages(c, idParam, token, len(row.Pages), row.Pages, row.Thumbnails); replayErr != nil {
 				slog.Warn("gallery pages cache replay failed", "id", galleryID, "error", replayErr)
 			}
@@ -584,7 +594,7 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 				Type:      "page",
 				PageURL:   pageURLs[i],
 				Index:     &index,
-				Thumbnail: &thumb,
+				Thumbnail: thumbPtr(thumb),
 			}); writeErr != nil {
 				return writeErr
 			}
@@ -693,7 +703,7 @@ func (s *Server) handleCachedGalleryPages(c *gin.Context) {
 			Type:      "page",
 			PageURL:   pageURL,
 			Index:     &index,
-			Thumbnail: &thumb,
+			Thumbnail: thumbPtr(thumb),
 		}
 	}
 

@@ -1,12 +1,11 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { fetchGalleries, fetchWatched, fetchPopular } from "../api/gallery";
+import { GALLERY_LIST_STALE_TIME } from "../lib/cacheConfig";
 import type {
   AdvancedSearchOptions,
   GalleryListResponse,
   ListingNavOptions,
 } from "../types/gallery";
-
-const GALLERY_LIST_STALE_TIME = 2 * 60_000;
 
 // ExHentai serves 25 galleries per listing page.
 const EXHENTAI_PAGE_SIZE = 25;

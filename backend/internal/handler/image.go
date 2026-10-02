@@ -14,13 +14,17 @@ import (
 
 	"manga-reader/internal/cache"
 	"manga-reader/internal/exhentai"
+	"manga-reader/internal/ttl"
 )
 
 const (
-	thumbnailCachePrefix  = "thumbnail/"
-	maxThumbnailRetries   = 2
-	thumbnailCacheControl = "public, max-age=3600"
-	cacheControlHeader    = "public, max-age=31536000, immutable"
+	thumbnailCachePrefix = "thumbnail/"
+	maxThumbnailRetries  = 2
+)
+
+var (
+	thumbnailCacheControl = ttl.PublicMaxAge(ttl.ImageThumbnailHTTP)
+	cacheControlHeader    = ttl.PublicImmutableMaxAge(ttl.ImageImmutableHTTP)
 )
 
 type imageResult struct {

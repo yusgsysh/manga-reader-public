@@ -81,9 +81,12 @@ func seedGalleryCache(t *testing.T, client *ent.Client, id int64, token string) 
 		t.Fatalf("seed cache meta: %v", err)
 	}
 	if err := gallerycache.UpsertPages(t.Context(), client, id, token,
-		[]string{"https://exhentai.org/s/abc/1", "https://exhentai.org/s/abc/2"},
-		[]model.GalleryPageThumb{{}, {}}); err != nil {
+		[]string{"https://exhentai.org/s/abc/1", "https://exhentai.org/s/abc/2"}); err != nil {
 		t.Fatalf("seed cache pages: %v", err)
+	}
+	if err := gallerycache.UpsertThumbnails(t.Context(), client, id, token,
+		[]model.GalleryPageThumb{{}, {}}); err != nil {
+		t.Fatalf("seed cache thumbnails: %v", err)
 	}
 }
 
@@ -987,39 +990,42 @@ func TestGalleryCache_MetaTracksApiPagesFirstWrite(t *testing.T) {
 		t.Errorf("empty fields must not overwrite: rating=%v uploader=%q", row.Rating, row.Uploader)
 	}
 
-	// Pages are stored first-write only.
-	if err := gallerycache.UpsertPages(ctx, client, 9001, "tok",
-		[]string{"a"},
-		[]model.GalleryPageThumb{{}}); err != nil {
+	// Page URLs merge index by index and never shrink.
+	if err := gallerycache.UpsertPages(ctx, client, 9001, "tok", []string{"a"}); err != nil {
 		t.Fatalf("first pages write: %v", err)
 	}
-	if err := gallerycache.UpsertPages(ctx, client, 9001, "tok",
-		[]string{"a", "b", "c"},
-		[]model.GalleryPageThumb{{}, {}, {}}); err != nil {
+	if err := gallerycache.UpsertPages(ctx, client, 9001, "tok", []string{"a", "b", "c"}); err != nil {
 		t.Fatalf("second pages write: %v", err)
 	}
 	row, _, _ = gallerycache.Get(ctx, client, 9001, "tok")
-	if len(row.Pages) != 1 {
-		t.Errorf("pages = %d, want 1 (no overwrite)", len(row.Pages))
+	if len(row.Pages) != 3 {
+		t.Errorf("pages = %d, want 3 (merged)", len(row.Pages))
+	}
+	// A shorter list must not truncate the cached one.
+	if err := gallerycache.UpsertPages(ctx, client, 9001, "tok", []string{"a"}); err != nil {
+		t.Fatalf("shorter pages write: %v", err)
+	}
+	row, _, _ = gallerycache.Get(ctx, client, 9001, "tok")
+	if len(row.Pages) != 3 {
+		t.Errorf("pages = %d, want 3 (never shrinks)", len(row.Pages))
 	}
 }
 
-func TestUpsertPages_BackfillsThumbnailGeometry(t *testing.T) {
+func TestUpsertThumbnails_BackfillsThumbnailGeometry(t *testing.T) {
 	client := newTestDB(t)
 	ctx := t.Context()
 
-	// A row cached before sprite geometry existed (no thumbnails).
-	if err := gallerycache.UpsertPages(ctx, client, 9002, "tok",
-		[]string{"a", "b"},
-		[]model.GalleryPageThumb{{}, {}}); err != nil {
-		t.Fatalf("first pages write: %v", err)
+	// A row cached before sprite geometry existed (pages only, no thumbnails).
+	if err := gallerycache.UpsertPages(ctx, client, 9002, "tok", []string{"a", "b"}); err != nil {
+		t.Fatalf("pages write: %v", err)
 	}
 
-	// A later scrape with the same pages plus geometry must replace it.
-	thumb := &model.GalleryPageThumb{SpriteURL: "https://cdn.example/1-0.webp", Width: 200, Height: 282}
-	if err := gallerycache.UpsertPages(ctx, client, 9002, "tok",
-		[]string{"a", "b"},
-		[]model.GalleryPageThumb{{SpriteURL: "https://cdn.example/1-0.webp", Width: 200, Height: 282}, *thumb}); err != nil {
+	// A later scrape with the same pages plus geometry fills it in.
+	if err := gallerycache.UpsertThumbnails(ctx, client, 9002, "tok",
+		[]model.GalleryPageThumb{
+			{SpriteURL: "https://cdn.example/1-0.webp", Width: 200, Height: 282},
+			{SpriteURL: "https://cdn.example/1-1.webp", Width: 200, Height: 282},
+		}); err != nil {
 		t.Fatalf("backfill write: %v", err)
 	}
 
@@ -1028,18 +1034,40 @@ func TestUpsertPages_BackfillsThumbnailGeometry(t *testing.T) {
 		t.Fatalf("cache lookup: %v", err)
 	}
 	if len(row.Thumbnails) != 2 || row.Thumbnails[0].SpriteURL == "" || row.Thumbnails[1].SpriteURL == "" {
-		t.Fatalf("pages should be backfilled with geometry: %+v", row.Thumbnails)
+		t.Fatalf("thumbnails should be backfilled with geometry: %+v", row.Thumbnails)
 	}
 
 	// A geometry-less list must not downgrade the enriched one.
-	if err := gallerycache.UpsertPages(ctx, client, 9002, "tok",
-		[]string{"a", "b"},
+	if err := gallerycache.UpsertThumbnails(ctx, client, 9002, "tok",
 		[]model.GalleryPageThumb{{}, {}}); err != nil {
 		t.Fatalf("downgrade write: %v", err)
 	}
 	row, _, _ = gallerycache.Get(ctx, client, 9002, "tok")
 	if row.Thumbnails[0].SpriteURL == "" {
 		t.Error("a geometry-less list must not overwrite an enriched one")
+	}
+
+	// Same count with changed geometry repairs the entry (page-level update).
+	if err := gallerycache.UpsertThumbnails(ctx, client, 9002, "tok",
+		[]model.GalleryPageThumb{{SpriteURL: "https://cdn.example/1-0-v2.webp", X: 10}, {}}); err != nil {
+		t.Fatalf("repair write: %v", err)
+	}
+	row, _, _ = gallerycache.Get(ctx, client, 9002, "tok")
+	if row.Thumbnails[0].X != 10 {
+		t.Errorf("thumb X = %d, want 10 (repaired)", row.Thumbnails[0].X)
+	}
+}
+
+func TestUpsertThumbnails_NoPagesIsNoop(t *testing.T) {
+	client := newTestDB(t)
+	ctx := t.Context()
+
+	if err := gallerycache.UpsertThumbnails(ctx, client, 9003, "tok",
+		[]model.GalleryPageThumb{{SpriteURL: "https://cdn.example/1-0.webp"}}); err != nil {
+		t.Fatalf("upsert on missing row: %v", err)
+	}
+	if _, found, err := gallerycache.Get(ctx, client, 9003, "tok"); err != nil || found {
+		t.Errorf("upsert without pages must not create a row: found=%v err=%v", found, err)
 	}
 }
 

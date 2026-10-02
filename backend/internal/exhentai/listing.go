@@ -15,6 +15,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 
 	"manga-reader/internal/model"
+	"manga-reader/internal/ttl"
 )
 
 // Listing navigation ("Jump/Seek") state is emitted by the site as plain JS
@@ -138,8 +139,8 @@ var errNoNextPage = errors.New("no next page")
 // next=<gallery-id> cursor rather than ?page=N, so pages cannot be addressed
 // directly. We remember each page's URL the first time we walk to it, which
 // makes sequential access (the infinite-scroll case) cost one upstream request
-// per page instead of re-walking from page 0 every time.
-const listingCursorTTL = 10 * time.Minute
+// per page instead of re-walking from page 0 every time. The cursor lifetime
+// lives in internal/ttl.
 
 type listingCursor struct {
 	url     string
@@ -181,7 +182,7 @@ func setListingCursor(firstURL string, page int, u string) {
 	}
 	listingCursors.m[listingCursorKey(firstURL, page)] = listingCursor{
 		url:     u,
-		expires: time.Now().Add(listingCursorTTL),
+		expires: time.Now().Add(ttl.ListingCursor),
 	}
 }
 

@@ -6,6 +6,7 @@ import {
   removeFromBookshelf,
 } from "../api/bookshelf";
 import type { GalleryDetail } from "../types/gallery";
+import { GALLERY_DETAIL_STALE_TIME } from "../lib/cacheConfig";
 import { useOnlineThenCached } from "./useOnlineCached";
 
 export function useGalleryDetail(id: number, token: string) {
@@ -15,7 +16,7 @@ export function useGalleryDetail(id: number, token: string) {
     cacheKey: ["gallery-detail-cache", id, token],
     onlineFn: () => fetchGalleryDetail(id, token),
     cacheFn: () => fetchGalleryDetailCached(id, token),
-    staleTime: 5 * 60_000,
+    staleTime: GALLERY_DETAIL_STALE_TIME,
     // Show the cached details immediately while the live scrape loads.
     useCacheAsPlaceholder: true,
   });

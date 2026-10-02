@@ -9,6 +9,11 @@ import {
 } from "../api/gallery";
 import { fetchReadingProgress, updateReadingProgress } from "../api/progress";
 import { trackProgressSave } from "../lib/progressSave";
+import {
+  GALLERY_STALE_TIME,
+  PAGES_STALE_TIME,
+  PROGRESS_STALE_TIME,
+} from "../lib/cacheConfig";
 import type { GalleryCategory } from "../types/gallery";
 import type { RecentlyReadItem, RecentlyReadResponse } from "../types/recentlyRead";
 import type {
@@ -18,10 +23,6 @@ import type {
   UpdateReadingProgressRequest,
 } from "../types/reader";
 import { useOnlineThenCached } from "./useOnlineCached";
-
-const GALLERY_STALE_TIME = 5 * 60_000;
-const PAGES_STALE_TIME = 10 * 60_000;
-const PROGRESS_STALE_TIME = 30_000;
 
 export function useGallery(id: number, token: string) {
   return useOnlineThenCached<Gallery>({

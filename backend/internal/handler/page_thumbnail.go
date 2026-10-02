@@ -19,6 +19,7 @@ import (
 	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/imageproc"
 	"manga-reader/internal/model"
+	"manga-reader/internal/ttl"
 )
 
 const (
@@ -259,11 +260,17 @@ func (s *Server) resolveGalleryPageThumb(ctx context.Context, galleryID int64, t
 			if index < len(row.Thumbnails) {
 				thumb := row.Thumbnails[index]
 				if thumb.SpriteURL != "" {
-					return thumb, true, nil
+					// Serve cached geometry only while its thumbnail window is
+					// fresh; a stale entry falls through to a walk that
+					// refreshes the row.
+					if cacheFresh(row.ThumbnailFetchedAt, ttl.GalleryThumbnail) {
+						return thumb, true, nil
+					}
+				} else {
+					// Present but without geometry: fall through to a fresh
+					// walk, which upgrades the row through UpsertThumbnails.
+					behindStoredList = true
 				}
-				// Present but without geometry: fall through to a fresh walk,
-				// which upgrades the row through UpsertPages once complete.
-				behindStoredList = true
 			}
 			// Only verified, complete walks are ever written, and they emit
 			// pages in ascending order — so an index past the stored end does
@@ -281,12 +288,31 @@ func (s *Server) resolveGalleryPageThumb(ctx context.Context, galleryID int64, t
 	thumb, found, err := s.resolveGalleryPageThumbFromStream(resolveCtx, galleryID, token, index)
 	if errors.Is(err, context.DeadlineExceeded) {
 		u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
-		return exhentai.ScrapeGalleryPageThumb(ctx, s.Client, u, index)
+		scraped, scrapedFound, scrapedErr := exhentai.ScrapeGalleryPageThumb(ctx, s.Client, u, index)
+		if scrapedErr == nil && scrapedFound {
+			s.backfillThumbnail(ctx, galleryID, token, index, scraped)
+		}
+		return scraped, scrapedFound, scrapedErr
 	}
 	if err != nil {
 		return model.GalleryPageThumb{}, false, err
 	}
 	return thumb, found, nil
+}
+
+// backfillThumbnail persists a single scraped page geometry, index-aligned with
+// the cached page list. It is a best-effort cache write: failures are logged and
+// never fail the request.
+func (s *Server) backfillThumbnail(ctx context.Context, galleryID int64, token string, index int, thumb model.GalleryPageThumb) {
+	db := s.cacheDB()
+	if db == nil {
+		return
+	}
+	sparse := make([]model.GalleryPageThumb, index+1)
+	sparse[index] = thumb
+	if err := gallerycache.UpsertThumbnails(ctx, db, galleryID, token, sparse); err != nil {
+		slog.Warn("page-thumbnail backfill failed", "id", galleryID, "index", index, "error", err)
+	}
 }
 
 // resolveGalleryPageThumbFromStream finds the sprite geometry for index in the

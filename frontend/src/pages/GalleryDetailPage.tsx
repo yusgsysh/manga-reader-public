@@ -24,6 +24,7 @@ import { ErrorState } from "../components/common/ErrorState";
 import { PageThumbnailGrid } from "../components/gallery/PageThumbnailGrid";
 import { TagList } from "../components/tag";
 import { thumbnailUrl } from "../lib/image";
+import { DOWNLOAD_PAGES_STALE_TIME } from "../lib/cacheConfig";
 import { formatPosted } from "../lib/time";
 import { Chip, Section } from "../components/ui";
 
@@ -178,7 +179,7 @@ export function GalleryDetailPage() {
       const pagesData = await queryClient.fetchQuery({
         queryKey: ["download-pages", id, token ?? ""],
         queryFn: () => fetchGalleryPagesWithFallback(id, token ?? ""),
-        staleTime: 5 * 60_000,
+        staleTime: DOWNLOAD_PAGES_STALE_TIME,
       });
 
       startPrefill.mutate(

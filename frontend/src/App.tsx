@@ -8,6 +8,7 @@ import {
   type LinkComponentProps,
 } from "@cloudflare/kumo";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import { GLOBAL_STALE_TIME } from "./lib/cacheConfig";
 import { MotionProvider } from "./lib/motion";
 import { ThemeProvider } from "./lib/theme";
 import { tagTranslationService } from "./services/tagTranslation";
@@ -16,7 +17,7 @@ import { router } from "./router";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
+      staleTime: GLOBAL_STALE_TIME,
       retry: 1,
       refetchOnWindowFocus: false,
     },

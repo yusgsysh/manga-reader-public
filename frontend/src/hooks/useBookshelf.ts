@@ -1,8 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { fetchBookshelf } from "../api/bookshelf";
+import { BOOKSHELF_STALE_TIME } from "../lib/cacheConfig";
 import { whenProgressSavesSettled } from "../lib/progressSave";
-
-const BOOKSHELF_STALE_TIME = 2 * 60_000;
 
 export function useBookshelf() {
   return useInfiniteQuery({

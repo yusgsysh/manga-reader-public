@@ -7,13 +7,12 @@ import {
   startPrefillJob,
 } from "../api/prefill";
 import { ApiRequestError } from "../api/client";
+import { PREFILL_STALE_TIME } from "../lib/cacheConfig";
 import { hasActivePrefillJob } from "../lib/prefill";
 import { useKumoToastManager } from "@cloudflare/kumo";
 import type { PrefillStartRequest } from "../types/prefill";
 
 const PREFILL_KEY = ["prefill-jobs"] as const;
-
-const PREFILL_STALE_TIME = 30_000;
 
 export function usePrefillJobs() {
   return useQuery({

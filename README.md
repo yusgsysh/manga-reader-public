@@ -160,6 +160,23 @@ Schema 文件：
 
 缩略图缓存 Key 为 `thumbnail/<sha256(完整 URL)>`，与页面图片缓存（`images/`）相互独立。`/api/image/page-thumbnail` 与 `/api/image-cache/page-thumbnail` 支持两种寻址：`url`+`x/y/w/h`，或 `id`+`token`+`index`；精灵图缓存 Key 为 `sprite/<sha256(精灵图 URL)>`，裁剪结果不持久化，每次请求基于缓存的精灵图现场裁剪。
 
+### 缓存与过期时间（TTL）
+
+所有后端缓存寿命统一集中在 `backend/internal/ttl`（单一来源），前端 react-query 的 `staleTime` 集中在 `frontend/src/lib/cacheConfig.ts`。
+
+| 层 | 项 | 值 | 说明 |
+|----|----|----|------|
+| 后端 `gallery_cache` | `meta_fetched_at` / `details_fetched_at` / `pages_fetched_at` | 30 分钟 | 在线端点在此窗口内直接回放缓存，过期回源 |
+| 后端 `gallery_cache` | `thumbnail_fetched_at` | 6 小时 | 页面缩略图几何独立窗口，过期后由索引解析回填 |
+| 后端 | ExHentai listing cursor | 10 分钟 | 内存中的下一页游标 |
+| HTTP | live 图片代理（`/api/image/*`） | `max-age=3600` | `Cache-Control` |
+| HTTP | MinIO 内容寻址图片（`/api/image-cache/*`） | `max-age=31536000, immutable` | `Cache-Control` |
+| HTTP | `/pages` 流、`/api/gallery-cache/*` | `no-store` | 不缓存 |
+| MinIO | 页面图片对象 | 约 30 天 | 由 MinIO bucket 生命周期策略控制，非代码常量 |
+| 前端 | react-query `staleTime` | 见 `cacheConfig.ts` | 全局 30s；pages 10m；gallery / detail / search 5m；bookshelf / recently-read / list 2m；progress / prefill 30s；settings 0 |
+
+> 注：代码中另有一批**超时/预算**常量（如 `/pages` 抓取硬上限、缩略图解析超时、上游文档超时），它们限制单次操作的耗时，并非缓存 TTL。
+
 ### 阅读记录清理
 
 阅读记录不会自动清理。手动调用：

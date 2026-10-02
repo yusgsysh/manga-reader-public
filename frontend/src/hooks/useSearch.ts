@@ -1,8 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { fetchSearch } from "../api/search";
+import { SEARCH_STALE_TIME } from "../lib/cacheConfig";
 import type { SearchParams, SearchResponse } from "../types/gallery";
-
-const SEARCH_STALE_TIME = 5 * 60_000;
 
 export function useSearch(params: SearchParams) {
   return useInfiniteQuery({
