@@ -73,6 +73,10 @@ export interface AdvancedSearchOptions {
   disable_tag_filter?: boolean;
 }
 
+export interface GalleryListFilters extends AdvancedSearchOptions {
+  tags?: string[];
+}
+
 export interface SearchParams extends AdvancedSearchOptions, ListingNavOptions {
   q?: string;
   site?: string;

@@ -9,13 +9,15 @@ import { GalleryCard } from "../components/gallery/GalleryCard";
 import { readingToCard } from "../components/gallery/mappers";
 import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";
 import { JumpSeekMenu } from "../components/common/JumpSeekMenu";
+import { AdvancedSearchMenu } from "../components/search/AdvancedSearchMenu";
 import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
 import { PageHeader, Section } from "../components/ui";
-import type { ListingNavOptions } from "../types/gallery";
+import type { GalleryListFilters, ListingNavOptions } from "../types/gallery";
 
 export function HomePage() {
   const [nav, setNav] = useState<ListingNavOptions>({});
+  const [filters, setFilters] = useState<GalleryListFilters>({});
   const {
     data,
     isLoading,
@@ -25,7 +27,7 @@ export function HomePage() {
     isFetchingNextPage,
     isFetchNextPageError,
     fetchNextPage,
-  } = useGalleries(undefined, nav);
+  } = useGalleries(filters, nav);
   const { items: recent } = useRecentlyRead();
 
   const galleries = data?.pages.flatMap((page) => page.results) ?? [];
@@ -63,11 +65,14 @@ export function HomePage() {
           title="最新"
           icon={<Sparkle className="size-5" weight="fill" />}
           actions={
-            <JumpSeekMenu
-              nav={data?.pages[0]?.nav}
-              value={nav}
-              onChange={setNav}
-            />
+            <>
+              <AdvancedSearchMenu value={filters} onApply={setFilters} />
+              <JumpSeekMenu
+                nav={data?.pages[0]?.nav}
+                value={nav}
+                onChange={setNav}
+              />
+            </>
           }
         />
         {isLoading ? (

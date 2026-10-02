@@ -11,7 +11,6 @@ import (
 
 const (
 	ExhentaiURL = "https://exhentai.org"
-	EhentaiURL  = "https://e-hentai.org"
 
 	// upstreamDocTimeout bounds each HTML document fetch so a hung
 	// upstream connection cannot stall a request indefinitely.

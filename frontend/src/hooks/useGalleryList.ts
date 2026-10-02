@@ -2,7 +2,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { fetchGalleries, fetchWatched, fetchPopular } from "../api/gallery";
 import { GALLERY_LIST_STALE_TIME } from "../lib/cacheConfig";
 import type {
-  AdvancedSearchOptions,
+  GalleryListFilters,
   GalleryListResponse,
   ListingNavOptions,
 } from "../types/gallery";
@@ -17,7 +17,7 @@ function nextPageParam(lastPage: GalleryListResponse): number | undefined {
 }
 
 export function useGalleries(
-  filters?: AdvancedSearchOptions,
+  filters?: GalleryListFilters,
   nav?: ListingNavOptions,
 ) {
   return useInfiniteQuery({
@@ -30,7 +30,7 @@ export function useGalleries(
 }
 
 export function useWatched(
-  filters?: AdvancedSearchOptions,
+  filters?: GalleryListFilters,
   nav?: ListingNavOptions,
 ) {
   return useInfiniteQuery({

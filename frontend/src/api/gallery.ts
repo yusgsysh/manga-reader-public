@@ -1,7 +1,7 @@
 import { buildApiUrl, fetchChecked, apiGet } from "./client";
 import type {
-  AdvancedSearchOptions,
   GalleryDetail,
+  GalleryListFilters,
   GalleryListResponse,
   ListingNavOptions,
 } from "../types/gallery";
@@ -16,9 +16,10 @@ function boolToStr(v?: boolean): string | undefined {
   return v === undefined ? undefined : v ? "true" : "false";
 }
 
-function advancedToParams(filters?: AdvancedSearchOptions) {
+function advancedToParams(filters?: GalleryListFilters) {
   if (!filters) return {};
   return {
+    tags: filters.tags && filters.tags.length > 0 ? filters.tags.join(",") : undefined,
     min_pages: filters.min_pages,
     max_pages: filters.max_pages,
     min_rating: filters.min_rating,
@@ -42,7 +43,7 @@ function navToParams(nav?: ListingNavOptions) {
 
 export function fetchGalleries(
   page: number,
-  filters?: AdvancedSearchOptions,
+  filters?: GalleryListFilters,
   nav?: ListingNavOptions,
 ): Promise<GalleryListResponse> {
   return apiGet<GalleryListResponse>("/api/galleries", {
@@ -54,7 +55,7 @@ export function fetchGalleries(
 
 export function fetchWatched(
   page: number,
-  filters?: AdvancedSearchOptions,
+  filters?: GalleryListFilters,
   nav?: ListingNavOptions,
 ): Promise<GalleryListResponse> {
   return apiGet<GalleryListResponse>("/api/watched", {

@@ -435,26 +435,6 @@ func TestMockSearch_ExtendedLayout(t *testing.T) {
 	}
 }
 
-func TestMockSearch_SiteParam(t *testing.T) {
-	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, mockSearchHTML(1))
-	})
-	defer mockServer.Close()
-
-	server := &Server{Client: newMockClient(mockServer.URL)}
-	r := setupMockRouter(server)
-
-	// site=ehentai should build URL with e-hentai.org
-	req := httptest.NewRequest("GET", "/api/search?q=test&site=ehentai", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
-	}
-}
-
 func TestMockSearch_NegativePageClamped(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -649,6 +629,37 @@ func TestMockSearch_AdvancedSearchParamsPassThrough(t *testing.T) {
 	}
 	if q.Get("f_srdd") != "4" {
 		t.Errorf("f_srdd = %q, want %q", q.Get("f_srdd"), "4")
+	}
+}
+
+func TestMockSearch_TagsParamPassThrough(t *testing.T) {
+	var requestedURL string
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		requestedURL = r.URL.String()
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockSearchHTML(1))
+	})
+	defer mockServer.Close()
+
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/search?q=test&tags=female:yuri,full%20color", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	parsedURL, _ := url.Parse(requestedURL)
+	q := parsedURL.Query()
+
+	if got := q.Get("f_search"); got != "test tag:female:yuri tag:full color" {
+		t.Errorf("f_search = %q, want %q", got, "test tag:female:yuri tag:full color")
+	}
+	if q.Get("advsearch") != "1" {
+		t.Errorf("advsearch = %q, want %q", q.Get("advsearch"), "1")
 	}
 }
 
@@ -1437,6 +1448,37 @@ func TestMockGalleries_AdvancedSearchParams(t *testing.T) {
 	}
 	if q.Get("f_sname") != "on" {
 		t.Errorf("f_sname = %q, want %q", q.Get("f_sname"), "on")
+	}
+}
+
+func TestMockGalleries_TagsParam(t *testing.T) {
+	var requestedURL string
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		requestedURL = r.URL.String()
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryListHTML(1))
+	})
+	defer mockServer.Close()
+
+	server := &Server{Client: newMockClient(mockServer.URL)}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/galleries?tags=female:yuri,full%20color", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	parsedURL, _ := url.Parse(requestedURL)
+	q := parsedURL.Query()
+
+	if q.Get("advsearch") != "1" {
+		t.Errorf("advsearch = %q, want %q", q.Get("advsearch"), "1")
+	}
+	if got := q.Get("f_search"); got != "tag:female:yuri tag:full color" {
+		t.Errorf("f_search = %q, want %q", got, "tag:female:yuri tag:full color")
 	}
 }
 

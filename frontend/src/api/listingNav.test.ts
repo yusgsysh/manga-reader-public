@@ -73,4 +73,37 @@ describe("listing jump/seek parameters", () => {
     expect(url.searchParams.has("seek")).toBe(false);
     expect(url.searchParams.has("jump")).toBe(false);
   });
+
+  it("forwards tags on the homepage list", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ page: 0, page_size: 0, results: [] }),
+    );
+
+    await fetchGalleries(0, { tags: ["female:yuri", "full color"] });
+
+    const url = lastUrl();
+    expect(url.searchParams.get("tags")).toBe("female:yuri,full color");
+  });
+
+  it("forwards tags on the watched list", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ page: 0, page_size: 0, results: [] }),
+    );
+
+    await fetchWatched(0, { tags: ["lolicon"] });
+
+    const url = lastUrl();
+    expect(url.searchParams.get("tags")).toBe("lolicon");
+  });
+
+  it("omits tags when the list is empty", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ page: 0, page_size: 0, results: [] }),
+    );
+
+    await fetchGalleries(0, { tags: [] });
+
+    const url = lastUrl();
+    expect(url.searchParams.has("tags")).toBe(false);
+  });
 });

@@ -19,6 +19,8 @@ var foundReg = regexp.MustCompile(`Found(?: about)? ([\d,]+)\+? results?`)
 var foundThousandsReg = regexp.MustCompile(`Found thousands of results`)
 
 type SearchOptions struct {
+	Tags []string
+
 	MinPages  *int
 	MaxPages  *int
 	MinRating *int
@@ -47,15 +49,32 @@ func BuildSearchQuery(keyword string, categories []string, opts *SearchOptions) 
 			q.Set("f_cats", catVal)
 		}
 	}
-	if keyword != "" {
-		q.Set("f_search", keyword)
-	}
 
 	if opts == nil {
+		if keyword != "" {
+			q.Set("f_search", keyword)
+		}
 		return q
 	}
 
 	advanced := false
+
+	searchTerms := make([]string, 0, len(opts.Tags)+1)
+	if keyword != "" {
+		searchTerms = append(searchTerms, keyword)
+	}
+	for _, tag := range opts.Tags {
+		tag = strings.TrimSpace(tag)
+		if tag != "" {
+			searchTerms = append(searchTerms, "tag:"+tag)
+		}
+	}
+	if len(searchTerms) > 0 {
+		q.Set("f_search", strings.Join(searchTerms, " "))
+	}
+	if len(opts.Tags) > 0 {
+		advanced = true
+	}
 
 	if opts.MinPages != nil {
 		q.Set("f_spf", strconv.Itoa(*opts.MinPages))

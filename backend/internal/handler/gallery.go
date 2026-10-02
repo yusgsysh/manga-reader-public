@@ -753,7 +753,6 @@ func (s *Server) verifyCachedPageCount(galleryID int64, token string, cached int
 func (s *Server) handleSearch(c *gin.Context) {
 	keyword := c.Query("q")
 	categoryStr := c.Query("categories")
-	site := c.DefaultQuery("site", "exhentai")
 	pageStr := c.DefaultQuery("page", "0")
 	page, _ := strconv.Atoi(pageStr)
 	if page < 0 {
@@ -774,12 +773,7 @@ func (s *Server) handleSearch(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	var siteURL string
-	if site == "ehentai" {
-		siteURL = exhentai.EhentaiURL
-	} else {
-		siteURL = exhentai.ExhentaiURL
-	}
+	siteURL := exhentai.ExhentaiURL
 
 	var categories []string
 	if categoryStr != "" {
@@ -987,7 +981,34 @@ func parseOptionalBool(c *gin.Context, key string) (bool, error) {
 	}
 }
 
+// parseTagsQuery splits a comma-separated tag list, trimming whitespace and
+// dropping empty or duplicate entries while preserving order.
+func parseTagsQuery(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	tags := make([]string, 0)
+	for _, part := range strings.Split(raw, ",") {
+		tag := strings.TrimSpace(part)
+		if tag == "" {
+			continue
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		tags = append(tags, tag)
+	}
+	if len(tags) == 0 {
+		return nil
+	}
+	return tags
+}
+
 func parseSearchOptions(c *gin.Context) (*exhentai.SearchOptions, error) {
+	tags := parseTagsQuery(c.Query("tags"))
+
 	minPages, err := parseOptionalInt(c, "min_pages")
 	if err != nil {
 		return nil, fmt.Errorf("invalid min_pages")
@@ -1060,6 +1081,7 @@ func parseSearchOptions(c *gin.Context) (*exhentai.SearchOptions, error) {
 	}
 
 	return &exhentai.SearchOptions{
+		Tags:                  tags,
 		MinPages:              minPages,
 		MaxPages:              maxPages,
 		MinRating:             minRating,
