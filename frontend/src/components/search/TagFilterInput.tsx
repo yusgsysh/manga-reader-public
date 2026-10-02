@@ -108,7 +108,7 @@ export function TagFilterInput({
       <div className="relative">
         <Input
           ref={tagInputRef}
-          placeholder="输入标签搜索（例如：yuri, 无修正）"
+          placeholder="输入标签搜索"
           aria-label="搜索标签"
           aria-autocomplete="list"
           aria-expanded={showSuggestions}
@@ -176,10 +176,6 @@ export function TagFilterInput({
           ))}
         </div>
       )}
-
-      <p className="mt-2 text-xs text-kumo-subtle">
-        支持 ExHentai 标签语法：普通标签（yuri）、命名空间标签（female:sole_female）
-      </p>
     </Section>
   );
 }
