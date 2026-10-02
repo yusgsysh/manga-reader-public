@@ -269,8 +269,8 @@ func TestScrapeSearch_FallsBackToPageZeroForTotal(t *testing.T) {
 	if total != 100 || len(results) != 1 {
 		t.Fatalf("total=%d results=%d, want 100/1", total, len(results))
 	}
-	if got := requests.Load(); got != 3 {
-		t.Errorf("upstream requests = %d, want 3 (walk 0..1 + page 0 fallback)", got)
+	if got := requests.Load(); got != 2 {
+		t.Errorf("upstream requests = %d, want 2 (walk 0..1; page 0 fallback reuses the shared page-0 fetch)", got)
 	}
 }
 

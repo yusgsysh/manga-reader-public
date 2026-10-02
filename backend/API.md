@@ -16,6 +16,17 @@ Search / Homepage / Watched / Popular 的上游（ExHentai）使用 `next=<galle
 
 是否还有下一页按端点元信息判断：Search / Bookshelf / Recently Read 使用 `total` / `total_pages`；Homepage / Watched / Popular 按上游每页 25 条的固定页大小判断。
 
+## 上游请求去重（10 秒短共享）
+
+多个端点会从同一个上游页面派生不同数据（画廊 HTML 页：详情 / 页列表 / `.gpc` 总数 / 缩略图；种子页：列表 + Information；gdata API：元数据）。服务端在 `backend/internal/exhentai/fetchcache.go` 对「同一 client（Cookie）+ 方法 + URL（+表单）」的上游文档/元数据请求做 **singleflight + 10 秒 TTL 去重**：
+
+- 并发相同请求只发一次，其余等待同一结果；
+- 10 秒内再次请求同一页面直接复用，不再回源；
+- 抓取与任一调用方解绑（`context.WithoutCancel` + 超时），单个调用方取消不会影响其他等待者；
+- 这是**进程内短共享**，不写 `gallery_cache`/MinIO，也不会跨实例共享。
+
+例外：单页缩略图直抓（`ScrapeGalleryPageThumb`）**不参与**此去重，它必须绕过卡住的共享 walk 独立抓取。
+
 ### Jump/Seek
 
 Search / Homepage / Watched 支持上游 ExHentai 的 Jump/Seek 定位，通过两个可选查询参数：
@@ -341,7 +352,7 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 
 ### 4.1 Gallery Torrents（实时，不缓存）
 
-上游 `gallerytorrents.php` 的实时抓取，**不读写任何缓存**（不使用 `gallery_cache`/MinIO），所有响应 `Cache-Control: no-store`。
+上游 `gallerytorrents.php` 的实时抓取，**不读写任何缓存**（不使用 `gallery_cache`/MinIO），所有响应 `Cache-Control: no-store`。列表 / Information / 下载共享同一条上游请求的 10 秒短去重（见「上游请求去重」），因此打开弹窗后点下载不会重复抓取种子页。
 
 #### 列表
 

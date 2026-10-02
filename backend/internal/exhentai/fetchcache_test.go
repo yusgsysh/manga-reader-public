@@ -1,0 +1,117 @@
+package exhentai
+
+import (
+	"context"
+	"net/http"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+func TestFetchOnce_CoalescesConcurrent(t *testing.T) {
+	var calls atomic.Int32
+	start := make(chan struct{})
+	fetch := func(context.Context) (any, error) {
+		calls.Add(1)
+		<-start
+		return "value", nil
+	}
+
+	client := &http.Client{}
+	key := t.Name()
+
+	const n = 8
+	var wg sync.WaitGroup
+	results := make([]any, n)
+	for i := range n {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			v, err := fetchOnce(context.Background(), client, key, fetch)
+			if err != nil {
+				t.Errorf("fetchOnce: %v", err)
+				return
+			}
+			results[i] = v
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("fetch calls = %d, want 1 (coalesced)", got)
+	}
+	for i, v := range results {
+		if v != "value" {
+			t.Errorf("result[%d] = %v, want value", i, v)
+		}
+	}
+}
+
+func TestFetchOnce_ReusesWithinTTL(t *testing.T) {
+	var calls atomic.Int32
+	fetch := func(context.Context) (any, error) {
+		return calls.Add(1), nil
+	}
+
+	client := &http.Client{}
+	key := t.Name() + "-reuse"
+	for range 3 {
+		if _, err := fetchOnce(context.Background(), client, key, fetch); err != nil {
+			t.Fatalf("fetchOnce: %v", err)
+		}
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("fetch calls = %d, want 1 (fresh entries reused)", got)
+	}
+}
+
+func TestFetchOnce_ExpiresAfterTTL(t *testing.T) {
+	prev := fetchCacheTTL
+	fetchCacheTTL = 20 * time.Millisecond
+	t.Cleanup(func() { fetchCacheTTL = prev })
+
+	var calls atomic.Int32
+	fetch := func(context.Context) (any, error) {
+		return calls.Add(1), nil
+	}
+
+	client := &http.Client{}
+	key := t.Name() + "-expire"
+	if _, err := fetchOnce(context.Background(), client, key, fetch); err != nil {
+		t.Fatalf("fetchOnce: %v", err)
+	}
+	if _, err := fetchOnce(context.Background(), client, key, fetch); err != nil {
+		t.Fatalf("fetchOnce: %v", err)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("fetch calls = %d, want 1 before expiry", got)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	if _, err := fetchOnce(context.Background(), client, key, fetch); err != nil {
+		t.Fatalf("fetchOnce: %v", err)
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("fetch calls = %d, want 2 after expiry", got)
+	}
+}
+
+func TestFetchOnce_DistinctKeysDoNotShare(t *testing.T) {
+	var calls atomic.Int32
+	fetch := func(context.Context) (any, error) {
+		return calls.Add(1), nil
+	}
+
+	client := &http.Client{}
+	if _, err := fetchOnce(context.Background(), client, t.Name()+"-a", fetch); err != nil {
+		t.Fatalf("fetchOnce: %v", err)
+	}
+	if _, err := fetchOnce(context.Background(), client, t.Name()+"-b", fetch); err != nil {
+		t.Fatalf("fetchOnce: %v", err)
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("fetch calls = %d, want 2 (distinct keys)", got)
+	}
+}

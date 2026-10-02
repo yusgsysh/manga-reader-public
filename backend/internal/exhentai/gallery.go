@@ -330,7 +330,7 @@ func ScrapeGalleryPageThumb(ctx context.Context, client *http.Client, galleryURL
 		return model.GalleryPageThumb{}, false, nil
 	}
 
-	doc, err := httpGetDoc(ctx, client, galleryURL)
+	doc, err := httpGetDocDirect(ctx, client, galleryURL)
 	if err != nil {
 		return model.GalleryPageThumb{}, false, err
 	}
@@ -356,7 +356,7 @@ func ScrapeGalleryPageThumb(ctx context.Context, client *http.Client, galleryURL
 		return model.GalleryPageThumb{}, false, err
 	}
 	u.RawQuery = fmt.Sprintf("p=%d", index/perPage)
-	pageDoc, err := httpGetDoc(ctx, client, u.String())
+	pageDoc, err := httpGetDocDirect(ctx, client, u.String())
 	if err != nil {
 		return model.GalleryPageThumb{}, false, err
 	}

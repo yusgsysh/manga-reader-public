@@ -13,8 +13,23 @@ import (
 
 const apiURL = "https://api.e-hentai.org/api.php"
 
-// PostGalleryMetadata calls the official API to get gallery metadata.
+// PostGalleryMetadata calls the official API to get gallery metadata. Identical
+// metadata lookups share one upstream request for a short window (see
+// fetchOnce), so the online and cache metadata paths do not both hit gdata.
 func PostGalleryMetadata(ctx context.Context, client *http.Client, gid int64, token string) (*model.GalleryMetadata, error) {
+	key := fetchCacheKey(client, "GDATA", fmt.Sprintf("%d:%s", gid, token))
+	value, err := fetchOnce(ctx, client, key, func(fetchCtx context.Context) (any, error) {
+		return postGalleryMetadata(fetchCtx, client, gid, token)
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Return a copy so callers can never mutate the shared cached value.
+	meta := value.(model.GalleryMetadata)
+	return &meta, nil
+}
+
+func postGalleryMetadata(ctx context.Context, client *http.Client, gid int64, token string) (model.GalleryMetadata, error) {
 	type request struct {
 		Method    string  `json:"method"`
 		GIdList   [][]any `json:"gidlist"`
@@ -32,37 +47,37 @@ func PostGalleryMetadata(ctx context.Context, client *http.Client, gid int64, to
 
 	b, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrRequestFailed, err)
+		return model.GalleryMetadata{}, fmt.Errorf("%w: %v", ErrRequestFailed, err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(b))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrRequestFailed, err)
+		return model.GalleryMetadata{}, fmt.Errorf("%w: %v", ErrRequestFailed, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrRequestFailed, err)
+		return model.GalleryMetadata{}, fmt.Errorf("%w: %v", ErrRequestFailed, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: HTTP %d", ErrNonOKStatus, resp.StatusCode)
+		return model.GalleryMetadata{}, fmt.Errorf("%w: HTTP %d", ErrNonOKStatus, resp.StatusCode)
 	}
 
 	var result response
 	if err := json.UnmarshalRead(resp.Body, &result); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
+		return model.GalleryMetadata{}, fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
 
 	if len(result.GMetadata) == 0 {
-		return nil, ErrNoMetadata
+		return model.GalleryMetadata{}, ErrNoMetadata
 	}
 
-	meta := &result.GMetadata[0]
+	meta := result.GMetadata[0]
 	if meta.Error != "" {
-		return nil, fmt.Errorf("%w: %s", ErrAPIError, meta.Error)
+		return model.GalleryMetadata{}, fmt.Errorf("%w: %s", ErrAPIError, meta.Error)
 	}
 
 	return meta, nil
