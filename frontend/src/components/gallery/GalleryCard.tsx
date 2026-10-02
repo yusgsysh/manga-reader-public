@@ -228,13 +228,16 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
             {gallery.title}
           </h3>
 
-          <div className="flex items-center gap-x-2 overflow-hidden text-xs text-kumo-subtle">
+          <div className="flex items-center gap-x-1.5 text-[11px] text-kumo-subtle">
             {gallery.category && (
-              <CategoryChip category={gallery.category} className="shrink" />
+              <CategoryChip
+                category={gallery.category}
+                className="shrink-0 px-1.5 text-[11px]"
+              />
             )}
             {typeof gallery.rating === "number" && (
               <span className="inline-flex shrink-0 items-center gap-0.5">
-                <Star className="size-3.5 text-kumo-warning" weight="fill" />
+                <Star className="size-3 text-kumo-warning" weight="fill" />
                 {gallery.rating.toFixed(1)}
               </span>
             )}
