@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createThumbnailQueue,
   isPageThumbnailURL,
+  pageThumbnailIndex,
 } from "./thumbnails";
 
 describe("isPageThumbnailURL", () => {
@@ -34,6 +35,33 @@ describe("isPageThumbnailURL", () => {
       isPageThumbnailURL("http://localhost:8080/api/image-cache/page?url=x"),
     ).toBe(false);
     expect(isPageThumbnailURL("not a url")).toBe(false);
+  });
+});
+
+describe("pageThumbnailIndex", () => {
+  it("reads the gallery page index from an index-addressed url", () => {
+    expect(
+      pageThumbnailIndex(
+        "http://localhost:8080/api/image-cache/page-thumbnail?id=1&token=tok&index=7",
+      ),
+    ).toBe(7);
+    expect(
+      pageThumbnailIndex(
+        "http://localhost:8080/api/image/page-thumbnail?id=1&token=tok&index=0",
+      ),
+    ).toBe(0);
+  });
+
+  it("returns null for sprite-rectangle or unrelated urls", () => {
+    expect(
+      pageThumbnailIndex(
+        "http://localhost:8080/api/image-cache/page-thumbnail?url=x&x=0&y=0&w=4&h=4",
+      ),
+    ).toBeNull();
+    expect(
+      pageThumbnailIndex("http://localhost:8080/api/image-cache/page?url=x"),
+    ).toBeNull();
+    expect(pageThumbnailIndex("not a url")).toBeNull();
   });
 });
 

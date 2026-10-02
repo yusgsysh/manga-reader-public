@@ -22,12 +22,17 @@ import { useReadingProgressSync } from "../hooks/useReadingProgressSync";
 import { useTheme } from "../hooks/useTheme";
 import {
   clampPageIndex,
-  galleryPagesToManga,
+  galleryPageSlotsToManga,
+  PageUrlStore,
   parsePageParam,
+  slotPageSrcResolver,
 } from "../lib/reader";
-import { loadThumbnails, THUMBNAIL_CONCURRENCY } from "../lib/thumbnails";
+import {
+  loadThumbnails,
+  type LoadThumbnailsHandle,
+  THUMBNAIL_CONCURRENCY,
+} from "../lib/thumbnails";
 import { ErrorState } from "../components/common/ErrorState";
-import type { GalleryPage } from "../types/reader";
 
 type LayoutMode = ViewerSettings["layoutMode"];
 
@@ -48,11 +53,13 @@ export function ReaderPage() {
     containerRef.current = el;
     setShellEl(el);
   }, []);
-  // The page the reader is actually on. The library resets to page 0 whenever
-  // its `manga` prop changes (storage is disabled), so we keep the real index
-  // here and restore it after the one-time completion update.
-  const currentPageRef = useRef(0);
-  const [viewerPages, setViewerPages] = useState<GalleryPage[] | null>(null);
+  // Stable for the component's lifetime: page URLs stream in here while comimi
+  // keeps a fixed set of page slots (see galleryPageSlotsToManga).
+  const [pageUrlStore] = useState(() => new PageUrlStore());
+  // How many pages the live stream has delivered so far; caps thumbnail
+  // prefetch and is bumped without re-rendering the viewer.
+  const receivedRef = useRef(0);
+  const thumbnailsRef = useRef<LoadThumbnailsHandle | null>(null);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("inline");
   const id = Number(idParam);
   const restart = searchParams.get("restart") === "1";
@@ -128,8 +135,10 @@ export function ReaderPage() {
   const progressQuery = useReadingProgress(id, token ?? "");
 
   const gallery = galleryQuery.data;
-  const pages = pagesQuery.data?.pages;
-  const total = pagesQuery.data?.total ?? 0;
+  // The gallery detail's page count is authoritative: it is fetched
+  // independently of the streaming page list, so the reader's total never
+  // changes as pages arrive.
+  const total = gallery?.page_count || pagesQuery.data?.total || 0;
   // "离线数据" only when a cache value is actually being used as a fallback
   // (upstream failed or the browser is offline), not as a loading placeholder.
   const offline = galleryQuery.isFallback || pagesQuery.isFallback;
@@ -157,58 +166,53 @@ export function ReaderPage() {
     initialPage,
   );
 
-  const pageCount = pages?.length ?? 0;
-  // The reader mounts only once the batch containing the resume target has
-  // arrived, so it can jump straight to the right page instead of clamping to
-  // a partial list.
-  const targetReady = !!pages && total > 0 && pageCount > initialPage;
-  const listComplete = !!pages && total > 0 && pageCount >= total;
-
+  // A new gallery resets the streaming store (and its pending resolvers). This
+  // runs before the page-writing effect below so a fresh gallery always starts
+  // empty.
   useEffect(() => {
-    currentPageRef.current = initialPage;
-  }, [initialPage]);
+    pageUrlStore.reset();
+    receivedRef.current = 0;
+    return () => pageUrlStore.reset();
+  }, [pageUrlStore, id, token]);
 
-  // Freeze the page list handed to the viewer: mount immediately on the first
-  // snapshot that covers the target page so the first image shows without
-  // waiting for the whole scrape, then refresh it exactly once when the full
-  // list has arrived. Debouncing on every streamed batch would keep pushing
-  // the snapshot back until the stream ended. Feeding every batch would make
-  // comimi reset to page 0 on each update; this render-phase state adjustment
-  // re-renders at most twice (first snapshot + completion).
-  if (pages && targetReady) {
-    if (viewerPages === null) {
-      setViewerPages(pages);
-    } else if (listComplete && viewerPages.length < pages.length) {
-      setViewerPages(pages);
-    }
-  }
+  // Hand every newly streamed page URL to the store, then let the thumbnail
+  // queue pick up any that just crossed the received-page limit.
+  useEffect(() => {
+    const list = pagesQuery.data?.pages ?? [];
+    receivedRef.current = list.length;
+    for (const page of list) pageUrlStore.set(page.index, page.page_url);
+    thumbnailsRef.current?.refresh();
+  }, [pageUrlStore, pagesQuery.data]);
+
+  // Once the live list has settled short of the authoritative total, stop
+  // waiting on the missing indexes so their slots show the error mascot.
+  useEffect(() => {
+    if (!pagesQuery.data || pagesQuery.isFetching || total <= 0) return;
+    if (pagesQuery.data.pages.length < total) pageUrlStore.failAll();
+  }, [pageUrlStore, pagesQuery.data, pagesQuery.isFetching, total]);
 
   const handlePageChange = useCallback(
     ({ pageIndex }: { pageIndex: number }) => {
-      currentPageRef.current = pageIndex;
       onPageChange(pageIndex);
     },
     [onPageChange],
   );
 
-  // comimi resets to page 0 on every setManga; after the single completion
-  // update restore the page the reader was actually on.
-  const handleMangaChange = useCallback(() => {
-    requestAnimationFrame(() => {
-      const viewer = viewerRef.current;
-      const target = currentPageRef.current;
-      if (viewer && viewer.getCurrentPageIndex() !== target) {
-        viewer.goToPage(target);
-      }
-    });
-  }, []);
-
+  // Fixed page slots from the authoritative total: comimi sees the full count
+  // from the first render and never rebuilds its page list, so the total and
+  // thumbnails stay put while the real page URLs stream into the store.
   const manga = useMemo(
     () =>
-      gallery && viewerPages
-        ? galleryPagesToManga(String(id), token ?? "", gallery.title, viewerPages)
+      gallery && total > 0
+        ? galleryPageSlotsToManga(String(id), token ?? "", gallery.title, total)
         : null,
-    [gallery, viewerPages, id, token],
+    [gallery, total, id, token],
+  );
+
+  // Stable resolver reads page URLs from the store as they arrive.
+  const resolvePageSrc = useMemo(
+    () => slotPageSrcResolver(pageUrlStore),
+    [pageUrlStore],
   );
 
   const loading =
@@ -217,12 +221,20 @@ export function ReaderPage() {
     galleryQuery.error ?? pagesQuery.error ?? progressQuery.error;
 
   // Route comimi's page-list / seek-preview thumbnails through a bounded
-  // queue: all of them load immediately, but concurrency stays capped.
+  // queue: they load as they appear, but never ahead of the streamed list.
+  // Every URL is still handed to the queue lazily; only concurrency and the
+  // received-page cap apply.
   useEffect(() => {
     if (!shellEl) return;
-    return loadThumbnails(shellEl, {
+    const handle = loadThumbnails(shellEl, {
       concurrency: THUMBNAIL_CONCURRENCY,
+      getLimit: () => receivedRef.current,
     });
+    thumbnailsRef.current = handle;
+    return () => {
+      thumbnailsRef.current = null;
+      handle();
+    };
   }, [shellEl]);
 
   useEffect(() => {
@@ -258,7 +270,7 @@ export function ReaderPage() {
     );
   }
 
-  if (!gallery || !pages || total === 0) {
+  if (!gallery || total === 0) {
     return (
       <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-kumo-base">
         <p className="text-sm text-kumo-subtle">没有可用的页面</p>
@@ -272,22 +284,6 @@ export function ReaderPage() {
           <ArrowLeft className="mr-1 size-4" weight="bold" />
           返回
         </Button>
-      </div>
-    );
-  }
-
-  // Keep the reader closed until the page list has streamed up to the resume
-  // target, so mounting it cannot clamp to a not-yet-arrived page.
-  if (!targetReady || !viewerPages) {
-    return (
-      <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-kumo-base">
-        <Loader size={32} />
-        <p className="text-sm text-kumo-subtle">
-          正在加载到第 {initialPage + 1} 页…
-        </p>
-        <p className="tnum text-xs text-kumo-inactive">
-          {pageCount} / {total} 页
-        </p>
       </div>
     );
   }
@@ -342,14 +338,17 @@ export function ReaderPage() {
       {/* Reader */}
       <div className="min-h-0 flex-1">
         <MangaViewer
+          // Remount on gallery change so `initialPageIndex` applies to the new
+          // gallery (comimi only reads it when the viewer is created).
+          key={`${id}:${token ?? ""}`}
           ref={viewerRef}
           manga={manga!}
           initialPageIndex={initialPage}
           locale="zh-CN"
           storage={{ enabled: false }}
           settings={viewerSettings}
+          resolvePageSrc={resolvePageSrc}
           onPageChange={handlePageChange}
-          onMangaChange={handleMangaChange}
           onLayoutChange={({ layoutMode: mode }) => setLayoutMode(mode)}
           className="h-full w-full"
         />

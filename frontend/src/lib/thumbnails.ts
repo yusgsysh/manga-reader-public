@@ -30,6 +30,22 @@ export function isPageThumbnailURL(url: string): boolean {
   }
 }
 
+/** Returns the gallery page index of an index-addressed thumbnail URL. */
+export function pageThumbnailIndex(url: string): number | null {
+  try {
+    const base =
+      typeof window !== "undefined" ? window.location.origin : undefined;
+    const parsed = new URL(url, base);
+    if (!parsed.pathname.endsWith("/page-thumbnail")) return null;
+    const raw = parsed.searchParams.get("index");
+    if (raw === null) return null;
+    const value = Number(raw);
+    return Number.isInteger(value) && value >= 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface QueueItem {
   img: HTMLImageElement;
   url: string;
@@ -97,17 +113,42 @@ export function createThumbnailQueue(concurrency = 5): ThumbnailQueue {
 
 export interface LoadThumbnailsOptions {
   concurrency?: number;
+  /**
+   * When set, only thumbnails with a page index below the returned count are
+   * enqueued; the rest keep their placeholder until a later `refresh()`. Used by
+   * the reader so prefetching never runs ahead of the streamed page list.
+   * Thumbnails without an index (sprite-rectangle form) are always allowed.
+   */
+  getLimit?: () => number;
+}
+
+/** Cleanup for {@link loadThumbnails}; call `refresh` to re-scan for newly
+ *  eligible thumbnails after the limit grows. */
+export interface LoadThumbnailsHandle {
+  (): void;
+  refresh: () => void;
 }
 
 /**
  * Watches `root` for comimi thumbnails and loads every one of them through a
- * concurrency-limited queue as soon as it appears. Returns a cleanup function.
+ * concurrency-limited queue as soon as it appears. Returns a callable cleanup
+ * handle with a `refresh` method.
  */
 export function loadThumbnails(
   root: HTMLElement,
-  { concurrency = THUMBNAIL_CONCURRENCY }: LoadThumbnailsOptions = {},
-): () => void {
+  {
+    concurrency = THUMBNAIL_CONCURRENCY,
+    getLimit,
+  }: LoadThumbnailsOptions = {},
+): LoadThumbnailsHandle {
   const queue = createThumbnailQueue(concurrency);
+
+  const allowed = (url: string): boolean => {
+    if (!getLimit) return true;
+    const index = pageThumbnailIndex(url);
+    if (index === null) return true;
+    return index < getLimit();
+  };
 
   const defer = (node: Node) => {
     if (!(node instanceof HTMLImageElement)) return;
@@ -122,8 +163,11 @@ export function loadThumbnails(
       // Already loading or loaded (possibly by a previous run).
       return;
     }
-    // Still a placeholder: queue it now, or re-queue it if an earlier run was
-    // cleaned up while it was waiting.
+    // Still a placeholder. Skip if it is beyond the current limit; a later
+    // refresh() re-runs defer and enqueues it once the limit has grown.
+    if (!allowed(url)) return;
+    // Queue it now, or re-queue it if an earlier run was cleaned up while it
+    // was waiting.
     queue.enqueue({ img: node, url });
   };
 
@@ -152,8 +196,10 @@ export function loadThumbnails(
 
   scan(root);
 
-  return () => {
+  const cleanup = (() => {
     mutations.disconnect();
     queue.stop();
-  };
+  }) as LoadThumbnailsHandle;
+  cleanup.refresh = () => scan(root);
+  return cleanup;
 }

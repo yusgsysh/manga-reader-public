@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   calculateProgress,
   clampPageIndex,
-  galleryPagesToManga,
+  galleryPageSlotsToManga,
   getReaderImageURL,
+  PageUrlStore,
   parsePageParam,
+  slotPageSrcResolver,
 } from "./reader";
 
 describe("parsePageParam", () => {
@@ -74,46 +76,85 @@ describe("getReaderImageURL", () => {
   });
 });
 
-describe("galleryPagesToManga", () => {
-  const thumb = {
-    sprite_url: "https://cdn.hath.network/c2/hash/1-0.webp",
-    x: 200,
-    y: 0,
-    width: 200,
-    height: 282,
-  };
-
-  it("converts backend pages to comimi image pages", () => {
-    const manga = galleryPagesToManga("123", "token", "Title", [
-      { page_url: "https://e.org/s/1", index: 0, thumbnail: thumb },
-      { page_url: "https://e.org/s/2", index: 1 },
-    ]);
+describe("galleryPageSlotsToManga", () => {
+  it("pre-allocates exactly `total` stable, index-addressed slots", () => {
+    const manga = galleryPageSlotsToManga("123", "token", "Title", 3);
     expect(manga.id).toBe("123:token");
     expect(manga.title).toBe("Title");
-    expect(manga.pages).toHaveLength(2);
-    expect(manga.pages[0]).toMatchObject({ id: "0", type: "image" });
+    expect(manga.pages).toHaveLength(3);
 
-    const first = manga.pages[0];
-    if (first.type !== "image") throw new Error("expected image page");
-    expect(first.src).toContain("/api/image-cache/page?url=");
-    expect(first.thumbnailSrc).toContain("/api/image-cache/page-thumbnail?");
-    expect(first.thumbnailSrc).toContain("id=123");
-    expect(first.thumbnailSrc).toContain("token=token");
-    expect(first.thumbnailSrc).toContain("index=0");
-    expect(first.thumbnailSrc).not.toContain("url=");
-    expect(first.thumbnailSrc).not.toContain("x=200");
-
-    const second = manga.pages[1];
-    if (second.type !== "image") throw new Error("expected image page");
-    expect(second.thumbnailSrc).toBeUndefined();
+    manga.pages.forEach((page, index) => {
+      if (page.type !== "image") throw new Error("expected image page");
+      expect(page.id).toBe(String(index));
+      expect(page.alt).toBe(`Title - ${index + 1}`);
+      // The signature-relevant fields never depend on the streamed URL, so
+      // comimi-react never calls setManga once the slots are built.
+      expect(page.src).toBe("");
+      expect(page.thumbnailSrc).toContain("/api/image-cache/page-thumbnail?");
+      expect(page.thumbnailSrc).toContain("id=123");
+      expect(page.thumbnailSrc).toContain("token=token");
+      expect(page.thumbnailSrc).toContain(`index=${index}`);
+      expect(page.thumbnailSrc).not.toContain("url=");
+    });
   });
 
   it("skips thumbnails when the gallery token is missing", () => {
-    const manga = galleryPagesToManga("123", "", "Title", [
-      { page_url: "https://e.org/s/1", index: 0, thumbnail: thumb },
-    ]);
+    const manga = galleryPageSlotsToManga("123", "", "Title", 1);
     const page = manga.pages[0];
     if (page.type !== "image") throw new Error("expected image page");
     expect(page.thumbnailSrc).toBeUndefined();
+  });
+
+  it("handles a zero total", () => {
+    expect(galleryPageSlotsToManga("123", "token", "Title", 0).pages).toEqual(
+      [],
+    );
+  });
+});
+
+describe("PageUrlStore", () => {
+  it("resolves waiters when the page url arrives", async () => {
+    const store = new PageUrlStore();
+    const pending = store.wait(2);
+    store.set(2, "https://e.org/s/3");
+    await expect(pending).resolves.toBe("https://e.org/s/3");
+    expect(store.get(2)).toBe("https://e.org/s/3");
+  });
+
+  it("resolves immediately when the url is already known", async () => {
+    const store = new PageUrlStore();
+    store.set(0, "https://e.org/s/1");
+    await expect(store.wait(0)).resolves.toBe("https://e.org/s/1");
+  });
+
+  it("resolves missing pages to a broken sentinel on failAll", async () => {
+    const store = new PageUrlStore();
+    const pending = store.wait(5);
+    store.failAll();
+    await expect(pending).resolves.toMatch(/^data:/);
+    // Later waits must not hang.
+    await expect(store.wait(6)).resolves.toMatch(/^data:/);
+  });
+
+  it("reset clears known urls", async () => {
+    const store = new PageUrlStore();
+    store.set(0, "https://e.org/s/1");
+    store.reset();
+    expect(store.get(0)).toBeUndefined();
+  });
+});
+
+describe("slotPageSrcResolver", () => {
+  it("maps a slot index to the cached page image url", async () => {
+    const store = new PageUrlStore();
+    store.set(1, "https://e.org/s/2");
+    const resolve = slotPageSrcResolver(store);
+    const src = await resolve({
+      page: { id: "1", type: "image", src: "" },
+      pageIndex: 1,
+      isSpread: false,
+    });
+    expect(src).toContain("/api/image-cache/page?url=");
+    expect(src).toContain(encodeURIComponent("https://e.org/s/2"));
   });
 });
