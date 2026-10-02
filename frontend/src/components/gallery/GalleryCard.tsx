@@ -198,8 +198,8 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
         )}
 
         {typeof gallery.rating === "number" && (
-          <div className="pointer-events-none absolute right-2 top-2">
-            <span className="inline-flex items-center gap-0.5 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white/90 backdrop-blur-sm">
+          <div className="pointer-events-none absolute right-0 top-0">
+            <span className="inline-flex items-center gap-0.5 rounded-bl-lg rounded-tr-xl bg-white/15 px-2 py-1 text-[11px] font-medium text-white ring-1 ring-white/25 backdrop-blur-md">
               <Star className="size-3 text-kumo-warning" weight="fill" />
               {gallery.rating.toFixed(1)}
             </span>
