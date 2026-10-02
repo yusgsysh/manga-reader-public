@@ -2,6 +2,7 @@ import type { GalleryCategory } from "../../types/gallery";
 import { Link } from "react-router";
 import { thumbnailUrl } from "../../lib/image";
 import { parseTagString } from "../../lib/tag";
+import { languageCodeFromTags } from "../../lib/language";
 import { formatPosted } from "../../lib/time";
 import { useTagTranslation } from "../../hooks/useTagTranslation";
 import { Star, Tag as TagIcon } from "@phosphor-icons/react";
@@ -56,6 +57,8 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
   const { translateTag, ready: tagDbReady } = useTagTranslation();
 
   const hasTags = (gallery.tags?.length ?? 0) > 0;
+  const language = languageCodeFromTags(gallery.tags);
+  const hasPages = typeof gallery.pages === "number" && gallery.pages > 0;
   const galleryHref = `/gallery/${gallery.id}/${gallery.token}`;
   const image = gallery.image ? thumbnailUrl(gallery.image) : "";
   const imageLoaded = image !== "" && loadedImage === image;
@@ -235,9 +238,14 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
           </h3>
 
           <div className="flex items-center gap-2 text-xs text-kumo-subtle">
-            {gallery.category && <CategoryChip category={gallery.category} />}
-            {typeof gallery.pages === "number" && gallery.pages > 0 && (
-              <span className="tnum ml-auto shrink-0">{gallery.pages}p</span>
+            {gallery.category && (
+              <CategoryChip category={gallery.category} className="min-w-0 shrink" />
+            )}
+            {(language || hasPages) && (
+              <span className="ml-auto flex shrink-0 items-center gap-1">
+                {language && <span className="uppercase">{language}</span>}
+                {hasPages && <span className="tnum">{gallery.pages}p</span>}
+              </span>
             )}
           </div>
 
