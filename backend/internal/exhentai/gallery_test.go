@@ -22,26 +22,26 @@ func TestExtractGalleryPages_ThumbnailSprite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pages := extractGalleryPages(doc)
+	pageURLs, thumbnails := extractGalleryPages(doc)
 
-	if len(pages) != 3 {
-		t.Fatalf("pages = %d, want 3", len(pages))
+	if len(pageURLs) != 3 {
+		t.Fatalf("pageURLs = %d, want 3", len(pageURLs))
 	}
-	if pages[0].PageURL != "https://exhentai.org/s/aaa/1-1" {
-		t.Errorf("page[0].PageURL = %q", pages[0].PageURL)
+	if pageURLs[0] != "https://exhentai.org/s/aaa/1-1" {
+		t.Errorf("pageURLs[0] = %q", pageURLs[0])
 	}
-	thumb := pages[1].Thumbnail
-	if thumb == nil {
-		t.Fatal("page[1].Thumbnail is nil, want sprite geometry")
+	thumb := thumbnails[1]
+	if thumb.SpriteURL == "" {
+		t.Fatal("page[1].Thumbnail is empty, want sprite geometry")
 	}
 	if thumb.SpriteURL != "https://cdn.hath.network/x/1-0.webp" {
 		t.Errorf("sprite = %q", thumb.SpriteURL)
 	}
 	if thumb.X != 200 || thumb.Y != 0 || thumb.Width != 200 || thumb.Height != 282 {
-		t.Errorf("thumb = %+v, want x=200 y=0 w=200 h=282", *thumb)
+		t.Errorf("thumb = %+v, want x=200 y=0 w=200 h=282", thumb)
 	}
-	if pages[2].Thumbnail != nil {
-		t.Errorf("page without sprite should have nil thumbnail, got %+v", pages[2].Thumbnail)
+	if thumbnails[2].SpriteURL != "" {
+		t.Errorf("page without sprite should have empty thumbnail, got %+v", thumbnails[2])
 	}
 }
 

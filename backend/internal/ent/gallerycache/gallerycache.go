@@ -51,8 +51,10 @@ const (
 	FieldExpunged = "expunged"
 	// FieldTags holds the string denoting the tags field in the database.
 	FieldTags = "tags"
-	// FieldPages holds the string denoting the pages field in the database.
-	FieldPages = "pages"
+	// FieldPageUrls holds the string denoting the page_urls field in the database.
+	FieldPageUrls = "page_urls"
+	// FieldThumbnails holds the string denoting the thumbnails field in the database.
+	FieldThumbnails = "thumbnails"
 	// FieldMetaFetchedAt holds the string denoting the meta_fetched_at field in the database.
 	FieldMetaFetchedAt = "meta_fetched_at"
 	// FieldDetailsFetchedAt holds the string denoting the details_fetched_at field in the database.
@@ -87,7 +89,8 @@ var Columns = []string{
 	FieldFavorited,
 	FieldExpunged,
 	FieldTags,
-	FieldPages,
+	FieldPageUrls,
+	FieldThumbnails,
 	FieldMetaFetchedAt,
 	FieldDetailsFetchedAt,
 	FieldPagesFetchedAt,

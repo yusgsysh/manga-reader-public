@@ -13,11 +13,11 @@ type GalleryPageThumb struct {
 	Height    int    `json:"height"`
 }
 
-// CachedPage is a single gallery page reference stored in the gallery cache.
-type CachedPage struct {
-	PageURL   string            `json:"page_url"`
-	Index     int               `json:"index"`
-	Thumbnail *GalleryPageThumb `json:"thumbnail,omitempty"`
+// GalleryPageRef is a lightweight page reference (URL + index) without
+// thumbnail geometry. Used for page lists, prefill queues, reader, etc.
+type GalleryPageRef struct {
+	PageURL string `json:"page_url"`
+	Index   int    `json:"index"`
 }
 
 // GalleryCacheSnapshot is the metadata written into gallery_cache. Sources

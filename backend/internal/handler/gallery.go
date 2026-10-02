@@ -275,13 +275,14 @@ type galleryPagesLine struct {
 // A late subscriber is replayed the already-scraped prefix, so it never blocks
 // until the whole list is ready.
 type galleryPagesStream struct {
-	mu       sync.Mutex
-	cond     *sync.Cond
-	pages    []model.CachedPage
-	total    int
-	done     bool
-	err      error
-	finished atomic.Bool
+	mu         sync.Mutex
+	cond       *sync.Cond
+	pageURLs   []string
+	thumbnails []model.GalleryPageThumb
+	total      int
+	done       bool
+	err        error
+	finished   atomic.Bool
 }
 
 func newGalleryPagesStream() *galleryPagesStream {
@@ -290,12 +291,13 @@ func newGalleryPagesStream() *galleryPagesStream {
 	return s
 }
 
-func (s *galleryPagesStream) append(total int, batch []model.CachedPage) {
+func (s *galleryPagesStream) append(total int, pageURLs []string, thumbnails []model.GalleryPageThumb) {
 	s.mu.Lock()
 	if total > 0 {
 		s.total = total
 	}
-	s.pages = append(s.pages, batch...)
+	s.pageURLs = append(s.pageURLs, pageURLs...)
+	s.thumbnails = append(s.thumbnails, thumbnails...)
 	s.mu.Unlock()
 	s.cond.Broadcast()
 }
@@ -320,7 +322,7 @@ func (s *galleryPagesStream) finish(err error) {
 func (s *galleryPagesStream) drain(
 	ctx context.Context,
 	cursor int,
-	emit func(total int, batch []model.CachedPage) error,
+	emit func(total int, pageURLs []string, thumbnails []model.GalleryPageThumb) error,
 ) (int, error) {
 	stopWake := context.AfterFunc(ctx, func() {
 		s.mu.Lock()
@@ -331,7 +333,7 @@ func (s *galleryPagesStream) drain(
 
 	for {
 		s.mu.Lock()
-		for cursor >= len(s.pages) && !s.done && ctx.Err() == nil {
+		for cursor >= len(s.pageURLs) && !s.done && ctx.Err() == nil {
 			s.cond.Wait()
 		}
 		if ctx.Err() != nil {
@@ -339,18 +341,19 @@ func (s *galleryPagesStream) drain(
 			s.mu.Unlock()
 			return cursor, err
 		}
-		if cursor >= len(s.pages) {
+		if cursor >= len(s.pageURLs) {
 			err := s.err
 			s.mu.Unlock()
 			return cursor, err
 		}
-		batch := append([]model.CachedPage(nil), s.pages[cursor:]...)
-		cursor = len(s.pages)
+		batchURLs := append([]string(nil), s.pageURLs[cursor:]...)
+		batchThumbs := append([]model.GalleryPageThumb(nil), s.thumbnails[cursor:]...)
+		cursor = len(s.pageURLs)
 		total := s.total
 		s.mu.Unlock()
 
 		if emit != nil {
-			if err := emit(total, batch); err != nil {
+			if err := emit(total, batchURLs, batchThumbs); err != nil {
 				return cursor, err
 			}
 		}
@@ -403,7 +406,7 @@ func (s *Server) scrapeGalleryPages(
 	ctx context.Context,
 	galleryID int64,
 	token string,
-	emit func(total int, batch []model.CachedPage) error,
+	emit func(total int, pageURLs []string, thumbnails []model.GalleryPageThumb) error,
 ) (int, error) {
 	key := fmt.Sprintf("%d:%s", galleryID, token)
 	stream, leader := galleryPagesHub.acquire(key)
@@ -430,26 +433,28 @@ func (s *Server) runGalleryPagesScrape(
 		defer cancel()
 
 		u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
-		var pages []model.CachedPage
+		var pageURLs []string
+		var thumbnails []model.GalleryPageThumb
 		total := 0
-		err := exhentai.StreamGalleryPages(ctx, s.Client, u, func(t int, batch []model.CachedPage) error {
+		err := exhentai.StreamGalleryPages(ctx, s.Client, u, func(t int, urls []string, thumbs []model.GalleryPageThumb) error {
 			total = t
-			pages = append(pages, batch...)
-			stream.append(t, batch)
+			pageURLs = append(pageURLs, urls...)
+			thumbnails = append(thumbnails, thumbs...)
+			stream.append(t, urls, thumbs)
 			return nil
 		})
-		if err == nil && (total <= 0 || len(pages) != total) {
+		if err == nil && (total <= 0 || len(pageURLs) != total) {
 			// StreamGalleryPages only returns nil once the received count equals
 			// the ".gpc" total; re-check at the cache boundary so only a
 			// verified, complete list is ever persisted.
-			err = fmt.Errorf("incomplete page list: got %d pages, want %d", len(pages), total)
+			err = fmt.Errorf("incomplete page list: got %d pages, want %d", len(pageURLs), total)
 		}
 		if err == nil {
 			// UpsertPages stores the whole list in a single row write, so this
 			// is the one and only cache write for the scrape: it either commits
 			// in full or leaves the previous value untouched.
 			if db := s.cacheDB(); db != nil {
-				if cacheErr := gallerycache.UpsertPages(ctx, db, galleryID, token, pages); cacheErr != nil {
+				if cacheErr := gallerycache.UpsertPages(ctx, db, galleryID, token, pageURLs, thumbnails); cacheErr != nil {
 					slog.Warn("gallery cache pages upsert failed", "id", galleryID, "error", cacheErr)
 				}
 			}
@@ -473,7 +478,7 @@ func writeNDJSONLine(c *gin.Context, line galleryPagesLine) error {
 
 // replayGalleryPages writes a fully scraped list as NDJSON for a caller that
 // joined an in-flight scrape instead of running its own.
-func replayGalleryPages(c *gin.Context, id, token string, total int, pages []model.CachedPage) error {
+func replayGalleryPages(c *gin.Context, id, token string, total int, pageURLs []string, thumbnails []model.GalleryPageThumb) error {
 	c.Header("Content-Type", "application/x-ndjson; charset=utf-8")
 	c.Header("Cache-Control", "no-store")
 	c.Header("X-Accel-Buffering", "no")
@@ -482,18 +487,22 @@ func replayGalleryPages(c *gin.Context, id, token string, total int, pages []mod
 	if err := writeNDJSONLine(c, galleryPagesLine{Type: "meta", ID: id, Token: token, Total: &total}); err != nil {
 		return err
 	}
-	for _, p := range pages {
-		index := p.Index
+	for i := range pageURLs {
+		index := i
+		thumb := model.GalleryPageThumb{}
+		if i < len(thumbnails) {
+			thumb = thumbnails[i]
+		}
 		if err := writeNDJSONLine(c, galleryPagesLine{
 			Type:      "page",
-			PageURL:   p.PageURL,
+			PageURL:   pageURLs[i],
 			Index:     &index,
-			Thumbnail: p.Thumbnail,
+			Thumbnail: &thumb,
 		}); err != nil {
 			return err
 		}
 	}
-	done := len(pages)
+	done := len(pageURLs)
 	return writeNDJSONLine(c, galleryPagesLine{Type: "done", Total: &done})
 }
 
@@ -522,8 +531,8 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 	if db := s.cacheDB(); db != nil {
 		if row, found, err := gallerycache.Get(c.Request.Context(), db, galleryID, token); err != nil {
 			slog.Warn("gallery cache read failed", "id", galleryID, "error", err)
-		} else if found && len(row.Pages) > 0 && cacheFresh(row.PagesFetchedAt, galleryCacheTTL) {
-			if replayErr := replayGalleryPages(c, idParam, token, len(row.Pages), row.Pages); replayErr != nil {
+		} else if found && len(row.PageUrls) > 0 && cacheFresh(row.PagesFetchedAt, galleryCacheTTL) {
+			if replayErr := replayGalleryPages(c, idParam, token, len(row.PageUrls), row.PageUrls, row.Thumbnails); replayErr != nil {
 				slog.Warn("gallery pages cache replay failed", "id", galleryID, "error", replayErr)
 			}
 			return
@@ -546,7 +555,7 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 		return nil
 	}
 
-	emit := func(total int, batch []model.CachedPage) error {
+	emit := func(total int, pageURLs []string, thumbnails []model.GalleryPageThumb) error {
 		if !started {
 			c.Header("Content-Type", "application/x-ndjson; charset=utf-8")
 			c.Header("Cache-Control", "no-store")
@@ -565,13 +574,17 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 				return writeErr
 			}
 		}
-		for _, p := range batch {
-			index := p.Index
+		for i := range pageURLs {
+			index := i
+			thumb := model.GalleryPageThumb{}
+			if i < len(thumbnails) {
+				thumb = thumbnails[i]
+			}
 			if writeErr := writeLine(galleryPagesLine{
 				Type:      "page",
-				PageURL:   p.PageURL,
+				PageURL:   pageURLs[i],
 				Index:     &index,
-				Thumbnail: p.Thumbnail,
+				Thumbnail: &thumb,
 			}); writeErr != nil {
 				return writeErr
 			}
@@ -664,7 +677,7 @@ func (s *Server) handleCachedGalleryPages(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("read gallery cache failed: %v", err)})
 		return
 	}
-	if !found || len(row.Pages) == 0 {
+	if !found || len(row.PageUrls) == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "no cached pages"})
 		return
 	}
@@ -673,8 +686,9 @@ func (s *Server) handleCachedGalleryPages(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"id":    c.Param("id"),
 		"token": token,
-		"total": len(row.Pages),
-		"pages": row.Pages,
+		"total": len(row.PageUrls),
+		"page_urls": row.PageUrls,
+		"thumbnails": row.Thumbnails,
 	})
 }
 

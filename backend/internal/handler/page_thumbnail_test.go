@@ -338,16 +338,14 @@ func TestPageThumbnail_Live_ByIndexOutOfRange(t *testing.T) {
 
 func TestCachedPageThumbnail_ByIndexUsesCachedGeometry(t *testing.T) {
 	client := newTestDB(t)
-	if err := gallerycache.UpsertPages(t.Context(), client, testGalleryIDInt, thumbToken, []model.CachedPage{
-		{
-			PageURL: "https://exhentai.org/s/a/1-1",
-			Index:   0,
-			Thumbnail: &model.GalleryPageThumb{
+	if err := gallerycache.UpsertPages(t.Context(), client, testGalleryIDInt, thumbToken,
+		[]string{"https://exhentai.org/s/a/1-1"},
+		[]model.GalleryPageThumb{
+			{
 				SpriteURL: testSpriteURLTwo,
 				X:         0, Y: 0, Width: 4, Height: 4,
 			},
-		},
-	}); err != nil {
+		}); err != nil {
 		t.Fatalf("seed pages: %v", err)
 	}
 
@@ -516,7 +514,7 @@ func TestCachedPageThumbnail_ByIndexCoalescesWithPagesStream(t *testing.T) {
 	// race the database close.
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		if row, found, err := gallerycache.Get(t.Context(), db, 777001, token); err == nil && found && len(row.Pages) == 2 {
+		if row, found, err := gallerycache.Get(t.Context(), db, 777001, token); err == nil && found && len(row.PageUrls) == 2 {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -550,14 +548,14 @@ func TestCachedPageThumbnail_ByIndexWalkPopulatesCache(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 	for !backfilled && time.Now().Before(deadline) {
 		row, found, err := gallerycache.Get(t.Context(), db, 777002, token)
-		if err != nil || !found || len(row.Pages) != 2 {
+		if err != nil || !found || len(row.PageUrls) != 2 {
 			time.Sleep(20 * time.Millisecond)
 			continue
 		}
 		backfilled = true
-		for _, p := range row.Pages {
-			if p.Thumbnail == nil {
-				t.Errorf("page %d cached without thumbnail geometry", p.Index)
+		for i := range row.PageUrls {
+			if row.Thumbnails[i].SpriteURL == "" {
+				t.Errorf("page %d cached without thumbnail geometry", i)
 			}
 		}
 	}
@@ -616,7 +614,7 @@ func TestCachedPageThumbnail_ByIndexResolveTimeoutFallsBack(t *testing.T) {
 			// t.Context() is already cancelled inside cleanup, so the detached
 			// walk's cache write must be observed with a live context.
 			row, found, err := gallerycache.Get(context.Background(), db, 777004, "fallback")
-			if err == nil && found && len(row.Pages) == 2 {
+			if err == nil && found && len(row.PageUrls) == 2 {
 				return
 			}
 			time.Sleep(20 * time.Millisecond)

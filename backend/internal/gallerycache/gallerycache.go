@@ -207,25 +207,26 @@ func upsertMeta(ctx context.Context, client *ent.Client, galleryID int64, token 
 	return update.Exec(ctx)
 }
 
-func countPageThumbnails(pages []model.CachedPage) int {
+// countThumbnails returns the number of thumbnails with actual sprite geometry.
+func countThumbnails(thumbnails []model.GalleryPageThumb) int {
 	n := 0
-	for _, p := range pages {
-		if p.Thumbnail != nil {
+	for _, t := range thumbnails {
+		if t.SpriteURL != "" {
 			n++
 		}
 	}
 	return n
 }
 
-// UpsertPages stores the page list on first write, with one exception: an
-// existing list is replaced when the incoming one carries more page-thumbnail
-// geometry. Page URLs are stable for a gallery, but the sprite geometry was
-// added later, so rows cached before it existed (and locked in by the original
-// first-write-wins rule) are refreshed here as soon as a scrape supplies the
-// richer data. A list with equal or fewer thumbnails never overwrites, so
-// existing data is not downgraded. pages_fetched_at is always refreshed so the
-// online endpoint can treat a recently verified list as fresh.
-func UpsertPages(ctx context.Context, client *ent.Client, galleryID int64, token string, pages []model.CachedPage) error {
+// UpsertPages stores the page URLs and thumbnail geometries.
+// If the gallery already has pages, the incoming list replaces the stored one
+// only when it carries more thumbnail geometries (more entries in thumbnails).
+// page_urls are stable for a gallery; thumbnails were added later, so rows
+// cached before thumbnail support are refreshed when a scrape supplies the
+// richer data. A list with equal or fewer thumbnails never overwrites.
+// pages_fetched_at is always refreshed so the online endpoint can treat a
+// recently verified list as fresh.
+func UpsertPages(ctx context.Context, client *ent.Client, galleryID int64, token string, pageURLs []string, thumbnails []model.GalleryPageThumb) error {
 	existing, found, err := Get(ctx, client, galleryID, token)
 	if err != nil {
 		return err
@@ -236,13 +237,18 @@ func UpsertPages(ctx context.Context, client *ent.Client, galleryID int64, token
 		return client.GalleryCache.Create().
 			SetGalleryID(galleryID).
 			SetToken(token).
-			SetPages(pages).
+			SetPageUrls(pageURLs).
+			SetThumbnails(thumbnails).
 			SetPagesFetchedAt(now).
 			Exec(ctx)
 	}
 
-	if len(existing.Pages) > 0 &&
-		countPageThumbnails(pages) <= countPageThumbnails(existing.Pages) {
+	// First-write-wins for page URLs: if we already have a page list, don't
+	// overwrite it unless the incoming list carries MORE thumbnail geometries.
+	// This preserves the original page list while allowing backfilling of
+	// thumbnail geometries when they become available.
+	if len(existing.PageUrls) > 0 &&
+		countThumbnails(thumbnails) <= countThumbnails(existing.Thumbnails) {
 		// Keep the stored list but mark this scrape as freshly verified.
 		return client.GalleryCache.UpdateOneID(existing.ID).
 			SetPagesFetchedAt(now).
@@ -250,7 +256,8 @@ func UpsertPages(ctx context.Context, client *ent.Client, galleryID int64, token
 	}
 
 	return client.GalleryCache.UpdateOneID(existing.ID).
-		SetPages(pages).
+		SetPageUrls(pageURLs).
+		SetThumbnails(thumbnails).
 		SetPagesFetchedAt(now).
 		Exec(ctx)
 }

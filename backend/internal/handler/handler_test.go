@@ -22,11 +22,12 @@ func setupRouter() *gin.Engine {
 
 // pagesStreamResult is the decoded form of an NDJSON /pages response.
 type pagesStreamResult struct {
-	Meta     galleryPagesLine
-	Pages    []model.CachedPage
-	Done     bool
-	Error    string
-	Terminal int
+	Meta      galleryPagesLine
+	PageURLs  []string
+	Thumbnails []model.GalleryPageThumb
+	Done      bool
+	Error     string
+	Terminal  int
 }
 
 // parsePagesStream decodes the NDJSON body of GET /api/gallery/:id/:token/pages
@@ -64,11 +65,12 @@ func parsePagesStream(t *testing.T, body []byte) pagesStreamResult {
 			if l.Index == nil {
 				t.Fatalf("page line %d is missing index", i)
 			}
-			res.Pages = append(res.Pages, model.CachedPage{
-				PageURL:   l.PageURL,
-				Index:     *l.Index,
-				Thumbnail: l.Thumbnail,
-			})
+			res.PageURLs = append(res.PageURLs, l.PageURL)
+			thumb := model.GalleryPageThumb{}
+			if l.Thumbnail != nil {
+				thumb = *l.Thumbnail
+			}
+			res.Thumbnails = append(res.Thumbnails, thumb)
 		case "done":
 			if l.Total == nil {
 				t.Fatalf("done line %d is missing total", i)
@@ -91,8 +93,8 @@ func parsePagesStream(t *testing.T, body []byte) pagesStreamResult {
 	if res.Terminal != 1 {
 		t.Fatalf("terminal lines = %d, want exactly 1", res.Terminal)
 	}
-	if res.Done && *res.Meta.Total > 0 && len(res.Pages) < *res.Meta.Total {
-		t.Fatalf("pages = %d, want >= meta total %d", len(res.Pages), *res.Meta.Total)
+	if res.Done && *res.Meta.Total > 0 && len(res.PageURLs) < *res.Meta.Total {
+		t.Fatalf("pageURLs = %d, want >= meta total %d", len(res.PageURLs), *res.Meta.Total)
 	}
 	return res
 }

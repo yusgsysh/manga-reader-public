@@ -1069,14 +1069,24 @@ func TagsNotNil() predicate.GalleryCache {
 	return predicate.GalleryCache(sql.FieldNotNull(FieldTags))
 }
 
-// PagesIsNil applies the IsNil predicate on the "pages" field.
-func PagesIsNil() predicate.GalleryCache {
-	return predicate.GalleryCache(sql.FieldIsNull(FieldPages))
+// PageUrlsIsNil applies the IsNil predicate on the "page_urls" field.
+func PageUrlsIsNil() predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldIsNull(FieldPageUrls))
 }
 
-// PagesNotNil applies the NotNil predicate on the "pages" field.
-func PagesNotNil() predicate.GalleryCache {
-	return predicate.GalleryCache(sql.FieldNotNull(FieldPages))
+// PageUrlsNotNil applies the NotNil predicate on the "page_urls" field.
+func PageUrlsNotNil() predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldNotNull(FieldPageUrls))
+}
+
+// ThumbnailsIsNil applies the IsNil predicate on the "thumbnails" field.
+func ThumbnailsIsNil() predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldIsNull(FieldThumbnails))
+}
+
+// ThumbnailsNotNil applies the NotNil predicate on the "thumbnails" field.
+func ThumbnailsNotNil() predicate.GalleryCache {
+	return predicate.GalleryCache(sql.FieldNotNull(FieldThumbnails))
 }
 
 // MetaFetchedAtEQ applies the EQ predicate on the "meta_fetched_at" field.

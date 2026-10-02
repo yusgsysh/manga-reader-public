@@ -57,8 +57,10 @@ type GalleryCache struct {
 	Expunged bool `json:"expunged,omitempty"`
 	// Tags holds the value of the "tags" field.
 	Tags []model.Tag `json:"tags,omitempty"`
-	// Pages holds the value of the "pages" field.
-	Pages []model.CachedPage `json:"pages,omitempty"`
+	// PageUrls holds the value of the "page_urls" field.
+	PageUrls []string `json:"page_urls,omitempty"`
+	// Thumbnails holds the value of the "thumbnails" field.
+	Thumbnails []model.GalleryPageThumb `json:"thumbnails,omitempty"`
 	// MetaFetchedAt holds the value of the "meta_fetched_at" field.
 	MetaFetchedAt *time.Time `json:"meta_fetched_at,omitempty"`
 	// DetailsFetchedAt holds the value of the "details_fetched_at" field.
@@ -75,7 +77,7 @@ func (*GalleryCache) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case gallerycache.FieldTags, gallerycache.FieldPages:
+		case gallerycache.FieldTags, gallerycache.FieldPageUrls, gallerycache.FieldThumbnails:
 			values[i] = new([]byte)
 		case gallerycache.FieldTranslated, gallerycache.FieldExpunged:
 			values[i] = new(sql.NullBool)
@@ -225,12 +227,20 @@ func (_m *GalleryCache) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field tags: %w", err)
 				}
 			}
-		case gallerycache.FieldPages:
+		case gallerycache.FieldPageUrls:
 			if value, ok := values[i].(*[]byte); !ok {
-				return fmt.Errorf("unexpected type %T for field pages", values[i])
+				return fmt.Errorf("unexpected type %T for field page_urls", values[i])
 			} else if value != nil && len(*value) > 0 {
-				if err := json.Unmarshal(*value, &_m.Pages); err != nil {
-					return fmt.Errorf("unmarshal field pages: %w", err)
+				if err := json.Unmarshal(*value, &_m.PageUrls); err != nil {
+					return fmt.Errorf("unmarshal field page_urls: %w", err)
+				}
+			}
+		case gallerycache.FieldThumbnails:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field thumbnails", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Thumbnails); err != nil {
+					return fmt.Errorf("unmarshal field thumbnails: %w", err)
 				}
 			}
 		case gallerycache.FieldMetaFetchedAt:
@@ -355,8 +365,11 @@ func (_m *GalleryCache) String() string {
 	builder.WriteString("tags=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Tags))
 	builder.WriteString(", ")
-	builder.WriteString("pages=")
-	builder.WriteString(fmt.Sprintf("%v", _m.Pages))
+	builder.WriteString("page_urls=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PageUrls))
+	builder.WriteString(", ")
+	builder.WriteString("thumbnails=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Thumbnails))
 	builder.WriteString(", ")
 	if v := _m.MetaFetchedAt; v != nil {
 		builder.WriteString("meta_fetched_at=")

@@ -327,21 +327,39 @@ func (_u *GalleryCacheUpdate) ClearTags() *GalleryCacheUpdate {
 	return _u
 }
 
-// SetPages sets the "pages" field.
-func (_u *GalleryCacheUpdate) SetPages(v []model.CachedPage) *GalleryCacheUpdate {
-	_u.mutation.SetPages(v)
+// SetPageUrls sets the "page_urls" field.
+func (_u *GalleryCacheUpdate) SetPageUrls(v []string) *GalleryCacheUpdate {
+	_u.mutation.SetPageUrls(v)
 	return _u
 }
 
-// AppendPages appends value to the "pages" field.
-func (_u *GalleryCacheUpdate) AppendPages(v []model.CachedPage) *GalleryCacheUpdate {
-	_u.mutation.AppendPages(v)
+// AppendPageUrls appends value to the "page_urls" field.
+func (_u *GalleryCacheUpdate) AppendPageUrls(v []string) *GalleryCacheUpdate {
+	_u.mutation.AppendPageUrls(v)
 	return _u
 }
 
-// ClearPages clears the value of the "pages" field.
-func (_u *GalleryCacheUpdate) ClearPages() *GalleryCacheUpdate {
-	_u.mutation.ClearPages()
+// ClearPageUrls clears the value of the "page_urls" field.
+func (_u *GalleryCacheUpdate) ClearPageUrls() *GalleryCacheUpdate {
+	_u.mutation.ClearPageUrls()
+	return _u
+}
+
+// SetThumbnails sets the "thumbnails" field.
+func (_u *GalleryCacheUpdate) SetThumbnails(v []model.GalleryPageThumb) *GalleryCacheUpdate {
+	_u.mutation.SetThumbnails(v)
+	return _u
+}
+
+// AppendThumbnails appends value to the "thumbnails" field.
+func (_u *GalleryCacheUpdate) AppendThumbnails(v []model.GalleryPageThumb) *GalleryCacheUpdate {
+	_u.mutation.AppendThumbnails(v)
+	return _u
+}
+
+// ClearThumbnails clears the value of the "thumbnails" field.
+func (_u *GalleryCacheUpdate) ClearThumbnails() *GalleryCacheUpdate {
+	_u.mutation.ClearThumbnails()
 	return _u
 }
 
@@ -541,16 +559,27 @@ func (_u *GalleryCacheUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if _u.mutation.TagsCleared() {
 		_spec.ClearField(gallerycache.FieldTags, field.TypeJSON)
 	}
-	if value, ok := _u.mutation.Pages(); ok {
-		_spec.SetField(gallerycache.FieldPages, field.TypeJSON, value)
+	if value, ok := _u.mutation.PageUrls(); ok {
+		_spec.SetField(gallerycache.FieldPageUrls, field.TypeJSON, value)
 	}
-	if value, ok := _u.mutation.AppendedPages(); ok {
+	if value, ok := _u.mutation.AppendedPageUrls(); ok {
 		_spec.AddModifier(func(u *sql.UpdateBuilder) {
-			sqljson.Append(u, gallerycache.FieldPages, value)
+			sqljson.Append(u, gallerycache.FieldPageUrls, value)
 		})
 	}
-	if _u.mutation.PagesCleared() {
-		_spec.ClearField(gallerycache.FieldPages, field.TypeJSON)
+	if _u.mutation.PageUrlsCleared() {
+		_spec.ClearField(gallerycache.FieldPageUrls, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.Thumbnails(); ok {
+		_spec.SetField(gallerycache.FieldThumbnails, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedThumbnails(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, gallerycache.FieldThumbnails, value)
+		})
+	}
+	if _u.mutation.ThumbnailsCleared() {
+		_spec.ClearField(gallerycache.FieldThumbnails, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.MetaFetchedAt(); ok {
 		_spec.SetField(gallerycache.FieldMetaFetchedAt, field.TypeTime, value)
@@ -890,21 +919,39 @@ func (_u *GalleryCacheUpdateOne) ClearTags() *GalleryCacheUpdateOne {
 	return _u
 }
 
-// SetPages sets the "pages" field.
-func (_u *GalleryCacheUpdateOne) SetPages(v []model.CachedPage) *GalleryCacheUpdateOne {
-	_u.mutation.SetPages(v)
+// SetPageUrls sets the "page_urls" field.
+func (_u *GalleryCacheUpdateOne) SetPageUrls(v []string) *GalleryCacheUpdateOne {
+	_u.mutation.SetPageUrls(v)
 	return _u
 }
 
-// AppendPages appends value to the "pages" field.
-func (_u *GalleryCacheUpdateOne) AppendPages(v []model.CachedPage) *GalleryCacheUpdateOne {
-	_u.mutation.AppendPages(v)
+// AppendPageUrls appends value to the "page_urls" field.
+func (_u *GalleryCacheUpdateOne) AppendPageUrls(v []string) *GalleryCacheUpdateOne {
+	_u.mutation.AppendPageUrls(v)
 	return _u
 }
 
-// ClearPages clears the value of the "pages" field.
-func (_u *GalleryCacheUpdateOne) ClearPages() *GalleryCacheUpdateOne {
-	_u.mutation.ClearPages()
+// ClearPageUrls clears the value of the "page_urls" field.
+func (_u *GalleryCacheUpdateOne) ClearPageUrls() *GalleryCacheUpdateOne {
+	_u.mutation.ClearPageUrls()
+	return _u
+}
+
+// SetThumbnails sets the "thumbnails" field.
+func (_u *GalleryCacheUpdateOne) SetThumbnails(v []model.GalleryPageThumb) *GalleryCacheUpdateOne {
+	_u.mutation.SetThumbnails(v)
+	return _u
+}
+
+// AppendThumbnails appends value to the "thumbnails" field.
+func (_u *GalleryCacheUpdateOne) AppendThumbnails(v []model.GalleryPageThumb) *GalleryCacheUpdateOne {
+	_u.mutation.AppendThumbnails(v)
+	return _u
+}
+
+// ClearThumbnails clears the value of the "thumbnails" field.
+func (_u *GalleryCacheUpdateOne) ClearThumbnails() *GalleryCacheUpdateOne {
+	_u.mutation.ClearThumbnails()
 	return _u
 }
 
@@ -1134,16 +1181,27 @@ func (_u *GalleryCacheUpdateOne) sqlSave(ctx context.Context) (_node *GalleryCac
 	if _u.mutation.TagsCleared() {
 		_spec.ClearField(gallerycache.FieldTags, field.TypeJSON)
 	}
-	if value, ok := _u.mutation.Pages(); ok {
-		_spec.SetField(gallerycache.FieldPages, field.TypeJSON, value)
+	if value, ok := _u.mutation.PageUrls(); ok {
+		_spec.SetField(gallerycache.FieldPageUrls, field.TypeJSON, value)
 	}
-	if value, ok := _u.mutation.AppendedPages(); ok {
+	if value, ok := _u.mutation.AppendedPageUrls(); ok {
 		_spec.AddModifier(func(u *sql.UpdateBuilder) {
-			sqljson.Append(u, gallerycache.FieldPages, value)
+			sqljson.Append(u, gallerycache.FieldPageUrls, value)
 		})
 	}
-	if _u.mutation.PagesCleared() {
-		_spec.ClearField(gallerycache.FieldPages, field.TypeJSON)
+	if _u.mutation.PageUrlsCleared() {
+		_spec.ClearField(gallerycache.FieldPageUrls, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.Thumbnails(); ok {
+		_spec.SetField(gallerycache.FieldThumbnails, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedThumbnails(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, gallerycache.FieldThumbnails, value)
+		})
+	}
+	if _u.mutation.ThumbnailsCleared() {
+		_spec.ClearField(gallerycache.FieldThumbnails, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.MetaFetchedAt(); ok {
 		_spec.SetField(gallerycache.FieldMetaFetchedAt, field.TypeTime, value)

@@ -589,8 +589,10 @@ type GalleryCacheMutation struct {
 	expunged           *bool
 	tags               *[]model.Tag
 	appendtags         []model.Tag
-	pages              *[]model.CachedPage
-	appendpages        []model.CachedPage
+	page_urls          *[]string
+	appendpage_urls    []string
+	thumbnails         *[]model.GalleryPageThumb
+	appendthumbnails   []model.GalleryPageThumb
 	meta_fetched_at    *time.Time
 	details_fetched_at *time.Time
 	pages_fetched_at   *time.Time
@@ -1525,69 +1527,134 @@ func (m *GalleryCacheMutation) ResetTags() {
 	delete(m.clearedFields, gallerycache.FieldTags)
 }
 
-// SetPages sets the "pages" field.
-func (m *GalleryCacheMutation) SetPages(mp []model.CachedPage) {
-	m.pages = &mp
-	m.appendpages = nil
+// SetPageUrls sets the "page_urls" field.
+func (m *GalleryCacheMutation) SetPageUrls(s []string) {
+	m.page_urls = &s
+	m.appendpage_urls = nil
 }
 
-// Pages returns the value of the "pages" field in the mutation.
-func (m *GalleryCacheMutation) Pages() (r []model.CachedPage, exists bool) {
-	v := m.pages
+// PageUrls returns the value of the "page_urls" field in the mutation.
+func (m *GalleryCacheMutation) PageUrls() (r []string, exists bool) {
+	v := m.page_urls
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldPages returns the old "pages" field's value of the GalleryCache entity.
+// OldPageUrls returns the old "page_urls" field's value of the GalleryCache entity.
 // If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldPages(ctx context.Context) (v []model.CachedPage, err error) {
+func (m *GalleryCacheMutation) OldPageUrls(ctx context.Context) (v []string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldPages is only allowed on UpdateOne operations")
+		return v, errors.New("OldPageUrls is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldPages requires an ID field in the mutation")
+		return v, errors.New("OldPageUrls requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldPages: %w", err)
+		return v, fmt.Errorf("querying old value for OldPageUrls: %w", err)
 	}
-	return oldValue.Pages, nil
+	return oldValue.PageUrls, nil
 }
 
-// AppendPages adds mp to the "pages" field.
-func (m *GalleryCacheMutation) AppendPages(mp []model.CachedPage) {
-	m.appendpages = append(m.appendpages, mp...)
+// AppendPageUrls adds s to the "page_urls" field.
+func (m *GalleryCacheMutation) AppendPageUrls(s []string) {
+	m.appendpage_urls = append(m.appendpage_urls, s...)
 }
 
-// AppendedPages returns the list of values that were appended to the "pages" field in this mutation.
-func (m *GalleryCacheMutation) AppendedPages() ([]model.CachedPage, bool) {
-	if len(m.appendpages) == 0 {
+// AppendedPageUrls returns the list of values that were appended to the "page_urls" field in this mutation.
+func (m *GalleryCacheMutation) AppendedPageUrls() ([]string, bool) {
+	if len(m.appendpage_urls) == 0 {
 		return nil, false
 	}
-	return m.appendpages, true
+	return m.appendpage_urls, true
 }
 
-// ClearPages clears the value of the "pages" field.
-func (m *GalleryCacheMutation) ClearPages() {
-	m.pages = nil
-	m.appendpages = nil
-	m.clearedFields[gallerycache.FieldPages] = struct{}{}
+// ClearPageUrls clears the value of the "page_urls" field.
+func (m *GalleryCacheMutation) ClearPageUrls() {
+	m.page_urls = nil
+	m.appendpage_urls = nil
+	m.clearedFields[gallerycache.FieldPageUrls] = struct{}{}
 }
 
-// PagesCleared returns if the "pages" field was cleared in this mutation.
-func (m *GalleryCacheMutation) PagesCleared() bool {
-	_, ok := m.clearedFields[gallerycache.FieldPages]
+// PageUrlsCleared returns if the "page_urls" field was cleared in this mutation.
+func (m *GalleryCacheMutation) PageUrlsCleared() bool {
+	_, ok := m.clearedFields[gallerycache.FieldPageUrls]
 	return ok
 }
 
-// ResetPages resets all changes to the "pages" field.
-func (m *GalleryCacheMutation) ResetPages() {
-	m.pages = nil
-	m.appendpages = nil
-	delete(m.clearedFields, gallerycache.FieldPages)
+// ResetPageUrls resets all changes to the "page_urls" field.
+func (m *GalleryCacheMutation) ResetPageUrls() {
+	m.page_urls = nil
+	m.appendpage_urls = nil
+	delete(m.clearedFields, gallerycache.FieldPageUrls)
+}
+
+// SetThumbnails sets the "thumbnails" field.
+func (m *GalleryCacheMutation) SetThumbnails(mpt []model.GalleryPageThumb) {
+	m.thumbnails = &mpt
+	m.appendthumbnails = nil
+}
+
+// Thumbnails returns the value of the "thumbnails" field in the mutation.
+func (m *GalleryCacheMutation) Thumbnails() (r []model.GalleryPageThumb, exists bool) {
+	v := m.thumbnails
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldThumbnails returns the old "thumbnails" field's value of the GalleryCache entity.
+// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GalleryCacheMutation) OldThumbnails(ctx context.Context) (v []model.GalleryPageThumb, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldThumbnails is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldThumbnails requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldThumbnails: %w", err)
+	}
+	return oldValue.Thumbnails, nil
+}
+
+// AppendThumbnails adds mpt to the "thumbnails" field.
+func (m *GalleryCacheMutation) AppendThumbnails(mpt []model.GalleryPageThumb) {
+	m.appendthumbnails = append(m.appendthumbnails, mpt...)
+}
+
+// AppendedThumbnails returns the list of values that were appended to the "thumbnails" field in this mutation.
+func (m *GalleryCacheMutation) AppendedThumbnails() ([]model.GalleryPageThumb, bool) {
+	if len(m.appendthumbnails) == 0 {
+		return nil, false
+	}
+	return m.appendthumbnails, true
+}
+
+// ClearThumbnails clears the value of the "thumbnails" field.
+func (m *GalleryCacheMutation) ClearThumbnails() {
+	m.thumbnails = nil
+	m.appendthumbnails = nil
+	m.clearedFields[gallerycache.FieldThumbnails] = struct{}{}
+}
+
+// ThumbnailsCleared returns if the "thumbnails" field was cleared in this mutation.
+func (m *GalleryCacheMutation) ThumbnailsCleared() bool {
+	_, ok := m.clearedFields[gallerycache.FieldThumbnails]
+	return ok
+}
+
+// ResetThumbnails resets all changes to the "thumbnails" field.
+func (m *GalleryCacheMutation) ResetThumbnails() {
+	m.thumbnails = nil
+	m.appendthumbnails = nil
+	delete(m.clearedFields, gallerycache.FieldThumbnails)
 }
 
 // SetMetaFetchedAt sets the "meta_fetched_at" field.
@@ -1807,7 +1874,7 @@ func (m *GalleryCacheMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GalleryCacheMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 25)
 	if m.gallery_id != nil {
 		fields = append(fields, gallerycache.FieldGalleryID)
 	}
@@ -1865,8 +1932,11 @@ func (m *GalleryCacheMutation) Fields() []string {
 	if m.tags != nil {
 		fields = append(fields, gallerycache.FieldTags)
 	}
-	if m.pages != nil {
-		fields = append(fields, gallerycache.FieldPages)
+	if m.page_urls != nil {
+		fields = append(fields, gallerycache.FieldPageUrls)
+	}
+	if m.thumbnails != nil {
+		fields = append(fields, gallerycache.FieldThumbnails)
 	}
 	if m.meta_fetched_at != nil {
 		fields = append(fields, gallerycache.FieldMetaFetchedAt)
@@ -1926,8 +1996,10 @@ func (m *GalleryCacheMutation) Field(name string) (ent.Value, bool) {
 		return m.Expunged()
 	case gallerycache.FieldTags:
 		return m.Tags()
-	case gallerycache.FieldPages:
-		return m.Pages()
+	case gallerycache.FieldPageUrls:
+		return m.PageUrls()
+	case gallerycache.FieldThumbnails:
+		return m.Thumbnails()
 	case gallerycache.FieldMetaFetchedAt:
 		return m.MetaFetchedAt()
 	case gallerycache.FieldDetailsFetchedAt:
@@ -1983,8 +2055,10 @@ func (m *GalleryCacheMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldExpunged(ctx)
 	case gallerycache.FieldTags:
 		return m.OldTags(ctx)
-	case gallerycache.FieldPages:
-		return m.OldPages(ctx)
+	case gallerycache.FieldPageUrls:
+		return m.OldPageUrls(ctx)
+	case gallerycache.FieldThumbnails:
+		return m.OldThumbnails(ctx)
 	case gallerycache.FieldMetaFetchedAt:
 		return m.OldMetaFetchedAt(ctx)
 	case gallerycache.FieldDetailsFetchedAt:
@@ -2135,12 +2209,19 @@ func (m *GalleryCacheMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetTags(v)
 		return nil
-	case gallerycache.FieldPages:
-		v, ok := value.([]model.CachedPage)
+	case gallerycache.FieldPageUrls:
+		v, ok := value.([]string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetPages(v)
+		m.SetPageUrls(v)
+		return nil
+	case gallerycache.FieldThumbnails:
+		v, ok := value.([]model.GalleryPageThumb)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetThumbnails(v)
 		return nil
 	case gallerycache.FieldMetaFetchedAt:
 		v, ok := value.(time.Time)
@@ -2269,8 +2350,11 @@ func (m *GalleryCacheMutation) ClearedFields() []string {
 	if m.FieldCleared(gallerycache.FieldTags) {
 		fields = append(fields, gallerycache.FieldTags)
 	}
-	if m.FieldCleared(gallerycache.FieldPages) {
-		fields = append(fields, gallerycache.FieldPages)
+	if m.FieldCleared(gallerycache.FieldPageUrls) {
+		fields = append(fields, gallerycache.FieldPageUrls)
+	}
+	if m.FieldCleared(gallerycache.FieldThumbnails) {
+		fields = append(fields, gallerycache.FieldThumbnails)
 	}
 	if m.FieldCleared(gallerycache.FieldMetaFetchedAt) {
 		fields = append(fields, gallerycache.FieldMetaFetchedAt)
@@ -2301,8 +2385,11 @@ func (m *GalleryCacheMutation) ClearField(name string) error {
 	case gallerycache.FieldTags:
 		m.ClearTags()
 		return nil
-	case gallerycache.FieldPages:
-		m.ClearPages()
+	case gallerycache.FieldPageUrls:
+		m.ClearPageUrls()
+		return nil
+	case gallerycache.FieldThumbnails:
+		m.ClearThumbnails()
 		return nil
 	case gallerycache.FieldMetaFetchedAt:
 		m.ClearMetaFetchedAt()
@@ -2378,8 +2465,11 @@ func (m *GalleryCacheMutation) ResetField(name string) error {
 	case gallerycache.FieldTags:
 		m.ResetTags()
 		return nil
-	case gallerycache.FieldPages:
-		m.ResetPages()
+	case gallerycache.FieldPageUrls:
+		m.ResetPageUrls()
+		return nil
+	case gallerycache.FieldThumbnails:
+		m.ResetThumbnails()
 		return nil
 	case gallerycache.FieldMetaFetchedAt:
 		m.ResetMetaFetchedAt()

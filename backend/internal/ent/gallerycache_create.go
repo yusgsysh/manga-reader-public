@@ -263,9 +263,15 @@ func (_c *GalleryCacheCreate) SetTags(v []model.Tag) *GalleryCacheCreate {
 	return _c
 }
 
-// SetPages sets the "pages" field.
-func (_c *GalleryCacheCreate) SetPages(v []model.CachedPage) *GalleryCacheCreate {
-	_c.mutation.SetPages(v)
+// SetPageUrls sets the "page_urls" field.
+func (_c *GalleryCacheCreate) SetPageUrls(v []string) *GalleryCacheCreate {
+	_c.mutation.SetPageUrls(v)
+	return _c
+}
+
+// SetThumbnails sets the "thumbnails" field.
+func (_c *GalleryCacheCreate) SetThumbnails(v []model.GalleryPageThumb) *GalleryCacheCreate {
+	_c.mutation.SetThumbnails(v)
 	return _c
 }
 
@@ -584,9 +590,13 @@ func (_c *GalleryCacheCreate) createSpec() (*GalleryCache, *sqlgraph.CreateSpec)
 		_spec.SetField(gallerycache.FieldTags, field.TypeJSON, value)
 		_node.Tags = value
 	}
-	if value, ok := _c.mutation.Pages(); ok {
-		_spec.SetField(gallerycache.FieldPages, field.TypeJSON, value)
-		_node.Pages = value
+	if value, ok := _c.mutation.PageUrls(); ok {
+		_spec.SetField(gallerycache.FieldPageUrls, field.TypeJSON, value)
+		_node.PageUrls = value
+	}
+	if value, ok := _c.mutation.Thumbnails(); ok {
+		_spec.SetField(gallerycache.FieldThumbnails, field.TypeJSON, value)
+		_node.Thumbnails = value
 	}
 	if value, ok := _c.mutation.MetaFetchedAt(); ok {
 		_spec.SetField(gallerycache.FieldMetaFetchedAt, field.TypeTime, value)

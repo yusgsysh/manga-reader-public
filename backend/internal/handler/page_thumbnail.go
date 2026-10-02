@@ -256,23 +256,20 @@ func (s *Server) resolveGalleryPageThumb(ctx context.Context, galleryID int64, t
 			slog.Warn("gallery page-thumbnail cache read failed", "id", galleryID, "error", err)
 		} else if found {
 			behindStoredList := false
-			for _, p := range row.Pages {
-				if p.Index != index {
-					continue
-				}
-				if p.Thumbnail != nil {
-					return *p.Thumbnail, true, nil
+			if index < len(row.Thumbnails) {
+				thumb := row.Thumbnails[index]
+				if thumb.SpriteURL != "" {
+					return thumb, true, nil
 				}
 				// Present but without geometry: fall through to a fresh walk,
 				// which upgrades the row through UpsertPages once complete.
 				behindStoredList = true
-				break
 			}
 			// Only verified, complete walks are ever written, and they emit
 			// pages in ascending order — so an index past the stored end does
 			// not exist upstream either. Without this, probing an invalid
 			// index on a warm gallery would start a full walk every time.
-			if !behindStoredList && len(row.Pages) > 0 && index > row.Pages[len(row.Pages)-1].Index {
+			if !behindStoredList && len(row.Thumbnails) > 0 && index >= len(row.Thumbnails) {
 				return model.GalleryPageThumb{}, false, nil
 			}
 		}
@@ -307,20 +304,14 @@ func (s *Server) resolveGalleryPageThumbFromStream(
 	var thumb model.GalleryPageThumb
 	found := false
 
-	_, err := s.scrapeGalleryPages(ctx, galleryID, token, func(total int, batch []model.CachedPage) error {
+	_, err := s.scrapeGalleryPages(ctx, galleryID, token, func(total int, pageURLs []string, thumbnails []model.GalleryPageThumb) error {
 		if total > 0 && index >= total {
 			// The walk already knows the gallery size: no need to wait for the
 			// remaining pages to conclude the index does not exist.
 			return errThumbResolved
 		}
-		for _, p := range batch {
-			if p.Index != index {
-				continue
-			}
-			if p.Thumbnail != nil {
-				thumb, found = *p.Thumbnail, true
-			}
-			// Each index appears exactly once per walk, so this is final.
+		if index < len(thumbnails) {
+			thumb, found = thumbnails[index], thumbnails[index].SpriteURL != ""
 			return errThumbResolved
 		}
 		return nil

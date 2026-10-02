@@ -822,15 +822,12 @@ func TestMockGalleryPages_Success(t *testing.T) {
 	if *stream.Meta.Total <= 0 {
 		t.Errorf("total = %d, want > 0", *stream.Meta.Total)
 	}
-	if len(stream.Pages) == 0 {
+	if len(stream.PageURLs) == 0 {
 		t.Fatal("pages should not be empty")
 	}
-	for i, p := range stream.Pages {
-		if p.PageURL == "" {
+	for i, url := range stream.PageURLs {
+		if url == "" {
 			t.Errorf("pages[%d].page_url should not be empty", i)
-		}
-		if p.Index != i {
-			t.Errorf("pages[%d].index = %d, want %d", i, p.Index, i)
 		}
 	}
 }
@@ -865,16 +862,13 @@ func TestMockGalleryPages_Paginated(t *testing.T) {
 	if *stream.Meta.Total != 65 {
 		t.Errorf("total = %d, want 65", *stream.Meta.Total)
 	}
-	if len(stream.Pages) != 65 {
-		t.Fatalf("pages len = %d, want 65", len(stream.Pages))
+	if len(stream.PageURLs) != 65 {
+		t.Fatalf("pages len = %d, want 65", len(stream.PageURLs))
 	}
-	for i, p := range stream.Pages {
-		if p.Index != i {
-			t.Errorf("pages[%d].index = %d, want %d", i, p.Index, i)
-		}
+	for i, url := range stream.PageURLs {
 		wantSuffix := fmt.Sprintf("-%d", i+1)
-		if !strings.HasSuffix(p.PageURL, wantSuffix) {
-			t.Errorf("pages[%d].page_url = %q, want suffix %q", i, p.PageURL, wantSuffix)
+		if !strings.HasSuffix(url, wantSuffix) {
+			t.Errorf("pages[%d].page_url = %q, want suffix %q", i, url, wantSuffix)
 		}
 	}
 }

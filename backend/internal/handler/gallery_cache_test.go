@@ -80,10 +80,9 @@ func seedGalleryCache(t *testing.T, client *ent.Client, id int64, token string) 
 	}); err != nil {
 		t.Fatalf("seed cache meta: %v", err)
 	}
-	if err := gallerycache.UpsertPages(t.Context(), client, id, token, []model.CachedPage{
-		{PageURL: "https://exhentai.org/s/abc/1", Index: 0},
-		{PageURL: "https://exhentai.org/s/abc/2", Index: 1},
-	}); err != nil {
+	if err := gallerycache.UpsertPages(t.Context(), client, id, token,
+		[]string{"https://exhentai.org/s/abc/1", "https://exhentai.org/s/abc/2"},
+		[]model.GalleryPageThumb{{}, {}}); err != nil {
 		t.Fatalf("seed cache pages: %v", err)
 	}
 }
@@ -116,8 +115,8 @@ func TestGalleryPages_WritesCache(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("cache lookup: found=%v err=%v", found, err)
 	}
-	if len(row.Pages) != 3 {
-		t.Errorf("cached pages = %d, want 3", len(row.Pages))
+	if len(row.PageUrls) != 3 {
+		t.Errorf("cached pages = %d, want 3", len(row.PageUrls))
 	}
 	if row.PagesFetchedAt == nil {
 		t.Error("pages_fetched_at should be set")
@@ -144,8 +143,8 @@ func TestGalleryPages_FreshCacheServedWithoutUpstream(t *testing.T) {
 		t.Fatalf("status = %d, want 200 (fresh cache). body: %s", w.Code, w.Body.String())
 	}
 	stream := parsePagesStream(t, w.Body.Bytes())
-	if !stream.Done || len(stream.Pages) != 2 {
-		t.Fatalf("stream should replay the cached 2 pages: done=%v pages=%d", stream.Done, len(stream.Pages))
+	if !stream.Done || len(stream.PageURLs) != 2 {
+		t.Fatalf("stream should replay the cached 2 pages: done=%v pages=%d", stream.Done, len(stream.PageURLs))
 	}
 }
 
@@ -198,7 +197,7 @@ func TestGalleryPages_MidStreamFailureWritesNothing(t *testing.T) {
 	if stream.Error == "" {
 		t.Fatal("terminal line must be an error")
 	}
-	if len(stream.Pages) == 0 {
+	if len(stream.PageURLs) == 0 {
 		t.Fatal("pages should have been streamed before the failure")
 	}
 
@@ -378,8 +377,8 @@ func TestGalleryPages_CacheSurvivesClientDisconnect(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("cache lookup after disconnect: found=%v err=%v", found, err)
 	}
-	if len(row.Pages) != 3 {
-		t.Errorf("cached pages = %d, want 3", len(row.Pages))
+	if len(row.PageUrls) != 3 {
+		t.Errorf("cached pages = %d, want 3", len(row.PageUrls))
 	}
 }
 
@@ -425,8 +424,8 @@ func TestGalleryPages_MultiBatchWriteFailureStillCaches(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("cache lookup after write failure: found=%v err=%v", found, err)
 	}
-	if len(row.Pages) != 100 {
-		t.Errorf("cached pages = %d, want 100", len(row.Pages))
+	if len(row.PageUrls) != 100 {
+		t.Errorf("cached pages = %d, want 100", len(row.PageUrls))
 	}
 }
 
@@ -470,8 +469,8 @@ func TestGalleryPages_ConcurrentScrapesShareSingleflight(t *testing.T) {
 		if !stream.Done {
 			t.Errorf("response %d did not finish with done: error=%q", i, stream.Error)
 		}
-		if len(stream.Pages) != 65 {
-			t.Errorf("response %d pages = %d, want 65", i, len(stream.Pages))
+		if len(stream.PageURLs) != 65 {
+			t.Errorf("response %d pages = %d, want 65", i, len(stream.PageURLs))
 		}
 	}
 }
@@ -567,8 +566,8 @@ func TestGalleryPages_FollowerStreamsBeforeScrapeCompletes(t *testing.T) {
 		"follower": followerW.Body.String(),
 	} {
 		stream := parsePagesStream(t, []byte(body))
-		if !stream.Done || len(stream.Pages) != 65 {
-			t.Errorf("%s: done=%v pages=%d, want done with 65", name, stream.Done, len(stream.Pages))
+		if !stream.Done || len(stream.PageURLs) != 65 {
+			t.Errorf("%s: done=%v pages=%d, want done with 65", name, stream.Done, len(stream.PageURLs))
 		}
 	}
 }
@@ -578,13 +577,13 @@ func TestGalleryPages_FollowerStreamsBeforeScrapeCompletes(t *testing.T) {
 // hub, followers blocked until the whole scrape finished.
 func TestGalleryPagesStream_ReplaysPrefixToLateSubscriber(t *testing.T) {
 	stream := newGalleryPagesStream()
-	stream.append(3, []model.CachedPage{{Index: 0, PageURL: "p0"}, {Index: 1, PageURL: "p1"}})
+	stream.append(3, []string{"p0", "p1"}, []model.GalleryPageThumb{{}, {}})
 
 	batches := make(chan int, 4)
 	drainErr := make(chan error, 1)
 	go func() {
-		_, err := stream.drain(t.Context(), 0, func(_ int, batch []model.CachedPage) error {
-			batches <- len(batch)
+		_, err := stream.drain(t.Context(), 0, func(_ int, urls []string, thumbs []model.GalleryPageThumb) error {
+			batches <- len(urls)
 			return nil
 		})
 		drainErr <- err
@@ -599,7 +598,7 @@ func TestGalleryPagesStream_ReplaysPrefixToLateSubscriber(t *testing.T) {
 		t.Fatal("late subscriber did not receive the already-scraped prefix")
 	}
 
-	stream.append(3, []model.CachedPage{{Index: 2, PageURL: "p2"}})
+	stream.append(3, []string{"p2"}, []model.GalleryPageThumb{{}})
 	stream.finish(nil)
 
 	select {
@@ -625,7 +624,7 @@ func TestPagesStream_DrainContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	drainErr := make(chan error, 1)
 	go func() {
-		_, err := stream.drain(ctx, 0, func(int, []model.CachedPage) error { return nil })
+		_, err := stream.drain(ctx, 0, func(int, []string, []model.GalleryPageThumb) error { return nil })
 		drainErr <- err
 	}()
 
@@ -643,7 +642,7 @@ func TestPagesStream_DrainContextCancel(t *testing.T) {
 	}
 
 	// The stream is unaffected: later subscribers still drain normally.
-	stream.append(1, []model.CachedPage{{Index: 0, PageURL: "p0"}})
+	stream.append(1, []string{"p0"}, []model.GalleryPageThumb{{}})
 	stream.finish(nil)
 	if _, err := stream.drain(t.Context(), 0, nil); err != nil {
 		t.Fatalf("drain after cancellation = %v, want nil", err)
@@ -762,14 +761,15 @@ func TestCachedGalleryPages_Hit(t *testing.T) {
 		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
 	}
 	var resp struct {
-		Total int                `json:"total"`
-		Pages []model.CachedPage `json:"pages"`
+		Total       int                      `json:"total"`
+		PageURLs    []string                 `json:"page_urls"`
+		Thumbnails  []model.GalleryPageThumb `json:"thumbnails"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.Total != 2 || len(resp.Pages) != 2 {
-		t.Errorf("pages = %d (total %d), want 2", len(resp.Pages), resp.Total)
+	if resp.Total != 2 || len(resp.PageURLs) != 2 {
+		t.Errorf("pages = %d (total %d), want 2", len(resp.PageURLs), resp.Total)
 	}
 	if got := w.Header().Get("Cache-Control"); got != "no-store" {
 		t.Errorf("Cache-Control = %q, want no-store", got)
@@ -901,8 +901,8 @@ func TestPrefetchGallery_WritesCache(t *testing.T) {
 	if row.Title != "Prefetch Test" {
 		t.Errorf("title = %q, want %q", row.Title, "Prefetch Test")
 	}
-	if len(row.Pages) != 4 {
-		t.Errorf("cached pages = %d, want 4", len(row.Pages))
+	if len(row.PageUrls) != 4 {
+		t.Errorf("cached pages = %d, want 4", len(row.PageUrls))
 	}
 }
 
@@ -935,8 +935,8 @@ func TestPrefetchGallery_IncompletePagesNotCached(t *testing.T) {
 	if row.PagesFetchedAt != nil {
 		t.Error("pages_fetched_at must not be set on a failed scrape")
 	}
-	if len(row.Pages) != 0 {
-		t.Errorf("cached pages = %d, want 0", len(row.Pages))
+	if len(row.PageUrls) != 0 {
+		t.Errorf("cached pages = %d, want 0", len(row.PageUrls))
 	}
 }
 
@@ -985,21 +985,19 @@ func TestGalleryCache_MetaTracksApiPagesFirstWrite(t *testing.T) {
 	}
 
 	// Pages are stored first-write only.
-	if err := gallerycache.UpsertPages(ctx, client, 9001, "tok", []model.CachedPage{
-		{PageURL: "a", Index: 0},
-	}); err != nil {
+	if err := gallerycache.UpsertPages(ctx, client, 9001, "tok",
+		[]string{"a"},
+		[]model.GalleryPageThumb{{}}); err != nil {
 		t.Fatalf("first pages write: %v", err)
 	}
-	if err := gallerycache.UpsertPages(ctx, client, 9001, "tok", []model.CachedPage{
-		{PageURL: "a", Index: 0},
-		{PageURL: "b", Index: 1},
-		{PageURL: "c", Index: 2},
-	}); err != nil {
+	if err := gallerycache.UpsertPages(ctx, client, 9001, "tok",
+		[]string{"a", "b", "c"},
+		[]model.GalleryPageThumb{{}, {}, {}}); err != nil {
 		t.Fatalf("second pages write: %v", err)
 	}
 	row, _, _ = gallerycache.Get(ctx, client, 9001, "tok")
-	if len(row.Pages) != 1 {
-		t.Errorf("pages = %d, want 1 (no overwrite)", len(row.Pages))
+	if len(row.PageUrls) != 1 {
+		t.Errorf("pages = %d, want 1 (no overwrite)", len(row.PageUrls))
 	}
 }
 
@@ -1008,19 +1006,17 @@ func TestUpsertPages_BackfillsThumbnailGeometry(t *testing.T) {
 	ctx := t.Context()
 
 	// A row cached before sprite geometry existed (no thumbnails).
-	if err := gallerycache.UpsertPages(ctx, client, 9002, "tok", []model.CachedPage{
-		{PageURL: "a", Index: 0},
-		{PageURL: "b", Index: 1},
-	}); err != nil {
+	if err := gallerycache.UpsertPages(ctx, client, 9002, "tok",
+		[]string{"a", "b"},
+		[]model.GalleryPageThumb{{}, {}}); err != nil {
 		t.Fatalf("first pages write: %v", err)
 	}
 
 	// A later scrape with the same pages plus geometry must replace it.
 	thumb := &model.GalleryPageThumb{SpriteURL: "https://cdn.example/1-0.webp", Width: 200, Height: 282}
-	if err := gallerycache.UpsertPages(ctx, client, 9002, "tok", []model.CachedPage{
-		{PageURL: "a", Index: 0, Thumbnail: thumb},
-		{PageURL: "b", Index: 1, Thumbnail: thumb},
-	}); err != nil {
+	if err := gallerycache.UpsertPages(ctx, client, 9002, "tok",
+		[]string{"a", "b"},
+		[]model.GalleryPageThumb{{SpriteURL: "https://cdn.example/1-0.webp", Width: 200, Height: 282}, *thumb}); err != nil {
 		t.Fatalf("backfill write: %v", err)
 	}
 
@@ -1028,19 +1024,18 @@ func TestUpsertPages_BackfillsThumbnailGeometry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cache lookup: %v", err)
 	}
-	if len(row.Pages) != 2 || row.Pages[0].Thumbnail == nil || row.Pages[1].Thumbnail == nil {
-		t.Fatalf("pages should be backfilled with geometry: %+v", row.Pages)
+	if len(row.Thumbnails) != 2 || row.Thumbnails[0].SpriteURL == "" || row.Thumbnails[1].SpriteURL == "" {
+		t.Fatalf("pages should be backfilled with geometry: %+v", row.Thumbnails)
 	}
 
 	// A geometry-less list must not downgrade the enriched one.
-	if err := gallerycache.UpsertPages(ctx, client, 9002, "tok", []model.CachedPage{
-		{PageURL: "a", Index: 0},
-		{PageURL: "b", Index: 1},
-	}); err != nil {
+	if err := gallerycache.UpsertPages(ctx, client, 9002, "tok",
+		[]string{"a", "b"},
+		[]model.GalleryPageThumb{{}, {}}); err != nil {
 		t.Fatalf("downgrade write: %v", err)
 	}
 	row, _, _ = gallerycache.Get(ctx, client, 9002, "tok")
-	if row.Pages[0].Thumbnail == nil {
+	if row.Thumbnails[0].SpriteURL == "" {
 		t.Error("a geometry-less list must not overwrite an enriched one")
 	}
 }

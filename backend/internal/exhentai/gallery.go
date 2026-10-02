@@ -127,32 +127,39 @@ func ScrapeGalleryDetails(ctx context.Context, client *http.Client, galleryURL s
 
 // extractGalleryPages collects gallery page links and their sprite thumbnail
 // geometry from a gallery document.
-func extractGalleryPages(doc *goquery.Document) []model.CachedPage {
-	var pages []model.CachedPage
+// Returns page URLs and their corresponding thumbnail geometries in parallel slices.
+func extractGalleryPages(doc *goquery.Document) (pageURLs []string, thumbnails []model.GalleryPageThumb) {
 	doc.Find("#gdt > a").Each(func(i int, s *goquery.Selection) {
 		href, _ := s.Attr("href")
 		if href == "" {
 			return
 		}
-		page := model.CachedPage{PageURL: href}
+		pageURLs = append(pageURLs, href)
+		var thumb model.GalleryPageThumb
+		hasThumb := false
 		if style, ok := s.Find("div[style]").First().Attr("style"); ok {
 			if m := pageThumbStyleReg.FindStringSubmatch(style); len(m) == 6 {
 				w, _ := strconv.Atoi(m[1])
 				h, _ := strconv.Atoi(m[2])
 				posX, _ := strconv.Atoi(m[4])
 				posY, _ := strconv.Atoi(m[5])
-				page.Thumbnail = &model.GalleryPageThumb{
+				thumb = model.GalleryPageThumb{
 					SpriteURL: m[3],
 					X:         -posX,
 					Y:         -posY,
 					Width:     w,
 					Height:    h,
 				}
+				hasThumb = true
 			}
 		}
-		pages = append(pages, page)
+		if hasThumb {
+			thumbnails = append(thumbnails, thumb)
+		} else {
+			thumbnails = append(thumbnails, model.GalleryPageThumb{})
+		}
 	})
-	return pages
+	return
 }
 
 // galleryTotalImages parses the total image count from the ".gpc" counter.
@@ -199,7 +206,7 @@ func galleryPagesWalkBudget(total int) time.Duration {
 // received. An empty thumbnail page while pages are still missing, a received
 // count that overshoots total, or an emit failure (caller went away) all fail
 // the scrape. Partial results are never reported as success.
-func StreamGalleryPages(ctx context.Context, client *http.Client, galleryURL string, emit func(total int, batch []model.CachedPage) error) error {
+func StreamGalleryPages(ctx context.Context, client *http.Client, galleryURL string, emit func(total int, pageURLs []string, thumbnails []model.GalleryPageThumb) error) error {
 	doc, err := httpGetDoc(ctx, client, galleryURL)
 	if err != nil {
 		return err
@@ -209,17 +216,14 @@ func StreamGalleryPages(ctx context.Context, client *http.Client, galleryURL str
 	if total <= 0 {
 		return fmt.Errorf("cannot determine gallery total: %q counter missing or invalid", ".gpc")
 	}
-	first := extractGalleryPages(doc)
-	if len(first) == 0 {
+	firstURLs, firstThumbs := extractGalleryPages(doc)
+	if len(firstURLs) == 0 {
 		return fmt.Errorf("cannot determine gallery total: no page links in the gallery document")
 	}
-	for i := range first {
-		first[i].Index = i
-	}
-	if err := emit(total, first); err != nil {
+	if err := emit(total, firstURLs, firstThumbs); err != nil {
 		return err
 	}
-	received := len(first)
+	received := len(firstURLs)
 
 	// The total parsed from the first document bounds the pagination walk: a
 	// gallery with many pages gets more time, but a hanging or abusive walk
@@ -239,17 +243,14 @@ func StreamGalleryPages(ctx context.Context, client *http.Client, galleryURL str
 		if err != nil {
 			return err
 		}
-		batch := extractGalleryPages(pageDoc)
-		if len(batch) == 0 {
+		batchURLs, batchThumbs := extractGalleryPages(pageDoc)
+		if len(batchURLs) == 0 {
 			return fmt.Errorf("incomplete page list: thumbnail page %d is empty, got %d of %d pages", p, received, total)
 		}
-		for i := range batch {
-			batch[i].Index = received + i
-		}
-		if err := emit(total, batch); err != nil {
+		if err := emit(total, batchURLs, batchThumbs); err != nil {
 			return err
 		}
-		received += len(batch)
+		received += len(batchURLs)
 	}
 
 	if received != total {
@@ -261,15 +262,17 @@ func StreamGalleryPages(ctx context.Context, client *http.Client, galleryURL str
 // ScrapeGalleryPages fetches the full list of gallery pages. It reports an
 // error instead of returning a partial list, so callers only ever cache a
 // complete result.
-func ScrapeGalleryPages(ctx context.Context, client *http.Client, galleryURL string) ([]model.CachedPage, error) {
-	var pages []model.CachedPage
-	if err := StreamGalleryPages(ctx, client, galleryURL, func(_ int, batch []model.CachedPage) error {
-		pages = append(pages, batch...)
+func ScrapeGalleryPages(ctx context.Context, client *http.Client, galleryURL string) ([]string, []model.GalleryPageThumb, error) {
+	var pageURLs []string
+	var thumbnails []model.GalleryPageThumb
+	if err := StreamGalleryPages(ctx, client, galleryURL, func(_ int, urls []string, thumbs []model.GalleryPageThumb) error {
+		pageURLs = append(pageURLs, urls...)
+		thumbnails = append(thumbnails, thumbs...)
 		return nil
 	}); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return pages, nil
+	return pageURLs, thumbnails, nil
 }
 
 // ScrapeGalleryPageThumb returns the sprite thumbnail geometry for a single
@@ -289,13 +292,16 @@ func ScrapeGalleryPageThumb(ctx context.Context, client *http.Client, galleryURL
 		return model.GalleryPageThumb{}, false, nil
 	}
 
-	first := extractGalleryPages(doc)
-	perPage := len(first)
+	firstURLs, firstThumbs := extractGalleryPages(doc)
+	perPage := len(firstURLs)
 	if perPage == 0 {
 		return model.GalleryPageThumb{}, false, nil
 	}
 	if index < perPage {
-		return pageThumbAt(first, index)
+		if index < len(firstThumbs) && firstThumbs[index].SpriteURL != "" {
+			return firstThumbs[index], true, nil
+		}
+		return model.GalleryPageThumb{}, false, nil
 	}
 
 	u, err := url.Parse(galleryURL)
@@ -307,12 +313,9 @@ func ScrapeGalleryPageThumb(ctx context.Context, client *http.Client, galleryURL
 	if err != nil {
 		return model.GalleryPageThumb{}, false, err
 	}
-	return pageThumbAt(extractGalleryPages(pageDoc), index%perPage)
-}
-
-func pageThumbAt(pages []model.CachedPage, index int) (model.GalleryPageThumb, bool, error) {
-	if index < 0 || index >= len(pages) || pages[index].Thumbnail == nil {
-		return model.GalleryPageThumb{}, false, nil
+	_, batchThumbs := extractGalleryPages(pageDoc)
+	if idx := index % perPage; idx < len(batchThumbs) && batchThumbs[idx].SpriteURL != "" {
+		return batchThumbs[idx], true, nil
 	}
-	return *pages[index].Thumbnail, true, nil
+	return model.GalleryPageThumb{}, false, nil
 }
