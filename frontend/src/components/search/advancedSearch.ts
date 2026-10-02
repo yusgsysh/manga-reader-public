@@ -1,16 +1,10 @@
 import type { AdvancedSearchOptions } from "../../types/gallery";
+import { ALL_CATEGORY_VALUES, CATEGORY_META } from "../../lib/categories";
 
-export const CATEGORIES = [
-  { value: "doujinshi", label: "Doujinshi" },
-  { value: "manga", label: "Manga" },
-  { value: "artistcg", label: "Artist CG" },
-  { value: "gamecg", label: "Game CG" },
-  { value: "western", label: "Western" },
-  { value: "cosplay", label: "Cosplay" },
-  { value: "asianporn", label: "Asian Porn" },
-  { value: "non-h", label: "Non-H" },
-  { value: "misc", label: "Misc" },
-];
+export const CATEGORIES = ALL_CATEGORY_VALUES.map((value) => ({
+  value,
+  label: CATEGORY_META[value].label,
+}));
 
 export const MIN_RATING_OPTIONS = [
   { value: "", label: "Any rating" },

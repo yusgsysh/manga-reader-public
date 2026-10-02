@@ -24,6 +24,7 @@ import {
   countActiveFilters,
 } from "../components/search/advancedSearch";
 import { FilterChip } from "../components/search/FilterChip";
+import { ALL_CATEGORY_VALUES, categoryPillStyle } from "../lib/categories";
 import type {
   AdvancedSearchOptions,
   ListingNavOptions,
@@ -107,13 +108,20 @@ export function SearchPage() {
     if (e.key === "Enter") handleSearch();
   };
 
+  // ExHentai semantics: every category is included by default; clicking one
+  // excludes it. The `categories` param stores the still-included set, and an
+  // empty value means "all included".
   const toggleCategory = (cat: string) => {
     setCategories((prev) => {
-      const current = prev ? prev.split(",") : [];
-      const next = current.includes(cat)
-        ? current.filter((c) => c !== cat)
-        : [...current, cat];
-      return next.length > 0 ? next.join(",") : "";
+      const included = prev
+        ? prev.split(",").filter(Boolean)
+        : [...ALL_CATEGORY_VALUES];
+      const next = included.includes(cat)
+        ? included.filter((c) => c !== cat)
+        : [...included, cat];
+      if (next.length === 0) return prev;
+      if (next.length === ALL_CATEGORY_VALUES.length) return "";
+      return ALL_CATEGORY_VALUES.filter((value) => next.includes(value)).join(",");
     });
   };
 
@@ -198,7 +206,9 @@ export function SearchPage() {
 
   const galleries = data?.pages.flatMap((page) => page.results) ?? [];
   const total = data?.pages[0]?.total ?? 0;
-  const activeCategories = categories ? categories.split(",") : [];
+  const includedCategories = categories
+    ? categories.split(",").filter(Boolean)
+    : ALL_CATEGORY_VALUES;
 
   return (
     <div className="space-y-5">
@@ -226,8 +236,29 @@ export function SearchPage() {
       </div>
 
       {/* Filters */}
-      <div className="card-surface space-y-4 p-4">
-        <div className="flex flex-wrap items-center justify-end gap-3">
+      <div className="card-surface p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-1.5">
+            {CATEGORIES.map((cat) => {
+              const active = includedCategories.includes(cat.value);
+              return (
+                <button
+                  key={cat.value}
+                  type="button"
+                  onClick={() => toggleCategory(cat.value)}
+                  aria-pressed={active}
+                  style={categoryPillStyle(cat.value)}
+                  className={cn(
+                    "rounded-[3px] border px-2.5 py-1 text-xs font-bold tracking-[1px] transition-opacity",
+                    active ? "" : "opacity-40 hover:opacity-60",
+                  )}
+                >
+                  {cat.label}
+                </button>
+              );
+            })}
+          </div>
+
           <button
             type="button"
             onClick={() => setShowAdvanced(!showAdvanced)}
@@ -245,28 +276,6 @@ export function SearchPage() {
               </span>
             )}
           </button>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {CATEGORIES.map((cat) => {
-            const active = activeCategories.includes(cat.value);
-            return (
-              <button
-                key={cat.value}
-                type="button"
-                onClick={() => toggleCategory(cat.value)}
-                aria-pressed={active}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                  active
-                    ? "border-transparent bg-[var(--app-accent)] text-[var(--app-accent-contrast)]"
-                    : "border-kumo-hairline text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default",
-                )}
-              >
-                {cat.label}
-              </button>
-            );
-          })}
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-import { Input, Checkbox, Select } from "@cloudflare/kumo";
+import { Input, Checkbox, Select, cn } from "@cloudflare/kumo";
 import { Section } from "../ui";
 import { MIN_RATING_OPTIONS } from "./advancedSearch";
 import type { AdvancedSearchOptions } from "../../types/gallery";
@@ -26,17 +26,29 @@ interface AdvancedFilterFieldsProps {
     value: string | boolean | number | undefined,
   ) => void;
   disabled?: boolean;
+  /**
+   * `"responsive"` uses viewport breakpoints (inline search panel).
+   * `"stacked"` keeps a single-column range and 2-column toggles that fit the
+   * narrow popover without relying on the viewport width.
+   */
+  layout?: "responsive" | "stacked";
 }
 
 export function AdvancedFilterFields({
   value,
   onChange,
   disabled,
+  layout = "responsive",
 }: AdvancedFilterFieldsProps) {
   return (
     <>
       <Section title="范围">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-4",
+            layout === "responsive" && "sm:grid-cols-2",
+          )}
+        >
           <div className="space-y-2">
             <label className="text-xs font-medium text-kumo-subtle">
               页数范围
@@ -47,6 +59,7 @@ export function AdvancedFilterFields({
                 placeholder="最小"
                 aria-label="最小页数"
                 disabled={disabled}
+                className="min-w-0 flex-1"
                 value={value.min_pages ?? ""}
                 onChange={(e) => {
                   const next = e.target.value
@@ -56,12 +69,13 @@ export function AdvancedFilterFields({
                 }}
                 min="0"
               />
-              <span className="text-kumo-subtle">-</span>
+              <span className="shrink-0 text-kumo-subtle">-</span>
               <Input
                 type="number"
                 placeholder="最大"
                 aria-label="最大页数"
                 disabled={disabled}
+                className="min-w-0 flex-1"
                 value={value.max_pages ?? ""}
                 onChange={(e) => {
                   const next = e.target.value
@@ -84,6 +98,7 @@ export function AdvancedFilterFields({
               }}
               aria-label="最低评分"
               disabled={disabled}
+              className="w-full"
               items={MIN_RATING_OPTIONS}
             />
           </div>
@@ -91,7 +106,14 @@ export function AdvancedFilterFields({
       </Section>
 
       <Section title="筛选选项">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          className={cn(
+            "grid gap-3",
+            layout === "stacked"
+              ? "grid-cols-2"
+              : "sm:grid-cols-2 lg:grid-cols-3",
+          )}
+        >
           {FILTER_TOGGLES.map((toggle) => (
             <label
               key={toggle.key}

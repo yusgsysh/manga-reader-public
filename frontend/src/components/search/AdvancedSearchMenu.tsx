@@ -93,7 +93,7 @@ export function AdvancedSearchMenu({
         side="bottom"
         align="end"
         sideOffset={8}
-        className="max-h-[70vh] w-[min(90vw,26rem)] overflow-y-auto p-4"
+        className="max-h-[70vh] w-[min(94vw,30rem)] overflow-y-auto p-4"
       >
         <div className="space-y-6">
           <TagFilterInput
@@ -109,6 +109,7 @@ export function AdvancedSearchMenu({
             value={pendingOptions}
             onChange={updateOption}
             disabled={disabled}
+            layout="stacked"
           />
 
           <div className="flex justify-end gap-2">

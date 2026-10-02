@@ -7,7 +7,7 @@ import { useTagTranslation } from "../../hooks/useTagTranslation";
 import { Star, Tag as TagIcon } from "@phosphor-icons/react";
 import { createPortal } from "react-dom";
 import { useState, useRef, useEffect } from "react";
-import { Chip } from "../ui";
+import { CategoryChip } from "./CategoryChip";
 
 const TAG_POPOVER_WIDTH = 224;
 const VIEWPORT_MARGIN = 8;
@@ -229,7 +229,7 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
           </h3>
 
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-kumo-subtle">
-            {gallery.category && <Chip tone="solid">{gallery.category}</Chip>}
+            {gallery.category && <CategoryChip category={gallery.category} />}
             {typeof gallery.rating === "number" && (
               <span className="inline-flex items-center gap-0.5">
                 <Star className="size-3.5 text-kumo-warning" weight="fill" />

@@ -27,6 +27,7 @@ import { thumbnailUrl } from "../lib/image";
 import { DOWNLOAD_PAGES_STALE_TIME } from "../lib/cacheConfig";
 import { formatPosted } from "../lib/time";
 import { Chip, Section } from "../components/ui";
+import { CategoryChip } from "../components/gallery/CategoryChip";
 
 function PageGridSkeleton() {
   return (
@@ -331,7 +332,7 @@ export function GalleryDetailPage() {
                 </Chip>
               )}
 
-              <Chip tone="solid">{gallery.category}</Chip>
+              <CategoryChip category={gallery.category} />
 
               <span className="inline-flex items-center gap-1 text-kumo-default">
                 <Star
