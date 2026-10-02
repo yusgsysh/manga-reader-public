@@ -33,7 +33,7 @@ type LayoutMode = ViewerSettings["layoutMode"];
 
 // Max concurrent page-thumbnail loads; keeps large galleries from firing
 // hundreds of requests at once.
-const THUMBNAIL_CONCURRENCY = 6;
+const THUMBNAIL_CONCURRENCY = 5;
 
 export function ReaderPage() {
   const { id: idParam, token } = useParams<{ id: string; token: string }>();

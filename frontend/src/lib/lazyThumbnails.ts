@@ -39,7 +39,7 @@ export interface ThumbnailQueue {
  * Runs image loads with at most `concurrency` in flight. A slot is freed when
  * the image fires `load` or `error`.
  */
-export function createThumbnailQueue(concurrency = 6): ThumbnailQueue {
+export function createThumbnailQueue(concurrency = 5): ThumbnailQueue {
   let active = 0;
   let stopped = false;
   const waiting: QueueItem[] = [];
@@ -86,7 +86,7 @@ export interface LazyThumbnailOptions {
  */
 export function observeLazyThumbnails(
   root: HTMLElement,
-  { concurrency = 6, rootMargin = "300px" }: LazyThumbnailOptions = {},
+  { concurrency = 5, rootMargin = "300px" }: LazyThumbnailOptions = {},
 ): () => void {
   const queue = createThumbnailQueue(concurrency);
   const pending = new WeakMap<HTMLImageElement, string>();
