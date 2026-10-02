@@ -204,6 +204,7 @@ export function DownloadManagerPage() {
 
   const handleCleanup = () => {
     cleanup.mutate(0);
+    setCleanupOpen(false);
   };
 
   const onZipStart = (id: number) => {
