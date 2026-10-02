@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  useNavigate,
-  useNavigationType,
-  useParams,
-  useSearchParams,
-} from "react-router";
+import { useParams, useSearchParams } from "react-router";
 import { Button, Loader } from "@cloudflare/kumo";
 import {
   ArrowLeft,
@@ -20,6 +15,7 @@ import {
 import { useGallery, useGalleryPages, useReadingProgress } from "../hooks/useReaderData";
 import { useReadingProgressSync } from "../hooks/useReadingProgressSync";
 import { useTheme } from "../hooks/useTheme";
+import { useBackNavigation } from "../hooks/useBackNavigation";
 import {
   clampPageIndex,
   galleryPageSlotsToManga,
@@ -39,8 +35,6 @@ type LayoutMode = ViewerSettings["layoutMode"];
 export function ReaderPage() {
   const { id: idParam, token } = useParams<{ id: string; token: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const navigationType = useNavigationType();
   const { resolvedMode } = useTheme();
   const viewerRef = useRef<MangaViewerHandle>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -62,6 +56,7 @@ export function ReaderPage() {
   const thumbnailsRef = useRef<LoadThumbnailsHandle | null>(null);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("inline");
   const id = Number(idParam);
+  const goBack = useBackNavigation(`/gallery/${id}/${token}`);
   const restart = searchParams.get("restart") === "1";
   // Capture a `?page=N` deep-link target once, so cleaning it from the URL
   // below cannot reset the reader back to the saved progress.
@@ -278,7 +273,7 @@ export function ReaderPage() {
           variant="secondary"
           onClick={() => {
             flushProgress();
-            navigate(-1);
+            goBack();
           }}
         >
           <ArrowLeft className="mr-1 size-4" weight="bold" />
@@ -300,11 +295,7 @@ export function ReaderPage() {
           size="sm"
           onClick={() => {
             flushProgress();
-            if (navigationType === "PUSH") {
-              navigate(-1);
-            } else {
-              navigate(`/gallery/${id}/${token}`);
-            }
+            goBack();
           }}
           aria-label="返回 Gallery"
         >

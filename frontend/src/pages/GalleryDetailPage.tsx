@@ -18,6 +18,7 @@ import {
   useBookshelfToggle,
   useGalleryDetail,
 } from "../hooks/useGalleryDetail";
+import { useBackNavigation } from "../hooks/useBackNavigation";
 import { fetchGalleryPagesWithFallback } from "../api/gallery";
 import { useReadingProgress } from "../hooks/useReaderData";
 import { useStartPrefillJob } from "../hooks/usePrefillJobs";
@@ -90,6 +91,7 @@ export function GalleryDetailPage() {
   }>();
 
   const navigate = useNavigate();
+  const goBack = useBackNavigation("/");
   const id = Number(idParam);
 
   const {
@@ -265,7 +267,7 @@ export function GalleryDetailPage() {
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => navigate(-1)}
+        onClick={goBack}
         className="w-fit"
       >
         <ArrowLeft className="mr-1 size-4" weight="bold" />

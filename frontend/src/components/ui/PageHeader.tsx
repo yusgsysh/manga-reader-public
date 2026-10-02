@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { useNavigate } from "react-router";
 import { ArrowLeft } from "@phosphor-icons/react";
 import { cn } from "@cloudflare/kumo";
+import { useBackNavigation } from "../../hooks/useBackNavigation";
 
 interface PageHeaderProps {
   title: string;
@@ -20,7 +20,7 @@ export function PageHeader({
   back,
   className,
 }: PageHeaderProps) {
-  const navigate = useNavigate();
+  const goBack = useBackNavigation("/");
 
   return (
     <div
@@ -33,7 +33,7 @@ export function PageHeader({
         {back && (
           <button
             type="button"
-            onClick={() => navigate(-1)}
+            onClick={goBack}
             aria-label="返回"
             className="flex size-8 shrink-0 items-center justify-center rounded-lg text-kumo-subtle transition-colors hover:bg-kumo-tint hover:text-kumo-default"
           >
