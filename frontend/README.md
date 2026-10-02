@@ -49,7 +49,11 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
 
 ## comimi 补丁（@yui540/comimi）
 
-### 背景
+本仓库对 `@yui540/comimi` 维护两处补丁，均由同一个 `patches/@yui540%2Fcomimi@0.26.0.patch` 承载：**预加载页白屏**与**触屏进度条缩略图**。
+
+### 补丁一：预加载页白屏
+
+#### 背景
 
 阅读器翻到「已预加载」的页面时，如果图片还没加载出来，会短暂白屏，而不是显示 comimi 的兔子加载动画。
 
@@ -82,6 +86,53 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
 
 注意：`dist/manga-viewer.global.js` 是浏览器全局构建，Vite 不引用，无需修改。
 
+### 补丁二：触屏进度条缩略图
+
+#### 背景
+
+桌面上拖动底部进度条会显示页面缩略图预览，但触屏设备上不显示。
+
+根因有两处：`@yui540/comimi@0.26.0` 的 `ControlsDock.buildSeek`（`dist/index.js`，约 1583 行）只给 `.comimi-seek-bar` 绑定了 `mousemove` / `mouseleave`，没有触摸事件；同时其内置样式对 `.comimi-seek-preview` 有 `@media (hover: none) { display: none; }`，主动在触屏设备上隐藏预览。
+
+#### 补丁
+
+`patches/@yui540%2Fcomimi@0.26.0.patch` 追加触摸监听，并让 `updateSeekPreview` 在 `clientX` 缺失时从 `touch` 事件取坐标：
+
+```diff
+ 		}), this.seekBar.addEventListener("mousemove", (e) => this.updateSeekPreview(e)), this.seekBar.addEventListener("mouseleave", () => {
+ 			this.seekPreview.dataset.show = "false";
++		}), this.seekBar.addEventListener("touchstart", (e) => this.updateSeekPreview(e), { passive: !0 }), this.seekBar.addEventListener("touchmove", (e) => this.updateSeekPreview(e), { passive: !0 }), this.seekBar.addEventListener("touchend", () => {
++			this.seekPreview.dataset.show = "false";
++		}), this.seekBar.addEventListener("touchcancel", () => {
++			this.seekPreview.dataset.show = "false";
+ 		}), this.seekBar.append(n, this.seekInput, this.seekPreview), e.append(t, this.seekBar), e;
+ 	}
+ 	updateSeekPreview(e) {
+@@
+ 		let r = this.seekBar.getBoundingClientRect();
+ 		if (r.width === 0) return;
+-		let i = Math.max(0, Math.min(r.width, e.clientX - r.left)), ...
++		let d = e.clientX;
++		if (d === void 0) {
++			let f = e.touches && e.touches[0] || e.changedTouches && e.changedTouches[0];
++			if (!f) return;
++			d = f.clientX;
++		}
++		let i = Math.max(0, Math.min(r.width, d - r.left)), ...
+```
+
+触摸监听用 `{ passive: true }`，不阻止默认行为，滑动 `<input type="range">` 仍照常翻页。
+
+内置样式在触屏上隐藏预览，需在 `src/index.css` 用更高优先级的规则解除（`0,2,0` > `0,1,0`，与注入顺序无关）：
+
+```css
+@media (hover: none) {
+  .reader-shell .comimi-seek-preview {
+    display: flex;
+  }
+}
+```
+
 ### 回归测试
 
 `e2e/repro-reader-loading.mjs` 延迟整页图片，先验证首页有兔子，再跳到预加载页采样。
@@ -104,11 +155,13 @@ bun run repro:reader-loading      # 诊断探针：仍白屏则 exit 0，已修�
    - 通过（兔子正常）：上游已修，删除 `patches/@yui540%2Fcomimi@*.patch` 和 `package.json` 的 `patchedDependencies`，本段可只留作历史记录。
    - 失败：继续下一步。
 
+   触屏进度条缩略图没有自动化回归，需在触屏设备或 DevTools 触摸模拟下手动确认；若上游已支持触摸事件并移除了 `@media (hover: none)` 隐藏，可一并去掉 `src/index.css` 里的 `.reader-shell .comimi-seek-preview` 覆盖。
+
 2. 重新打补丁：
 
    ```bash
    bun patch @yui540/comimi@x.y.z
-   # 按上面的 diff 修改 node_modules/@yui540/comimi/dist/index.js
+   # 按上面两处 diff 修改 node_modules/@yui540/comimi/dist/index.js
    bun patch --commit 'node_modules/@yui540/comimi'
    ```
 
@@ -116,7 +169,7 @@ bun run repro:reader-loading      # 诊断探针：仍白屏则 exit 0，已修�
 
 3. 验证：`bun run test:e2e`。
 
-4. 建议同时向上游提 issue/PR，把两条渲染分支合并，最终移除补丁。
+4. 建议同时向上游提 issue/PR（合并两条渲染分支、补齐触摸事件），最终移除补丁。
 
 ## 环境变量
 

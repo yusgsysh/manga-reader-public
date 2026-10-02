@@ -1,8 +1,37 @@
+diff --git a/node_modules/@yui540/comimi/.bun-tag-643ee4adcf125b88 b/.bun-tag-643ee4adcf125b88
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
 diff --git a/dist/index.js b/dist/index.js
-index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..ca8b7460a98f940929206ce76645c034b99a943a 100644
+index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..f84612b34795f34bf14fe221740eb1f41206dff1 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -1807,10 +1807,16 @@ var Le = class {
+@@ -1582,6 +1582,10 @@ var ke = class {
+ 			this.callbacks.goToPage(Number(this.seekInput.value));
+ 		}), this.seekPreview = document.createElement("div"), this.seekPreview.className = "comimi-seek-preview", this.seekPreview.dataset.show = "false", this.seekPreviewThumbs = document.createElement("div"), this.seekPreviewThumbs.className = "comimi-seek-preview-thumbs", this.seekPreviewLabel = document.createElement("div"), this.seekPreviewLabel.className = "comimi-seek-preview-label", this.seekPreview.append(this.seekPreviewThumbs, this.seekPreviewLabel), this.seekBar.addEventListener("mousemove", (e) => this.updateSeekPreview(e)), this.seekBar.addEventListener("mouseleave", () => {
+ 			this.seekPreview.dataset.show = "false";
++		}), this.seekBar.addEventListener("touchstart", (e) => this.updateSeekPreview(e), { passive: !0 }), this.seekBar.addEventListener("touchmove", (e) => this.updateSeekPreview(e), { passive: !0 }), this.seekBar.addEventListener("touchend", () => {
++			this.seekPreview.dataset.show = "false";
++		}), this.seekBar.addEventListener("touchcancel", () => {
++			this.seekPreview.dataset.show = "false";
+ 		}), this.seekBar.append(n, this.seekInput, this.seekPreview), e.append(t, this.seekBar), e;
+ 	}
+ 	updateSeekPreview(e) {
+@@ -1591,7 +1595,13 @@ var ke = class {
+ 		if (n === 0) return;
+ 		let r = this.seekBar.getBoundingClientRect();
+ 		if (r.width === 0) return;
+-		let i = Math.max(0, Math.min(r.width, e.clientX - r.left)), a = i / r.width, o = t.settings.readingDirection === "rtl" ? 1 - a : a, s = L(t, Math.min(n - 1, Math.max(0, Math.floor(o * n))), !1), c = s.map((e) => t.manga.pages[e]).filter((e) => !!e);
++		let d = e.clientX;
++		if (d === void 0) {
++			let f = e.touches && e.touches[0] || e.changedTouches && e.changedTouches[0];
++			if (!f) return;
++			d = f.clientX;
++		}
++		let i = Math.max(0, Math.min(r.width, d - r.left)), a = i / r.width, o = t.settings.readingDirection === "rtl" ? 1 - a : a, s = L(t, Math.min(n - 1, Math.max(0, Math.floor(o * n))), !1), c = s.map((e) => t.manga.pages[e]).filter((e) => !!e);
+ 		this.refreshSeekPreviewThumbs(s, c);
+ 		let l = [...s].sort((e, t) => e - t);
+ 		this.seekPreviewLabel.textContent = l.length > 1 ? `${l[0] + 1} - ${l[l.length - 1] + 1}` : String(l[0] + 1), this.seekPreview.style.left = `${i}px`, this.seekPreview.dataset.show = "true";
+@@ -1807,10 +1817,16 @@ var Le = class {
  			i.replaceChildren(R(this.options.i18n, n + 1, this.options.errorMascot)), this.options.onPageLoadError?.(n);
  		}), a.addEventListener("contextmenu", (e) => e.preventDefault()), i.append(a);
  		let o = `${e.manga.id}:${t.id}`, s = this.imageSources.get(o);
