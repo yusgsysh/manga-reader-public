@@ -1,22 +1,32 @@
 name: Local
 variables:
   - name: baseUrl
-    value: http://localhost:8080
+    value: https://exhentai.09270721.xyz
+    description: ""
   - name: site
     value: exhentai
+    description: ""
   - name: searchQuery
     value: ""
+    description: ""
   - name: galleryId
     value: "3138775"
+    description: ""
   - name: galleryToken
     value: 30b0285f9b
+    description: ""
   - name: pageUrl
     value: https://exhentai.org/s/abc/3138775-1
+    description: ""
   - name: thumbnailUrl
     value: https://s.exhentai.org/w/00/999/15582-3owak8q3.webp
+    description: ""
   - name: spriteUrl
-    value: https://zoycbewnml.hath.network/c2/nu85b6ladjhz2v196v/3138775-0.webp
+    value: https://zurswtyclg.hath.network/c2/ainmwwz5kv6y4o197b/4223874-0.webp
+    description: ""
   - name: prefillId
     value: "1"
+    description: ""
   - name: cleanupDays
     value: "30"
+    description: ""
