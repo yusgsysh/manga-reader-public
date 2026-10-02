@@ -31,8 +31,6 @@ export function TagFilterInput({
 
   const tagInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
-  const sizerRef = useRef<HTMLSpanElement>(null);
-  const [inputWidth, setInputWidth] = useState<number>();
 
   const { searchTags, ready: tagDbReady } = useTagTranslation();
 
@@ -105,28 +103,12 @@ export function TagFilterInput({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Size the input to its content (falling back to the placeholder when empty)
-  // so its width tracks what is typed instead of staying fixed.
-  useEffect(() => {
-    const el = sizerRef.current;
-    if (el) setInputWidth(el.getBoundingClientRect().width);
-  }, [tagInput]);
-
-  const placeholder = "输入标签搜索";
-
   return (
     <Section title="标签">
       <div className="relative">
-        <span
-          ref={sizerRef}
-          aria-hidden="true"
-          className="pointer-events-none invisible absolute left-0 top-0 whitespace-pre px-3 text-base"
-        >
-          {tagInput || placeholder}
-        </span>
         <Input
           ref={tagInputRef}
-          placeholder={placeholder}
+          placeholder="输入标签搜索"
           aria-label="搜索标签"
           aria-autocomplete="list"
           aria-expanded={showSuggestions}
@@ -137,8 +119,7 @@ export function TagFilterInput({
           onFocus={() => {
             if (suggestions.length > 0) setShowSuggestions(true);
           }}
-          style={{ width: inputWidth ? `${inputWidth}px` : undefined }}
-          className="max-w-full"
+          className="w-full"
         />
         {showSuggestions && suggestions.length > 0 && (
           <div
