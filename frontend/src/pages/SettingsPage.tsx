@@ -1,9 +1,11 @@
+import { useState } from "react";
 import {
   ArrowsClockwise,
   CircleNotch,
   Gear,
   Monitor,
   Moon,
+  Palette,
   Sun,
 } from "@phosphor-icons/react";
 import {
@@ -12,12 +14,14 @@ import {
   useKumoToastManager,
   cn,
 } from "@cloudflare/kumo";
+import { HexColorPicker, HexColorInput } from "react-colorful";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchUpstreamDown, setUpstreamDown } from "../api/dev";
 import { ApiRequestError } from "../api/client";
 import { useTheme } from "../hooks/useTheme";
 import { useTagTranslation } from "../hooks/useTagTranslation";
 import { SETTINGS_STALE_TIME } from "../lib/cacheConfig";
+import { ACCENT_PRESETS, DEFAULT_ACCENT, isPresetAccent } from "../lib/accent";
 import { formatDateTime } from "../lib/time";
 import type { ThemeMode } from "../lib/theme";
 import { PageHeader, Section } from "../components/ui";
@@ -28,33 +32,141 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
   { mode: "system", label: "跟随系统", icon: Monitor },
 ];
 
+const CUSTOM_ACCENT_SEED = "#6366f1";
+
+const CUSTOM_SWATCH_GRADIENT =
+  "conic-gradient(from 0deg, #ef4444, #eab308, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444)";
+
+function AccentSwatch({
+  label,
+  color,
+  active,
+  onClick,
+}: {
+  label: string;
+  color: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "size-9 rounded-full border border-kumo-hairline transition-transform hover:scale-105",
+        active &&
+          "ring-2 ring-[var(--app-accent)] ring-offset-2 ring-offset-[var(--color-kumo-base)]",
+      )}
+      style={{ backgroundColor: color }}
+    />
+  );
+}
+
 function AppearanceSection() {
-  const { mode, setMode } = useTheme();
+  const { mode, setMode, accent, setAccent } = useTheme();
+  const [showCustom, setShowCustom] = useState(false);
+
+  const isCustom = accent !== null && !isPresetAccent(accent);
+  const showPicker = showCustom && isCustom && accent !== null;
+
+  const handleSelectCustom = () => {
+    setShowCustom(true);
+    if (!isCustom) setAccent(CUSTOM_ACCENT_SEED);
+  };
 
   return (
     <Section title="外观">
-      <div className="flex flex-wrap gap-2">
-        {THEME_OPTIONS.map((option) => {
-          const Icon = option.icon;
-          const active = mode === option.mode;
-          return (
+      <div className="space-y-6">
+        <div>
+          <div className="mb-2 text-sm font-medium">主题模式</div>
+          <div className="flex flex-wrap gap-2">
+            {THEME_OPTIONS.map((option) => {
+              const Icon = option.icon;
+              const active = mode === option.mode;
+              return (
+                <button
+                  key={option.mode}
+                  type="button"
+                  onClick={() => setMode(option.mode)}
+                  aria-pressed={active}
+                  className={cn(
+                    "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors",
+                    active
+                      ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
+                      : "border-kumo-hairline text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default",
+                  )}
+                >
+                  <Icon
+                    className="size-5"
+                    weight={active ? "fill" : "regular"}
+                  />
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-2 text-sm font-medium">主题色</div>
+          <div className="flex flex-wrap items-center gap-3">
+            <AccentSwatch
+              label="默认"
+              color={DEFAULT_ACCENT}
+              active={accent === null}
+              onClick={() => {
+                setShowCustom(false);
+                setAccent(null);
+              }}
+            />
+            {ACCENT_PRESETS.map((preset) => (
+              <AccentSwatch
+                key={preset.id}
+                label={preset.label}
+                color={preset.color}
+                active={accent === preset.color}
+                onClick={() => {
+                  setShowCustom(false);
+                  setAccent(preset.color);
+                }}
+              />
+            ))}
             <button
-              key={option.mode}
               type="button"
-              onClick={() => setMode(option.mode)}
-              aria-pressed={active}
+              title="自定义"
+              aria-label="自定义主题色"
+              aria-pressed={isCustom}
+              onClick={handleSelectCustom}
               className={cn(
-                "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors",
-                active
-                  ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
-                  : "border-kumo-hairline text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default",
+                "flex size-9 items-center justify-center rounded-full border border-kumo-hairline text-white transition-transform hover:scale-105",
+                isCustom &&
+                  "ring-2 ring-[var(--app-accent)] ring-offset-2 ring-offset-[var(--color-kumo-base)]",
               )}
+              style={{ backgroundImage: CUSTOM_SWATCH_GRADIENT }}
             >
-              <Icon className="size-5" weight={active ? "fill" : "regular"} />
-              {option.label}
+              <Palette className="size-4 drop-shadow" weight="fill" />
             </button>
-          );
-        })}
+          </div>
+
+          {showPicker && (
+            <div className="mt-3 max-w-[16rem] space-y-3 rounded-xl border border-kumo-hairline bg-kumo-elevated p-3">
+              <HexColorPicker
+                color={accent}
+                onChange={setAccent}
+                style={{ width: "100%" }}
+              />
+              <HexColorInput
+                color={accent}
+                onChange={setAccent}
+                prefixed
+                className="w-full rounded-lg border border-kumo-hairline bg-kumo-base px-2 py-1 font-mono text-xs uppercase text-kumo-default"
+              />
+            </div>
+          )}
+        </div>
       </div>
     </Section>
   );

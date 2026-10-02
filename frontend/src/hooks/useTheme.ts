@@ -7,6 +7,8 @@ export interface ThemeContextValue {
   mode: ThemeMode;
   resolvedMode: ResolvedTheme;
   setMode: (mode: ThemeMode) => void;
+  accent: string | null;
+  setAccent: (accent: string | null) => void;
 }
 
 export const ThemeContext = createContext<ThemeContextValue | null>(null);
