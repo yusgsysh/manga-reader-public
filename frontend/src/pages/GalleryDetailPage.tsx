@@ -18,7 +18,7 @@ import {
   useGalleryDetail,
 } from "../hooks/useGalleryDetail";
 import { fetchGalleryPagesWithFallback } from "../api/gallery";
-import { useGalleryPages, useReadingProgress } from "../hooks/useReaderData";
+import { useReadingProgress } from "../hooks/useReaderData";
 import { useStartPrefillJob } from "../hooks/usePrefillJobs";
 import { ErrorState } from "../components/common/ErrorState";
 import { PageThumbnailGrid } from "../components/gallery/PageThumbnailGrid";
@@ -28,19 +28,6 @@ import { DOWNLOAD_PAGES_STALE_TIME } from "../lib/cacheConfig";
 import { formatPosted } from "../lib/time";
 import { Chip, Section } from "../components/ui";
 import { CategoryChip } from "../components/gallery/CategoryChip";
-
-function PageGridSkeleton() {
-  return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6">
-      {Array.from({ length: 12 }).map((_, index) => (
-        <div
-          key={index}
-          className="aspect-[2/3] animate-pulse rounded-xl bg-kumo-recessed"
-        />
-      ))}
-    </div>
-  );
-}
 
 function DetailSkeleton() {
   return (
@@ -114,7 +101,6 @@ export function GalleryDetailPage() {
   const { data: shelfStatus } = useBookshelfStatus(id, token ?? "");
   const { add, remove } = useBookshelfToggle(id, token ?? "");
   const { data: progress } = useReadingProgress(id, token ?? "");
-  const pagesQuery = useGalleryPages(id, token ?? "");
   const startPrefill = useStartPrefillJob();
   const queryClient = useQueryClient();
   const toast = useKumoToastManager();
@@ -454,14 +440,11 @@ export function GalleryDetailPage() {
         title="页面"
         description={`共 ${gallery.page_count} 页`}
       >
-        {pagesQuery.isLoading ? (
-          <PageGridSkeleton />
-        ) : pagesQuery.data && pagesQuery.data.pages.length > 0 ? (
+        {gallery.page_count > 0 ? (
           <PageThumbnailGrid
             id={id}
             token={token ?? ""}
-            pages={pagesQuery.data.pages}
-            total={pagesQuery.data.total ?? gallery.page_count}
+            total={gallery.page_count}
           />
         ) : (
           <p className="text-sm text-kumo-subtle">

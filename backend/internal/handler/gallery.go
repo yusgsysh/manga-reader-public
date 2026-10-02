@@ -543,6 +543,11 @@ func streamGalleryPagesNDJSON(
 ) {
 	started := false
 	clientGone := false
+	// written is the global page offset across all batches. The walk emits
+	// pages in batches (the gallery document, then ?p=1, ?p=2, …), but the
+	// NDJSON protocol requires a single contiguous index sequence, so each
+	// page is numbered by its absolute position, not its position in the batch.
+	written := 0
 
 	writeLine := func(line galleryPagesLine) error {
 		if clientGone {
@@ -570,7 +575,7 @@ func streamGalleryPagesNDJSON(
 			}
 		}
 		for i := range pageURLs {
-			index := i
+			index := written + i
 			thumb := model.GalleryPageThumb{}
 			if i < len(thumbnails) {
 				thumb = thumbnails[i]
@@ -584,6 +589,7 @@ func streamGalleryPagesNDJSON(
 				return writeErr
 			}
 		}
+		written += len(pageURLs)
 		return nil
 	}
 

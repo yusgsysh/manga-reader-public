@@ -12,6 +12,10 @@ const LAZY_FLAG = "lazyThumb";
 // re-parented node) can adopt images that a previous run already deferred.
 const LAZY_SRC = "lazyThumbSrc";
 
+// Shared cap for /page-thumbnail requests, used by both the reader's eager
+// page-list thumbnails and the gallery detail's paginated grid.
+export const THUMBNAIL_CONCURRENCY = 5;
+
 export function isPageThumbnailURL(url: string): boolean {
   try {
     const base =
@@ -101,7 +105,7 @@ export interface LoadThumbnailsOptions {
  */
 export function loadThumbnails(
   root: HTMLElement,
-  { concurrency = 5 }: LoadThumbnailsOptions = {},
+  { concurrency = THUMBNAIL_CONCURRENCY }: LoadThumbnailsOptions = {},
 ): () => void {
   const queue = createThumbnailQueue(concurrency);
 

@@ -310,7 +310,7 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 | 行类型 | 字段 | 说明 |
 |--------|------|------|
 | `meta` | `id`、`token`、`total` | 首行且**唯一**；`total` 为源站 `.gpc` 的总图片数。解析不到 `.gpc` 或首个缩略图页无页链接即判定失败（见错误语义，不发 `meta`） |
-| `page` | `page_url`、`index`、`thumbnail?` | 每页一行；`index` 从 `0` **连续**递增，不得重复或跳号 |
+| `page` | `page_url`、`index`、`thumbnail?` | 每页一行；`index` 从 `0` **连续**递增，不得重复或跳号（跨多个 `?p` 批次仍是全局连续） |
 | `done` | `total` | 成功终止行；`total` 为实收条数（等于 `page` 行数，且 `meta.total > 0` 时必须等于 `meta.total`） |
 | `error` | `error` | 失败终止行；发出后流立即结束，客户端必须**丢弃已收到的全部 `page` 行** |
 

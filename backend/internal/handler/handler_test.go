@@ -22,12 +22,13 @@ func setupRouter() *gin.Engine {
 
 // pagesStreamResult is the decoded form of an NDJSON /pages response.
 type pagesStreamResult struct {
-	Meta      galleryPagesLine
-	PageURLs  []string
+	Meta       galleryPagesLine
+	PageURLs   []string
+	PageIndexes []int
 	Thumbnails []model.GalleryPageThumb
-	Done      bool
-	Error     string
-	Terminal  int
+	Done       bool
+	Error      string
+	Terminal   int
 }
 
 // parsePagesStream decodes the NDJSON body of GET /api/gallery/:id/:token/pages
@@ -66,6 +67,7 @@ func parsePagesStream(t *testing.T, body []byte) pagesStreamResult {
 				t.Fatalf("page line %d is missing index", i)
 			}
 			res.PageURLs = append(res.PageURLs, l.PageURL)
+			res.PageIndexes = append(res.PageIndexes, *l.Index)
 			thumb := model.GalleryPageThumb{}
 			if l.Thumbnail != nil {
 				thumb = *l.Thumbnail
@@ -95,6 +97,13 @@ func parsePagesStream(t *testing.T, body []byte) pagesStreamResult {
 	}
 	if res.Done && *res.Meta.Total > 0 && len(res.PageURLs) < *res.Meta.Total {
 		t.Fatalf("pageURLs = %d, want >= meta total %d", len(res.PageURLs), *res.Meta.Total)
+	}
+	// Page indices must be a single contiguous global sequence (0..N-1) even
+	// when the walk delivers them in multiple batches.
+	for i, index := range res.PageIndexes {
+		if index != i {
+			t.Fatalf("page index at position %d = %d, want %d (non-contiguous stream)", i, index, i)
+		}
 	}
 	return res
 }

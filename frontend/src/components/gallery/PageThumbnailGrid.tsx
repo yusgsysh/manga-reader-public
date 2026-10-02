@@ -1,47 +1,50 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { pageThumbnailUrl } from "../../lib/image";
+import { loadThumbnails, THUMBNAIL_CONCURRENCY } from "../../lib/thumbnails";
 import { SimplePagination } from "../common/SimplePagination";
-import type { GalleryPage } from "../../types/reader";
 
 const PER_PAGE = 20;
 
 interface PageThumbnailGridProps {
   id: number;
   token: string;
-  pages: GalleryPage[];
   total: number;
 }
 
 function PageThumbnail({
   id,
   token,
-  page,
+  index,
 }: {
   id: number;
   token: string;
-  page: GalleryPage;
+  index: number;
 }) {
   const [loaded, setLoaded] = useState(false);
-  const src =
-    page.thumbnail && token ? pageThumbnailUrl(id, token, page.index) : "";
-  const showShimmer = src !== "" && !loaded;
+  const [failed, setFailed] = useState(false);
+  // Index-addressed: the backend resolves the sprite geometry itself, so the
+  // grid never needs the full page list.
+  const src = token ? pageThumbnailUrl(id, token, index) : "";
+  const showShimmer = src !== "" && !loaded && !failed;
 
   return (
     <Link
-      to={`/reader/${id}/${token}?page=${page.index}`}
+      to={`/reader/${id}/${token}?page=${index}`}
       className="page-thumb-item"
-      aria-label={`第 ${page.index + 1} 页`}
+      aria-label={`第 ${index + 1} 页`}
     >
-      {src ? (
+      {src && !failed ? (
         <img
           src={src}
-          alt={`第 ${page.index + 1} 页`}
-          loading="lazy"
+          alt={`第 ${index + 1} 页`}
           decoding="async"
           className="app-image"
           onLoad={() => setLoaded(true)}
-          onError={() => setLoaded(true)}
+          onError={() => {
+            setFailed(true);
+            setLoaded(true);
+          }}
         />
       ) : (
         <span className="page-thumb-placeholder" aria-hidden />
@@ -54,7 +57,7 @@ function PageThumbnail({
           <div className="skeleton-shimmer h-full w-full bg-kumo-recessed" />
         </div>
       )}
-      <span className="page-thumb-number">{page.index + 1}</span>
+      <span className="page-thumb-number">{index + 1}</span>
     </Link>
   );
 }
@@ -62,23 +65,35 @@ function PageThumbnail({
 export function PageThumbnailGrid({
   id,
   token,
-  pages,
   total,
 }: PageThumbnailGridProps) {
   const [gridPage, setGridPage] = useState(0);
+  const gridRef = useRef<HTMLDivElement>(null);
 
-  // Derive the page count from the gallery total, not from how many pages have
-  // loaded, so pagination is fixed from the start and does not grow as the
-  // list streams in.
+  // Only the current grid page's indices are rendered/requested, derived from
+  // the gallery's page count; there is no full page-list fetch here.
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
   const current = Math.min(gridPage, totalPages - 1);
-  const slice = pages.slice(current * PER_PAGE, current * PER_PAGE + PER_PAGE);
+  const start = current * PER_PAGE;
+  const end = Math.min(total, start + PER_PAGE);
+  const indices = Array.from(
+    { length: Math.max(0, end - start) },
+    (_, i) => start + i,
+  );
+
+  // Feed the page's index-addressed thumbnails through the shared bounded
+  // queue so a page of 20 tiles never fires 20 upstream resolves at once.
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    return loadThumbnails(el, { concurrency: THUMBNAIL_CONCURRENCY });
+  }, []);
 
   return (
     <div className="space-y-2">
-      <div className="page-thumb-grid">
-        {slice.map((page) => (
-          <PageThumbnail key={page.index} id={id} token={token} page={page} />
+      <div ref={gridRef} className="page-thumb-grid">
+        {indices.map((index) => (
+          <PageThumbnail key={index} id={id} token={token} index={index} />
         ))}
       </div>
       <SimplePagination

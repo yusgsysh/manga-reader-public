@@ -25,15 +25,11 @@ import {
   galleryPagesToManga,
   parsePageParam,
 } from "../lib/reader";
-import { loadThumbnails } from "../lib/thumbnails";
+import { loadThumbnails, THUMBNAIL_CONCURRENCY } from "../lib/thumbnails";
 import { ErrorState } from "../components/common/ErrorState";
 import type { GalleryPage } from "../types/reader";
 
 type LayoutMode = ViewerSettings["layoutMode"];
-
-// Every page thumbnail loads eagerly, but at most this many requests are in
-// flight at once; keeps large galleries from firing hundreds at once.
-const THUMBNAIL_CONCURRENCY = 5;
 
 export function ReaderPage() {
   const { id: idParam, token } = useParams<{ id: string; token: string }>();
