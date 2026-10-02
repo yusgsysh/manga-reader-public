@@ -34,56 +34,46 @@ export function RecentlyReadPage() {
     cleanup.mutate(30);
   }, [cleanup]);
 
-  if (isLoading) {
-    return <GalleryGridSkeleton count={8} />;
-  }
-
-  if (error) {
-    return (
-      <ErrorState message="加载最近阅读失败" onRetry={() => refetch()} />
-    );
-  }
-
-  if (items.length === 0) {
-    return (
-      <div>
-        <PageHeader
-          title="阅读历史"
-          icon={<ClockCounterClockwise className="size-5" weight="fill" />}
-        />
-        <EmptyState
-          message="还没有阅读记录"
-          actionLabel="浏览首页"
-          actionTo="/"
-        />
-      </div>
-    );
-  }
+  const clearButton = (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="text-kumo-danger"
+      onClick={() => setConfirmOpen(true)}
+    >
+      <Trash className="mr-1 size-4" weight="bold" />
+      清理记录
+    </Button>
+  );
 
   return (
     <div>
       <PageHeader
         title="阅读历史"
         icon={<ClockCounterClockwise className="size-5" weight="fill" />}
-        actions={
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-kumo-danger"
-            onClick={() => setConfirmOpen(true)}
-          >
-            <Trash className="mr-1 size-4" weight="bold" />
-            清理记录
-          </Button>
-        }
+        actions={items.length > 0 ? clearButton : undefined}
       />
-      <BookshelfGrid items={items} />
-      <InfiniteScrollTrigger
-        hasNextPage={!!hasNextPage}
-        isFetchingNextPage={isFetchingNextPage}
-        isFetchNextPageError={isFetchNextPageError}
-        fetchNextPage={() => fetchNextPage()}
-      />
+      {isLoading ? (
+        <GalleryGridSkeleton count={8} />
+      ) : error ? (
+        <ErrorState message="加载最近阅读失败" onRetry={() => refetch()} />
+      ) : items.length === 0 ? (
+        <EmptyState
+          message="还没有阅读记录"
+          actionLabel="浏览首页"
+          actionTo="/"
+        />
+      ) : (
+        <>
+          <BookshelfGrid items={items} />
+          <InfiniteScrollTrigger
+            hasNextPage={!!hasNextPage}
+            isFetchingNextPage={isFetchingNextPage}
+            isFetchNextPageError={isFetchNextPageError}
+            fetchNextPage={() => fetchNextPage()}
+          />
+        </>
+      )}
 
       <Dialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
         <Dialog className="p-6">

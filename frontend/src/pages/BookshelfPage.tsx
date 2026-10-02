@@ -30,19 +30,6 @@ export function BookshelfPage() {
     fetchNextPage,
   } = useBookshelf();
 
-  if (isLoading) {
-    return <GalleryGridSkeleton />;
-  }
-
-  if (error) {
-    return (
-      <ErrorState
-        message={error.message || "无法加载书架"}
-        onRetry={() => refetch()}
-      />
-    );
-  }
-
   const items = data?.pages.flatMap((page) => page.results) ?? [];
   const filtered = items.filter((item) => {
     if (filter === "all") return true;
@@ -71,40 +58,39 @@ export function BookshelfPage() {
     </div>
   );
 
-  if (items.length === 0) {
-    return (
-      <div>
-        <PageHeader
-          title="书架"
-          icon={<BooksIcon className="size-5" weight="fill" />}
-        />
-        <EmptyState
-          message="书架还是空的"
-          actionLabel="浏览首页"
-          actionTo="/"
-        />
-      </div>
-    );
-  }
-
   return (
     <div>
       <PageHeader
         title="书架"
         icon={<BooksIcon className="size-5" weight="fill" />}
-        actions={controls}
+        actions={items.length > 0 ? controls : undefined}
       />
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <GalleryGridSkeleton />
+      ) : error ? (
+        <ErrorState
+          message={error.message || "无法加载书架"}
+          onRetry={() => refetch()}
+        />
+      ) : items.length === 0 ? (
+        <EmptyState
+          message="书架还是空的"
+          actionLabel="浏览首页"
+          actionTo="/"
+        />
+      ) : filtered.length === 0 ? (
         <EmptyState message="没有符合条件的画廊" />
       ) : (
-        <BookshelfGrid items={filtered} />
+        <>
+          <BookshelfGrid items={filtered} />
+          <InfiniteScrollTrigger
+            hasNextPage={!!hasNextPage}
+            isFetchingNextPage={isFetchingNextPage}
+            isFetchNextPageError={isFetchNextPageError}
+            fetchNextPage={() => fetchNextPage()}
+          />
+        </>
       )}
-      <InfiniteScrollTrigger
-        hasNextPage={!!hasNextPage}
-        isFetchingNextPage={isFetchingNextPage}
-        isFetchNextPageError={isFetchNextPageError}
-        fetchNextPage={() => fetchNextPage()}
-      />
     </div>
   );
 }

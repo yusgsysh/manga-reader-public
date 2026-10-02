@@ -23,13 +23,13 @@ describe("formatRelativeTime", () => {
 
   it("formats minutes", () => {
     expect(formatRelativeTime(new Date(now - 10 * 60_000).toISOString())).toBe(
-      "10 分钟前",
+      "10分钟前",
     );
   });
 
   it("formats hours", () => {
     expect(formatRelativeTime(new Date(now - 3 * 3_600_000).toISOString())).toBe(
-      "3 小时前",
+      "3小时前",
     );
   });
 
@@ -42,7 +42,7 @@ describe("formatRelativeTime", () => {
   it("formats days", () => {
     expect(
       formatRelativeTime(new Date(now - 5 * 86_400_000).toISOString()),
-    ).toBe("5 天前");
+    ).toBe("5天前");
   });
 });
 
