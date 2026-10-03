@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	json "encoding/json/v2"
 
@@ -416,5 +417,56 @@ func TestHandleBookshelfList_WithItems(t *testing.T) {
 	}
 	if len(resp.Results) != 2 {
 		t.Errorf("Results length = %d, want 2", len(resp.Results))
+	}
+}
+
+func TestHandleBookshelfList_OrdersByUpdatedAt(t *testing.T) {
+	client := newTestDB(t)
+	ctx := t.Context()
+
+	older := time.Now().UTC().Add(-48 * time.Hour)
+	newer := time.Now().UTC().Add(-1 * time.Hour)
+
+	b1 := newTestBookshelf()
+	client.Bookshelf.Create().
+		SetGalleryID(b1.GalleryID).
+		SetToken(b1.Token).
+		SetCreatedAt(older).
+		SetUpdatedAt(older).
+		Save(ctx)
+
+	// Added more recently but read less recently than b2.
+	b2 := newTestBookshelf2()
+	client.Bookshelf.Create().
+		SetGalleryID(b2.GalleryID).
+		SetToken(b2.Token).
+		SetCreatedAt(newer).
+		SetUpdatedAt(newer).
+		Save(ctx)
+
+	r := setupTestRouter()
+	server := &Server{DB: &database.DB{Client: client}}
+	r.GET("/api/bookshelf", server.handleBookshelfList)
+
+	req := httptest.NewRequest("GET", "/api/bookshelf", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp model.BookshelfListResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp.Results) != 2 {
+		t.Fatalf("Results length = %d, want 2", len(resp.Results))
+	}
+	if resp.Results[0].ID != b2.GalleryID {
+		t.Errorf("first item = %d, want %d (most recently updated first)", resp.Results[0].ID, b2.GalleryID)
+	}
+	if resp.Results[1].ID != b1.GalleryID {
+		t.Errorf("second item = %d, want %d", resp.Results[1].ID, b1.GalleryID)
 	}
 }

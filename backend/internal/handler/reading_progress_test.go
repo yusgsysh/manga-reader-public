@@ -285,6 +285,76 @@ func TestHandleUpdateProgress_NegativePage(t *testing.T) {
 	}
 }
 
+func TestHandleUpdateProgress_BumpsBookshelfUpdatedAt(t *testing.T) {
+	client := newTestDB(t)
+
+	createdAt := time.Now().UTC().Add(-72 * time.Hour)
+	if _, err := client.Bookshelf.Create().
+		SetGalleryID(123456).
+		SetToken("abcdef").
+		SetCreatedAt(createdAt).
+		SetUpdatedAt(createdAt).
+		Save(t.Context()); err != nil {
+		t.Fatalf("create bookshelf: %v", err)
+	}
+
+	r := setupTestRouter()
+	server := &Server{DB: &database.DB{Client: client}}
+	r.PUT("/api/progress/:id/:token", server.handleUpdateProgress)
+
+	body, _ := json.Marshal(model.UpdateReadingProgressRequest{CurrentPage: 5, Progress: 0.2})
+	req := httptest.NewRequest("PUT", "/api/progress/123456/abcdef", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	row, err := client.Bookshelf.Query().
+		Where(
+			bookshelf.GalleryID(123456),
+			bookshelf.Token("abcdef"),
+		).
+		Only(t.Context())
+	if err != nil {
+		t.Fatalf("load bookshelf: %v", err)
+	}
+	if !row.UpdatedAt.After(createdAt) {
+		t.Errorf("updated_at = %v, want after %v (reading should bump it)", row.UpdatedAt, createdAt)
+	}
+	if !row.CreatedAt.Equal(createdAt) {
+		t.Errorf("created_at = %v, want unchanged %v", row.CreatedAt, createdAt)
+	}
+}
+
+func TestHandleUpdateProgress_NotInBookshelf(t *testing.T) {
+	client := newTestDB(t)
+
+	r := setupTestRouter()
+	server := &Server{DB: &database.DB{Client: client}}
+	r.PUT("/api/progress/:id/:token", server.handleUpdateProgress)
+
+	body, _ := json.Marshal(model.UpdateReadingProgressRequest{CurrentPage: 5, Progress: 0.2})
+	req := httptest.NewRequest("PUT", "/api/progress/123456/abcdef", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	n, err := client.Bookshelf.Query().Count(t.Context())
+	if err != nil {
+		t.Fatalf("count bookshelf: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("bookshelf rows = %d, want 0 (progress save must not add shelf entries)", n)
+	}
+}
+
 type cleanupResponse struct {
 	Days    int   `json:"days"`
 	Deleted int64 `json:"deleted"`

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"manga-reader/internal/ent"
+	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/readingprogress"
 
 	"manga-reader/internal/model"
@@ -133,6 +134,19 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("update progress failed: %v", err)})
 		return
+	}
+
+	// Reading activity refreshes the bookshelf entry's updated_at so the
+	// shelf can be ordered by recent activity. Best-effort: items not in the
+	// bookshelf affect zero rows.
+	if bErr := s.DB.Client.Bookshelf.Update().
+		Where(
+			bookshelf.GalleryID(id),
+			bookshelf.Token(token),
+		).
+		SetUpdatedAt(now).
+		Exec(ctx); bErr != nil {
+		slog.Warn("bump bookshelf updated_at failed", "error", bErr)
 	}
 
 	p, err := s.DB.Client.ReadingProgress.Query().

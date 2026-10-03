@@ -740,7 +740,7 @@ Cache-Control: public, max-age=31536000, immutable
 
 `GET /api/bookshelf`
 
-获取书架列表，按收藏时间倒序排列。
+获取书架列表，按最近活跃时间（`updated_at`）倒序排列。`updated_at` 在加入书架时写入，之后每次保存阅读进度时刷新（仅对已在书架中的条目生效）。
 
 > 书架表只保存 `(id, token)` 引用；`title` / `title_jpn` / `category` / `thumbnail` / `pages` 等元数据在返回时从 `gallery_cache` 关联读取，因此始终反映最新已知上游数据（若没有对应的缓存行，这些字段为空/零值）。
 
@@ -914,7 +914,7 @@ Cache-Control: public, max-age=31536000, immutable
 
 `PUT /api/progress/:id/:token`
 
-更新 Gallery 的阅读进度。首次保存自动设置 `created_at`，后续更新只修改 `updated_at`。
+更新 Gallery 的阅读进度。首次保存自动设置 `created_at`，后续更新只修改 `updated_at`。若该 Gallery 在书架中，同时会刷新书架条目的 `updated_at`（书架据此排序；不在书架时无影响）。
 
 **Path Parameters:**
 

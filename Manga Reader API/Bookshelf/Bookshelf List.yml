@@ -26,11 +26,11 @@ runtime:
   scripts:
     - type: tests
       code: |-
-        test("results are ordered by created_at descending", function () {
+        test("results are ordered by updated_at descending", function () {
           var list = res.body.results;
           for (var i = 1; i < list.length; i++) {
-            expect(new Date(list[i - 1].created_at).getTime())
-              .to.be.at.least(new Date(list[i].created_at).getTime());
+            expect(new Date(list[i - 1].updated_at).getTime())
+              .to.be.at.least(new Date(list[i].updated_at).getTime());
           }
         });
 
@@ -41,5 +41,6 @@ settings:
   maxRedirects: 5
 
 docs: |-
-  Bookshelf listing, newest first. The `reading` field is only present when
-  reading progress exists.
+  Bookshelf listing ordered by updated_at descending (most recently added or
+  read first). The `reading` field is only present when reading progress
+  exists.
