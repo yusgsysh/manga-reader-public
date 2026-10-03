@@ -8,9 +8,11 @@ import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
 import { PageHeader } from "../components/ui";
 import { useLastListRoute } from "../hooks/useLastListRoute";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 export function PopularPage() {
   useLastListRoute("/popular");
+  useDocumentTitle("热门");
   const {
     data,
     isLoading,

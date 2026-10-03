@@ -24,6 +24,7 @@ import {
   THUMBNAIL_CONCURRENCY,
 } from "../lib/thumbnails";
 import { ErrorState } from "../components/common/ErrorState";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 // 菜单底部返回入口的文案：补丁只引用 key，库内没有内置。
 const READER_TRANSLATIONS = { "menu.backToGallery": "返回画廊" };
@@ -230,14 +231,7 @@ export function ReaderPage() {
     };
   }, [shellEl]);
 
-  useEffect(() => {
-    if (gallery?.title) {
-      document.title = gallery.title;
-    }
-    return () => {
-      document.title = "Manga Reader";
-    };
-  }, [gallery?.title]);
+  useDocumentTitle(gallery?.title);
 
   if (loading) {
     return (

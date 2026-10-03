@@ -31,6 +31,7 @@ import { formatPosted } from "../lib/time";
 import { Chip, Section } from "../components/ui";
 import { CategoryChip } from "../components/gallery/CategoryChip";
 import { GalleryTorrentsDialog } from "../components/gallery/GalleryTorrentsDialog";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 function DetailSkeleton() {
   return (
@@ -116,6 +117,8 @@ export function GalleryDetailPage() {
   const inShelf = shelfStatus?.in_bookshelf ?? false;
   const hasProgress =
     progress && (progress.current_page > 0 || progress.completed);
+
+  useDocumentTitle(gallery?.title);
 
   if (isLoading) {
     return <DetailSkeleton />;

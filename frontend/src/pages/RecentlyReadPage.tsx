@@ -12,9 +12,11 @@ import { EmptyState } from "../components/common/EmptyState";
 import { ErrorState } from "../components/common/ErrorState";
 import { PageHeader } from "../components/ui";
 import { useLastListRoute } from "../hooks/useLastListRoute";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 export function RecentlyReadPage() {
   useLastListRoute("/recently-read");
+  useDocumentTitle("阅读历史");
   const {
     items,
     isLoading,

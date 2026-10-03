@@ -26,6 +26,7 @@ import { EmptyState } from "../components/common/EmptyState";
 import { ErrorState } from "../components/common/ErrorState";
 import { PageHeader, Section } from "../components/ui";
 import type { PrefillJob, PrefillStatus } from "../types/prefill";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 function statusBadgeVariant(
   status: PrefillStatus,
@@ -193,6 +194,7 @@ function JobRow({ job, zippingIds, onZipStart }: JobRowProps) {
 }
 
 export function DownloadManagerPage() {
+  useDocumentTitle("下载管理");
   const { data, isLoading, error, refetch } = usePrefillJobs();
   const cleanup = useCleanupPrefillJobs();
   const [cleanupOpen, setCleanupOpen] = useState(false);

@@ -25,6 +25,7 @@ import { ACCENT_PRESETS, DEFAULT_ACCENT, isPresetAccent } from "../lib/accent";
 import { formatDateTime } from "../lib/time";
 import type { ThemeMode } from "../lib/theme";
 import { PageHeader, Section } from "../components/ui";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
   { mode: "light", label: "浅色", icon: Sun },
@@ -303,6 +304,7 @@ function DevToolsSection() {
 }
 
 export function SettingsPage() {
+  useDocumentTitle("设置");
   return (
     <div className="max-w-3xl">
       <PageHeader

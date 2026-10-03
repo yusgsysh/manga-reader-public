@@ -18,9 +18,11 @@ import {
 } from "../lib/listingParams";
 import type { GalleryListFilters, ListingNavOptions } from "../types/gallery";
 import { useLastListRoute } from "../hooks/useLastListRoute";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 export function SubscriptionsPage() {
   useLastListRoute("/watched");
+  useDocumentTitle("订阅");
   const [searchParams, setSearchParams] = useSearchParams();
   const nav = parseNavOptions(searchParams);
   const filters = parseListFilters(searchParams);

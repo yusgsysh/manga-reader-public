@@ -9,6 +9,7 @@ import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
 import { PageHeader } from "../components/ui";
 import { useLastListRoute } from "../hooks/useLastListRoute";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 type ShelfFilter = "all" | "reading" | "done";
 
@@ -20,6 +21,7 @@ const FILTERS: { value: ShelfFilter; label: string }[] = [
 
 export function BookshelfPage() {
   useLastListRoute("/bookshelf");
+  useDocumentTitle("书架");
   const [filter, setFilter] = useState<ShelfFilter>("all");
   const {
     data,
