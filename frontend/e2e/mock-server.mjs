@@ -123,6 +123,21 @@ function galleryDetail(id) {
   };
 }
 
+function bookshelfItem(id) {
+  const detail = galleryDetail(id);
+  return {
+    id: detail.id,
+    token: detail.token,
+    title: detail.title,
+    title_jpn: detail.title_jpn,
+    category: detail.category,
+    thumbnail: `https://exhentai.org/t/${detail.id}-tok.jpg`,
+    pages: detail.page_count,
+    created_at: "2026-10-01T00:00:00Z",
+    updated_at: "2026-10-02T00:00:00Z",
+  };
+}
+
 function ndjsonStream(id) {
   const encoder = new TextEncoder();
   let cancelled = false;
@@ -220,6 +235,16 @@ const server = Bun.serve({
     }
 
     // ---- Local database endpoints ----------------------------------------
+    if (path === "/api/bookshelf") {
+      const page = Number(url.searchParams.get("page") ?? "0") || 0;
+      return json({
+        page,
+        page_size: 24,
+        total: 1,
+        total_pages: 1,
+        results: [bookshelfItem(1001)],
+      });
+    }
     m = path.match(/^\/api\/bookshelf\/(\d+)\/tok\/status$/);
     if (m) return json({ in_bookshelf: false });
     if (path.startsWith("/api/bookshelf")) return json({ success: true });

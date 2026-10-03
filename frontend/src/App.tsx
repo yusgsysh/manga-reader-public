@@ -8,6 +8,7 @@ import {
   type LinkComponentProps,
 } from "@cloudflare/kumo";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import { NavigationProvider } from "./context/NavigationContext";
 import { GLOBAL_STALE_TIME } from "./lib/cacheConfig";
 import { MotionProvider } from "./lib/motion";
 import { ThemeProvider } from "./lib/theme";
@@ -42,7 +43,9 @@ export default function App() {
             <LinkProvider component={AppLink}>
               <TooltipProvider>
                 <Toasty>
-                  <RouterProvider router={router} />
+                  <NavigationProvider>
+                    <RouterProvider router={router} />
+                  </NavigationProvider>
                 </Toasty>
               </TooltipProvider>
             </LinkProvider>
