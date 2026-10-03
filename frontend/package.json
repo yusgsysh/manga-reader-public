@@ -21,8 +21,8 @@
     "@fontsource-variable/inter": "^5.3.0",
     "@phosphor-icons/react": "^2.1.10",
     "@tanstack/react-query": "^5.104.0",
-    "@yui540/comimi": "github:yusgsysh/comimi#manga-reader",
-    "@yui540/comimi-react": "github:yusgsysh/comimi-react#manga-reader",
+    "@yui540/comimi": "^0.26.0",
+    "@yui540/comimi-react": "^0.3.0",
     "motion": "^13.5.0",
     "react": "^19.3.0",
     "react-colorful": "^5.8.1",
@@ -41,5 +41,9 @@
     "typescript": "~7.0.2",
     "vite": "^8.3.2",
     "vitest": "^5.0.3"
+  },
+  "patchedDependencies": {
+    "@yui540/comimi@0.26.0": "patches/@yui540%2Fcomimi@0.26.0.patch",
+    "@yui540/comimi-react@0.3.0": "patches/@yui540%2Fcomimi-react@0.3.0.patch"
   }
 }
