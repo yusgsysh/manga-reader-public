@@ -1,4 +1,5 @@
 import type { Tag } from "../../types/gallery";
+import { nextIdle } from "../../lib/idle";
 import { loadDb, updateDb } from "./loader";
 import { getTagKey, parseDb } from "./parser";
 import type {
@@ -16,6 +17,9 @@ class TagTranslationService {
   private loadPromise: Promise<void> | null = null;
   private listeners = new Set<() => void>();
   private info: TagTranslationDatabaseInfo | null = null;
+  // Bumped on every notify so subscribers can use a single cheap snapshot
+  // instead of three separate useSyncExternalStore subscriptions.
+  private version = 0;
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -32,7 +36,10 @@ class TagTranslationService {
 
   getInfo = (): TagTranslationDatabaseInfo | null => this.info;
 
+  getVersion = (): number => this.version;
+
   private notify() {
+    this.version++;
     for (const listener of this.listeners) {
       listener();
     }
@@ -54,6 +61,7 @@ class TagTranslationService {
 
   private async doLoad(): Promise<void> {
     const raw = await loadDb();
+    await nextIdle();
     this.applyIndex(parseDb(raw));
     this.status = "ready";
     this.notify();
@@ -69,6 +77,7 @@ class TagTranslationService {
     this.notify();
     try {
       const raw = await updateDb();
+      await nextIdle();
       this.applyIndex(parseDb(raw));
       if (this.status !== "ready") {
         this.status = "ready";
@@ -135,13 +144,12 @@ class TagTranslationService {
 
   searchTags(query: string, limit = 10): Array<{ namespace: string; tag: string; translation: string }> {
     if (!query || this.status !== "ready") return [];
+    // Single includes() against the precomputed lowercase key instead of
+    // lowercasing translation + tag for all ~44k entries on every keystroke.
     const lowerQuery = query.toLowerCase();
     const results: Array<{ namespace: string; tag: string; translation: string }> = [];
     for (const entry of this.translationMap.values()) {
-      if (
-        entry.translation.toLowerCase().includes(lowerQuery) ||
-        entry.tag.toLowerCase().includes(lowerQuery)
-      ) {
+      if (entry.searchKey.includes(lowerQuery)) {
         results.push({
           namespace: entry.namespace,
           tag: entry.tag,

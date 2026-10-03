@@ -1,4 +1,5 @@
 import { useSearchParams } from "react-router";
+import { useMemo } from "react";
 import { BookmarkSimple } from "@phosphor-icons/react";
 import { useWatched } from "../hooks/useGalleryList";
 import { GalleryGrid } from "../components/gallery/GalleryGrid";
@@ -34,7 +35,10 @@ export function SubscriptionsPage() {
     fetchNextPage,
   } = useWatched(filters, nav);
 
-  const galleries = data?.pages.flatMap((page) => page.results) ?? [];
+  const galleries = useMemo(
+    () => data?.pages.flatMap((page) => page.results) ?? [],
+    [data],
+  );
 
   const handleFiltersChange = (next: GalleryListFilters) => {
     setSearchParams(withListFilters(searchParams, next));

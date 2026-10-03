@@ -14,6 +14,11 @@ interface TagFilterInputProps {
   disabled?: boolean;
 }
 
+type TagSuggestion = { namespace: string; tag: string; translation: string };
+
+// Stable empty list so deriving `suggestions` never changes identity.
+const EMPTY_SUGGESTIONS: TagSuggestion[] = [];
+
 export function TagFilterInput({
   appliedTags = [],
   pendingTags,
@@ -23,29 +28,39 @@ export function TagFilterInput({
   disabled,
 }: TagFilterInputProps) {
   const [tagInput, setTagInput] = useState("");
-  const [showSuggestions, setShowSuggestions] = useState(false);
+  // Search runs debounced (see effect below): scanning ~44k translation
+  // entries per keystroke dropped frames while typing on low-end devices.
+  // Results are tagged with the query they belong to and filtered during
+  // render, so the effect never has to setState synchronously.
+  const [pendingQuery, setPendingQuery] = useState("");
+  const [results, setResults] = useState<TagSuggestion[]>([]);
+  const [resultsQuery, setResultsQuery] = useState("");
+  const [dismissed, setDismissed] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [suggestions, setSuggestions] = useState<
-    Array<{ namespace: string; tag: string; translation: string }>
-  >([]);
 
   const tagInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
   const { searchTags, ready: tagDbReady } = useTagTranslation();
 
+  const suggestions =
+    pendingQuery.length > 0 && resultsQuery === pendingQuery
+      ? results
+      : EMPTY_SUGGESTIONS;
+  const showSuggestions = !dismissed && suggestions.length > 0;
+
   const addTag = (tagValue?: string) => {
     const tag = (tagValue ?? tagInput).trim();
     if (!tag) return;
     if (pendingTags.includes(tag) || appliedTags.includes(tag)) {
       setTagInput("");
-      setShowSuggestions(false);
+      setDismissed(true);
       setSelectedIndex(-1);
       return;
     }
     onAddTag(tag);
     setTagInput("");
-    setShowSuggestions(false);
+    setDismissed(true);
     setSelectedIndex(-1);
   };
 
@@ -57,7 +72,7 @@ export function TagFilterInput({
       e.preventDefault();
       setSelectedIndex((prev) => Math.max(prev - 1, -1));
     } else if (e.key === "Escape") {
-      setShowSuggestions(false);
+      setDismissed(true);
       setSelectedIndex(-1);
     } else if (
       e.key === "Enter" &&
@@ -75,18 +90,20 @@ export function TagFilterInput({
       const value = e.target.value;
       setTagInput(value);
       setSelectedIndex(-1);
-
-      if (tagDbReady && value.trim().length > 0) {
-        const results = searchTags(value.trim(), 6);
-        setSuggestions(results);
-        setShowSuggestions(results.length > 0);
-      } else {
-        setSuggestions([]);
-        setShowSuggestions(false);
-      }
+      setPendingQuery(value.trim());
+      setDismissed(false);
     },
-    [tagDbReady, searchTags],
+    [],
   );
+
+  useEffect(() => {
+    if (!tagDbReady || pendingQuery.length === 0) return;
+    const timer = setTimeout(() => {
+      setResults(searchTags(pendingQuery, 6));
+      setResultsQuery(pendingQuery);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [pendingQuery, tagDbReady, searchTags]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -96,7 +113,7 @@ export function TagFilterInput({
         tagInputRef.current &&
         !tagInputRef.current.contains(e.target as Node)
       ) {
-        setShowSuggestions(false);
+        setDismissed(true);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -117,11 +134,11 @@ export function TagFilterInput({
           onChange={handleTagInputChange}
           onKeyDown={handleTagKeyDown}
           onFocus={() => {
-            if (suggestions.length > 0) setShowSuggestions(true);
+            setDismissed(false);
           }}
           className="w-full"
         />
-        {showSuggestions && suggestions.length > 0 && (
+        {showSuggestions && (
           <div
             ref={suggestionsRef}
             className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-xl border border-kumo-hairline bg-kumo-elevated shadow-lg"

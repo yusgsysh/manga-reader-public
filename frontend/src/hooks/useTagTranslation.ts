@@ -4,18 +4,17 @@ import { tagTranslationService } from "../services/tagTranslation";
 import type { TagTranslationDatabaseInfo } from "../services/tagTranslation";
 
 export function useTagTranslation() {
-  const status = useSyncExternalStore(
+  // One version subscription instead of three status/info subscriptions: the
+  // snapshot is a plain counter, so React bails out unless the store changed.
+  useSyncExternalStore(
     tagTranslationService.subscribe,
-    tagTranslationService.getStatus,
+    tagTranslationService.getVersion,
+    tagTranslationService.getVersion,
   );
-  const updateStatus = useSyncExternalStore(
-    tagTranslationService.subscribe,
-    tagTranslationService.getUpdateStatus,
-  );
-  const info = useSyncExternalStore(
-    tagTranslationService.subscribe,
-    tagTranslationService.getInfo,
-  );
+
+  const status = tagTranslationService.getStatus();
+  const updateStatus = tagTranslationService.getUpdateStatus();
+  const info = tagTranslationService.getInfo();
 
   useEffect(() => {
     tagTranslationService.load();

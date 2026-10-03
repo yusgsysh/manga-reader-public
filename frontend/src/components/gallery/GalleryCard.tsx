@@ -7,7 +7,7 @@ import { formatPosted } from "../../lib/time";
 import { useTagTranslation } from "../../hooks/useTagTranslation";
 import { Star, Tag as TagIcon } from "@phosphor-icons/react";
 import { createPortal } from "react-dom";
-import { useState, useRef, useEffect } from "react";
+import { memo, useState, useRef, useEffect, useMemo } from "react";
 import { CategoryChip } from "./CategoryChip";
 
 const TAG_POPOVER_WIDTH = 224;
@@ -49,7 +49,55 @@ interface GalleryCardProps {
   gallery: GalleryCardData;
 }
 
-export function GalleryCard({ gallery }: GalleryCardProps) {
+/*
+ * Mounted only while the tag popover is open. Keeping `useTagTranslation`
+ * out of the card itself matters: every subscription made the whole grid
+ * re-render the moment the translation database finished loading.
+ */
+function TagPopover({
+  tags,
+  position,
+  onHoverChange,
+}: {
+  tags: string[];
+  position: { left: number; bottom: number };
+  onHoverChange: (hovering: boolean) => void;
+}) {
+  const { translateTag, ready } = useTagTranslation();
+
+  return createPortal(
+    <div
+      className="fixed z-50 w-56 rounded-xl border border-kumo-hairline bg-kumo-elevated p-2 shadow-lg"
+      style={{ left: position.left, bottom: position.bottom }}
+      onMouseEnter={() => onHoverChange(true)}
+      onMouseLeave={() => onHoverChange(false)}
+    >
+      <div className="flex flex-wrap gap-1">
+        {tags.map((raw) => {
+          const tag = parseTagString(raw);
+          const label = ready
+            ? translateTag(tag)
+            : tag.namespace
+              ? `${tag.namespace}:${tag.name}`
+              : tag.name;
+          return (
+            <span
+              key={raw}
+              className="inline-block rounded-md bg-kumo-recessed px-1.5 py-0.5 text-[11px]"
+            >
+              {label}
+            </span>
+          );
+        })}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+export const GalleryCard = memo(function GalleryCard({
+  gallery,
+}: GalleryCardProps) {
   const [showTags, setShowTags] = useState(false);
   const [loadedImage, setLoadedImage] = useState<string | null>(null);
   const [popoverPos, setPopoverPos] = useState<{
@@ -58,17 +106,34 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
   } | null>(null);
   const tagsRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { translateTag, ready: tagDbReady } = useTagTranslation();
 
-  const displayTags = (gallery.tags ?? []).filter(
-    (raw) => !HIDDEN_TAG_NAMESPACES.has(parseTagString(raw).namespace),
-  );
-  const hasTags = displayTags.length > 0;
-  const language = languageCodeFromTags(gallery.tags);
-  const hasPages = typeof gallery.pages === "number" && gallery.pages > 0;
-  const galleryHref = `/gallery/${gallery.id}/${gallery.token}`;
-  const image = gallery.image ? thumbnailUrl(gallery.image) : "";
+  // Tag parsing, language sniffing, image URL building and date formatting are
+  // all derived once per gallery instead of on every render — with hundreds of
+  // cards mounted, per-render work here shows up as scroll/animation frames.
+  const derived = useMemo(() => {
+    const tags = gallery.tags ?? [];
+    const displayTags = tags.filter(
+      (raw) => !HIDDEN_TAG_NAMESPACES.has(parseTagString(raw).namespace),
+    );
+    return {
+      displayTags,
+      hasTags: displayTags.length > 0,
+      language: languageCodeFromTags(gallery.tags),
+      hasPages: typeof gallery.pages === "number" && gallery.pages > 0,
+      image: gallery.image ? thumbnailUrl(gallery.image) : "",
+      posted: gallery.posted ? formatPosted(gallery.posted) : "",
+      progress: gallery.reading
+        ? gallery.reading.completed
+          ? 100
+          : Math.round(gallery.reading.progress * 100)
+        : 0,
+    };
+  }, [gallery]);
+
+  const { displayTags, hasTags, language, hasPages, image, posted, progress } =
+    derived;
   const imageLoaded = image !== "" && loadedImage === image;
+  const galleryHref = `/gallery/${gallery.id}/${gallery.token}`;
 
   const openTags = () => {
     const el = tagsRef.current;
@@ -96,50 +161,36 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
     };
   }, []);
 
+  // All dismiss handlers (outside click, scroll, resize) attach only while the
+  // popover is open. A document listener per card meant N `contains()` checks
+  // on every tap once several pages were scrolled in.
   useEffect(() => {
+    if (!showTags) return;
     const handleClickOutside = (e: MouseEvent) => {
       if (tagsRef.current && !tagsRef.current.contains(e.target as Node)) {
         setShowTags(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-    if (!showTags) return;
     const close = () => setShowTags(false);
     const reposition = () => {
       const el = tagsRef.current;
       if (el) setPopoverPos(computePopoverPosition(el));
     };
+    document.addEventListener("mousedown", handleClickOutside);
     window.addEventListener("scroll", close, { passive: true });
-    window.addEventListener("resize", reposition);
+    window.addEventListener("resize", reposition, { passive: true });
     return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
       window.removeEventListener("scroll", close);
       window.removeEventListener("resize", reposition);
     };
   }, [showTags]);
 
-  const formatTag = (raw: string) => {
-    const tag = parseTagString(raw);
-    if (tagDbReady) {
-      return translateTag(tag);
-    }
-    return tag.namespace ? `${tag.namespace}:${tag.name}` : tag.name;
-  };
-
-  const progress = gallery.reading
-    ? gallery.reading.completed
-      ? 100
-      : Math.round(gallery.reading.progress * 100)
-    : 0;
-
   return (
     <div className="gallery-card group relative">
       <div className="relative">
         <Link to={galleryHref} aria-label={gallery.title} className="block">
-          <div className="relative aspect-[3/4] overflow-hidden rounded-xl bg-kumo-recessed ring-1 ring-kumo-hairline/70 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-lg">
+          <div className="relative aspect-[3/4] overflow-hidden rounded-xl bg-kumo-recessed ring-1 ring-kumo-hairline/70 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:shadow-lg">
             {image ? (
               <img
                 src={image}
@@ -191,7 +242,7 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
           >
             <button
               type="button"
-              className="flex size-7 items-center justify-center rounded-full bg-white/15 text-white ring-1 ring-white/25 backdrop-blur-md transition-colors hover:bg-white/25"
+              className="flex size-7 items-center justify-center rounded-full bg-black/45 text-white ring-1 ring-white/25 transition-colors hover:bg-black/60"
               onClick={toggleTags}
               aria-label="查看标签"
               aria-expanded={showTags}
@@ -213,29 +264,16 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
           </div>
         )}
 
-        {hasTags &&
-          showTags &&
-          popoverPos &&
-          createPortal(
-            <div
-              className="fixed z-50 w-56 rounded-xl border border-kumo-hairline bg-kumo-elevated p-2 shadow-lg"
-              style={{ left: popoverPos.left, bottom: popoverPos.bottom }}
-              onMouseEnter={handleMouseEnter}
-              onMouseLeave={handleMouseLeave}
-            >
-              <div className="flex flex-wrap gap-1">
-                {displayTags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-block rounded-md bg-kumo-recessed px-1.5 py-0.5 text-[11px]"
-                  >
-                    {formatTag(tag)}
-                  </span>
-                ))}
-              </div>
-            </div>,
-            document.body,
-          )}
+        {hasTags && showTags && popoverPos && (
+          <TagPopover
+            tags={displayTags}
+            position={popoverPos}
+            onHoverChange={(hovering) => {
+              if (hovering) handleMouseEnter();
+              else handleMouseLeave();
+            }}
+          />
+        )}
       </div>
 
       <Link to={galleryHref} className="block">
@@ -258,11 +296,11 @@ export function GalleryCard({ gallery }: GalleryCardProps) {
 
           {gallery.posted && (
             <p className="truncate text-right text-xs text-kumo-inactive">
-              {formatPosted(gallery.posted)}
+              {posted}
             </p>
           )}
         </div>
       </Link>
     </div>
   );
-}
+});

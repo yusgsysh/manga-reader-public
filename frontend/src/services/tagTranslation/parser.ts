@@ -41,11 +41,13 @@ export function parseDb(data: unknown): TranslationIndex {
       const translation = cleanText(info.name ?? "");
       if (!translation) continue;
 
+      const description = info.intro ? cleanText(info.intro) : undefined;
       translationMap.set(getTagKey({ namespace, name: tagName }), {
         namespace,
         tag: tagName,
         translation,
-        description: info.intro ? cleanText(info.intro) : undefined,
+        description,
+        searchKey: `${translation}\0${tagName}`.toLowerCase(),
       });
     }
 

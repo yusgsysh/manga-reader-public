@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Books as BooksIcon } from "@phosphor-icons/react";
 import { cn } from "@cloudflare/kumo";
 import { useBookshelf } from "../hooks/useBookshelf";
@@ -32,13 +32,18 @@ export function BookshelfPage() {
     fetchNextPage,
   } = useBookshelf();
 
-  const items = data?.pages.flatMap((page) => page.results) ?? [];
-  const filtered = items.filter((item) => {
-    if (filter === "all") return true;
-    const reading = item.reading;
-    if (!reading) return false;
-    return filter === "done" ? reading.completed : !reading.completed;
-  });
+  const items = useMemo(
+    () => data?.pages.flatMap((page) => page.results) ?? [],
+    [data],
+  );
+  const filtered = useMemo(() => {
+    return items.filter((item) => {
+      if (filter === "all") return true;
+      const reading = item.reading;
+      if (!reading) return false;
+      return filter === "done" ? reading.completed : !reading.completed;
+    });
+  }, [items, filter]);
 
   const controls = (
     <div className="inline-flex items-center gap-0.5 rounded-lg bg-kumo-recessed p-0.5">

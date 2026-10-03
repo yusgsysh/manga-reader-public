@@ -12,7 +12,7 @@ import {
   CaretDown,
   CaretUp,
 } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { PageHeader } from "../components/ui";
 import { AdvancedFilterFields } from "../components/search/AdvancedFilterFields";
 import { TagFilterInput } from "../components/search/TagFilterInput";
@@ -205,7 +205,12 @@ export function SearchPage() {
       })),
   ];
 
-  const galleries = data?.pages.flatMap((page) => page.results) ?? [];
+  // Memoized: the input above is uncontrolled page state, and without a
+  // stable array every keystroke re-rendered the entire results grid.
+  const galleries = useMemo(
+    () => data?.pages.flatMap((page) => page.results) ?? [],
+    [data],
+  );
   const total = data?.pages[0]?.total ?? 0;
   const includedCategories = normalizeIncludedCategories(
     categories ? categories.split(",") : undefined,
@@ -218,8 +223,9 @@ export function SearchPage() {
         icon={<MagnifyingGlass className="size-5" weight="bold" />}
       />
 
-      {/* Sticky search bar */}
-      <div className="sticky top-14 z-30 -mx-1 bg-kumo-base/85 px-1 py-3 backdrop-blur-md lg:top-0">
+      {/* Sticky search bar. Sits right below the header, so a blur here would
+          stack a second backdrop-filter layer on every scroll frame. */}
+      <div className="sticky top-14 z-30 -mx-1 bg-kumo-base/95 px-1 py-3 lg:top-0">
         <div className="flex gap-2">
           <Input
             placeholder="搜索 Gallery..."

@@ -1,4 +1,5 @@
 import { Fire } from "@phosphor-icons/react";
+import { useMemo } from "react";
 import { usePopular } from "../hooks/useGalleryList";
 import { GalleryGrid } from "../components/gallery/GalleryGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
@@ -21,6 +22,11 @@ export function PopularPage() {
     fetchNextPage,
   } = usePopular();
 
+  const galleries = useMemo(
+    () => data?.pages.flatMap((page) => page.results) ?? [],
+    [data],
+  );
+
   if (isLoading) {
     return <GalleryGridSkeleton />;
   }
@@ -33,8 +39,6 @@ export function PopularPage() {
       />
     );
   }
-
-  const galleries = data?.pages.flatMap((page) => page.results) ?? [];
 
   if (galleries.length === 0) {
     return (

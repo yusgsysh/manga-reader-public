@@ -31,7 +31,14 @@ export function AppLayout() {
         onToggle={() => setCollapsed((value) => !value)}
       />
       <Header />
-      <div className="transition-[padding] duration-200 lg:pl-[var(--app-sidebar-width)]">
+      {/*
+        Content padding snaps to the sidebar width instead of transitioning:
+        animating padding re-lays-out the whole main subtree every frame, which
+        is what dropped frames on the toggle. The (cheap, fixed-position)
+        aside keeps its width animation, and it covers the snapped content
+        while it collapses, so the switch still reads as one motion.
+      */}
+      <div className="lg:pl-[var(--app-sidebar-width)]">
         <main className="app-container py-6 md:py-8">
           <PageTransition routeKey={location.pathname}>
             <Outlet />

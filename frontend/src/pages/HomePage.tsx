@@ -1,4 +1,5 @@
 import { Link, useSearchParams } from "react-router";
+import { useMemo } from "react";
 import { Sparkle } from "@phosphor-icons/react";
 import { useGalleries } from "../hooks/useGalleryList";
 import { useRecentlyRead } from "../hooks/useRecentlyRead";
@@ -38,8 +39,17 @@ export function HomePage() {
   } = useGalleries(filters, nav);
   const { items: recent } = useRecentlyRead();
 
-  const galleries = data?.pages.flatMap((page) => page.results) ?? [];
-  const continueItems = recent.slice(0, 12);
+  // Stable identities: the grid below is memoized, so these must not be
+  // rebuilt on every render (a keystroke or image load would otherwise
+  // re-render every card).
+  const galleries = useMemo(
+    () => data?.pages.flatMap((page) => page.results) ?? [],
+    [data],
+  );
+  const continueCards = useMemo(
+    () => recent.slice(0, 12).map(readingToCard),
+    [recent],
+  );
 
   const handleFiltersChange = (next: GalleryListFilters) => {
     setSearchParams(withListFilters(searchParams, next));
@@ -51,7 +61,7 @@ export function HomePage() {
 
   return (
     <div className="space-y-8">
-      {continueItems.length > 0 && (
+      {continueCards.length > 0 && (
         <Section
           title="继续阅读"
           action={
@@ -64,12 +74,12 @@ export function HomePage() {
           }
         >
           <div className="-mx-1 flex gap-4 overflow-x-auto px-1 pb-2">
-            {continueItems.map((item) => (
+            {continueCards.map((card) => (
               <div
-                key={`${item.id}-${item.token}`}
+                key={`${card.id}-${card.token}`}
                 className="w-32 shrink-0 sm:w-36"
               >
-                <GalleryCard gallery={readingToCard(item)} />
+                <GalleryCard gallery={card} />
               </div>
             ))}
           </div>

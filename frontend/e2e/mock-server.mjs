@@ -123,6 +123,108 @@ function galleryDetail(id) {
   };
 }
 
+// ---- Listing helpers (list-page perf/animation scenarios) ----------------
+const LIST_CATEGORIES = [
+  "manga",
+  "doujinshi",
+  "artistcg",
+  "gamecg",
+  "cosplay",
+  "misc",
+  "non-h",
+  "asianporn",
+  "image-set",
+  "western",
+];
+
+const LIST_TAGS = [
+  "female:solefemale",
+  "female:long hair",
+  "female:schoolgirl",
+  "male:sole male",
+  "artist:kohaku",
+  "language:chinese",
+  "language:japanese",
+  "parody:original",
+  "character:reimu",
+  "group:some circle",
+  "other:2026",
+  "female:mind control",
+  "male:monster",
+  "artist:fanza",
+  "other:full color",
+  "language:english",
+];
+
+function listItem(index) {
+  const id = 100000 + index;
+  return {
+    id,
+    token: `tok${id}`,
+    title: `Perf Gallery ${id} — 用于排版与动画性能测试的示例标题`,
+    category: LIST_CATEGORIES[index % LIST_CATEGORIES.length],
+    cover: `https://exhentai.org/s/cover/${id}`,
+    posted: "2026-09-01 12:00",
+    rating: 4 + (index % 10) / 10,
+    url: `https://exhentai.org/g/${id}/tok${id}`,
+    tags: LIST_TAGS.slice(0, 6 + (index % 6)),
+    uploader: `user${index % 7}`,
+    pages: 20 + (index % 60),
+    domain: "exhentai.org",
+  };
+}
+
+function listResponse(page, pageSize = 25) {
+  const start = page * pageSize;
+  return {
+    page,
+    page_size: pageSize,
+    results: Array.from({ length: pageSize }, (_, i) => listItem(start + i)),
+    nav: {
+      prev: "",
+      next: "",
+      min_date: "2026-01-01",
+      max_date: "2026-10-01",
+      range_min: 0,
+      range_max: 100,
+      range_span: 100,
+    },
+  };
+}
+
+function searchResponse(page, pageSize = 25) {
+  return { total: 500, total_pages: 20, ...listResponse(page, pageSize) };
+}
+
+function recentlyReadResponse(page, pageSize = 24) {
+  const start = page * pageSize;
+  return {
+    page,
+    page_size: pageSize,
+    total: 40,
+    total_pages: 2,
+    results: Array.from({ length: pageSize }, (_, i) => {
+      const item = listItem(start + i);
+      return {
+        id: item.id,
+        token: item.token,
+        title: item.title,
+        title_jpn: "",
+        category: item.category,
+        thumbnail: item.cover,
+        pages: item.pages,
+        reading: {
+          gallery_id: item.id,
+          token: item.token,
+          current_page: 3,
+          progress: 0.15,
+          completed: false,
+        },
+      };
+    }),
+  };
+}
+
 // Mutable shelf state: saving reading progress bumps an item's updated_at so
 // the mocked /api/bookshelf re-sorts by recent activity, like the real
 // backend. 1001 starts ahead of 1005; reading 1005 must move it to the front.
@@ -349,6 +451,24 @@ const server = Bun.serve({
       return new Response("torrent-bytes", {
         headers: { ...CORS, "Content-Type": "application/x-bittorrent" },
       });
+    }
+
+    // ---- Listing endpoints (list-page perf/animation scenarios) ----------
+    if (
+      path === "/api/galleries" ||
+      path === "/api/watched" ||
+      path === "/api/popular"
+    ) {
+      const page = Number(url.searchParams.get("page") ?? "0") || 0;
+      return json(listResponse(page));
+    }
+    if (path === "/api/search") {
+      const page = Number(url.searchParams.get("page") ?? "0") || 0;
+      return json(searchResponse(page));
+    }
+    if (path === "/api/recently-read") {
+      const page = Number(url.searchParams.get("page") ?? "0") || 0;
+      return json(recentlyReadResponse(page));
     }
 
     if (path.startsWith("/api/image-cache/") || path.startsWith("/api/image/")) {

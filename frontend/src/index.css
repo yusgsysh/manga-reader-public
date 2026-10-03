@@ -235,15 +235,32 @@ body {
   contain-intrinsic-size: auto 320px;
 }
 
-/* Slightly dim cover art in dark mode to reduce glare. */
+/*
+ * Slightly dim cover art in dark mode to reduce glare. Plain opacity instead
+ * of `filter: brightness()`: every filter forces its own composited layer plus
+ * a filter pass per frame, which tanks scroll/animation frames on low-end GPUs;
+ * opacity is a cheap compositor blend against the tile background.
+ */
 [data-mode="dark"] .app-image {
-  filter: brightness(0.85);
+  opacity: 0.9;
 }
 
 @keyframes app-shimmer {
   100% {
     transform: translateX(100%);
   }
+}
+
+/* Route-change fade/rise; compositor-only, mirrors the old motion transition. */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.page-enter {
+  animation: page-enter 0.18s ease-out;
 }
 
 .skeleton-shimmer {

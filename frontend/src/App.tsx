@@ -10,6 +10,7 @@ import {
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { NavigationProvider } from "./context/NavigationContext";
 import { GLOBAL_STALE_TIME } from "./lib/cacheConfig";
+import { scheduleIdle } from "./lib/idle";
 import { MotionProvider } from "./lib/motion";
 import { ThemeProvider } from "./lib/theme";
 import { tagTranslationService } from "./services/tagTranslation";
@@ -31,9 +32,11 @@ const AppLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(
 AppLink.displayName = "AppLink";
 
 export default function App() {
-  useEffect(() => {
-    tagTranslationService.load();
-  }, []);
+  // The tag-translation database is a 1.75 MB payload whose inflate + index
+  // build costs ~1 s of main-thread time on low-end devices. Kicking the load
+  // off at idle keeps it out of the route transition and first scroll; every
+  // consumer still sees the same "loading -> ready" stream.
+  useEffect(() => scheduleIdle(() => void tagTranslationService.load()), []);
 
   return (
     <ErrorBoundary>

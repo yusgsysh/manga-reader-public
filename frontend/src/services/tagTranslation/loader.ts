@@ -1,4 +1,5 @@
 import { readCachedDb, writeCachedDb } from "./database";
+import { nextIdle } from "../../lib/idle";
 
 const LOCAL_DB_URL =
   import.meta.env.VITE_TAG_TRANSLATION_DB_URL || "/db.text.js";
@@ -48,6 +49,10 @@ function loadViaJsonp(url: string): Promise<unknown> {
 }
 
 export async function loadDb(): Promise<unknown> {
+  // Reading IndexedDB (structured-clone of ~3 MB) and executing the inflate
+  // script are both main-thread blocks; hold both back until the browser is
+  // idle so they never land inside a route transition or a scroll.
+  await nextIdle();
   const cached = await readCachedDb();
   if (cached !== undefined) return cached;
   return loadViaJsonp(LOCAL_DB_URL);

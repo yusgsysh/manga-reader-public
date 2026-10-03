@@ -1,20 +1,22 @@
 import type { ReactNode } from "react";
-import { m } from "motion/react";
 
 interface PageTransitionProps {
   routeKey: string;
   children: ReactNode;
 }
 
+/*
+ * Pure CSS keyframes instead of motion: the route change already mounts the
+ * new page's content (grid, images) on the main thread, and driving this
+ * animation from JS as well is what makes the transition stutter on low-end
+ * devices. A CSS transform/opacity animation runs entirely on the compositor,
+ * and without a fill mode the element keeps no transform once it finishes
+ * (so no permanent full-page composited layer).
+ */
 export function PageTransition({ routeKey, children }: PageTransitionProps) {
   return (
-    <m.div
-      key={routeKey}
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.18, ease: "easeOut" }}
-    >
+    <div key={routeKey} className="page-enter">
       {children}
-    </m.div>
+    </div>
   );
 }
