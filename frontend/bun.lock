@@ -9,8 +9,8 @@
         "@fontsource-variable/inter": "^5.3.0",
         "@phosphor-icons/react": "^2.1.10",
         "@tanstack/react-query": "^5.104.0",
-        "@yui540/comimi": "^0.26.0",
-        "@yui540/comimi-react": "^0.3.0",
+        "@yui540/comimi": "github:yusgsysh/comimi#manga-reader",
+        "@yui540/comimi-react": "github:yusgsysh/comimi-react#manga-reader",
         "motion": "^13.5.0",
         "react": "^19.3.0",
         "react-colorful": "^5.8.1",
@@ -31,10 +31,6 @@
         "vitest": "^5.0.3",
       },
     },
-  },
-  "patchedDependencies": {
-    "@yui540/comimi-react@0.3.0": "patches/@yui540%2Fcomimi-react@0.3.0.patch",
-    "@yui540/comimi@0.26.0": "patches/@yui540%2Fcomimi@0.26.0.patch",
   },
   "packages": {
     "@babel/runtime": ["@babel/runtime@7.29.7", "", {}, "sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw=="],
@@ -261,9 +257,9 @@
 
     "@vitest/spy": ["@vitest/spy@5.0.3", "", {}, "sha512-XhFysQTB8AZ+P4gMi+Lpo99vg2AZi0qKpaB9yXQl37+CaMEAPO3iH/wGVnSyL5MPERiLezpqTVtrR6UZH5GCXg=="],
 
-    "@yui540/comimi": ["@yui540/comimi@0.26.0", "", {}, "sha512-+eo2iojw4Qdz8ZDjNUPAMZDmZgu3Orun8MFyI8oGntRj/SLLuA+NFfSsoatnN6T2gYvdfaupAnTcn+OdgUeAwA=="],
+    "@yui540/comimi": ["@yui540/comimi@github:yusgsysh/comimi#57e17a5", {}, "yusgsysh-comimi-57e17a5", "sha512-++Csb/J8rOFbAC8ffXdKg8lI3DGb4IzyMvyxERweeCpLEHa4HDFKqXfTafxIfoIr3wXBLNYeZ3dvCWuq5SC+HA=="],
 
-    "@yui540/comimi-react": ["@yui540/comimi-react@0.3.0", "", { "peerDependencies": { "@yui540/comimi": ">=0.26.0", "react": "^18.0.0 || ^19.0.0", "react-dom": "^18.0.0 || ^19.0.0" } }, "sha512-m67d0sic83YJcO8bvEmksaQQeZcgcuWvgtVhOu3OFQb+2FZCAcduHSoYSyHOfsSN5Fe5J1oNQYNjQfmMCACMDQ=="],
+    "@yui540/comimi-react": ["@yui540/comimi-react@github:yusgsysh/comimi-react#670807f", { "peerDependencies": { "@yui540/comimi": ">=0.26.0", "react": "^18.0.0 || ^19.0.0", "react-dom": "^18.0.0 || ^19.0.0" } }, "yusgsysh-comimi-react-670807f", "sha512-m/9iNVCQ11C2BFjKnWtDpd3O2QF2qdzMjnnHLrAKhS1itPFVJuXPU1Zz60Mzd0UQi+pEKExAB0mJ5ct5hIsWbg=="],
 
     "assertion-error": ["assertion-error@2.0.1", "", {}, "sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA=="],
 

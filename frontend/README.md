@@ -47,137 +47,39 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
 
 覆盖两种关键行为：已有完整缓存的画廊从缓存即时打开（完全不请求在线 `/pages`）；无缓存时渐进流式，首批到达即挂载、无需等待整份列表。
 
-## comimi / comimi-react 补丁
+## comimi / comimi-react fork
 
-本仓库对 `@yui540/comimi` 维护三处补丁，均由同一个 `patches/@yui540%2Fcomimi@0.26.0.patch` 承载：**预加载页白屏**、**触屏进度条缩略图**与**阅读器返回/全屏入口迁入 comimi（并移除宽屏选项）**。另有 `patches/@yui540%2Fcomimi-react@0.3.0.patch`，把新增事件加入运行时事件白名单，使 `onBack` / `onFullscreenRequest` 能作为 props 透传。
+本项目不再用 `patches/` + `patchedDependencies`，而是把改动维护在两个 fork 的分支上，前端直接依赖它们：
 
-### 补丁一：预加载页白屏
+- `github:yusgsysh/comimi#manga-reader`
+- `github:yusgsysh/comimi-react#manga-reader`
 
-#### 背景
+fork 里 `dist/` 是**提交进仓库**的（上游 `.gitignore` 忽略它），所以 `bun install` 拉下来即可用，不需要在安装时构建。分支上包含三处 comimi 改动与一处 comimi-react 改动。
 
-阅读器翻到「已预加载」的页面时，如果图片还没加载出来，会短暂白屏，而不是显示 comimi 的兔子加载动画。
+### 改动一：预加载页不再白屏
 
-根因在 `@yui540/comimi@0.26.0` 的 `PageStage.buildSlot`（`dist/index.js`，约 1809 行）：它有一条快速分支，当 `imageSources` 已缓存该页的解析结果时，直接 `img.src = url` 返回，既不插入 `.comimi-loading-icon`（兔子），也不把 `<img>` 设为 `visibility: hidden`。而 `PageStage.preloadImages()` 会预热当前页 ±4 页，所以翻到这些页就命中快速分支，解码前只露出白底。
+阅读器翻到「已预加载」的页面时，如果图片还没解码，会短暂白屏而不是显示 comimi 的兔子加载动画。
 
-### 补丁
+根因在 `PageStage.buildSlot`：当 `imageSources` 已缓存该页的解析结果时它有一条快速分支，直接 `img.src = url` 返回，既不插入 `.comimi-loading-icon`，也不把 `<img>` 设为 `visibility: hidden`；而 `PageStage.preloadImages()` 会预热当前页 ±4 页，命中该分支就在解码前露出白底。fork 让这条分支走与普通分支一致的流程（插入 loading 图标、隐藏图片、`load` 后移除）。改动在 `src/components/page-stage.ts`。
 
-`patches/@yui540%2Fcomimi@0.26.0.patch` 把该快速分支改成与正常分支一致（插入兔子 + 隐藏图片，`load` 后移除图标）。`package.json` 的 `patchedDependencies` 声明它，`bun install` 会自动应用。
+### 改动二：触屏进度条缩略图
 
-升级后重新打补丁时，照下面的 diff 修改 `node_modules/@yui540/comimi/dist/index.js` 里 `buildSlot` 的快速分支：
+桌面上拖动底部进度条会显示缩略图预览，触屏设备上不显示。
 
-```diff
- 		let o = `${e.manga.id}:${t.id}`, s = this.imageSources.get(o);
--		if (s) return a.src = s, {
--			slot: i,
--			img: a
--		};
-+		if (s) {
-+			let c = Ie(this.options.i18n, this.options.loadingMascot);
-+			i.append(c), a.style.visibility = "hidden", a.addEventListener("load", () => {
-+				a.style.visibility = "", c.remove();
-+			}, { once: !0 }), a.src = s;
-+			return {
-+				slot: i,
-+				img: a
-+			};
-+		}
- 		let c = Ie(this.options.i18n, this.options.loadingMascot);
-```
+`ControlsDock.buildSeek` 只给 `.comimi-seek-bar` 绑定了 `mousemove` / `mouseleave`，且内置样式对 `.comimi-seek-preview` 有 `@media (hover: none) { display: none; }`。fork 追加 `touchstart` / `touchmove` / `touchend` / `touchcancel`（`{ passive: true }`，不阻止滑杆的翻页），`updateSeekPreview` 在 `clientX` 缺失时从 `touches` / `changedTouches` 取坐标，并把内置样式的 `display: none` 改成 `display: flex`。改动在 `src/components/controls-dock.ts` 与 `src/components/controls-dock.styles.ts`，因此不再需要 `src/index.css` 里针对 `.reader-shell .comimi-seek-preview` 的覆盖。
 
-注意：`dist/manga-viewer.global.js` 是浏览器全局构建，Vite 不引用，无需修改。
+### 改动三：返回 / 全屏入口迁入 comimi（移除宽屏）
 
-### 补丁二：触屏进度条缩略图
+阅读器原本自绘 `.reader-topbar`（返回、页码、离线徽标、全屏）。进入 comimi 全屏后 `.comimi-root` 变成 `position: fixed; inset: 0` 会盖住顶栏，返回与退出全屏都不可达。fork 把这些入口收进 comimi 自身 UI：
 
-#### 背景
+- `ViewerEventMap` 新增 `back` / `fullscreenRequest`；核心回调 `requestBack` / `requestFullscreen` 分别 `emit`，`requestFullscreen` 在没有监听者时回退到 `browserFullscreen`。
+- 菜单在「关于 comimi」下方新增 `menu.backToGallery` 条目（各内置 locale 已补文案），点击关闭菜单并派发 `back`。
+- dock 视图切换器的全屏按钮与 `F` 键改为派发 `fullscreenRequest`，由应用侧统一处理，保留原来的 `browserFullscreen` + 原生 `requestFullscreen` + `fullscreenchange` 同步。
+- 移除宽屏：切换器 `entries` 去掉 `wide`；内置 CSS `repeat(3, 42px)` / `126px` 改为 `repeat(2, 42px)` / `84px`；快捷键列表去掉 `W`；键盘 `W` 分支删除。
 
-桌面上拖动底部进度条会显示页面缩略图预览，但触屏设备上不显示。
+comimi-react 侧把 `back` / `fullscreenRequest` 加进运行时事件白名单（`src/useMangaViewer.ts` 的 `EVENT_NAMES`），这样 `onBack` / `onFullscreenRequest` props 才会真正透传（prop 类型由 comimi 的 `ViewerEventMap` 推导，运行时则由这份白名单决定，两处都要有）。
 
-根因有两处：`@yui540/comimi@0.26.0` 的 `ControlsDock.buildSeek`（`dist/index.js`，约 1583 行）只给 `.comimi-seek-bar` 绑定了 `mousemove` / `mouseleave`，没有触摸事件；同时其内置样式对 `.comimi-seek-preview` 有 `@media (hover: none) { display: none; }`，主动在触屏设备上隐藏预览。
-
-#### 补丁
-
-`patches/@yui540%2Fcomimi@0.26.0.patch` 追加触摸监听，并让 `updateSeekPreview` 在 `clientX` 缺失时从 `touch` 事件取坐标：
-
-```diff
- 		}), this.seekBar.addEventListener("mousemove", (e) => this.updateSeekPreview(e)), this.seekBar.addEventListener("mouseleave", () => {
- 			this.seekPreview.dataset.show = "false";
-+		}), this.seekBar.addEventListener("touchstart", (e) => this.updateSeekPreview(e), { passive: !0 }), this.seekBar.addEventListener("touchmove", (e) => this.updateSeekPreview(e), { passive: !0 }), this.seekBar.addEventListener("touchend", () => {
-+			this.seekPreview.dataset.show = "false";
-+		}), this.seekBar.addEventListener("touchcancel", () => {
-+			this.seekPreview.dataset.show = "false";
- 		}), this.seekBar.append(n, this.seekInput, this.seekPreview), e.append(t, this.seekBar), e;
- 	}
- 	updateSeekPreview(e) {
-@@
- 		let r = this.seekBar.getBoundingClientRect();
- 		if (r.width === 0) return;
--		let i = Math.max(0, Math.min(r.width, e.clientX - r.left)), ...
-+		let d = e.clientX;
-+		if (d === void 0) {
-+			let f = e.touches && e.touches[0] || e.changedTouches && e.changedTouches[0];
-+			if (!f) return;
-+			d = f.clientX;
-+		}
-+		let i = Math.max(0, Math.min(r.width, d - r.left)), ...
-```
-
-触摸监听用 `{ passive: true }`，不阻止默认行为，滑动 `<input type="range">` 仍照常翻页。
-
-内置样式在触屏上隐藏预览，需在 `src/index.css` 用更高优先级的规则解除（`0,2,0` > `0,1,0`，与注入顺序无关）：
-
-```css
-@media (hover: none) {
-  .reader-shell .comimi-seek-preview {
-    display: flex;
-  }
-}
-```
-
-### 补丁三：阅读器返回/全屏入口迁入 comimi（移除宽屏）
-
-#### 背景
-
-阅读器原本自绘一条 `.reader-topbar`：返回、页码、离线徽标、全屏切换。进入 comimi 的全屏布局后，库把 `.comimi-root` 设为 `position: fixed; inset: 0`，会盖住顶栏，返回与退出全屏都变得不可达。现在把返回与全屏入口收进 comimi 自身 UI，并移除顶部栏（页码与「离线数据」徽标一并移除）。
-
-#### comimi 侧补丁
-
-- **事件**：`dist/types.d.ts` 的 `ViewerEventMap` 新增 `back` / `fullscreenRequest`；`dist/index.js` 的核心回调新增 `requestBack` / `requestFullscreen` 并分别 `emit`。`requestFullscreen` 在没有监听者时回退到 `setLayoutMode("browserFullscreen")`。
-- **返回入口**：`buildMenuView` 在「关于 comimi」下方追加 `menu.backToGallery` 条目，点击关闭菜单并派发 `back`。
-- **全屏入口**：dock 视图切换器的全屏按钮与 `F` 键改为派发 `fullscreenRequest`，由应用侧统一处理（保持原来的 `browserFullscreen` + 原生 `requestFullscreen` + `fullscreenchange` 同步）。
-- **移除宽屏**：视图切换器 `entries` 去掉 `wide`；内置 CSS `repeat(3, 42px)` / `126px` 改为 `repeat(2, 42px)` / `84px`；快捷键列表去掉 `W`；键盘 `W` 分支删除。
-
-```diff
-+	has(e) {
-+		let t = this.handlers.get(e);
-+		return !!t && t.size > 0;
-+	}
- 	emit(e, t) {
-@@
- 		reportPageLoadError: (e) => {
- 			let t = this.store.getState().manga.pages[e];
- 			t && this.events.emit("pageLoadError", {
- 				pageIndex: e,
- 				page: t
- 			});
-+		},
-+		requestBack: () => {
-+			this.events.emit("back", void 0);
-+		},
-+		requestFullscreen: () => {
-+			this.events.has("fullscreenRequest") ? this.events.emit("fullscreenRequest", void 0) : this.setLayoutMode("browserFullscreen");
- 		}
- 	};
-```
-
-`menu.backToGallery` 的文案不放进库内 locale，而是由 `ReaderPage` 通过 `translations` 传入（见下）。
-
-#### comimi-react 侧补丁
-
-`dist/index.js` 的事件白名单 `V` 增加 `"back"` / `"fullscreenRequest"`。comimi-react 的 `on<EventName>` props 类型由 comimi 的 `ViewerEventMap` 推导，运行时却由这份硬编码白名单决定，因此两处必须同时加上，`onBack` / `onFullscreenRequest` 才会真正生效；它也会把这两个 prop 从透传到 DOM 的 rest props 中剔除。
-
-#### 应用侧
-
-`ReaderPage` 删除 `.reader-topbar`，改用 `<MangaViewer onBack={...} onFullscreenRequest={...} />`：`onBack` 执行 `flushProgress()` + `goBack()`（沿用 `useBackNavigation` 的浏览器历史 / 深链回退规则）；`settings.layoutMode` 默认 `inline`（标准），用户可点 dock 的全屏按钮进入全屏。
+应用侧 `ReaderPage` 删除 `.reader-topbar`，改用 `<MangaViewer onBack={...} onFullscreenRequest={...} />`：`onBack` 执行 `flushProgress()` + `goBack()`（沿用 `useBackNavigation` 的浏览器历史 / 深链回退规则）；`settings.layoutMode` 默认 `inline`（标准），可点 dock 的全屏按钮进入全屏。
 
 ### 回归测试
 
@@ -189,43 +91,19 @@ bun run test:e2e:reader-loading   # 仅回归门禁（需先 build:e2e）
 bun run repro:reader-loading      # 诊断探针：仍白屏则 exit 0，已修复则 exit 1
 ```
 
-### 升级 comimi 时如何重新打补丁
+### 更新 fork
 
-1. 升级版本（如 `bun add @yui540/comimi@x.y.z`）后，先检查上游是否已修复：
+```bash
+# 在 fork 的 manga-reader 分支上改 src/ 后：
+bun run build            # 重新生成 dist/
+git add -A && git commit -m "..." && git push
 
-   ```bash
-   bun run build:e2e
-   EXPECT_FIXED=1 bun e2e/repro-reader-loading.mjs
-   ```
+# 回到本项目，刷新锁定的提交：
+bun update @yui540/comimi @yui540/comimi-react
+bun run lint && bun run build && bun run test && bun run test:e2e
+```
 
-   - 通过（兔子正常）：上游已修，删除 `patches/@yui540%2Fcomimi@*.patch` 和 `package.json` 的 `patchedDependencies`，本段可只留作历史记录。
-   - 失败：继续下一步。
-
-   触屏进度条缩略图没有自动化回归，需在触屏设备或 DevTools 触摸模拟下手动确认；若上游已支持触摸事件并移除了 `@media (hover: none)` 隐藏，可一并去掉 `src/index.css` 里的 `.reader-shell .comimi-seek-preview` 覆盖。
-
-2. 重新打补丁（comimi）：
-
-   ```bash
-   bun patch @yui540/comimi@x.y.z
-   # 按「补丁一 / 补丁二 / 补丁三」的 diff 修改
-   # node_modules/@yui540/comimi/dist/index.js 与 dist/types.d.ts
-   bun patch --commit 'node_modules/@yui540/comimi'
-   ```
-
-   bun 会生成新的 `patches/@yui540%2Fcomimi@x.y.z.patch` 并更新 `patchedDependencies`；确认无误后删除旧补丁文件。
-
-3. 若 `@yui540/comimi-react` 也升级，重新打事件白名单补丁：
-
-   ```bash
-   bun patch @yui540/comimi-react@x.y.z
-   # 确认 node_modules/@yui540/comimi-react/dist/index.js 的事件白名单 V 中
-   # 仍包含 "back" / "fullscreenRequest"
-   bun patch --commit 'node_modules/@yui540/comimi-react'
-   ```
-
-4. 验证：`bun run lint && bun run build && bun run test && bun run test:e2e`。
-
-5. 建议同时向上游提 issue/PR（合并两条渲染分支、补齐触摸事件、暴露 back/全屏事件与隐藏宽屏选项），最终移除补丁。
+`package.json` 里写的是分支名，`bun.lock` 会把解析到的具体 commit 固定下来；`bun update` 才会刷新到分支最新提交。若上游合并了这些改动，切回 `@yui540/comimi` / `@yui540/comimi-react` 的正式版本并删除 fork 依赖即可。改动也可以拆成两个上游 PR（comimi 先加事件，comimi-react 再消费）。
 
 ## 环境变量
 

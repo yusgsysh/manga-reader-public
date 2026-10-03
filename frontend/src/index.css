@@ -306,15 +306,3 @@ body {
 .reader-shell .comimi-seek-preview-thumb img {
   object-fit: cover;
 }
-
-/*
- * comimi hides the seek preview on hover-less (touch) devices because it only
- * wires `mousemove` to it. The library is patched to also drive the preview
- * from `touchstart`/`touchmove`, so keep it visible and let the patched
- * handlers position it while the user drags the slider.
- */
-@media (hover: none) {
-  .reader-shell .comimi-seek-preview {
-    display: flex;
-  }
-}
