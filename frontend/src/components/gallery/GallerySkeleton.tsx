@@ -27,7 +27,9 @@ function useGridColumnCount(): number {
 function GallerySkeleton() {
   return (
     <div>
-      <Skeleton className="aspect-[3/4] rounded-xl" />
+      {/* Same cover chrome as GalleryCard (rounded-xl + hairline ring) so the
+          placeholder does not visibly shift when the real cover paints in. */}
+      <Skeleton className="aspect-[3/4] rounded-xl ring-1 ring-kumo-hairline/70" />
       <div className="mt-2 space-y-1.5">
         <div className="min-h-10 space-y-1">
           <Skeleton className="h-4 w-full" />

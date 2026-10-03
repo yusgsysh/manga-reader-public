@@ -40,7 +40,8 @@ function DetailSkeleton() {
       <div className="space-y-6">
         <div className="flex flex-col gap-6 sm:flex-row">
           <div className="mx-auto w-full max-w-[220px] shrink-0 sm:mx-0 sm:w-[220px]">
-            <div className="aspect-[3/4] animate-pulse rounded-2xl bg-kumo-recessed" />
+            {/* Mirrors the real cover's rounded-2xl + shadow-lg + hairline ring. */}
+            <div className="aspect-[3/4] animate-pulse overflow-hidden rounded-2xl bg-kumo-recessed shadow-lg ring-1 ring-kumo-hairline" />
           </div>
 
           <div className="min-w-0 flex-1 space-y-5">
