@@ -4,8 +4,14 @@ index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2
 diff --git a/node_modules/@yui540/comimi/.bun-tag-643ee4adcf125b88 b/.bun-tag-643ee4adcf125b88
 new file mode 100644
 index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/node_modules/@yui540/comimi/.bun-tag-7f236588db838d92 b/.bun-tag-7f236588db838d92
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/node_modules/@yui540/comimi/.bun-tag-cf6041e987e7311c b/.bun-tag-cf6041e987e7311c
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
 diff --git a/dist/index.js b/dist/index.js
-index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..710f1115d03d6d7052097dfb76395be5a972eae2 100644
+index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..db6794b4cabb440f31bc3657f752cadc1cbe109e 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -964,7 +964,9 @@ var xe = {
@@ -13,7 +19,7 @@ index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..710f1115d03d6d7052097dfb76395be5
  		e.className = "comimi-menu-view comimi-menu-view-menu";
  		let t = document.createElement("div");
 -		return t.className = "comimi-menu-list", t.append(this.renderMenuLink("menu.openPages", () => this.callbacks.setPanel("pages")), this.renderMenuLink("menu.openFavorites", () => this.callbacks.setPanel("favorites")), this.renderMenuLink("menu.openShortcuts", () => this.callbacks.setPanel("shortcuts"), "comimi-menu-link-shortcuts"), this.renderMenuLink("menu.openShare", () => this.callbacks.setPanel("share")), this.renderMenuLink("menu.openAbout", () => this.callbacks.setPanel("about"))), e.append(t), e;
-+		return t.className = "comimi-menu-list", t.append(this.renderMenuLink("menu.openPages", () => this.callbacks.setPanel("pages")), this.renderMenuLink("menu.openFavorites", () => this.callbacks.setPanel("favorites")), this.renderMenuLink("menu.openShortcuts", () => this.callbacks.setPanel("shortcuts"), "comimi-menu-link-shortcuts"), this.renderMenuLink("menu.openShare", () => this.callbacks.setPanel("share")), this.renderMenuLink("menu.openAbout", () => this.callbacks.setPanel("about")), this.renderMenuLink("menu.backToGallery", () => {
++		return t.className = "comimi-menu-list", t.append(this.renderMenuLink("menu.openPages", () => this.callbacks.setPanel("pages")), this.renderMenuLink("menu.openShortcuts", () => this.callbacks.setPanel("shortcuts"), "comimi-menu-link-shortcuts"), this.renderMenuLink("menu.openShare", () => this.callbacks.setPanel("share")), this.renderMenuLink("menu.backToGallery", () => {
 +			this.callbacks.setPanel("none"), this.callbacks.requestBack?.();
 +		})), e.append(t), e;
  	}
@@ -104,6 +110,24 @@ index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..710f1115d03d6d7052097dfb76395be5
  	dt,
  	$e,
  	ut,
+@@ -2161,7 +2173,7 @@ var ht = 180, gt = 500, _t = 10, vt = .01, yt = 16, bt = 400, xt = 1400, St = [
+ 			let c = this.root.getBoundingClientRect(), l = t.clientX - (c.left + c.width / 2), u = t.clientY - (c.top + c.height / 2), d = s / n, f = i * d + l * (1 - d), p = a * d + u * (1 - d), m = this.clampPan(f, p, s);
+ 			this.callbacks.setZoom(s, m.x, m.y);
+ 		}, i = (t) => {
+-			this.suppressNextClick = !1, this.longPressFired = !1, !(this.isPageTurnAnimating || this.isSwipeBlockingTarget(t.target)) && t.button === 0 && (this.startLongPress(t.target, t.clientX, t.clientY, e), !this.isSwipeLocked(e) && (this.mouseStart = {
++			this.suppressNextClick = !1, this.longPressFired = !1, !(this.isPageTurnAnimating || this.isSwipeBlockingTarget(t.target)) && t.button === 0 && (!this.isSwipeLocked(e) && (this.mouseStart = {
+ 				x: t.clientX,
+ 				y: t.clientY,
+ 				panX: e.panX,
+@@ -2184,7 +2196,7 @@ var ht = 180, gt = 500, _t = 10, vt = .01, yt = 16, bt = 400, xt = 1400, St = [
+ 			}
+ 			if (this.isSwipeBlockingTarget(t.target)) return;
+ 			let n = t.touches[0];
+-			n && (this.startLongPress(t.target, n.clientX, n.clientY, e), !this.isSwipeLocked(e) && (this.touchStart = {
++			n && (!this.isSwipeLocked(e) && (this.touchStart = {
+ 				x: n.clientX,
+ 				y: n.clientY,
+ 				panX: e.panX,
 @@ -2621,6 +2633,10 @@ var At = class {
  			n.delete(t);
  		};

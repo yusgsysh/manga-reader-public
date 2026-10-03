@@ -25,7 +25,7 @@ import {
 } from "../lib/thumbnails";
 import { ErrorState } from "../components/common/ErrorState";
 
-// 菜单「关于 comimi」下方返回入口的文案：补丁只引用 key，库内没有内置。
+// 菜单底部返回入口的文案：补丁只引用 key，库内没有内置。
 const READER_TRANSLATIONS = { "menu.backToGallery": "返回画廊" };
 
 export function ReaderPage() {
