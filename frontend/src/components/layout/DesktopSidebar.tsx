@@ -35,15 +35,28 @@ function SidebarLink({
       aria-current={active ? "page" : undefined}
       title={collapsed ? item.label : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
-        collapsed && "justify-center px-0",
+        "flex items-center rounded-xl px-3 py-2 text-sm font-medium transition-[gap,background-color,color] duration-200 ease-out",
+        collapsed ? "justify-center gap-0" : "gap-3",
         active
           ? "bg-[var(--app-accent)] text-[var(--app-accent-contrast)]"
           : "text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default",
       )}
     >
       <Icon className="size-5 shrink-0" weight={active ? "fill" : "regular"} />
-      {!collapsed && item.label}
+      {/*
+        The label stays mounted and collapses via max-width/opacity so the text
+        slides and fades with the rail instead of popping in at the end. Kept in
+        the accessibility tree (no display:none) so collapsed links still have a
+        readable name.
+      */}
+      <span
+        className={cn(
+          "min-w-0 overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 ease-out",
+          collapsed ? "max-w-0 opacity-0" : "max-w-[10rem] opacity-100",
+        )}
+      >
+        {item.label}
+      </span>
     </Link>
   );
 }
@@ -59,21 +72,31 @@ export function DesktopSidebar({ collapsed, onToggle }: DesktopSidebarProps) {
   const { lastListRoute } = useNavigationContext();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[var(--app-sidebar-width)] flex-col border-r border-kumo-hairline bg-kumo-base transition-[width] duration-200 lg:flex">
-      <div
-        className={cn(
-          "flex h-14 shrink-0 items-center px-3",
-          collapsed ? "justify-center" : "justify-between",
-        )}
-      >
-        {!collapsed && (
-          <Link to="/" aria-label="Manga Reader 首页">
-            <Logo />
-          </Link>
-        )}
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[var(--app-sidebar-width)] flex-col border-r border-kumo-hairline bg-kumo-base transition-[width] duration-200 ease-out lg:flex">
+      <div className="relative flex h-14 shrink-0 items-center px-3">
+        {/*
+          The logo collapses its own width instead of being unmounted, so it
+          slides/fades out with the rail. The toggle is pinned to the right edge
+          and only nudges to the rail's center, avoiding a full jump when the
+          header switches alignment.
+        */}
+        <Link
+          to="/"
+          aria-label="Manga Reader 首页"
+          className={cn(
+            "overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 ease-out",
+            collapsed ? "max-w-0 opacity-0" : "max-w-[8rem] opacity-100",
+          )}
+        >
+          <Logo />
+        </Link>
         <IconButton
           label={collapsed ? "展开侧边栏" : "折叠侧边栏"}
           onClick={onToggle}
+          className={cn(
+            "absolute top-1/2 -translate-y-1/2 transition-[right] duration-200 ease-out",
+            collapsed ? "right-[18px]" : "right-3",
+          )}
         >
           {collapsed ? (
             <CaretDoubleRight className="size-5" weight="bold" />
@@ -83,12 +106,7 @@ export function DesktopSidebar({ collapsed, onToggle }: DesktopSidebarProps) {
         </IconButton>
       </div>
 
-      <nav
-        className={cn(
-          "flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden py-2",
-          collapsed ? "px-2" : "px-3",
-        )}
-      >
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-3 py-2">
         {PRIMARY_NAV.map((item) => (
           <SidebarLink
             key={item.to}
