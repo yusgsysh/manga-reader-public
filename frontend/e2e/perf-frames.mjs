@@ -130,6 +130,15 @@ async function runScenarios(browser) {
   const route = await snapshot(page);
   rows.push({ name: "route", ...route });
 
+  // Sidebar: collapse/expand the desktop rail (rail width + content padding).
+  await resetBuffers(page);
+  await page.click('button[aria-label="折叠侧边栏"]');
+  await sleep(450);
+  await page.click('button[aria-label="展开侧边栏"]');
+  await sleep(450);
+  const sidebar = await snapshot(page);
+  rows.push({ name: "sidebar", ...sidebar });
+
   await page.close();
   await desktop.close();
 

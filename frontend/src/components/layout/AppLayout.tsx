@@ -32,13 +32,12 @@ export function AppLayout() {
       />
       <Header />
       {/*
-        Content padding snaps to the sidebar width instead of transitioning:
-        animating padding re-lays-out the whole main subtree every frame, which
-        is what dropped frames on the toggle. The (cheap, fixed-position)
-        aside keeps its width animation, and it covers the snapped content
-        while it collapses, so the switch still reads as one motion.
+        Content slides with the rail. The padding transition reflows the main
+        subtree each frame, so every frame must stay cheap: cards already opt
+        into `content-visibility: auto` (off-screen ones skip layout), and this
+        mirrors the aside's 200ms ease-out so both edges move as one motion.
       */}
-      <div className="lg:pl-[var(--app-sidebar-width)]">
+      <div className="transition-[padding] duration-200 ease-out lg:pl-[var(--app-sidebar-width)]">
         <main className="app-container py-6 md:py-8">
           <PageTransition routeKey={location.pathname}>
             <Outlet />
