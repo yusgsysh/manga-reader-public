@@ -8,6 +8,7 @@ import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigge
 import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
 import { PageHeader } from "../components/ui";
+import { useLastListRoute } from "../hooks/useLastListRoute";
 
 type ShelfFilter = "all" | "reading" | "done";
 
@@ -18,6 +19,7 @@ const FILTERS: { value: ShelfFilter; label: string }[] = [
 ];
 
 export function BookshelfPage() {
+  useLastListRoute("/bookshelf");
   const [filter, setFilter] = useState<ShelfFilter>("all");
   const {
     data,

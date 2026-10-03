@@ -11,6 +11,7 @@ import { useTheme } from "../../hooks/useTheme";
 import type { ThemeMode } from "../../lib/theme";
 import { IconButton, Logo } from "../ui";
 import { PRIMARY_NAV, SECONDARY_NAV, isNavActive, type NavItem } from "./nav";
+import { useNavigationContext } from "../../context/NavigationContext";
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
   { mode: "light", label: "浅色", icon: Sun },
@@ -55,6 +56,7 @@ interface DesktopSidebarProps {
 export function DesktopSidebar({ collapsed, onToggle }: DesktopSidebarProps) {
   const location = useLocation();
   const { mode, setMode } = useTheme();
+  const { lastListRoute } = useNavigationContext();
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-[var(--app-sidebar-width)] flex-col border-r border-kumo-hairline bg-kumo-base transition-[width] duration-200 lg:flex">
@@ -91,7 +93,7 @@ export function DesktopSidebar({ collapsed, onToggle }: DesktopSidebarProps) {
           <SidebarLink
             key={item.to}
             item={item}
-            active={isNavActive(location.pathname, item.to)}
+            active={isNavActive(location.pathname, item.to, lastListRoute)}
             collapsed={collapsed}
           />
         ))}
@@ -102,7 +104,7 @@ export function DesktopSidebar({ collapsed, onToggle }: DesktopSidebarProps) {
           <SidebarLink
             key={item.to}
             item={item}
-            active={isNavActive(location.pathname, item.to)}
+            active={isNavActive(location.pathname, item.to, lastListRoute)}
             collapsed={collapsed}
           />
         ))}

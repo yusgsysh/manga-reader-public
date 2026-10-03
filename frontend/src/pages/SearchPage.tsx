@@ -34,6 +34,7 @@ import type {
   AdvancedSearchOptions,
   ListingNavOptions,
 } from "../types/gallery";
+import { useLastListRoute } from "../hooks/useLastListRoute";
 
 function parseTags(searchParams: URLSearchParams): string[] {
   const tags = searchParams.get("tags");
@@ -46,6 +47,7 @@ function buildTagQuery(tags: string[]): string {
 }
 
 export function SearchPage() {
+  useLastListRoute("/search");
   const [searchParams, setSearchParams] = useSearchParams();
   const q = searchParams.get("q") ?? "";
   const categoriesParam = searchParams.get("categories") ?? "";

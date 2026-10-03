@@ -6,8 +6,10 @@ import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigge
 import { ErrorState } from "../components/common/ErrorState";
 import { EmptyState } from "../components/common/EmptyState";
 import { PageHeader } from "../components/ui";
+import { useLastListRoute } from "../hooks/useLastListRoute";
 
 export function PopularPage() {
+  useLastListRoute("/popular");
   const {
     data,
     isLoading,

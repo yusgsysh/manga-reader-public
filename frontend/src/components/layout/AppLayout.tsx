@@ -4,6 +4,7 @@ import { Header } from "./Header";
 import { DesktopSidebar } from "./DesktopSidebar";
 import { BackToTop } from "../common/BackToTop";
 import { PageTransition } from "../ui";
+import { NavigationProvider } from "../../context/NavigationContext";
 
 const SIDEBAR_STORAGE_KEY = "manga-reader-sidebar";
 
@@ -33,9 +34,11 @@ export function AppLayout() {
       <Header />
       <div className="transition-[padding] duration-200 lg:pl-[var(--app-sidebar-width)]">
         <main className="app-container py-6 md:py-8">
-          <PageTransition routeKey={location.pathname}>
-            <Outlet />
-          </PageTransition>
+          <NavigationProvider>
+            <PageTransition routeKey={location.pathname}>
+              <Outlet />
+            </PageTransition>
+          </NavigationProvider>
         </main>
       </div>
       <BackToTop />

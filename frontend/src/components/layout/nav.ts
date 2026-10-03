@@ -7,6 +7,7 @@ import {
   Fire,
   Gear,
   House,
+  Images,
   MagnifyingGlass,
 } from "@phosphor-icons/react";
 
@@ -22,6 +23,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { to: "/popular", label: "热门", icon: Fire },
   { to: "/search", label: "搜索", icon: MagnifyingGlass },
   { to: "/bookshelf", label: "书架", icon: Books },
+  { to: "/gallery", label: "画廊", icon: Images },
 ];
 
 export const SECONDARY_NAV: NavItem[] = [
@@ -30,6 +32,9 @@ export const SECONDARY_NAV: NavItem[] = [
   { to: "/settings", label: "设置", icon: Gear },
 ];
 
-export function isNavActive(pathname: string, to: string): boolean {
+export function isNavActive(pathname: string, to: string, lastListRoute?: string): boolean {
+  if (pathname.startsWith("/gallery/")) {
+    return to === (lastListRoute || "/");
+  }
   return to === "/" ? pathname === "/" : pathname.startsWith(to);
 }

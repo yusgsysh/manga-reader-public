@@ -19,8 +19,10 @@ import {
   withNavOptions,
 } from "../lib/listingParams";
 import type { GalleryListFilters, ListingNavOptions } from "../types/gallery";
+import { useLastListRoute } from "../hooks/useLastListRoute";
 
 export function HomePage() {
+  useLastListRoute("/");
   const [searchParams, setSearchParams] = useSearchParams();
   const nav = parseNavOptions(searchParams);
   const filters = parseListFilters(searchParams);

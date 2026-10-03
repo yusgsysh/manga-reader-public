@@ -11,8 +11,10 @@ import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigge
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorState } from "../components/common/ErrorState";
 import { PageHeader } from "../components/ui";
+import { useLastListRoute } from "../hooks/useLastListRoute";
 
 export function RecentlyReadPage() {
+  useLastListRoute("/recently-read");
   const {
     items,
     isLoading,

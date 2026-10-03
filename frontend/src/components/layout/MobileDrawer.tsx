@@ -7,6 +7,7 @@ import { useTheme } from "../../hooks/useTheme";
 import type { ThemeMode } from "../../lib/theme";
 import { Logo } from "../ui";
 import { PRIMARY_NAV, SECONDARY_NAV, isNavActive, type NavItem } from "./nav";
+import { useNavigationContext } from "../../context/NavigationContext";
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
   { mode: "light", label: "浅色", icon: Sun },
@@ -51,6 +52,7 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
   const location = useLocation();
   const { mode, setMode } = useTheme();
   const panelRef = useRef<HTMLDivElement>(null);
+  const { lastListRoute } = useNavigationContext();
 
   useEffect(() => {
     if (!open) return;
@@ -108,7 +110,7 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
                 <DrawerLink
                   key={item.to}
                   item={item}
-                  active={isNavActive(location.pathname, item.to)}
+                  active={isNavActive(location.pathname, item.to, lastListRoute)}
                   onNavigate={onClose}
                 />
               ))}
@@ -119,7 +121,7 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
                 <DrawerLink
                   key={item.to}
                   item={item}
-                  active={isNavActive(location.pathname, item.to)}
+                  active={isNavActive(location.pathname, item.to, lastListRoute)}
                   onNavigate={onClose}
                 />
               ))}
