@@ -165,7 +165,7 @@ export function GalleryTorrentsDialog({
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
-      <Dialog className="w-[min(94vw,40rem)] p-5">
+      <Dialog className="top-16 w-[min(94vw,40rem)] p-5">
         <Dialog.Title className="flex items-center gap-2 text-base font-semibold">
           <Magnet className="size-4" weight="bold" />
           种子下载
