@@ -14,7 +14,11 @@ import {
   PAGES_STALE_TIME,
   PROGRESS_STALE_TIME,
 } from "../lib/cacheConfig";
-import type { GalleryCategory } from "../types/gallery";
+import type {
+  BookshelfItem,
+  BookshelfListResponse,
+  GalleryCategory,
+} from "../types/gallery";
 import type { RecentlyReadItem, RecentlyReadResponse } from "../types/recentlyRead";
 import type {
   Gallery,
@@ -159,6 +163,47 @@ function updateRecentlyReadCache(
   );
 }
 
+// updateBookshelfCache reorders the bookshelf infinite query so a just-read
+// gallery moves to the front immediately when navigating back, matching the
+// server's updated_at DESC ordering. Only items already on the shelf are
+// moved: reading a gallery outside the shelf must not insert it here.
+function updateBookshelfCache(
+  queryClient: QueryClient,
+  id: number,
+  token: string,
+  progress: ReadingProgress,
+): void {
+  queryClient.setQueryData<InfiniteData<BookshelfListResponse>>(
+    ["bookshelf"],
+    (old) => {
+      if (!old || old.pages.length === 0) return old;
+
+      let existing: BookshelfItem | undefined;
+      const pages = old.pages.map((page) => ({
+        ...page,
+        results: page.results.filter((item) => {
+          if (item.id === id && item.token === token) {
+            existing = item;
+            return false;
+          }
+          return true;
+        }),
+      }));
+
+      if (!existing) return old;
+
+      const item: BookshelfItem = {
+        ...existing,
+        updated_at: progress.updated_at ?? existing.updated_at,
+        reading: toReading(progress),
+      };
+
+      pages[0] = { ...pages[0], results: [item, ...pages[0].results] };
+      return { ...old, pages };
+    },
+  );
+}
+
 export function applyReadingProgressToCaches(
   queryClient: QueryClient,
   id: number,
@@ -170,6 +215,7 @@ export function applyReadingProgressToCaches(
     progress,
   );
   updateRecentlyReadCache(queryClient, id, token, progress);
+  updateBookshelfCache(queryClient, id, token, progress);
 }
 
 export function invalidateReadingLists(queryClient: QueryClient): void {

@@ -8,6 +8,10 @@ import {
 import type { Gallery } from "../types/reader";
 import type { ReadingProgress } from "../types/reader";
 import type {
+  BookshelfItem,
+  BookshelfListResponse,
+} from "../types/gallery";
+import type {
   RecentlyReadItem,
   RecentlyReadResponse,
 } from "../types/recentlyRead";
@@ -52,6 +56,40 @@ function emptyPage(page: number): RecentlyReadResponse {
 function infinite(
   results: RecentlyReadItem[],
 ): InfiniteData<RecentlyReadResponse> {
+  return {
+    pages: [
+      { page: 0, page_size: 25, total: results.length, total_pages: 1, results },
+    ],
+    pageParams: [0],
+  };
+}
+
+function shelfItem(id: number, updatedAt: string): BookshelfItem {
+  return {
+    id,
+    token: `token-${id}`,
+    title: `Title ${id}`,
+    title_jpn: "",
+    category: "doujinshi",
+    thumbnail: `thumb-${id}`,
+    pages: 10,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: updatedAt,
+    reading: {
+      gallery_id: id,
+      token: `token-${id}`,
+      current_page: 1,
+      progress: 0.5,
+      completed: false,
+      created_at: updatedAt,
+      updated_at: updatedAt,
+    },
+  };
+}
+
+function infiniteShelf(
+  results: BookshelfItem[],
+): InfiniteData<BookshelfListResponse> {
   return {
     pages: [
       { page: 0, page_size: 25, total: results.length, total_pages: 1, results },
@@ -162,17 +200,92 @@ describe("applyReadingProgressToCaches", () => {
   });
 });
 
+describe("applyReadingProgressToCaches bookshelf reorder", () => {
+  it("moves a shelved gallery to the front of the bookshelf", () => {
+    const client = new QueryClient();
+    client.setQueryData(
+      ["bookshelf"],
+      infiniteShelf([
+        shelfItem(1, "2026-01-03T00:00:00Z"),
+        shelfItem(2, "2026-01-02T00:00:00Z"),
+        shelfItem(3, "2026-01-01T00:00:00Z"),
+      ]),
+    );
+
+    applyReadingProgressToCaches(
+      client,
+      2,
+      "token-2",
+      progressFor(2, "2026-01-04T00:00:00Z"),
+    );
+
+    const data = client.getQueryData<InfiniteData<BookshelfListResponse>>([
+      "bookshelf",
+    ])!;
+    expect(data.pages[0].results.map((r) => r.id)).toEqual([2, 1, 3]);
+
+    const moved = data.pages[0].results[0];
+    expect(moved.reading).toMatchObject({
+      current_page: 9,
+      completed: true,
+      updated_at: "2026-01-04T00:00:00Z",
+    });
+    // Metadata is preserved and the shelf updated_at tracks the read.
+    expect(moved.title).toBe("Title 2");
+    expect(moved.thumbnail).toBe("thumb-2");
+    expect(moved.updated_at).toBe("2026-01-04T00:00:00Z");
+  });
+
+  it("leaves the bookshelf untouched when the gallery is not shelved", () => {
+    const client = new QueryClient();
+    client.setQueryData(
+      ["bookshelf"],
+      infiniteShelf([
+        shelfItem(1, "2026-01-03T00:00:00Z"),
+        shelfItem(3, "2026-01-02T00:00:00Z"),
+      ]),
+    );
+
+    applyReadingProgressToCaches(
+      client,
+      9,
+      "token-9",
+      progressFor(9, "2026-01-04T00:00:00Z"),
+    );
+
+    const data = client.getQueryData<InfiniteData<BookshelfListResponse>>([
+      "bookshelf",
+    ])!;
+    expect(data.pages[0].results.map((r) => r.id)).toEqual([1, 3]);
+  });
+
+  it("does nothing when there is no bookshelf cache", () => {
+    const client = new QueryClient();
+
+    expect(() =>
+      applyReadingProgressToCaches(
+        client,
+        1,
+        "token-1",
+        progressFor(1, "2026-01-04T00:00:00Z"),
+      ),
+    ).not.toThrow();
+
+    expect(client.getQueryData(["bookshelf"])).toBeUndefined();
+  });
+});
+
 describe("invalidateReadingLists", () => {
   it("invalidates every cached recently-read page", () => {
     const client = new QueryClient();
     client.setQueryData<RecentlyReadResponse>(["recently-read", 0], emptyPage(0));
     client.setQueryData<RecentlyReadResponse>(["recently-read", 1], emptyPage(1));
-    client.setQueryData(["bookshelf", 0], emptyPage(0));
+    client.setQueryData(["bookshelf"], emptyPage(0));
 
     invalidateReadingLists(client);
 
     expect(client.getQueryState(["recently-read", 0])?.isInvalidated).toBe(true);
     expect(client.getQueryState(["recently-read", 1])?.isInvalidated).toBe(true);
-    expect(client.getQueryState(["bookshelf", 0])?.isInvalidated).toBe(true);
+    expect(client.getQueryState(["bookshelf"])?.isInvalidated).toBe(true);
   });
 });
