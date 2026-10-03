@@ -370,6 +370,78 @@ try {
     await page.close();
   }
 
+  console.log("bookshelf: reading reorders the shelf without a reload");
+  {
+    const page = await browser.newPage();
+    // Delay bookshelf refetches after the first load so the assertion only
+    // passes if the client reordered its cached shelf optimistically.
+    let bookshelfRequests = 0;
+    await page.route("**/api/bookshelf**", async (route) => {
+      const reqUrl = new URL(route.request().url());
+      if (reqUrl.pathname === "/api/bookshelf") {
+        bookshelfRequests++;
+        if (bookshelfRequests > 1) await sleep(5000);
+      }
+      try {
+        await route.continue();
+      } catch {
+        // page closed while a delayed refetch was pending
+      }
+    });
+
+    const shelfOrder = () =>
+      page.$$eval(".gallery-card", (cards) =>
+        cards.map((card) => {
+          const href = card.querySelector('a[href^="/gallery/"]').getAttribute("href");
+          return href.split("/")[2];
+        }),
+      );
+
+    await page.goto(`${BASE}/bookshelf`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector('.gallery-card a[href^="/gallery/1005/"]', {
+      timeout: 30000,
+    });
+    // Mark this document: it survives SPA navigation but not a full reload.
+    await page.evaluate(() => {
+      window.__e2eShelfMarker = true;
+    });
+    check(
+      "shelf starts with 1001 before 1005",
+      JSON.stringify(await shelfOrder()) === JSON.stringify(["1001", "1005"]),
+      JSON.stringify(await shelfOrder()),
+    );
+
+    await page.locator('a[href^="/gallery/1005/"]').first().click();
+    await page.waitForURL(`${BASE}/gallery/1005/tok`, { timeout: 10000 });
+    await page
+      .getByRole("button", { name: /^(开始阅读|继续阅读|重新阅读)/ })
+      .click();
+    await page.waitForSelector(".reader-shell", { timeout: 30000 });
+
+    // Leave the reader; the final progress save reorders the shelf.
+    await page.keyboard.press("m");
+    await page.waitForSelector(".comimi-menu-link", { timeout: 10000 });
+    await page.locator(".comimi-menu-link").last().click();
+    await page.waitForURL(`${BASE}/gallery/1005/tok`, { timeout: 10000 });
+
+    await page.getByRole("button", { name: "返回" }).click();
+    await page.waitForURL(`${BASE}/bookshelf`, { timeout: 10000 });
+    await page.waitForSelector('.gallery-card a[href^="/gallery/1005/"]', {
+      timeout: 10000,
+    });
+
+    check(
+      "reading keeps the bookshelf session (no full reload)",
+      await page.evaluate(() => window.__e2eShelfMarker === true),
+    );
+    check(
+      "reading moves 1005 to the front of the shelf",
+      JSON.stringify(await shelfOrder()) === JSON.stringify(["1005", "1001"]),
+      JSON.stringify(await shelfOrder()),
+    );
+    await page.close();
+  }
+
   console.log("settings: dev tools section");
   {
     // Enabled backend: the switch is shown.

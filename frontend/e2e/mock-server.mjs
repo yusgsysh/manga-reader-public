@@ -123,8 +123,16 @@ function galleryDetail(id) {
   };
 }
 
-function bookshelfItem(id) {
-  const detail = galleryDetail(id);
+// Mutable shelf state: saving reading progress bumps an item's updated_at so
+// the mocked /api/bookshelf re-sorts by recent activity, like the real
+// backend. 1001 starts ahead of 1005; reading 1005 must move it to the front.
+const shelf = [
+  { id: 1001, updatedAt: "2026-10-02T00:00:00Z" },
+  { id: 1005, updatedAt: "2026-10-01T00:00:00Z" },
+];
+
+function bookshelfItem(entry) {
+  const detail = galleryDetail(entry.id);
   return {
     id: detail.id,
     token: detail.token,
@@ -134,7 +142,7 @@ function bookshelfItem(id) {
     thumbnail: `https://exhentai.org/t/${detail.id}-tok.jpg`,
     pages: detail.page_count,
     created_at: "2026-10-01T00:00:00Z",
-    updated_at: "2026-10-02T00:00:00Z",
+    updated_at: entry.updatedAt,
   };
 }
 
@@ -237,17 +245,51 @@ const server = Bun.serve({
     // ---- Local database endpoints ----------------------------------------
     if (path === "/api/bookshelf") {
       const page = Number(url.searchParams.get("page") ?? "0") || 0;
+      const results = [...shelf]
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .map(bookshelfItem);
       return json({
         page,
         page_size: 24,
-        total: 1,
+        total: results.length,
         total_pages: 1,
-        results: [bookshelfItem(1001)],
+        results,
       });
     }
     m = path.match(/^\/api\/bookshelf\/(\d+)\/tok\/status$/);
     if (m) return json({ in_bookshelf: false });
     if (path.startsWith("/api/bookshelf")) return json({ success: true });
+
+    // GET / PUT reading progress. A PUT bumps the matching shelf entry so the
+    // following /api/bookshelf fetch reflects the new order.
+    m = path.match(/^\/api\/progress\/(\d+)\/tok$/);
+    if (m) {
+      const id = Number(m[1]);
+      if (req.method === "PUT") {
+        const body = await req.json().catch(() => ({}));
+        const now = new Date().toISOString();
+        const entry = shelf.find((s) => s.id === id);
+        if (entry) entry.updatedAt = now;
+        return json({
+          gallery_id: id,
+          token: "tok",
+          current_page: body.current_page ?? 0,
+          progress: body.progress ?? 0,
+          completed: body.completed ?? false,
+          created_at: now,
+          updated_at: now,
+        });
+      }
+      return json({
+        gallery_id: id,
+        token: "tok",
+        current_page: 0,
+        progress: 0,
+        completed: false,
+        created_at: null,
+        updated_at: null,
+      });
+    }
 
     if (path.startsWith("/api/progress/")) {
       return json({
