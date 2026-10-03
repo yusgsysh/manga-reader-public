@@ -22,26 +22,26 @@ export function AppLayout() {
   }, [collapsed]);
 
   return (
-    <div
-      data-sidebar={collapsed ? "collapsed" : "expanded"}
-      className="min-h-dvh bg-kumo-base text-kumo-default"
-    >
-      <ScrollRestoration />
-      <DesktopSidebar
-        collapsed={collapsed}
-        onToggle={() => setCollapsed((value) => !value)}
-      />
-      <Header />
-      <div className="transition-[padding] duration-200 lg:pl-[var(--app-sidebar-width)]">
-        <main className="app-container py-6 md:py-8">
-          <NavigationProvider>
+    <NavigationProvider>
+      <div
+        data-sidebar={collapsed ? "collapsed" : "expanded"}
+        className="min-h-dvh bg-kumo-base text-kumo-default"
+      >
+        <ScrollRestoration />
+        <DesktopSidebar
+          collapsed={collapsed}
+          onToggle={() => setCollapsed((value) => !value)}
+        />
+        <Header />
+        <div className="transition-[padding] duration-200 lg:pl-[var(--app-sidebar-width)]">
+          <main className="app-container py-6 md:py-8">
             <PageTransition routeKey={location.pathname}>
               <Outlet />
             </PageTransition>
-          </NavigationProvider>
-        </main>
+          </main>
+        </div>
+        <BackToTop />
       </div>
-      <BackToTop />
-    </div>
+    </NavigationProvider>
   );
 }
