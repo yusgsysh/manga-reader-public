@@ -2,7 +2,7 @@
 
 ExHentai Web 漫画客户端的前端。
 
-单用户、自托管、Docker 部署。本阶段实现 5 个核心页面（首页 / 订阅 / 热门 / 搜索 / 书架）及基础架构。
+单用户、自托管、Docker 部署。页面：首页 / 订阅 / 热门 / 搜索 / 书架 / 最近阅读 / 下载管理 / 设置 / Gallery 详情 / 阅读器。
 
 ## 技术栈
 
@@ -10,9 +10,12 @@ ExHentai Web 漫画客户端的前端。
 - TypeScript
 - React
 - Vite
-- Cloudflare Kumo
+- Tailwind CSS
 - React Router
 - TanStack Query
+- comimi / comimi-react（阅读器，本地补丁，见「comimi / comimi-react 补丁」）
+- Cloudflare Kumo
+- oxlint / vitest / Playwright
 
 ## 开发
 
@@ -241,28 +244,25 @@ VITE_API_BASE_URL=http://localhost:8080
 bun run build
 ```
 
-## 部署（nginx，方案 A：托管前端 + 反代 /api）
+## 部署（Docker / Angie）
 
-1. 构建生产产物（读取 `.env.production`，`VITE_API_BASE_URL` 为空 → 前端走同源 `/api/*`）：
+镜像由 CI 构建（见根 `README.md` 的「CI 与部署」）。`frontend/Dockerfile` 分两阶段：Bun 构建生产产物（`VITE_API_BASE_URL` 强制留空 → 前端走同源 `/api/*`），运行阶段用 Angie 托管 `dist/` 并反代 `/api`。
 
-   ```bash
-   bun run build
-   ```
+- 反代目标由 `ANGIE_BACKEND_URL` 控制（compose 内默认 `backend:8080`）；`deploy/angie.conf.tpl` 在容器启动时由 `deploy/docker-entrypoint.sh` 用 `envsubst` 渲染成 `angie.conf`。
+- 根 `docker-compose.yml` 把前端发布到 `5173:80`，后端不对外发布端口。
+- 本地单独构建与运行：
 
-2. 将 `dist/` 复制到服务器，如 `/var/www/manga-reader/dist`。
+  ```bash
+  docker build -t manga-reader-frontend .
+  docker run -d -p 80:80 \
+    -e ANGIE_BACKEND_URL=192.168.1.100:8080 \
+    manga-reader-frontend
+  ```
 
-3. 使用 `deploy/nginx.conf`（按需改 `server_name`、`root`、后端 `proxy_pass` 地址），启用并重载：
+纯静态部署（自行用 nginx / caddy 托管并反代 `/api`）也只需 `bun run build` 的 `dist/`：
 
-   ```bash
-   sudo cp deploy/nginx.conf /etc/nginx/sites-available/manga-reader
-   sudo ln -s /etc/nginx/sites-available/manga-reader /etc/nginx/sites-enabled/
-   sudo nginx -t && sudo systemctl reload nginx
-   ```
-
-说明：
-
-- 前端所有 `/api/*`（含 `cached-image`/`cached-thumbnail`）由 nginx 转发到后端，无需后端 CORS。
-- SPA 路由靠 `try_files ... /index.html` 回退。
+- 前端所有 `/api/*` 转发到后端，无需后端 CORS；
+- SPA 路由靠 `try_files ... /index.html` 回退；
 - `db.text.js`（翻译库）同源加载，更新按钮仍从 GitHub 拉取。
 
 ## 缓存与 staleTime
@@ -288,7 +288,7 @@ react-query 的 `staleTime` 仅用于客户端节流，统一集中在 `src/lib/
 - **无限滚动**：滚动接近底部时自动请求下一页并追加，已移除上一页 / 下一页按钮。
 - **懒加载**：缩略图使用 `loading="lazy"` + `decoding="async"`，数据按 `page` 分页按需加载。
 - **提前加载**：`useInfiniteScroll` 通过 `IntersectionObserver`（`rootMargin: 0px 0px 200% 0px`，约提前 2 屏）预取下一页，加载过程不显示动画。
-- **Jump/Seek**：首页 / 订阅 / 搜索页提供 `JumpSeekBar`（文本框自动识别日期 `seek` 或偏移 `jump`，附 `1d/3d/1w/1m/1y` 快捷按钮），配合后端返回的 `nav` 元数据定位到指定日期或相对位置。首页 / 订阅使用局部 state，搜索页写入 URL 查询参数（`seek` / `jump`）。
+- **Jump/Seek**：首页 / 订阅 / 搜索页提供 Jump/Seek 面板（`JumpSeekPanel`：文本框自动识别日期 `seek` 或偏移 `jump`，附 `1d/3d/1w/1m/1y` 快捷按钮；首页 / 订阅通过 `JumpSeekMenu` 从页头弹出，搜索页直接内嵌），配合后端返回的 `nav` 元数据定位到指定日期或相对位置。首页 / 订阅使用局部 state，搜索页写入 URL 查询参数（`seek` / `jump`）。
 
 阅读器（comimi）的页面列表会为每一页创建缩略图，大画廊（上千页）会瞬间发起大量 `/api/image-cache/page-thumbnail` 请求。`loadThumbnails` 拦截这些图片，**不做视口懒加载**：缩略图出现即入队加载，通过并发上限为 5 的队列逐个请求；节点被移除时会取消占位并释放槽位。阅读器会给 `loadThumbnails` 传 `getLimit`，只预取已从 `/pages` 流式收到的页（`index < 已收页数`），新页到达时调用返回句柄的 `refresh()` 补入队，因此预取不会超过 `pages` 的数量。
 
@@ -296,7 +296,7 @@ react-query 的 `staleTime` 仅用于客户端节流，统一集中在 `src/lib/
 
 Gallery 详情页也提供页面缩略图网格（`PageThumbnailGrid`，每页 20 张、`SimplePagination` 翻页），点击某页跳转到 `/reader/:id/:token?page=N`；阅读器把 `?page`（0-indexed）作为初始页，离开时把进度保存为该页。
 
-相关实现：`src/hooks/useInfiniteScroll.ts`、`src/components/common/InfiniteScrollTrigger.tsx`、`src/components/common/JumpSeekBar.tsx`、`src/lib/jumpSeek.ts`、`src/lib/thumbnails.ts`，以及 `src/hooks/useGalleryList.ts`、`useSearch.ts`、`useBookshelf.ts`、`useRecentlyRead.ts`（均为 `useInfiniteQuery`）。
+相关实现：`src/hooks/useInfiniteScroll.ts`、`src/components/common/InfiniteScrollTrigger.tsx`、`src/components/common/JumpSeekPanel.tsx` / `JumpSeekMenu.tsx`、`src/lib/jumpSeek.ts`、`src/lib/thumbnails.ts`，以及 `src/hooks/useGalleryList.ts`、`useSearch.ts`、`useBookshelf.ts`、`useRecentlyRead.ts`（均为 `useInfiniteQuery`）。
 
 ## 路由
 
@@ -308,5 +308,9 @@ Gallery 详情页也提供页面缩略图网格（`PageThumbnailGrid`，每页 2
 | `/search` | 搜索 |
 | `/bookshelf` | 书架 |
 | `/recently-read` | 最近阅读 |
+| `/downloads` | 下载管理 |
+| `/settings` | 设置 |
 | `/gallery/:id/:token` | Gallery Detail |
 | `/reader/:id/:token` | Reader |
+
+列表页通过 `NavigationContext` + `useLastListRoute` 记住来源路由：进入 Gallery 详情时侧边栏 / 抽屉高亮来源列表项，直接访问（无 referrer）时回落到首页。

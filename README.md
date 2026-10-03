@@ -11,6 +11,7 @@
 - Gallery 详情、页面列表、图片代理
 - 书架（Bookshelf）收藏与快照
 - 阅读进度（Reading Progress）、最近阅读（Recently Read）
+- 阅读器（comimi 集成）：返回 / 全屏入口、触屏进度条缩略图预览、预加载页加载动画
 - 阅读记录手动清理（Cleanup API）
 - 离线下载任务（Prefill）：后台排队预填充图片缓存、下载管理页、流式 ZIP 下载
 - 缩略图源站代理与 MinIO 缓存
@@ -21,8 +22,10 @@
 
 ```text
 manga-reader/
-├── backend/          # Go Backend（见 backend/API.md）
-├── frontend/         # React 前端（见 frontend/README.md）
+├── backend/            # Go Backend（见 backend/API.md）
+├── frontend/           # React 前端（见 frontend/README.md）
+├── Manga Reader API/   # 接口集合（OpenCollection 请求定义，同 backend/API.md）
+├── .forgejo/           # CI：镜像构建 / 前端测试 / 部署
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -33,16 +36,22 @@ manga-reader/
 backend/
 ├── main.go                       # 应用入口
 ├── internal/
+│   ├── cache/                    # MinIO 对象存储缓存
+│   ├── config/                   # 环境变量配置
 │   ├── database/                 # 数据库初始化 (Ent Client)
 │   ├── ent/                      # Ent ORM 定义与生成代码
 │   │   ├── schema/               # 数据模型定义 (Schema as Code)
-│   │   ├── bookshelf/            # Bookshelf 查询工具
-│   │   ├── readingprogress/      # ReadingProgress 查询工具
-│   │   └── prefilljob/           # PrefillJob 查询工具
+│   │   ├── bookshelf/            # Bookshelf 字段常量与查询辅助
+│   │   ├── readingprogress/      # ReadingProgress 字段常量与查询辅助
+│   │   ├── prefilljob/           # PrefillJob 字段常量与查询辅助
+│   │   ├── gallerycache/         # GalleryCache 字段常量与查询辅助
+│   │   └── migrate/              # 数据库迁移逻辑
+│   ├── exhentai/                 # ExHentai API / 页面抓取（含 10 秒请求去重）
+│   ├── gallerycache/             # gallery_cache 读写
 │   ├── handler/                  # HTTP 处理器 (Gin)
+│   ├── imageproc/                # 图片裁剪（精灵图页面缩略图）
 │   ├── model/                    # API 响应模型
-│   ├── exhentai/                 # ExHentai API / 页面抓取
-│   └── cache/                    # MinIO 对象存储缓存
+│   └── ttl/                      # HTTP Cache-Control / listing cursor 常量
 └── API.md                        # API 文档
 ```
 
@@ -66,10 +75,16 @@ backend/
    EHENTAI_COOKIE_IPB_PASS_HASH=xxx
    ```
 
-2. 启动全部服务：
+2. 启动全部服务（镜像由 CI 构建并推送到镜像仓库，compose 直接拉取，仓库内无 `build:` 配置）：
 
    ```bash
-   docker compose up -d --build
+   docker compose up -d
+   ```
+
+   更新到最新镜像：
+
+   ```bash
+   docker compose pull && docker compose up -d
    ```
 
    | 服务 | 端口 | 说明 |
@@ -84,6 +99,23 @@ backend/
 - SQLite：`backend_data:/app/data`（`/app/data/manga-reader.db`）
 
 数据位于 Docker 命名卷中，`docker compose down` 不会丢失；如需彻底清除使用 `docker compose down -v`。
+
+## CI 与部署
+
+镜像构建与部署由 Forgejo Actions（`.forgejo/workflows/`）在自托管 runner 上完成：
+
+| Workflow | 触发 | 作用 |
+|----------|------|------|
+| `docker-build.yml` | push 到 `main`、PR | 检测 frontend/backend 变更 → 构建并推送 `manga-reader-frontend:latest` 与 `manga-reader-backend:latest`；push 到 `main` 且有变更时在服务器上 `docker compose pull && docker compose up -d` 完成部署（PR 只构建不部署） |
+| `frontend-tests.yml` | push 到 `main`、PR | 在 `oven/bun:1` 容器内跑单测（vitest）+ reader e2e（Playwright） |
+| `deploy.yml` | 手动（workflow_dispatch） | 单独执行一次 pull + 重启部署 |
+
+本地构建同名镜像（覆盖 compose 引用的镜像，便于不依赖 CI 调试）：
+
+```bash
+docker build -t git.09270721.xyz/abc/manga-reader-frontend:latest frontend
+docker build -t git.09270721.xyz/abc/manga-reader-backend:latest backend
+```
 
 ## 环境变量
 
@@ -107,6 +139,8 @@ backend/
 | `MINIO_BUCKET` | 否 | - | MinIO Bucket |
 | `MINIO_USE_SSL` | 否 | `false` | 是否启用 SSL |
 | `MINIO_REGION` | 否 | - | MinIO Region |
+| `ANGIE_BACKEND_URL` | 否 | `backend:8080` | frontend(Angie) 反代后端地址（独立运行镜像时改为 `host:port`） |
+| `MANGA_READER_DEV_TOOLS` | 否 | `false` | 启用 `/api/dev/*` 调试接口（可运行时模拟 ExHentai 不可用，见 `backend/API.md` Dev Tools） |
 
 > \* `EHENTAI_COOKIE` 与 `EHENTAI_COOKIE_IPB_MEMBER_ID` + `EHENTAI_COOKIE_IPB_PASS_HASH` 至少配置一种，否则后端无法启动。
 
@@ -138,12 +172,14 @@ go generate ./internal/ent/...
 | `bookshelf/` | Bookshelf 字段常量与查询辅助 |
 | `readingprogress/` | ReadingProgress 字段常量与查询辅助 |
 | `prefilljob/` | PrefillJob 字段常量与查询辅助 |
+| `gallerycache/` | GalleryCache 字段常量与查询辅助 |
 | `migrate/` | 数据库迁移逻辑 |
 
 Schema 文件：
 - `internal/ent/schema/bookshelf.go` — 书架模型
 - `internal/ent/schema/reading_progress.go` — 阅读进度模型
 - `internal/ent/schema/prefill_job.go` — 离线下载任务模型
+- `internal/ent/schema/gallery_cache.go` — 画廊缓存模型
 
 后端默认监听 `:8080`，完整 API 文档见 `backend/API.md`。
 

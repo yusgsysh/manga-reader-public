@@ -104,7 +104,7 @@ WARN gallery page-thumbnail cache read failed id=999001 error="context deadline 
 ## 运行测试
 
 ```bash
-cd /home/abc/manga-reader/backend
+cd backend
 go test -v -run "TestCachedPageThumbnail_SpriteExpired" ./internal/handler/
 go test -count=1 ./internal/handler/ ./internal/exhentai/
 ```

@@ -1291,6 +1291,30 @@ Cache-Control: no-store
 
 ---
 
+### 27. Dev Tools（默认关闭）
+
+仅当 `MANGA_READER_DEV_TOOLS=true` 时注册；生产默认不启用，路由不存在（`404`）。
+
+`GET /api/dev/upstream-down` / `PUT /api/dev/upstream-down`
+
+运行时开关，模拟 ExHentai 不可用，用于验证前端离线回退（书架 / 阅读历史 / 阅读器 / 下载）。开启后，依赖上游的端点（`/api/gallery/:id/:token` 与 `/details` `/pages` `/torrents` `/torrents/:gtid/{info,download}`、`/api/galleries`、`/api/search`、`/api/watched`、`/api/popular`）返回 `502 {"error":"simulated upstream outage"}`；本地缓存与数据库端点（`/api/gallery-cache/*`、`/api/bookshelf*`、`/api/progress*`、`/api/recently-read`、`/api/image-cache/*`）不受影响。
+
+**Request (PUT):**
+
+```json
+{ "down": true }
+```
+
+**Response (GET / PUT，200):**
+
+```json
+{ "down": true }
+```
+
+**Error Responses:** `400` 请求体不是 `{"down": bool}`、`404` 未启用 dev tools。
+
+---
+
 ## 缓存（gallery-cache，无 TTL + read-through）
 
 后端缓存**没有 TTL**：`gallery_cache` 一旦写入即被永久信任，命中直接返回，不再按时间回源。
