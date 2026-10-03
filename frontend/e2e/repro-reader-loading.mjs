@@ -91,8 +91,8 @@ async function snapshot(page, label) {
             visibility: getComputedStyle(img).visibility,
           }
         : null,
-      topbar: document
-        .querySelector(".reader-topbar")
+      seek: document
+        .querySelector(".comimi-seek")
         ?.innerText?.replace(/\s+/g, " ")
         .trim(),
     };

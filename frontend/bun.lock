@@ -33,6 +33,7 @@
     },
   },
   "patchedDependencies": {
+    "@yui540/comimi-react@0.3.0": "patches/@yui540%2Fcomimi-react@0.3.0.patch",
     "@yui540/comimi@0.26.0": "patches/@yui540%2Fcomimi@0.26.0.patch",
   },
   "packages": {

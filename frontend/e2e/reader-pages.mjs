@@ -82,7 +82,7 @@ try {
   console.log("scenario 1002: cache miss, progressive stream");
   {
     const { page, livePages, mountedMs } = await openReader(browser, 1002);
-    const shown = await page.locator(".reader-topbar").innerText();
+    const shown = await page.locator(".comimi-seek").innerText();
     check("mounts after the first batch", mountedMs < 6000, `${mountedMs}ms`);
     check("streams from the live endpoint", livePages === 1, `${livePages} requests`);
     check("shows the gallery total", /1\s*\/\s*50/.test(shown), shown);
@@ -188,7 +188,9 @@ try {
       await page.waitForSelector(".reader-shell", { timeout: 30000 });
       await sleep(1500);
       if (fullscreen) {
-        await page.locator('.reader-topbar button[aria-label="全屏"]').click();
+        // Fullscreen now lives in comimi's dock switcher; the F key emits the
+        // fullscreenRequest event that ReaderPage routes to toggleFullscreen.
+        await page.keyboard.press("f");
         await sleep(500);
       }
       await page.keyboard.press("m");
@@ -289,6 +291,30 @@ try {
       JSON.stringify(scrolled),
     );
     await full.page.close();
+  }
+
+  console.log("reader: menu back entry returns to the gallery");
+  {
+    const page = await browser.newPage();
+    await page.goto(`${BASE}/reader/1001/tok`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".reader-shell", { timeout: 30000 });
+    await page.keyboard.press("m");
+    await page.waitForSelector(".comimi-menu-link", { timeout: 10000 });
+    const back = page.locator(".comimi-menu-link").last();
+    const label = (await back.innerText()).trim();
+    check(
+      "menu shows the back entry below About comimi",
+      label.includes("返回画廊"),
+      label,
+    );
+    await back.click();
+    await page.waitForURL(`${BASE}/gallery/1001/tok`, { timeout: 10000 });
+    check(
+      "back entry returns to the gallery",
+      new URL(page.url()).pathname === "/gallery/1001/tok",
+      page.url(),
+    );
+    await page.close();
   }
 
   console.log("settings: dev tools section");

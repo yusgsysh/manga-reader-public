@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { Button, Loader } from "@cloudflare/kumo";
-import {
-  ArrowLeft,
-  CloudSlash,
-  CornersOut,
-  CornersIn,
-} from "@phosphor-icons/react";
+import { ArrowLeft } from "@phosphor-icons/react";
 import {
   MangaViewer,
   type MangaViewerHandle,
@@ -30,7 +25,8 @@ import {
 } from "../lib/thumbnails";
 import { ErrorState } from "../components/common/ErrorState";
 
-type LayoutMode = ViewerSettings["layoutMode"];
+// 菜单「关于 comimi」下方返回入口的文案：补丁只引用 key，库内没有内置。
+const READER_TRANSLATIONS = { "menu.backToGallery": "返回画廊" };
 
 export function ReaderPage() {
   const { id: idParam, token } = useParams<{ id: string; token: string }>();
@@ -54,7 +50,6 @@ export function ReaderPage() {
   // prefetch and is bumped without re-rendering the viewer.
   const receivedRef = useRef(0);
   const thumbnailsRef = useRef<LoadThumbnailsHandle | null>(null);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>("inline");
   const id = Number(idParam);
   const goBack = useBackNavigation(`/gallery/${id}/${token}`);
   const restart = searchParams.get("restart") === "1";
@@ -65,8 +60,6 @@ export function ReaderPage() {
   );
 
   const isDark = resolvedMode === "dark";
-  const isFullscreen =
-    layoutMode === "browserFullscreen" || layoutMode === "nativeFullscreen";
 
   // 引用固定：comimi-react 按引用比较 settings，内联对象会导致每次翻页都全量重渲染
   const viewerSettings = useMemo<Partial<ViewerSettings>>(
@@ -74,6 +67,8 @@ export function ReaderPage() {
       theme: isDark ? "dark" : "light",
       backgroundColor: isDark ? "black" : "white",
       pageTurnMode: "single",
+      // 打开时默认「标准」，可点 dock 的全屏按钮进入全屏。
+      layoutMode: "inline",
     }),
     [isDark],
   );
@@ -134,9 +129,6 @@ export function ReaderPage() {
   // independently of the streaming page list, so the reader's total never
   // changes as pages arrive.
   const total = gallery?.page_count || pagesQuery.data?.total || 0;
-  // "离线数据" only when a cache value is actually being used as a fallback
-  // (upstream failed or the browser is offline), not as a loading placeholder.
-  const offline = galleryQuery.isFallback || pagesQuery.isFallback;
 
   const initialPage = useMemo(() => {
     if (total <= 0) return 0;
@@ -154,7 +146,7 @@ export function ReaderPage() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  const { currentPage, onPageChange, flushProgress } = useReadingProgressSync(
+  const { onPageChange, flushProgress } = useReadingProgressSync(
     id,
     token ?? "",
     total,
@@ -192,6 +184,12 @@ export function ReaderPage() {
     },
     [onPageChange],
   );
+
+  // comimi 菜单里的返回入口：先落盘进度，再按浏览器历史 / 深链回退规则返回。
+  const handleBack = useCallback(() => {
+    flushProgress();
+    goBack();
+  }, [flushProgress, goBack]);
 
   // Fixed page slots from the authoritative total: comimi sees the full count
   // from the first render and never rebuilds its page list, so the total and
@@ -288,45 +286,7 @@ export function ReaderPage() {
       ref={attachShell}
       className="reader-shell flex h-[100dvh] flex-col bg-kumo-base"
     >
-      {/* Top bar：全屏时由 comimi 接管，控件交给库内 dock */}
-      <div className="reader-topbar relative z-10 flex min-h-12 shrink-0 items-center gap-2 border-b border-kumo-hairline bg-kumo-base/85 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-md">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            flushProgress();
-            goBack();
-          }}
-          aria-label="返回 Gallery"
-        >
-          <ArrowLeft className="size-4" weight="bold" />
-        </Button>
-        <div className="min-w-0 flex-1" />
-        {offline && (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-kumo-recessed px-2 py-0.5 text-[11px] text-kumo-subtle">
-            <CloudSlash className="size-3" weight="bold" />
-            离线数据
-          </span>
-        )}
-        <span className="shrink-0 text-xs text-kumo-subtle">
-          {currentPage + 1} / {total}
-        </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={toggleFullscreen}
-          aria-label={isFullscreen ? "退出全屏" : "全屏"}
-          title={isFullscreen ? "退出全屏" : "全屏"}
-        >
-          {isFullscreen ? (
-            <CornersIn className="size-4" weight="bold" />
-          ) : (
-            <CornersOut className="size-4" weight="bold" />
-          )}
-        </Button>
-      </div>
-
-      {/* Reader */}
+      {/* Reader：返回与全屏入口都在 comimi 内（菜单 + dock 视图切换器） */}
       <div className="min-h-0 flex-1">
         <MangaViewer
           // Remount on gallery change so `initialPageIndex` applies to the new
@@ -336,11 +296,13 @@ export function ReaderPage() {
           manga={manga!}
           initialPageIndex={initialPage}
           locale="zh-CN"
+          translations={READER_TRANSLATIONS}
           storage={{ enabled: false }}
           settings={viewerSettings}
           resolvePageSrc={resolvePageSrc}
           onPageChange={handlePageChange}
-          onLayoutChange={({ layoutMode: mode }) => setLayoutMode(mode)}
+          onBack={handleBack}
+          onFullscreenRequest={toggleFullscreen}
           className="h-full w-full"
         />
       </div>
