@@ -21,16 +21,20 @@ export function Logo({ className, showWordmark = true }: LogoProps) {
           fill="var(--app-accent)"
         />
         <path
-          d="M12 7.75v8.5"
+          d="M12 7.54c-1.4-1.31-3.24-1.92-5.25-1.92H4.56v10.85h2.19c2.01 0 3.85.61 5.25 1.92z"
+          fill="none"
           stroke="white"
           strokeWidth="1.6"
           strokeLinecap="round"
+          strokeLinejoin="round"
         />
         <path
-          d="M6.75 9.5H9M6.75 12.5H9M15 9.5h2.25M15 12.5h2.25"
+          d="M12 7.54c1.4-1.31 3.24-1.92 5.25-1.92h2.19v10.85h-2.19c-2.01 0-3.85.61-5.25 1.92z"
+          fill="none"
           stroke="white"
-          strokeWidth="1.4"
+          strokeWidth="1.6"
           strokeLinecap="round"
+          strokeLinejoin="round"
         />
       </svg>
       {showWordmark && (
