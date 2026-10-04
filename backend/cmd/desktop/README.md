@@ -194,3 +194,20 @@ curl -s $(python3 -c "import json;print(json.load(open('/tmp/manga-reader-deskto
 | 前端连不上 API | `cat` 运行时 JSON 确认端口仍在；`curl $API/healthz`；退出残留的 JSON 说明上一次没正常结束 |
 | 找不到配置/数据库 | 实际路径由 `os.UserConfigDir()` 决定，日志首行的 `db_driver`/`storage_driver` 可以佐证 |
 | 想换个数据目录 | 用 `MANGA_READER_DB_PATH`、`MANGA_READER_STORAGE_DIR`、`MANGA_READER_CONFIG_FILE` 覆盖，或把整个 `HOME` 指走 |
+| Windows 启动报 `CoInitialize has not been called` | 已在 `wails_windows.go` 通过 `runtime.LockOSThread()` + `CoInitializeEx(COINIT_APARTMENTTHREADED)` 修复；若仍复现请确认没有并发调用 Wails、且未被其他库抢占 COM apartment |
+
+
+---
+
+## 架构说明（Windows COM 初始化）
+
+Windows 的 WebView2 要求**创建 WebView 的 OS 线程**已初始化为 STA（Single-Threaded Apartment）。Go 的运行时会在 goroutine 间迁移 OS 线程，因此必须：
+
+1. `runtime.LockOSThread()` 将当前 goroutine 绑定到固定 OS 线程
+2. 该线程上调用 `CoInitializeEx(0, COINIT_APARTMENTTHREADED)`
+3. 同一线程上运行 `wails.Run()`（内部会创建 WebView2 环境）
+4. `wails.Run()` 返回后调用 `CoUninitialize()`
+
+实现位于 `wails_windows.go`（`//go:build windows`），非 Windows 平台走 `wails_other.go`（`//go:build !windows`），完全不依赖 Windows API，Linux/macOS 构建零影响。
+
+Bindings 模式（`-tags bindings`）在 `mode_bindings.go` 中短路，直接调用 `wails.Run(&options.App{})`，不经过平台包装器，保持原有行为。

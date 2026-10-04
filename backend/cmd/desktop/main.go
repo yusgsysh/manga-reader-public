@@ -114,24 +114,22 @@ func run() error {
 
 	wailsErr := make(chan error, 1)
 	go func() {
-		wailsErr <- wails.Run(&options.App{
-			Title:     "Manga Reader",
-			Width:     1280,
-			Height:    820,
-			MinWidth:  960,
-			MinHeight: 640,
-			AssetServer: &assetserver.Options{
+		wailsErr <- runWails(
+			context.Background(),
+			"Manga Reader",
+			1280, 820, 960, 640,
+			&assetserver.Options{
 				Assets:     frontendDist,
 				Middleware: assets.Middleware,
 			},
-			OnShutdown: func(ctx context.Context) {
+			func(ctx context.Context) {
 				shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 				defer cancel()
 				if err := a.Shutdown(shutdownCtx); err != nil {
 					logger.Error("shutdown failed", "error", err)
 				}
 			},
-		})
+		)
 	}()
 
 	select {
