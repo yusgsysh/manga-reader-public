@@ -848,13 +848,11 @@ func TestCachedPageThumbnail_SpriteExpired_ConcurrentRequests(t *testing.T) {
 	var wg sync.WaitGroup
 	results := make(chan int, n)
 	for range n {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, httptest.NewRequest("GET", indexThumbPathFor(cachedThumbPath, id, token, 0), nil))
 			results <- w.Code
-		}()
+		})
 	}
 	wg.Wait()
 	close(results)

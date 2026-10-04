@@ -65,8 +65,7 @@ func TestGalleryPagesWalkBudget(t *testing.T) {
 }
 
 func TestScrapeGalleryPageThumb(t *testing.T) {
-	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		switch r.URL.Query().Get("p") {
 		case "", "0":

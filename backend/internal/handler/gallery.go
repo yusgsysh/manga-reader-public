@@ -70,7 +70,7 @@ func cacheMetaFromGallery(g *model.Gallery) model.GalleryCacheSnapshot {
 func cacheMetaFromDetails(d model.GalleryDetail) model.GalleryCacheSnapshot {
 	tags := make([]model.Tag, len(d.Tags))
 	for i, t := range d.Tags {
-		tags[i] = model.Tag{Namespace: t.Namespace, Name: t.Name}
+		tags[i] = model.Tag(t)
 	}
 	return model.GalleryCacheSnapshot{
 		Title:       d.Title,
@@ -138,7 +138,7 @@ func galleryDetailsFromCache(row *ent.GalleryCache) gin.H {
 func galleryDetailsJSON(details model.GalleryDetail) gin.H {
 	tags := make([]model.Tag, len(details.Tags))
 	for i, t := range details.Tags {
-		tags[i] = model.Tag{Namespace: t.Namespace, Name: t.Name}
+		tags[i] = model.Tag(t)
 	}
 	return gin.H{
 		"id":            details.GalleryID,

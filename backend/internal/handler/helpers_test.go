@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"manga-reader/internal/database"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/model"
+
+	"github.com/gin-gonic/gin"
 
 	entsql "entgo.io/ent/dialect/sql"
 	_ "modernc.org/sqlite"

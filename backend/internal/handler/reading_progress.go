@@ -7,10 +7,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/readingprogress"
+
+	"github.com/gin-gonic/gin"
 
 	"manga-reader/internal/model"
 )
