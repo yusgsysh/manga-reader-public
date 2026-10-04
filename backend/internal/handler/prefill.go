@@ -201,7 +201,9 @@ func (m *prefillManager) nextQueued(s *Server) (int, bool) {
 			time.Sleep(50 * time.Millisecond)
 		}
 		slog.Error("prefill claim failed after retries", "job_id", row.ID, "error", lastErr)
-		return 0, false
+		// Job was claimed by another worker or failed after retries;
+		// continue outer loop to try the next queued job.
+		continue
 	}
 }
 
