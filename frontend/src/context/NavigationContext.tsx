@@ -1,11 +1,5 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
-
-interface NavigationContextValue {
-  lastListRoute: string;
-  setLastListRoute: (route: string) => void;
-}
-
-const NavigationContext = createContext<NavigationContextValue | null>(null);
+import { useState, type ReactNode } from "react";
+import { NavigationContext } from "./NavigationContextValue";
 
 export function NavigationProvider({ children }: { children: ReactNode }) {
   const [lastListRoute, setLastListRoute] = useState("/");
@@ -15,12 +9,4 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
       {children}
     </NavigationContext.Provider>
   );
-}
-
-export function useNavigationContext(): NavigationContextValue {
-  const context = useContext(NavigationContext);
-  if (!context) {
-    throw new Error("useNavigationContext must be used within a NavigationProvider");
-  }
-  return context;
 }

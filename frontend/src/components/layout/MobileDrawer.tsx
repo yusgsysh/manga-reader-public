@@ -7,7 +7,7 @@ import { useTheme } from "../../hooks/useTheme";
 import type { ThemeMode } from "../../lib/theme";
 import { Logo } from "../ui";
 import { PRIMARY_NAV, SECONDARY_NAV, isNavActive, type NavItem } from "./nav";
-import { useNavigationContext } from "../../context/NavigationContext";
+import { useNavigationContext } from "../../hooks/useNavigationContext";
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
   { mode: "light", label: "浅色", icon: Sun },
