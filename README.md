@@ -342,7 +342,7 @@ wails3 build     # 产物 bin/manga-reader-desktop
 wails3 dev       # 开发模式：Vite 热更新 + 运行时注入 API 地址
 ```
 
-Android APK 见 [构建/运行 → Android](backend/cmd/desktop/README.md#androidapk--aab)：本地用 `task android:package`，或用仓库根目录的 `build-android-docker.sh`（Podman/Docker，宿主机无需 SDK/NDK）。
+Android APK 的构建见 [Android（构建 APK / AAB）](backend/cmd/desktop/README.md#android构建-apk--aab)：本地用 `task android:package`，或用仓库根目录的 `build-android-docker.sh`（Podman/Docker，宿主机无需 SDK/NDK）。
 
 首次运行需要 ExHentai Cookie（与 Web 版相同）：写在 `config.env`、环境变量里，或启动后在应用内「设置」页填写。
 

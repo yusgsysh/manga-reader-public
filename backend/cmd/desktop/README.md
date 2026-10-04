@@ -61,37 +61,82 @@ cd ../backend && go build -tags production -o desktop ./cmd/desktop
 
 ---
 
-## Android（APK / AAB）
+## Android（构建 APK / AAB）
 
-Android 目标会把 Go 代码编成 `libwails.so`（`-buildmode=c-shared`，走 NDK），再由 Gradle 打包成 APK/AAB。相关 task 在 [`build/android/Taskfile.yml`](build/android/Taskfile.yml)。
+Android 目标把 Go 代码编成 `libwails.so`（`-buildmode=c-shared` + NDK），再由 Gradle 打包成 APK/AAB。
+相关逻辑在 [`build/android/Taskfile.yml`](build/android/Taskfile.yml)，容器镜像在
+[`build/docker/Dockerfile.android`](build/docker/Dockerfile.android)。
 
-### 本地构建
+APK 包名为 `com.manga.reader`，启动 Activity 是 `com.wails.app.MainActivity`
+（Wails v3 的 Java 运行时类都在 `com.wails.app` 包，Go 导出的 JNI 符号绑定到它）。
 
-需要 Android SDK、NDK（`26.3.11579264`）和 JDK 21；SDK 路径取 `ANDROID_HOME` / `ANDROID_SDK_ROOT`，或默认的 `~/Android/Sdk`。
+产物路径：
+
+| 构建方式 | 产物 |
+|----------|------|
+| Podman/Docker 脚本 | 仓库根目录 `manga-reader-desktop.apk` |
+| 本地 task | `backend/cmd/desktop/bin/manga-reader-desktop.apk` |
+
+### 方式一：Podman / Docker（推荐，宿主机无需装 Android SDK/NDK）
+
+仓库根目录的 [`build-android-docker.sh`](../../../build-android-docker.sh) 在容器里完成
+「编译前端 → 编译 libwails.so → Gradle 打包」，再把 APK 拷出来：
+
+```bash
+# 默认：arm64 debug APK（可装到真机）
+./build-android-docker.sh
+
+# 指定 ABI / 构建类型
+ARCH=x86_64 ./build-android-docker.sh                    # 模拟器（x86_64）
+TARGET=android:package ./build-android-docker.sh         # release APK（arm64）
+TARGET=android:package:fat ./build-android-docker.sh     # release APK（arm64 + x86_64）
+CONTAINER_ENGINE=docker ./build-android-docker.sh        # 用 docker 代替 podman
+```
+
+首次运行会构建约 11GB 的镜像（内含 SDK/NDK/JDK/Go），之后走构建缓存。
+
+### 方式二：本地构建（已装 SDK/NDK/JDK 21）
+
+SDK 路径取 `ANDROID_HOME` / `ANDROID_SDK_ROOT`，或默认的 `~/Android/Sdk`；
+NDK 用 `26.3.11579264`（取 `ANDROID_NDK_HOME`，或 SDK 下最新的 NDK）。
 
 ```bash
 cd backend/cmd/desktop
-task android:build            # 仅编译 libwails.so（默认按宿主架构）
-task android:assemble:apk     # 打 debug APK → bin/manga-reader-desktop.apk
-task android:package          # 打 release APK（默认 arm64，真机用）
-task android:package:fat      # release APK，含 arm64 + x86_64
+
+# 最省事：release APK，默认 arm64，一条命令搞定
+task android:package
+
+# 其他目标
+task android:package:fat      # release，含 arm64 + x86_64
 task android:bundle           # release AAB（Play 上传用）
+
+# debug APK 需要「先编译再打包」两步，ARCH 决定 ABI
+task android:build ARCH=arm64
+task android:assemble:apk     # → bin/manga-reader-desktop.apk
 ```
 
-### 用 Podman/Docker 构建（推荐，宿主机无需装 SDK/NDK）
-
-仓库根目录的 [`build-android-docker.sh`](../../../build-android-docker.sh) 在容器里完成全部构建，再把 APK 拷出来：
+### 安装到设备
 
 ```bash
-./build-android-docker.sh                              # debug APK（宿主架构）
-ARCH=arm64 ./build-android-docker.sh                   # 指定目标架构
-TARGET=android:package ./build-android-docker.sh       # release APK
-CONTAINER_ENGINE=docker ./build-android-docker.sh      # 用 docker 代替 podman
+# 真机（arm64 / x86_64 模拟器同理）：确保 adb 能看到设备
+adb install -r manga-reader-desktop.apk
+adb shell am start -n com.manga.reader/com.wails.app.MainActivity
+
+# 日志：Go 日志、资源加载
+adb logcat | grep -E "Wails|WailsBridge|WailsPathHandler"
+
+# App 数据 / 日志（debug 包可用 run-as 读取）
+adb shell run-as com.manga.reader ls -la files/
+adb shell run-as com.manga.reader cat files/manga-reader.log
 ```
 
-脚本最终产物为仓库根目录的 `manga-reader-desktop.apk`。镜像定义见 [`build/docker/Dockerfile.android`](build/docker/Dockerfile.android)。
+首次启动需在应用内「设置」页填写 ExHentai Cookie，否则日志会有
+`ExHentai cookies are not configured` 警告。
 
-> **架构很关键**：`android:build` 默认使用宿主架构，所以在 x86_64 机器上默认产出的是 `x86_64` APK，**装不到 arm64 真机**（报 `INSTALL_FAILED_NO_MATCHING_ABIS`）。真机请传 `ARCH=arm64`，或用 `android:package:fat` / `TARGET=android:package:fat` 打同时包含两种 ABI 的包。模拟器则用宿主架构（x86_64 主机上的 `x86_64`）即可。
+> **架构很关键**：物理手机是 arm64-v8a，x86_64 主机上的模拟器是 x86_64。
+> 装错架构会报 `INSTALL_FAILED_NO_MATCHING_ABIS` /「应用不兼容」。
+> 容器脚本默认打 arm64；本地 `android:build` 默认按宿主架构（x86_64 主机即 x86_64），
+> 真机请显式传 `ARCH=arm64`，或用 `package:fat` 打同时含两种 ABI 的通用包。
 
 ---
 
