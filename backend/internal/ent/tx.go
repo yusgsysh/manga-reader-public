@@ -20,6 +20,8 @@ type Tx struct {
 	PrefillJob *PrefillJobClient
 	// ReadingProgress is the client for interacting with the ReadingProgress builders.
 	ReadingProgress *ReadingProgressClient
+	// Setting is the client for interacting with the Setting builders.
+	Setting *SettingClient
 
 	// lazily loaded.
 	client     *Client
@@ -155,6 +157,7 @@ func (tx *Tx) init() {
 	tx.GalleryCache = NewGalleryCacheClient(tx.config)
 	tx.PrefillJob = NewPrefillJobClient(tx.config)
 	tx.ReadingProgress = NewReadingProgressClient(tx.config)
+	tx.Setting = NewSettingClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.

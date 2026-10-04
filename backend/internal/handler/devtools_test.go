@@ -19,10 +19,10 @@ func TestDevUpstreamDownToggle(t *testing.T) {
 
 	client := newTestDB(t)
 	server := &Server{
-		Client:   newMockClient(mockServer.URL),
-		DB:       &database.DB{Client: client},
-		devTools: true,
+		Client: newMockClient(mockServer.URL),
+		DB:     &database.DB{Client: client},
 	}
+	server.SetDevTools(true)
 	r := setupMockRouter(server)
 
 	do := func(method, path, body string) *httptest.ResponseRecorder {
@@ -80,5 +80,36 @@ func TestDevRoutesDisabledByDefault(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("dev route without DevTools = %d, want 404", w.Code)
+	}
+}
+
+// The dev tools routes stay mounted so the settings page can enable them
+// without a restart; they answer 404 until it does.
+func TestDevRoutesCanBeEnabledAtRuntime(t *testing.T) {
+	server := &Server{Client: &http.Client{}}
+	r := setupMockRouter(server)
+
+	get := func() *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest("GET", "/api/dev/upstream-down", nil))
+		return w
+	}
+
+	if code := get().Code; code != http.StatusNotFound {
+		t.Fatalf("before enabling = %d, want 404", code)
+	}
+
+	server.SetDevTools(true)
+	w := get()
+	if w.Code != http.StatusOK {
+		t.Fatalf("after enabling = %d, want 200", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"down":false`) {
+		t.Fatalf("body = %s, want down:false", w.Body.String())
+	}
+
+	server.SetDevTools(false)
+	if code := get().Code; code != http.StatusNotFound {
+		t.Fatalf("after disabling = %d, want 404", code)
 	}
 }

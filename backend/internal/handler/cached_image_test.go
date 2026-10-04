@@ -219,7 +219,7 @@ func TestCachedImage_InvalidURL(t *testing.T) {
 	}
 }
 
-func TestCachedImage_MissingMinIO(t *testing.T) {
+func TestCachedImage_MissingCacheConfig(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	app := &Server{Client: &http.Client{}}
@@ -230,9 +230,9 @@ func TestCachedImage_MissingMinIO(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// Should fail because Cache is nil (no MinIO configured)
+	// Should fail because Cache is nil (no storage configured)
 	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("status = %d, want %d when MinIO is not configured", w.Code, http.StatusServiceUnavailable)
+		t.Errorf("status = %d, want %d when cache is not configured", w.Code, http.StatusServiceUnavailable)
 	}
 }
 
@@ -244,16 +244,16 @@ type mockCacheEntry struct {
 	exists      bool
 }
 
-type mockMinIOCache struct {
+type mockObjectStore struct {
 	mu      sync.RWMutex
 	objects map[string]mockCacheEntry
 }
 
-func newMockMinIOCache() *mockMinIOCache {
-	return &mockMinIOCache{objects: make(map[string]mockCacheEntry)}
+func newMockObjectStore() *mockObjectStore {
+	return &mockObjectStore{objects: make(map[string]mockCacheEntry)}
 }
 
-func (m *mockMinIOCache) StatObject(key string) (mockCacheEntry, error) {
+func (m *mockObjectStore) StatObject(key string) (mockCacheEntry, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	entry, ok := m.objects[key]
@@ -263,7 +263,7 @@ func (m *mockMinIOCache) StatObject(key string) (mockCacheEntry, error) {
 	return entry, nil
 }
 
-func (m *mockMinIOCache) PutObject(key string, data []byte, contentType string) {
+func (m *mockObjectStore) PutObject(key string, data []byte, contentType string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.objects[key] = mockCacheEntry{data: data, contentType: contentType, exists: true}
@@ -317,8 +317,8 @@ func TestSingleflight_CoalescesRequests(t *testing.T) {
 
 // ==================== Cache Key Integration Test ====================
 
-func TestCacheKey_IntegrationWithMockMinIO(t *testing.T) {
-	mockCache := newMockMinIOCache()
+func TestCacheKey_IntegrationWithMockStore(t *testing.T) {
+	mockCache := newMockObjectStore()
 
 	pageURL := "https://exhentai.org/s/51d1aa689c/4153369-29"
 	key := cache.CacheKey(pageURL)
@@ -347,7 +347,7 @@ func TestCacheKey_IntegrationWithMockMinIO(t *testing.T) {
 }
 
 func TestCacheKey_SameURLAlwaysSameKey(t *testing.T) {
-	mockCache := newMockMinIOCache()
+	mockCache := newMockObjectStore()
 
 	urls := []string{
 		"https://exhentai.org/s/51d1aa689c/4153369-29",
@@ -363,31 +363,6 @@ func TestCacheKey_SameURLAlwaysSameKey(t *testing.T) {
 	// All three should have overwritten the same key
 	if len(mockCache.objects) != 1 {
 		t.Errorf("expected 1 object, got %d", len(mockCache.objects))
-	}
-}
-
-// ==================== MinIOConfig Tests ====================
-
-func TestMinIOConfig_IsValid(t *testing.T) {
-	tests := []struct {
-		name   string
-		config cache.MinIOConfig
-		valid  bool
-	}{
-		{"complete", cache.MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", SecretKey: "secret", Bucket: "bucket"}, true},
-		{"missing endpoint", cache.MinIOConfig{AccessKey: "key", SecretKey: "secret", Bucket: "bucket"}, false},
-		{"missing access key", cache.MinIOConfig{Endpoint: "minio:9000", SecretKey: "secret", Bucket: "bucket"}, false},
-		{"missing secret key", cache.MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", Bucket: "bucket"}, false},
-		{"missing bucket", cache.MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", SecretKey: "secret"}, false},
-		{"all empty", cache.MinIOConfig{}, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.config.IsValid(); got != tt.valid {
-				t.Errorf("IsValid() = %v, want %v", got, tt.valid)
-			}
-		})
 	}
 }
 

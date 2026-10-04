@@ -26,6 +26,12 @@ bun run dev
 
 前端通过 `VITE_API_BASE_URL` 直连后端 API（默认 `http://localhost:8080`，后端需允许 CORS）。
 
+桌面版开发使用单独的模式（见根 `README.md` 的「桌面应用」）：
+
+```bash
+bun run dev:desktop   # 等价 vite --mode desktop，API 地址由 Vite 插件运行时注入
+```
+
 ### EhTagTranslation 翻译数据库
 
 `public/db.text.js` 是内置的 Tag 中文翻译数据库（首次访问兜底）。日常通过右上角更新按钮从 GitHub 拉取最新版（存入 IndexedDB）。如需刷新内置种子文件：
@@ -238,10 +244,13 @@ bun run repro:reader-loading      # 诊断探针：仍白屏则 exit 0，已修�
 VITE_API_BASE_URL=http://localhost:8080
 ```
 
+`.env.desktop` 是桌面模式专用的 Vite mode 文件（`dev:desktop` / `build:desktop` 会自动加载），其中 `VITE_API_BASE_URL` 留空，API 地址改为运行时注入的 `window.__MANGA_READER_CONFIG__.apiBaseUrl`。
+
 ## 构建
 
 ```bash
-bun run build
+bun run build            # Web/Docker 产物（dist/）
+bun run build:desktop    # 桌面产物（同 dist/，模式 desktop）
 ```
 
 ## 部署（Docker / Angie）

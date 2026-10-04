@@ -30,10 +30,10 @@ func isUpstreamRoute(fullPath string) bool {
 
 // upstreamSimulationMiddleware returns 502 for upstream-backed endpoints while
 // the dev outage switch is on. It is a no-op unless dev tools are enabled, so
-// production (MANGA_READER_DEV_TOOLS unset) never registers it in effect.
+// production (MANGA_READER_DEV_TOOLS unset) never has it take effect.
 func (s *Server) upstreamSimulationMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !s.devTools || !s.simulateUpstreamDown.Load() {
+		if !s.devTools.Load() || !s.simulateUpstreamDown.Load() {
 			c.Next()
 			return
 		}
@@ -45,13 +45,29 @@ func (s *Server) upstreamSimulationMiddleware() gin.HandlerFunc {
 	}
 }
 
+// requireDevTools answers 404 when dev tools are off, matching what an
+// unmounted route would return so the endpoints stay invisible by default.
+func (s *Server) requireDevTools(c *gin.Context) bool {
+	if s.devTools.Load() {
+		return true
+	}
+	c.JSON(http.StatusNotFound, gin.H{"error": "dev tools are not enabled"})
+	return false
+}
+
 // handleDevUpstreamDownGet reports the current simulated-outage state.
 func (s *Server) handleDevUpstreamDownGet(c *gin.Context) {
+	if !s.requireDevTools(c) {
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"down": s.simulateUpstreamDown.Load()})
 }
 
 // handleDevUpstreamDownPut toggles the simulated-outage state at runtime.
 func (s *Server) handleDevUpstreamDownPut(c *gin.Context) {
+	if !s.requireDevTools(c) {
+		return
+	}
 	var body struct {
 		Down bool `json:"down"`
 	}

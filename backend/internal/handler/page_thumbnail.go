@@ -15,11 +15,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sync/singleflight"
 
-	"manga-reader/internal/cache"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/imageproc"
 	"manga-reader/internal/model"
+	"manga-reader/internal/storage"
 )
 
 const (
@@ -510,7 +510,7 @@ func (s *Server) loadOrFetchSprite(ctx context.Context, spriteURL string) ([]byt
 	if s.Cache != nil {
 		if data, _, getErr := s.Cache.Get(ctx, key); getErr == nil {
 			return data, nil
-		} else if !cache.IsNotFound(getErr) {
+		} else if !storage.IsNotFound(getErr) {
 			return nil, getErr
 		}
 	}
@@ -523,7 +523,7 @@ func (s *Server) loadOrFetchSprite(ctx context.Context, spriteURL string) ([]byt
 		if s.Cache != nil {
 			if data, _, getErr := s.Cache.Get(fetchCtx, key); getErr == nil {
 				return data, nil
-			} else if !cache.IsNotFound(getErr) {
+			} else if !storage.IsNotFound(getErr) {
 				return nil, getErr
 			}
 		}
@@ -534,9 +534,11 @@ func (s *Server) loadOrFetchSprite(ctx context.Context, spriteURL string) ([]byt
 		}
 
 		if s.Cache != nil {
-			if putErr := s.Cache.PutWithMeta(fetchCtx, key, data, contentType, map[string]string{
-				"source-url": spriteURL,
-			}, cacheControlHeader); putErr != nil {
+			putOpts := storage.PutOptions{
+				CacheControl: cacheControlHeader,
+				Meta:         map[string]string{"source-url": spriteURL},
+			}
+			if putErr := s.Cache.Put(fetchCtx, key, data, contentType, putOpts); putErr != nil {
 				slog.Error("sprite store failed", "key", key[:16], "error", putErr)
 			}
 		}

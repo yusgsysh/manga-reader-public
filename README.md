@@ -2,7 +2,7 @@
 
 单用户、自托管的 ExHentai Web 漫画客户端。
 
-- Backend：Go / Gin / Ent (ORM) / SQLite 或 PostgreSQL / MinIO (S3)
+- Backend：Go / Gin / Ent (ORM) / SQLite 或 PostgreSQL / 对象存储（S3·MinIO 或本地文件）
 - Frontend：Bun / React / Vite / TypeScript
 
 ## 功能
@@ -23,6 +23,7 @@
 ```text
 manga-reader/
 ├── backend/            # Go Backend（见 backend/API.md）
+│   └── cmd/desktop/     # Wails 桌面应用（复用同一套 REST API，见「桌面应用」）
 ├── frontend/           # React 前端（见 frontend/README.md）
 ├── Manga Reader API/   # 接口集合（OpenCollection 请求定义，同 backend/API.md）
 ├── .forgejo/           # CI：镜像构建 / 前端测试 / 部署
@@ -34,9 +35,13 @@ manga-reader/
 
 ```text
 backend/
-├── main.go                       # 应用入口
+├── main.go                       # Web/Docker 入口
+├── cmd/
+│   └── desktop/                  # Wails 桌面入口（WebView + 进程内 Gin）
 ├── internal/
-│   ├── cache/                    # MinIO 对象存储缓存
+│   ├── app/                      # 服务生命周期：配置 → 数据库 → 存储 → Gin → 关闭
+│   ├── cache/                    # 缓存对象 key（images/ thumbnail/ page-sprite/）
+│   ├── storage/                  # Storage 抽象：LocalStorage / S3Storage
 │   ├── config/                   # 环境变量配置
 │   ├── database/                 # 数据库初始化 (Ent Client)
 │   ├── ent/                      # Ent ORM 定义与生成代码
@@ -65,7 +70,8 @@ backend/
    cp .env.example .env
    ```
 
-   至少设置 ExHentai Cookie（两种方式任选其一）：
+   ExHentai Cookie 可以在这里填（两种方式任选其一），也可以留空、启动后在前端
+   「设置」页填写：
 
    ```env
    # 方式一：完整 Cookie 字符串
@@ -133,16 +139,46 @@ docker build -t git.09270721.xyz/abc/manga-reader-backend:latest backend
 | `MANGA_READER_DB_PATH` | 否 | `data/manga-reader.db` | SQLite 路径（Docker 内 `/app/data/manga-reader.db`） |
 | `MANGA_READER_DB_DSN` | 否 | - | PostgreSQL 连接串（`postgres` 驱动时必填） |
 | `DATABASE_URL` | 否 | - | 同 `MANGA_READER_DB_DSN`，作为回退 |
-| `MINIO_ENDPOINT` | 否 | - | 配置后启用图片缓存 API |
-| `MINIO_ACCESS_KEY` | 否 | - | MinIO 访问密钥 |
-| `MINIO_SECRET_KEY` | 否 | - | MinIO 密钥 |
-| `MINIO_BUCKET` | 否 | - | MinIO Bucket |
-| `MINIO_USE_SSL` | 否 | `false` | 是否启用 SSL |
-| `MINIO_REGION` | 否 | - | MinIO Region |
+| `MANGA_READER_STORAGE_DRIVER` | 否 | `auto` | 图片缓存存储：`auto`（有完整 S3 配置用 s3，否则本地文件）/ `local` / `s3`，可在设置页切换 |
+| `MANGA_READER_STORAGE_DIR` | 否 | `data/cache` | `local` 驱动的缓存根目录 |
+| `MANGA_READER_S3_ENDPOINT` | 否 | - | S3/MinIO 地址，如 `minio:9000`、`s3.amazonaws.com` |
+| `MANGA_READER_S3_REGION` | 否 | - | Region |
+| `MANGA_READER_S3_BUCKET` | 否 | - | Bucket（不存在时自动创建） |
+| `MANGA_READER_S3_ACCESS_KEY` | 否 | - | 访问密钥 |
+| `MANGA_READER_S3_SECRET_KEY` | 否 | - | 密钥 |
+| `MANGA_READER_S3_USE_SSL` | 否 | `false` | 是否启用 SSL |
+| `MANGA_READER_S3_PATH_STYLE` | 否 | `auto` | 寻址方式：`auto` / `path` / `dns` |
+| `MINIO_*`（旧） | 否 | - | 旧变量名，与 `MANGA_READER_S3_*` 一一对应，新名优先 |
+| `LOG_LEVEL` | 否 | `warn` | `debug`/`info`/`warn`/`error`（桌面版默认 `info`），可在设置页运行时修改 |
 | `ANGIE_BACKEND_URL` | 否 | `backend:8080` | frontend(Angie) 反代后端地址（独立运行镜像时改为 `host:port`） |
-| `MANGA_READER_DEV_TOOLS` | 否 | `false` | 启用 `/api/dev/*` 调试接口（可运行时模拟 ExHentai 不可用，见 `backend/API.md` Dev Tools） |
+| `MANGA_READER_DEV_TOOLS` | 否 | `false` | 启用 `/api/dev/*` 调试接口（可在设置页运行时开关，见 `backend/API.md` Dev Tools） |
 
-> \* `EHENTAI_COOKIE` 与 `EHENTAI_COOKIE_IPB_MEMBER_ID` + `EHENTAI_COOKIE_IPB_PASS_HASH` 至少配置一种，否则后端无法启动。
+> \* Cookie 不配置也能启动：后端会打一条 warning 并照常提供服务，缺少的凭据在前端「设置」页补上即可（否则搜索 / 在线端点会失败）。
+>
+> 存储驱动不配置也能启动：`auto`（默认）只在 S3 配置**齐全**时才用 S3，否则落到本地文件目录；只有显式 `MANGA_READER_STORAGE_DRIVER=s3` 而配置不全时才会启动失败。
+>
+> Cookie、图片缓存存储、`LOG_LEVEL`、`MANGA_READER_DEV_TOOLS` 属于「运行时设置」，见下节；其余变量仍然只在启动时读取。
+
+## 运行时设置
+
+设置页（前端 `/settings`）管理的配置项通过 `GET`/`PUT /api/settings` 读写：
+
+| 分区 | 内容 |
+|------|------|
+| ExHentai 账号 | `EHENTAI_COOKIE_IPB_*`、`EHENTAI_COOKIE_IGNEOUS`、`EHENTAI_COOKIE_SK` |
+| 图片缓存存储 | `MANGA_READER_STORAGE_DRIVER`、`MANGA_READER_STORAGE_DIR`、`MANGA_READER_S3_*` |
+| 通用 | `LOG_LEVEL`、`MANGA_READER_DEV_TOOLS` |
+
+行为约定：
+
+- **立即生效**：保存即热替换（Cookie 换 jar、存储换后端、日志改 level、dev tools 改开关），不重启进程；进行中的请求继续使用它们启动时的那一份。
+- **存数据库**：改动写入 `settings` 表（key/value），重启后继续生效；数据库中的值**优先于环境变量 / `.env`**。
+- **只存差异**：只有值与环境变量不同的键才落库。把某个键改回环境变量的值会删掉对应行，于是该键重新跟随 `.env` —— 没碰过的配置项始终是「读环境变量」。
+- **密钥打码**：`ipb_pass_hash`、`igneous`、`sk`、`s3.secretKey` 在响应里返回 `********`；原样回传表示「保持不变」。
+- **先校验后落库**：存储配置不完整、Cookie 缺 `ipb_member_id`/`ipb_pass_hash` 等校验失败返回 `400`，进程与数据库都保持原样；存储的连通性检查失败同样返回 `400`（超时 15s）。
+- 未改动的变量（端口、数据库、Cookie 引导字符串等）仍然只在启动时读取，改了要重启。
+
+详细请求/响应见 `backend/API.md` 的 Settings 一节。
 
 ## 后端开发
 
@@ -185,14 +221,14 @@ Schema 文件：
 
 ### 图片代理与缓存
 
-| API | 数据来源 | MinIO | 用途 |
+| API | 数据来源 | 对象存储 | 用途 |
 |-----|----------|:-----:|------|
 | `/api/image/page` | ExHentai | ❌ | 阅读页图片代理（live） |
 | `/api/image/thumbnail` | ExHentai | ❌ | 封面缩略图代理（live） |
 | `/api/image/page-thumbnail` | ExHentai | ❌ | 页面缩略图裁剪（live） |
-| `/api/image-cache/page` | MinIO / ExHentai | ✅ | 阅读页图片缓存 |
-| `/api/image-cache/thumbnail` | MinIO / ExHentai | ✅ | 封面缩略图缓存（前端使用） |
-| `/api/image-cache/page-thumbnail` | MinIO / ExHentai | ✅ | 页面缩略图（精灵图缓存 + 现场裁剪，前端使用） |
+| `/api/image-cache/page` | 存储 / ExHentai | ✅ | 阅读页图片缓存 |
+| `/api/image-cache/thumbnail` | 存储 / ExHentai | ✅ | 封面缩略图缓存（前端使用） |
+| `/api/image-cache/page-thumbnail` | 存储 / ExHentai | ✅ | 页面缩略图（精灵图缓存 + 现场裁剪，前端使用） |
 
 缩略图缓存 Key 为 `thumbnail/<sha256(完整 URL)>`，与页面图片缓存（`images/`）相互独立。`/api/image/page-thumbnail` 与 `/api/image-cache/page-thumbnail` 支持两种寻址：`url`+`x/y/w/h`，或 `id`+`token`+`index`；精灵图缓存 Key 为 `sprite/<sha256(精灵图 URL)>`，裁剪结果不持久化，每次请求基于缓存的精灵图现场裁剪。
 
@@ -271,6 +307,48 @@ curl -OJ http://localhost:8080/api/prefill/1/zip
 ```
 
 进度（`progress.done/cached/fetched`）只在任务于本进程内运行时存在，不落库；数据库仅存任务元信息与终态。进程重启后 `queued`/`running` 的任务自动重新排队。详见 `backend/API.md`。
+
+## 桌面应用（Wails Desktop）
+
+`backend/cmd/desktop` 是一个 Wails 桌面壳：它在同一个进程里启动与 Web 版**完全相同**的 Gin REST API（`internal/app`），再把现有 React 前端塞进 WebView。没有第二套接口——前端在浏览器里能做的每件事，在这里走的都是同一套 `/api/*`。
+
+> 完整的桌面版说明（依赖、构建、目录、配置优先级、测试与排障）见 **[`backend/cmd/desktop/README.md`](backend/cmd/desktop/README.md)**。
+
+### 特性
+
+- **进程内 HTTP**：API 只监听 `127.0.0.1:<随机端口>`，端口写进运行时 JSON 供前端读取，不对外暴露。
+- **默认本地存储**：SQLite + 本地文件缓存，不需要 PostgreSQL / MinIO。
+- **配置文件**：`~/.config/manga-reader/config.env`（`KEY=VALUE` 格式），真实环境变量优先于文件；路径可用 `MANGA_READER_CONFIG_FILE` 覆盖。
+- **日志**：`~/.config/manga-reader/manga-reader.log`（桌面默认 `LOG_LEVEL=info`）。
+- **运行时配置**：进程启动时写 `os.TempDir()/manga-reader-desktop.json`，退出时删除（可用 `MANGA_READER_RUNTIME_FILE` 覆盖）。
+
+| 项 | Web/Docker 默认 | 桌面默认 |
+|----|------------------|----------|
+| 数据库 | `sqlite` → `data/manga-reader.db` | `sqlite` → `~/.config/manga-reader/manga-reader.db` |
+| 图片缓存 | `auto`（有 S3 配置即 s3，否则本地 `data/cache`） | `local` → `~/.cache/manga-reader/cache` |
+| `LOG_LEVEL` | `warn` | `info` |
+| `ENVIRONMENT` | `production` | `desktop` |
+
+### 依赖
+
+- Go 1.27+、Bun、[Wails v2 CLI](https://wails.io)：`go install github.com/wailsapp/wails/v2/cmd/wails@latest`
+- Linux 需要 GTK3 与 `webkit2gtk` 开发头。`backend/cmd/desktop/wails.json` 的 `build:tags` 默认是 `webkit2_41`（Fedora 39+ 等较新发行版只带 4.1）；若你的发行版只有 `webkit2gtk-4.0`，把 `build:tags` 整行删掉即可。
+
+### 构建 / 运行
+
+```bash
+cd backend/cmd/desktop
+wails build     # 产物 build/bin/manga-reader-desktop
+wails dev       # 开发模式：Vite 热更新 + 运行时注入 API 地址
+```
+
+首次运行需要 ExHentai Cookie（与 Web 版相同）：写在 `config.env`、环境变量里，或启动后在应用内「设置」页填写。
+
+### 前端模式
+
+桌面使用独立的构建模式：`bun run build:desktop`（`vite build --mode desktop`）、开发用 `bun run dev:desktop`。
+
+API 地址解析顺序：`window.__MANGA_READER_CONFIG__`（Go 注入的 `index.html`）→ `import.meta.env.VITE_API_BASE_URL` → `http://localhost:8080`。开发模式下由 Vite 插件 `manga-reader:runtime-config` 读取上面的运行时 JSON 注入，因此不需要任何反向代理；后端的 CORS 中间件对 `wails://` 来源返回 `Access-Control-Allow-Origin: *`。
 
 ## 前端开发
 

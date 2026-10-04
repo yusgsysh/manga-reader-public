@@ -1,0 +1,21 @@
+{
+  "$scheme": "https://wails.io/schemas/config.v2.json",
+  "name": "manga-reader-desktop",
+  "outputfilename": "manga-reader-desktop",
+  "frontend:dir": "../../../frontend",
+  "frontend:install": "bun install",
+  "frontend:build": "bun run build:desktop",
+  "frontend:dev:watcher": "bun run dev:desktop",
+  "frontend:dev:serverUrl": "auto",
+  "build:dir": "build",
+  "build:tags": "webkit2_41",
+  "author": {
+    "name": "Manga Reader"
+  },
+  "info": {
+    "companyName": "Manga Reader",
+    "productName": "Manga Reader",
+    "productVersion": "1.0.0",
+    "comments": "Manga Reader desktop application"
+  }
+}

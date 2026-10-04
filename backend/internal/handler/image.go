@@ -15,6 +15,7 @@ import (
 	"manga-reader/internal/cache"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/gallerycache"
+	"manga-reader/internal/storage"
 	"manga-reader/internal/ttl"
 )
 
@@ -112,7 +113,7 @@ func (s *Server) handleCachedThumbnail(c *gin.Context) {
 
 	result, err := s.loadOrFetchThumbnail(ctx, key, rawURL)
 	if err != nil {
-		if cache.IsNotFound(err) {
+		if storage.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "thumbnail not found"})
 			return
 		}
@@ -147,7 +148,7 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 
 	result, err := s.loadOrFetchImage(ctx, key, rawURL)
 	if err != nil {
-		if cache.IsNotFound(err) {
+		if storage.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "image not found"})
 			return
 		}
@@ -179,7 +180,7 @@ func (s *Server) loadOrFetchImage(ctx context.Context, key string, decodedURL st
 		if getErr == nil {
 			return &imageResult{data: data, contentType: contentType, cacheHit: true, stored: true}, nil
 		}
-		if !cache.IsNotFound(getErr) {
+		if !storage.IsNotFound(getErr) {
 			return nil, getErr
 		}
 
@@ -190,7 +191,7 @@ func (s *Server) loadOrFetchImage(ctx context.Context, key string, decodedURL st
 		}
 
 		var stored bool
-		if putErr := s.Cache.Put(fetchCtx, key, data, contentType, cacheControlHeader); putErr != nil {
+		if putErr := s.Cache.Put(fetchCtx, key, data, contentType, storage.PutOptions{CacheControl: cacheControlHeader}); putErr != nil {
 			slog.Error("cached-image store failed", "key", key[:16], "error", putErr)
 			stored = false
 		} else {
@@ -220,7 +221,7 @@ func (s *Server) loadOrFetchThumbnail(ctx context.Context, key string, rawURL st
 		if getErr == nil {
 			return &imageResult{data: data, contentType: contentType, cacheHit: true, stored: true}, nil
 		}
-		if !cache.IsNotFound(getErr) {
+		if !storage.IsNotFound(getErr) {
 			return nil, getErr
 		}
 
@@ -230,9 +231,11 @@ func (s *Server) loadOrFetchThumbnail(ctx context.Context, key string, rawURL st
 		}
 
 		var stored bool
-		if putErr := s.Cache.PutWithMeta(fetchCtx, key, data, contentType, map[string]string{
-			"source-url": rawURL,
-		}, cacheControlHeader); putErr != nil {
+		putOpts := storage.PutOptions{
+			CacheControl: cacheControlHeader,
+			Meta:         map[string]string{"source-url": rawURL},
+		}
+		if putErr := s.Cache.Put(fetchCtx, key, data, contentType, putOpts); putErr != nil {
 			slog.Error("cached-thumbnail store failed", "key", key[:16], "error", putErr)
 			stored = false
 		} else {

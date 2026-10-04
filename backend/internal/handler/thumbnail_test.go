@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,10 +15,9 @@ import (
 
 	json "encoding/json/v2"
 
-	"github.com/minio/minio-go/v7"
-
 	"manga-reader/internal/cache"
 	"manga-reader/internal/exhentai"
+	"manga-reader/internal/storage"
 )
 
 const testThumbURL = "https://s.exhentai.org/w/00/999/15582-3owak8q3.webp"
@@ -251,13 +251,11 @@ func newMockImageCache() *mockImageCache {
 	return &mockImageCache{objects: make(map[string]mockCacheEntry)}
 }
 
-func (m *mockImageCache) Head(_ context.Context, key string) (minio.ObjectInfo, error) {
+func (m *mockImageCache) Exists(_ context.Context, key string) (bool, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if e, ok := m.objects[key]; ok && e.exists {
-		return minio.ObjectInfo{ContentType: e.contentType}, nil
-	}
-	return minio.ObjectInfo{}, minio.ErrorResponse{Code: "NoSuchKey"}
+	e, ok := m.objects[key]
+	return ok && e.exists, nil
 }
 
 func (m *mockImageCache) Get(_ context.Context, key string) ([]byte, string, error) {
@@ -265,16 +263,12 @@ func (m *mockImageCache) Get(_ context.Context, key string) ([]byte, string, err
 	defer m.mu.RUnlock()
 	e, ok := m.objects[key]
 	if !ok || !e.exists {
-		return nil, "", minio.ErrorResponse{Code: "NoSuchKey"}
+		return nil, "", fmt.Errorf("get %q: %w", key, storage.ErrNotFound)
 	}
 	return e.data, e.contentType, nil
 }
 
-func (m *mockImageCache) Put(ctx context.Context, key string, data []byte, contentType string, cacheControl string) error {
-	return m.PutWithMeta(ctx, key, data, contentType, nil, cacheControl)
-}
-
-func (m *mockImageCache) PutWithMeta(_ context.Context, key string, data []byte, contentType string, meta map[string]string, cacheControl string) error {
+func (m *mockImageCache) Put(_ context.Context, key string, data []byte, contentType string, opts storage.PutOptions) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.objects[key] = mockCacheEntry{data: data, contentType: contentType, exists: true}

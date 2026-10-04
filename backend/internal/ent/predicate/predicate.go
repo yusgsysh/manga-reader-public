@@ -17,3 +17,6 @@ type PrefillJob func(*sql.Selector)
 
 // ReadingProgress is the predicate function for readingprogress builders.
 type ReadingProgress func(*sql.Selector)
+
+// Setting is the predicate function for setting builders.
+type Setting func(*sql.Selector)

@@ -10,6 +10,9 @@ import {
 } from "@phosphor-icons/react";
 import {
   Button,
+  Input,
+  Select,
+  SensitiveInput,
   Switch,
   useKumoToastManager,
   cn,
@@ -17,6 +20,12 @@ import {
 import { HexColorPicker, HexColorInput } from "react-colorful";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchUpstreamDown, setUpstreamDown } from "../api/dev";
+import {
+  fetchSettings,
+  saveSettings,
+  type SettingsSnapshot,
+  type SettingsUpdate,
+} from "../api/settings";
 import { ApiRequestError } from "../api/client";
 import { useTheme } from "../hooks/useTheme";
 import { useTagTranslation } from "../hooks/useTagTranslation";
@@ -27,16 +36,76 @@ import type { ThemeMode } from "../lib/theme";
 import { PageHeader, Section } from "../components/ui";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
+const SETTINGS_QUERY_KEY = ["settings"] as const;
+
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
   { mode: "light", label: "浅色", icon: Sun },
   { mode: "dark", label: "深色", icon: Moon },
   { mode: "system", label: "跟随系统", icon: Monitor },
 ];
 
+const LOG_LEVELS = [
+  { value: "debug", label: "debug · 调试" },
+  { value: "info", label: "info · 信息" },
+  { value: "warn", label: "warn · 警告" },
+  { value: "error", label: "error · 错误" },
+];
+
+const STORAGE_DRIVERS = [
+  { value: "auto", label: "自动" },
+  { value: "local", label: "本地目录" },
+  { value: "s3", label: "S3 / MinIO 对象存储" },
+];
+
+const PATH_STYLES = [
+  { value: "auto", label: "auto · 自动（推荐）" },
+  { value: "path", label: "path · 路径风格" },
+  { value: "dns", label: "dns · 虚拟主机" },
+];
+
 const CUSTOM_ACCENT_SEED = "#6366f1";
 
 const CUSTOM_SWATCH_GRADIENT =
   "conic-gradient(from 0deg, #ef4444, #eab308, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444)";
+
+/**
+ * Applies one section to the server and returns the resulting snapshot, or null
+ * when the save was rejected. The caller resets its form from that snapshot so
+ * the masked secrets it gets back match what the backend now stores.
+ */
+type SaveSettings = (
+  label: string,
+  update: SettingsUpdate,
+) => Promise<SettingsSnapshot | null>;
+
+interface ServerSectionProps {
+  value: SettingsSnapshot;
+  onSave: SaveSettings;
+}
+
+function SaveButton({
+  onClick,
+  saving,
+}: {
+  onClick: () => void;
+  saving: boolean;
+}) {
+  return (
+    <Button
+      variant="primary"
+      size="sm"
+      onClick={onClick}
+      disabled={saving}
+    >
+      {saving ? (
+        <CircleNotch className="mr-1 size-4 animate-spin" />
+      ) : (
+        <ArrowsClockwise className="mr-1 size-4" weight="bold" />
+      )}
+      保存
+    </Button>
+  );
+}
 
 function AccentSwatch({
   label,
@@ -173,6 +242,284 @@ function AppearanceSection() {
   );
 }
 
+function AccountSection({ value, onSave }: ServerSectionProps) {
+  const [form, setForm] = useState(() => ({ ...value.cookie }));
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      // Reloading from the response re-masks the secrets and reflects anything
+      // the backend normalised on the way in.
+      const saved = await onSave("ExHentai 账号", {
+        cookie: {
+          memberId: form.memberId,
+          passHash: form.passHash,
+          igneous: form.igneous,
+          sk: form.sk,
+        },
+      });
+      if (saved) setForm({ ...saved.cookie });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Section
+      title="ExHentai 账号"
+      description="Cookie 变更立即生效，无需重启后端。"
+      action={<SaveButton onClick={handleSave} saving={saving} />}
+    >
+      <div className="card-surface space-y-4 p-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input
+            label="ipb_member_id"
+            value={form.memberId}
+            onChange={(e) => setForm({ ...form, memberId: e.target.value })}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <SensitiveInput
+            label="ipb_pass_hash"
+            value={form.passHash}
+            onValueChange={(v) => setForm({ ...form, passHash: v })}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <SensitiveInput
+            label="igneous"
+            description="可选，部分画廊需要。"
+            value={form.igneous}
+            onValueChange={(v) => setForm({ ...form, igneous: v })}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <SensitiveInput
+            label="sk"
+            description="可选。"
+            value={form.sk}
+            onValueChange={(v) => setForm({ ...form, sk: v })}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </div>
+        {/* Derived from the form so it reflects what the user is about to save. */}
+        <p
+          className={cn(
+            "text-xs",
+            form.memberId && form.passHash ? "text-kumo-subtle" : "text-red-500",
+          )}
+        >
+          {form.memberId && form.passHash
+            ? "Cookie 已配置，可以访问 ExHentai。"
+            : "尚未配置：ipb_member_id 与 ipb_pass_hash 都必须填写。"}
+        </p>
+      </div>
+    </Section>
+  );
+}
+
+function StorageSection({ value, onSave }: ServerSectionProps) {
+  const [form, setForm] = useState(() => ({
+    driver: value.storage.driver,
+    dir: value.storage.dir,
+    ...value.storage.s3,
+  }));
+  const [saving, setSaving] = useState(false);
+
+  const showS3 = form.driver !== "local";
+
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const saved = await onSave("图片缓存", {
+        storage: {
+          driver: form.driver,
+          dir: form.dir,
+          s3: {
+            endpoint: form.endpoint,
+            region: form.region,
+            bucket: form.bucket,
+            accessKey: form.accessKey,
+            secretKey: form.secretKey,
+            useSsl: form.useSsl,
+            pathStyle: form.pathStyle,
+          },
+        },
+      });
+      if (saved) {
+        setForm({
+          driver: saved.storage.driver,
+          dir: saved.storage.dir,
+          ...saved.storage.s3,
+        });
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Section
+      title="图片缓存存储"
+      description="切换存储后立即生效，正在读取的请求不受影响。"
+      action={<SaveButton onClick={handleSave} saving={saving} />}
+    >
+      <div className="card-surface space-y-4 p-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Select
+            label="存储驱动"
+            value={form.driver}
+            onValueChange={(v) => v != null && setForm({ ...form, driver: v })}
+          >
+            {STORAGE_DRIVERS.map((option) => (
+              <Select.Option key={option.value} value={option.value}>
+                {option.label}
+              </Select.Option>
+            ))}
+          </Select>
+          <Input
+            label="本地缓存目录"
+            description={
+              form.driver === "s3" ? "s3 驱动下不使用该目录。" : "相对后端工作目录。"
+            }
+            value={form.dir}
+            onChange={(e) => setForm({ ...form, dir: e.target.value })}
+            spellCheck={false}
+          />
+        </div>
+
+        <p className="text-xs text-kumo-subtle">
+          当前实际使用：
+          <span className="font-medium text-kumo-default">
+            {value.storage.resolvedDriver === "s3"
+              ? "S3 / MinIO 对象存储"
+              : "本地目录"}
+          </span>
+        </p>
+
+        {showS3 && (
+          <div className="grid gap-4 border-t border-kumo-hairline pt-4 sm:grid-cols-2">
+            <Input
+              label="endpoint"
+              description="不含协议，例如 minio:9000 或 s3.amazonaws.com。"
+              value={form.endpoint}
+              onChange={(e) => setForm({ ...form, endpoint: e.target.value })}
+              spellCheck={false}
+            />
+            <Input
+              label="region"
+              description="留空使用 us-east-1。"
+              value={form.region}
+              onChange={(e) => setForm({ ...form, region: e.target.value })}
+              spellCheck={false}
+            />
+            <Input
+              label="bucket"
+              value={form.bucket}
+              onChange={(e) => setForm({ ...form, bucket: e.target.value })}
+              spellCheck={false}
+            />
+            <Input
+              label="accessKey"
+              value={form.accessKey}
+              onChange={(e) => setForm({ ...form, accessKey: e.target.value })}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <SensitiveInput
+              label="secretKey"
+              value={form.secretKey}
+              onValueChange={(v) => setForm({ ...form, secretKey: v })}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <Select
+              label="pathStyle"
+              value={form.pathStyle}
+              onValueChange={(v) => v != null && setForm({ ...form, pathStyle: v })}
+            >
+              {PATH_STYLES.map((option) => (
+                <Select.Option key={option.value} value={option.value}>
+                  {option.label}
+                </Select.Option>
+              ))}
+            </Select>
+            <div className="sm:col-span-2">
+              <Switch
+                label="使用 HTTPS（useSsl）"
+                checked={form.useSsl}
+                onCheckedChange={(checked) =>
+                  setForm({ ...form, useSsl: checked })
+                }
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+function GeneralSection({ value, onSave }: ServerSectionProps) {
+  const [saving, setSaving] = useState<null | "logLevel" | "devTools">(null);
+
+  const update = async (
+    kind: "logLevel" | "devTools",
+    payload: SettingsUpdate,
+    label: string,
+  ) => {
+    if (saving) return;
+    setSaving(kind);
+    try {
+      await onSave(label, payload);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
+    <Section
+      title="通用"
+      description="日志级别与开发工具开关，改动立即生效。"
+    >
+      <div className="card-surface space-y-4 p-4">
+        <Select
+          label="日志级别（LOG_LEVEL）"
+          value={value.logLevel}
+          disabled={saving !== null}
+          onValueChange={(v) => {
+            if (v == null) return;
+            void update("logLevel", { logLevel: v }, "日志级别");
+          }}
+        >
+          {LOG_LEVELS.map((option) => (
+            <Select.Option key={option.value} value={option.value}>
+              {option.label}
+            </Select.Option>
+          ))}
+        </Select>
+        <div className="space-y-1.5">
+          <Switch
+            label="开发工具（/api/dev/*）"
+            checked={value.devTools}
+            disabled={saving !== null}
+            onCheckedChange={(checked) =>
+              update("devTools", { devTools: checked }, "开发工具")
+            }
+          />
+          <p className="text-xs text-kumo-subtle">
+            开启后可在下方模拟 ExHentai 不可用，用于验证离线回退。
+          </p>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 function TagDatabaseSection() {
   const { info, updateStatus, update } = useTagTranslation();
   const toast = useKumoToastManager();
@@ -234,7 +581,7 @@ function TagDatabaseSection() {
   );
 }
 
-function DevToolsSection() {
+function DevToolsSection({ devToolsEnabled }: { devToolsEnabled: boolean }) {
   const toast = useKumoToastManager();
   const queryClient = useQueryClient();
 
@@ -242,6 +589,7 @@ function DevToolsSection() {
     queryKey: ["dev-upstream-down"],
     queryFn: fetchUpstreamDown,
     retry: false,
+    enabled: devToolsEnabled,
     staleTime: SETTINGS_STALE_TIME,
   });
 
@@ -264,19 +612,16 @@ function DevToolsSection() {
   });
 
   const notEnabled =
-    stateQuery.error instanceof ApiRequestError &&
-    stateQuery.error.status === 404;
+    !devToolsEnabled ||
+    (stateQuery.error instanceof ApiRequestError &&
+      stateQuery.error.status === 404);
 
   return (
     <Section title="调试工具">
       <div className="card-surface p-4 text-sm">
         {notEnabled ? (
           <p className="text-kumo-subtle">
-            调试接口未开启。设置{" "}
-            <code className="rounded bg-kumo-recessed px-1 py-0.5 font-mono text-xs">
-              MANGA_READER_DEV_TOOLS=true
-            </code>{" "}
-            并重启后端后可用。
+            调试接口未开启。在上方「通用」中打开开发工具开关即可使用，改动立即生效。
           </p>
         ) : stateQuery.isLoading ? (
           <div className="flex items-center gap-2 text-kumo-subtle">
@@ -303,8 +648,49 @@ function DevToolsSection() {
   );
 }
 
+function SettingsSkeleton() {
+  return (
+    <div className="space-y-4 text-sm text-kumo-subtle">
+      <div className="flex items-center gap-2">
+        <CircleNotch className="size-4 animate-spin" />
+        正在读取服务器配置…
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   useDocumentTitle("设置");
+  const toast = useKumoToastManager();
+  const queryClient = useQueryClient();
+
+  const settingsQuery = useQuery({
+    queryKey: SETTINGS_QUERY_KEY,
+    queryFn: fetchSettings,
+    retry: 1,
+    staleTime: SETTINGS_STALE_TIME,
+  });
+
+  // TanStack Query owns the snapshot: a successful save writes it back through
+  // setQueryData, so every section sees the new values without a refetch.
+  const value = settingsQuery.data;
+
+  const handleSave: SaveSettings = async (label, update) => {
+    try {
+      const saved = await saveSettings(update);
+      queryClient.setQueryData(SETTINGS_QUERY_KEY, saved);
+      toast.add({ title: `${label}已保存并立即生效`, variant: "success" });
+      return saved;
+    } catch (error) {
+      toast.add({
+        title: `${label}保存失败`,
+        description: error instanceof Error ? error.message : undefined,
+        variant: "error",
+      });
+      return null;
+    }
+  };
+
   return (
     <div className="max-w-3xl">
       <PageHeader
@@ -313,8 +699,26 @@ export function SettingsPage() {
       />
       <div className="space-y-8">
         <AppearanceSection />
+        {settingsQuery.isError ? (
+          <Section title="服务器配置">
+            <div className="card-surface p-4 text-sm text-kumo-subtle">
+              无法读取服务器配置：{" "}
+              {settingsQuery.error instanceof Error
+                ? settingsQuery.error.message
+                : "未知错误"}
+            </div>
+          </Section>
+        ) : value === undefined ? (
+          <SettingsSkeleton />
+        ) : (
+          <>
+            <AccountSection value={value} onSave={handleSave} />
+            <StorageSection value={value} onSave={handleSave} />
+            <GeneralSection value={value} onSave={handleSave} />
+          </>
+        )}
         <TagDatabaseSection />
-        <DevToolsSection />
+        <DevToolsSection devToolsEnabled={value?.devTools ?? false} />
       </div>
     </div>
   );

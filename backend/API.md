@@ -1293,7 +1293,7 @@ Cache-Control: no-store
 
 ### 27. Dev Tools（默认关闭）
 
-仅当 `MANGA_READER_DEV_TOOLS=true` 时注册；生产默认不启用，路由不存在（`404`）。
+路由始终注册，但由运行时开关控制：初始值来自 `MANGA_READER_DEV_TOOLS`，可在设置页（见第 28 节）随时切换。关闭时返回 `404`，与路由未注册的表现一致。
 
 `GET /api/dev/upstream-down` / `PUT /api/dev/upstream-down`
 
@@ -1311,7 +1311,89 @@ Cache-Control: no-store
 { "down": true }
 ```
 
-**Error Responses:** `400` 请求体不是 `{"down": bool}`、`404` 未启用 dev tools。
+**Error Responses:** `400` 请求体不是 `{"down": bool}`、`404` dev tools 处于关闭状态。
+
+---
+
+### 28. Settings（运行时配置）
+
+`GET /api/settings` / `PUT /api/settings`
+
+设置页的后端接口。管理四类配置：ExHentai Cookie、图片缓存存储、`LOG_LEVEL`、`MANGA_READER_DEV_TOOLS`。保存后**立即生效**（热替换 jar / 存储后端 / 日志级别 / dev tools 开关），并写入 `settings` 表，重启后继续生效。
+
+- 数据库中的值**优先于环境变量**；只有值与环境变量不同的键才落库，改回环境变量的值会删除对应行，该键重新跟随环境。
+- 端口、数据库、`EHENTAI_COOKIE` 引导字符串等未纳入管理的变量仍然只在启动时读取。
+- 响应中的 `persisted` 表示是否有任何键被设置页覆盖过。
+
+**Response（GET，200）:**
+
+```json
+{
+  "persisted": false,
+  "cookie": {
+    "memberId": "42",
+    "passHash": "********",
+    "igneous": "",
+    "sk": "",
+    "configured": true
+  },
+  "storage": {
+    "driver": "auto",
+    "resolvedDriver": "local",
+    "dir": "data/cache",
+    "s3": {
+      "endpoint": "",
+      "region": "",
+      "bucket": "",
+      "accessKey": "",
+      "secretKey": "",
+      "useSsl": false,
+      "pathStyle": "auto"
+    }
+  },
+  "logLevel": "warn",
+  "devTools": false
+}
+```
+
+- `passHash` / `igneous` / `sk` / `s3.secretKey` 恒为 `********`（或空字符串，当它们未设置时）。
+- `cookie.configured` = `ipb_member_id` 与 `ipb_pass_hash` 都已设置。
+- `storage.resolvedDriver` 是**当前实际运行**的驱动（`auto` 解析后的结果）。
+
+**Request (PUT)：** PATCH 语义——**字段缺省即「不变」**；密钥字段传 `"********"` 同样表示不变。
+
+```json
+{
+  "cookie": { "memberId": "42", "passHash": "********", "igneous": "", "sk": "" },
+  "storage": {
+    "driver": "s3",
+    "dir": "data/cache",
+    "s3": {
+      "endpoint": "minio:9000",
+      "region": "",
+      "bucket": "manga-reader-cache",
+      "accessKey": "minioadmin",
+      "secretKey": "********",
+      "useSsl": false,
+      "pathStyle": "auto"
+    }
+  },
+  "logLevel": "debug",
+  "devTools": true
+}
+```
+
+**Response (PUT，200)：** 与 GET 相同的完整快照（即保存后的生效配置）。
+
+**Error Responses:**
+
+| Status | 含义 |
+|--------|------|
+| `400` | 配置不合法：Cookie 缺 `ipb_member_id`/`ipb_pass_hash`、S3 配置不全、不支持的 `logLevel`/`storage.driver`，或请求体不是合法 JSON |
+| `400` | 新存储配置的连通性检查失败（15 秒超时）——此时**不写库**，进程保持原配置 |
+| `500` | 数据库写入失败（同样会回滚已应用的热替换） |
+
+存储/日志/dev tools 的校验与应用按「先校验 → 应用热替换 → 落库」的顺序执行，任一步失败都会把进程恢复成保存前的状态。
 
 ---
 

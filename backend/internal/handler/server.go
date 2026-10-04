@@ -7,16 +7,19 @@ import (
 	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
-	"github.com/minio/minio-go/v7"
 
 	"manga-reader/internal/database"
+	"manga-reader/internal/settings"
+	"manga-reader/internal/storage"
 )
 
+// ImageCache is the slice of storage.Storage the handlers actually use. The
+// concrete backend (local files or S3) is decided outside this package, so no
+// handler ever names a vendor SDK.
 type ImageCache interface {
-	Head(ctx context.Context, key string) (minio.ObjectInfo, error)
 	Get(ctx context.Context, key string) (data []byte, contentType string, err error)
-	Put(ctx context.Context, key string, data []byte, contentType string, cacheControl string) error
-	PutWithMeta(ctx context.Context, key string, data []byte, contentType string, meta map[string]string, cacheControl string) error
+	Put(ctx context.Context, key string, data []byte, contentType string, opts storage.PutOptions) error
+	Exists(ctx context.Context, key string) (bool, error)
 }
 
 type Server struct {
@@ -24,9 +27,15 @@ type Server struct {
 	DB     *database.DB
 	Cache  ImageCache
 
-	// devTools enables the /api/dev/* debug endpoints; simulateUpstreamDown is
-	// a runtime switch they toggle to make upstream-backed endpoints fail.
-	devTools             bool
+	// settings is the live configuration service backing /api/settings; it is
+	// nil in tests that do not care about it, which leaves the route unmounted.
+	settings *settings.Service
+
+	// devTools enables the /api/dev/* debug endpoints and simulateUpstreamDown
+	// is the runtime switch they toggle to make upstream-backed endpoints fail.
+	// Both are atomic because the settings page can change them while requests
+	// are in flight.
+	devTools             atomic.Bool
 	simulateUpstreamDown atomic.Bool
 
 	prefillOnce sync.Once
@@ -39,24 +48,41 @@ type Config struct {
 	DB       *database.DB
 	Cache    ImageCache
 	DevTools bool
+	// Settings backs /api/settings. When nil the route is not mounted.
+	Settings *settings.Service
 }
 
 func New(cfg Config) *Server {
-	return &Server{
+	s := &Server{
 		Client:   cfg.Client,
 		DB:       cfg.DB,
 		Cache:    cfg.Cache,
-		devTools: cfg.DevTools,
+		settings: cfg.Settings,
 	}
+	s.devTools.Store(cfg.DevTools)
+	return s
 }
+
+// SetDevTools toggles the /api/dev/* endpoints. The routes are always mounted
+// and gate on this flag so the settings page can turn them on without a
+// restart; when disabled they answer 404, exactly as an unmounted route would.
+func (s *Server) SetDevTools(enabled bool) { s.devTools.Store(enabled) }
+
+// DevToolsEnabled reports whether the /api/dev/* endpoints are available.
+func (s *Server) DevToolsEnabled() bool { return s.devTools.Load() }
 
 func (s *Server) RegisterRoutes(r *gin.Engine) {
 	// Simulated upstream outage must be checked before any upstream handler.
 	r.Use(s.upstreamSimulationMiddleware())
 
-	if s.devTools {
-		r.GET("/api/dev/upstream-down", s.handleDevUpstreamDownGet)
-		r.PUT("/api/dev/upstream-down", s.handleDevUpstreamDownPut)
+	// Mounted unconditionally: the handlers gate on the live devTools flag so
+	// the setting can be toggled at runtime.
+	r.GET("/api/dev/upstream-down", s.handleDevUpstreamDownGet)
+	r.PUT("/api/dev/upstream-down", s.handleDevUpstreamDownPut)
+
+	if s.settings != nil {
+		r.GET("/api/settings", s.handleSettingsGet)
+		r.PUT("/api/settings", s.handleSettingsPut)
 	}
 
 	r.GET("/api/gallery/:id/:token", s.handleGetGallery)
@@ -89,7 +115,7 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 	r.GET("/api/image/thumbnail", s.handleThumbnail)
 	r.GET("/api/image/page-thumbnail", s.handlePageThumbnail)
 
-	// Image proxy caches (MinIO read-through).
+	// Image proxy caches (read-through object storage).
 	r.GET("/api/image-cache/page", s.handleCachedImage)
 	r.GET("/api/image-cache/thumbnail", s.handleCachedThumbnail)
 	r.GET("/api/image-cache/page-thumbnail", s.handleCachedPageThumbnail)
