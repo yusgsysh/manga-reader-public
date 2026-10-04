@@ -18,9 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"manga-reader/internal/app"
 	"manga-reader/internal/config"
@@ -45,16 +43,8 @@ func main() {
 }
 
 func run() error {
-	if bindingsMode {
-		// Wails compiles and runs a `-tags bindings` copy of this binary to
-		// discover bound methods. Nothing else has been initialised yet, and
-		// internal/app's Run implementation ignores every option we would set,
-		// so skip straight to the binding dump.
-		return wails.Run(&options.App{})
-	}
-
-	configPath := loadDesktopEnvFile()
-	applyDesktopDefaults()
+	configPath := loadEnvFile()
+	applyDefaults()
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -112,24 +102,50 @@ func run() error {
 		return err
 	}
 
+	// Create the Wails v3 application.
+	wailsApp := application.New(application.Options{
+		Name:        "Manga Reader",
+		Description: "Manga Reader desktop application",
+		Assets: application.AssetOptions{
+			Handler:    assets,
+			Middleware: nil,
+		},
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
+		},
+		Linux: application.LinuxOptions{
+			ProgramName: "manga-reader-desktop",
+		},
+	})
+
+	// On Android, the window is fullscreen and managed by the OS.
+	if application.System.IsMobile() {
+		wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+			Title: "Manga Reader",
+			URL:   "/",
+		})
+	} else {
+		wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+			Title:    "Manga Reader",
+			Width:    1280,
+			Height:   820,
+			MinWidth: 960,
+			MinHeight: 640,
+			URL:      "/",
+		})
+	}
+
+	wailsApp.OnShutdown(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		if err := a.Shutdown(shutdownCtx); err != nil {
+			logger.Error("shutdown failed", "error", err)
+		}
+	})
+
 	wailsErr := make(chan error, 1)
 	go func() {
-		wailsErr <- runWails(
-			context.Background(),
-			"Manga Reader",
-			1280, 820, 960, 640,
-			&assetserver.Options{
-				Assets:     frontendDist,
-				Middleware: assets.Middleware,
-			},
-			func(ctx context.Context) {
-				shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
-				defer cancel()
-				if err := a.Shutdown(shutdownCtx); err != nil {
-					logger.Error("shutdown failed", "error", err)
-				}
-			},
-		)
+		wailsErr <- wailsApp.Run()
 	}()
 
 	select {
@@ -157,7 +173,7 @@ func setupLogger(level string) (*slog.Logger, func(), func(string)) {
 	var base slog.Handler = stdout
 	var f *os.File
 
-	logFile := filepath.Join(desktopDataDir(), "manga-reader.log")
+	logFile := logFilePath()
 	if err := os.MkdirAll(filepath.Dir(logFile), 0o755); err != nil {
 		base = stdout
 	} else if opened, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err != nil {
@@ -171,7 +187,7 @@ func setupLogger(level string) (*slog.Logger, func(), func(string)) {
 	logger := dyn.Logger()
 	slog.SetDefault(logger)
 	if f == nil {
-		logger.Warn("could not open the desktop log file, logging to stdout only", "path", logFile)
+		logger.Warn("could not open the log file, logging to stdout only", "path", logFile)
 	}
 
 	setLevel := func(value string) { dyn.SetLevel(parse(value)) }
@@ -219,37 +235,9 @@ func parseLogLevel(value string) slog.Level {
 	}
 }
 
-// desktopDataDir is the per-user directory holding the SQLite database, the
-// log file and the optional config.env.
-func desktopDataDir() string {
-	dir, err := os.UserConfigDir()
-	if err != nil || dir == "" {
-		return filepath.Join("data", "manga-reader")
-	}
-	return filepath.Join(dir, "manga-reader")
-}
-
-// desktopCacheDir is where LocalStorage keeps cached images.
-func desktopCacheDir() string {
-	dir, err := os.UserCacheDir()
-	if err != nil || dir == "" {
-		return filepath.Join(desktopDataDir(), "cache")
-	}
-	return filepath.Join(dir, "manga-reader", "cache")
-}
-
-// applyDesktopDefaults makes the desktop build behave the way a desktop app
-// should: SQLite plus local file storage under the user's directories. Every
-// value is opt-out, so explicit environment variables still win.
-func applyDesktopDefaults() {
-	setDefault("MANGA_READER_DB_DRIVER", "sqlite")
-	setDefault("MANGA_READER_DB_PATH", filepath.Join(desktopDataDir(), "manga-reader.db"))
-	setDefault("MANGA_READER_STORAGE_DRIVER", config.StorageDriverLocal)
-	setDefault("MANGA_READER_STORAGE_DIR", desktopCacheDir())
-	setDefault("ENVIRONMENT", "desktop")
-	// The desktop log file is the only diagnostic available to a user, so it
-	// should not start out empty.
-	setDefault("LOG_LEVEL", "info")
+// applyDefaults applies platform-specific defaults.
+func applyDefaults() {
+	applyPlatformDefaults()
 }
 
 func setDefault(key, value string) {
@@ -258,14 +246,14 @@ func setDefault(key, value string) {
 	}
 }
 
-// loadDesktopEnvFile reads a KEY=VALUE file so desktop users can configure
-// ExHentai cookies without touching their shell environment. The path can be
-// overridden with MANGA_READER_CONFIG_FILE; the returned path ("" when no file
-// was found) is used in error messages.
-func loadDesktopEnvFile() string {
+// loadEnvFile reads a KEY=VALUE file so users can configure ExHentai cookies
+// without touching their shell environment. The path can be overridden with
+// MANGA_READER_CONFIG_FILE; the returned path ("" when no file was found) is
+// used in error messages.
+func loadEnvFile() string {
 	path := os.Getenv("MANGA_READER_CONFIG_FILE")
 	if path == "" {
-		path = filepath.Join(desktopDataDir(), "config.env")
+		path = envFilePath()
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -299,7 +287,7 @@ func runtimeConfigPath() string {
 	if p := os.Getenv("MANGA_READER_RUNTIME_FILE"); p != "" {
 		return p
 	}
-	return filepath.Join(os.TempDir(), "manga-reader-desktop.json")
+	return runtimeConfigPathValue()
 }
 
 func writeRuntimeConfig(path string, cfg runtimeConfig) error {

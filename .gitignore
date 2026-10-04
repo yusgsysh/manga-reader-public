@@ -11,3 +11,28 @@ backend/cmd/desktop/dist/*
 
 # Vite dependency hash
 frontend/package.json.md5
+
+# Go task caches
+.task/
+**/.task/
+
+# Wails v3 generated overlay / staging (root level)
+/build/
+backend/desktop
+
+# Frontend symlinks/staging created by the containerized build
+/frontend/frontend
+backend/cmd/desktop/build/frontend
+backend/cmd/desktop/frontend/
+
+# Android build outputs and generated sources
+backend/cmd/desktop/build/android/.gradle/
+backend/cmd/desktop/build/android/build/
+backend/cmd/desktop/build/android/app/build/
+backend/cmd/desktop/build/android/app/src/main/jniLibs/
+backend/cmd/desktop/build/android/gen/
+backend/cmd/desktop/build/android/overlay.json
+
+# Packaged Android artifacts
+*.apk
+*.aab

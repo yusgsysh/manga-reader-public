@@ -302,6 +302,33 @@ body {
   }
 }
 
+/* Safe area insets for mobile devices (notch, home indicator, etc.) */
+:root {
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+}
+
+/* Apply safe area padding to fixed position elements on mobile */
+@media (max-width: 768px) {
+  .fixed-top {
+    padding-top: max(var(--safe-area-inset-top), 0.5rem);
+  }
+  
+  .fixed-bottom {
+    padding-bottom: max(var(--safe-area-inset-bottom), 0.5rem);
+  }
+  
+  .fixed-left {
+    padding-left: max(var(--safe-area-inset-left), 0.5rem);
+  }
+  
+  .fixed-right {
+    padding-right: max(var(--safe-area-inset-right), 0.5rem);
+  }
+}
+
 /* Fill the reader viewport (hide the library's default 900x636 card chrome). */
 .reader-shell .comimi-root[data-layout="inline"] {
   width: 100%;

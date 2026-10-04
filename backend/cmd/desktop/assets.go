@@ -150,3 +150,10 @@ func indexBeforeHeadClose(html []byte) int {
 	}
 	return -1
 }
+
+// ServeHTTP implements http.Handler for Wails v3 AssetOptions.Handler
+func (d *desktopAssets) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Create a file server for the embedded dist
+	fileServer := http.FileServer(http.FS(d.dist))
+	d.Middleware(fileServer).ServeHTTP(w, r)
+}

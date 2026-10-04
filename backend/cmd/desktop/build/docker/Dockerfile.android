@@ -1,0 +1,109 @@
+# Wails Android Build Dockerfile
+# Builds Android APK/AAB using Android SDK/NDK
+#
+# Usage:
+#   docker build -t wails-android -f build/docker/Dockerfile.android build/docker/
+#   docker run --rm -v $(pwd):/app wails-android
+#
+# For release build with signing:
+#   docker run --rm -v $(pwd):/app \
+#     -e ANDROID_KEYSTORE_FILE=/app/release.jks \
+#     -e ANDROID_KEYSTORE_PASSWORD=xxx \
+#     -e ANDROID_KEY_ALIAS=xxx \
+#     -e ANDROID_KEY_PASSWORD=xxx \
+#     wails-android task android:package
+
+FROM docker.io/eclipse-temurin:21-jdk AS android-base
+
+# Install base tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl unzip xz-utils python3 git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Android SDK FIRST (cache heavy downloads)
+ENV ANDROID_HOME=/opt/android-sdk
+ENV ANDROID_SDK_ROOT=/opt/android-sdk
+ENV PATH=${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/emulator
+
+RUN mkdir -p ${ANDROID_HOME}/cmdline-tools && \
+    cd ${ANDROID_HOME}/cmdline-tools && \
+    curl -fSL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o cmdline-tools.zip && \
+    unzip -q cmdline-tools.zip && \
+    mv cmdline-tools latest && \
+    rm cmdline-tools.zip
+
+# Accept licenses and install SDK components
+RUN yes | sdkmanager --licenses && \
+    sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "build-tools;34.0.0" \
+               "ndk;26.3.11579264" "emulator" \
+               "system-images;android-35;google_apis;arm64-v8a"
+
+# Set NDK path
+ENV ANDROID_NDK_HOME=/opt/android-sdk/ndk/26.3.11579264
+
+# Create debug keystore if not exists
+RUN mkdir -p ~/.android && \
+    if [ ! -f ~/.android/debug.keystore ]; then \
+        keytool -genkeypair -v -keystore ~/.android/debug.keystore \
+                -storepass android -alias androiddebugkey -keypass android \
+                -keyalg RSA -keysize 2048 -validity 10000 \
+                -dname "CN=Android Debug,O=Android,C=US"; \
+    fi
+
+# Also create keystore in app directory for Gradle
+RUN mkdir -p /app/backend/cmd/desktop/build/android/app && \
+    if [ ! -f /app/backend/cmd/desktop/build/android/app/debug.keystore ]; then \
+        keytool -genkeypair -v -keystore /app/backend/cmd/desktop/build/android/app/debug.keystore \
+                -storepass android -alias androiddebugkey -keypass android \
+                -keyalg RSA -keysize 2048 -validity 10000 \
+                -dname "CN=Android Debug,O=Android,C=US"; \
+    fi
+
+# Install Go
+ARG GO_VERSION=1.27.0
+RUN ARCH=$(case $(uname -m) in x86_64) echo "amd64" ;; aarch64) echo "arm64" ;; esac) && \
+    curl -fSL "https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz" -o /tmp/go.tar.gz && \
+    rm -rf /usr/local/go && \
+    tar -xzf /tmp/go.tar.gz -C /usr/local && \
+    rm /tmp/go.tar.gz
+ENV PATH=$PATH:/usr/local/go/bin
+
+# Install Node.js, npm, bun, Task, and Wails CLI
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install bun
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH=$PATH:/root/.bun/bin
+
+RUN sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+RUN go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+ENV PATH=$PATH:/root/go/bin
+
+# Copy source and build
+WORKDIR /app
+
+# Install Go dependencies first (cached layer)
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+
+# Copy backend source
+COPY backend/ ./backend/
+
+# Copy frontend to where Taskfile expects it (for build:frontend task)
+# First copy to a temp location, then to the build directory
+COPY frontend/ /tmp/frontend/
+# The Taskfiles expect `frontend/` to live next to the backend desktop module.
+# The source tree already contains backend/cmd/desktop/frontend (generated
+# bindings), so it must be removed before symlinking, otherwise `ln -sf` nests
+# the link inside that directory and the frontend build can't find package.json.
+RUN rm -rf /app/backend/cmd/desktop/frontend /app/backend/cmd/desktop/build/frontend && \
+    mkdir -p /app/backend/cmd/desktop/build && \
+    cp -r /tmp/frontend /app/backend/cmd/desktop/build/frontend && \
+    ln -sf /app/backend/cmd/desktop/build/frontend /app/backend/cmd/desktop/frontend
+
+# Default command
+ENTRYPOINT ["task"]
+CMD ["android:build"]

@@ -331,16 +331,18 @@ curl -OJ http://localhost:8080/api/prefill/1/zip
 
 ### 依赖
 
-- Go 1.27+、Bun、[Wails v2 CLI](https://wails.io)：`go install github.com/wailsapp/wails/v2/cmd/wails@latest`
-- Linux 需要 GTK3 与 `webkit2gtk` 开发头。`backend/cmd/desktop/wails.json` 的 `build:tags` 默认是 `webkit2_41`（Fedora 39+ 等较新发行版只带 4.1）；若你的发行版只有 `webkit2gtk-4.0`，把 `build:tags` 整行删掉即可。
+- Go 1.27+、Bun、[go-task](https://taskfile.dev)、[Wails v3 CLI](https://wails.io)：`go install github.com/wailsapp/wails/v3/cmd/wails3@latest`
+- Linux 需要 GTK3 与 `webkit2gtk` 开发头。构建由 `backend/cmd/desktop/build/` 下的 Taskfile 驱动，应用元信息见 `build/config.yml`。
 
 ### 构建 / 运行
 
 ```bash
 cd backend/cmd/desktop
-wails build     # 产物 build/bin/manga-reader-desktop
-wails dev       # 开发模式：Vite 热更新 + 运行时注入 API 地址
+wails3 build     # 产物 bin/manga-reader-desktop
+wails3 dev       # 开发模式：Vite 热更新 + 运行时注入 API 地址
 ```
+
+Android APK 见 [构建/运行 → Android](backend/cmd/desktop/README.md#androidapk--aab)：本地用 `task android:package`，或用仓库根目录的 `build-android-docker.sh`（Podman/Docker，宿主机无需 SDK/NDK）。
 
 首次运行需要 ExHentai Cookie（与 Web 版相同）：写在 `config.env`、环境变量里，或启动后在应用内「设置」页填写。
 
