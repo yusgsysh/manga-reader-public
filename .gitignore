@@ -1,3 +1,8 @@
 backend/manga-reader
 backend/data/*
 backend/EHentai-go/*
+backend/cmd/desktop/build/bin/manga-reader-desktop
+frontend/wailsjs/runtime/package.json
+frontend/package.json.md5
+frontend/wailsjs/runtime/runtime.d.ts
+frontend/wailsjs/runtime/runtime.js
