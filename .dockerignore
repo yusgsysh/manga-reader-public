@@ -1,0 +1,30 @@
+# Keep the Android container build context small and deterministic.
+.git
+.gitignore
+.env*
+
+# Frontend deps / build output (rebuilt inside the image)
+**/node_modules
+frontend/dist
+frontend/frontend
+frontend/package.json.md5
+
+# Go task caches and desktop build output
+**/.task
+backend/desktop
+backend/cmd/desktop/dist
+backend/cmd/desktop/bin
+backend/cmd/desktop/build/bin
+backend/cmd/desktop/build/frontend
+
+# Generated Android/Gradle output (rebuilt inside the image)
+backend/cmd/desktop/build/android/.gradle
+backend/cmd/desktop/build/android/build
+backend/cmd/desktop/build/android/app/build
+backend/cmd/desktop/build/android/app/src/main/jniLibs
+backend/cmd/desktop/build/android/gen
+backend/cmd/desktop/build/android/overlay.json
+
+# Packaged artifacts
+*.apk
+*.aab

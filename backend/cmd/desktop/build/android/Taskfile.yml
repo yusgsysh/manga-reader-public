@@ -50,6 +50,14 @@ tasks:
             ref: .PRODUCTION
     cmds:
       - echo "Building Android app {{.APP_NAME}}..."
+      # The Go build embeds backend/cmd/desktop/dist (//go:embed all:dist).
+      # `wails3 build` normally syncs frontend/dist there, but the Android tasks
+      # call `go build` directly, so do it here before compiling.
+      - |
+        rm -rf dist
+        mkdir -p dist
+        cp -r frontend/dist/. dist/
+        touch dist/.gitkeep
       - task: compile:go:shared
         vars:
           ARCH: '{{.ARCH | default .HOST_ARCH}}'
@@ -354,7 +362,7 @@ tasks:
       - task: ensure-emulator
       - '"{{.ADB}}" uninstall {{.APP_ID}} 2>/dev/null || true'
       - '"{{.ADB}}" install "{{.BIN_DIR}}/{{.APP_NAME}}.apk"'
-      - '"{{.ADB}}" shell am start -n {{.APP_ID}}/com.manga.reader.MainActivity'
+      - '"{{.ADB}}" shell am start -n {{.APP_ID}}/com.wails.app.MainActivity'
 
   run:
     summary: Build, install and launch a debug build in the Android Emulator
@@ -365,7 +373,7 @@ tasks:
       - task: assemble:apk
       - '"{{.ADB}}" uninstall {{.APP_ID}} 2>/dev/null || true'
       - '"{{.ADB}}" install "{{.BIN_DIR}}/{{.APP_NAME}}.apk"'
-      - '"{{.ADB}}" shell am start -n {{.APP_ID}}/com.manga.reader.MainActivity'
+      - '"{{.ADB}}" shell am start -n {{.APP_ID}}/com.wails.app.MainActivity'
 
   device:list:
     summary: Lists connected Android devices and emulators (serials)
@@ -398,7 +406,7 @@ tasks:
         echo "Deploying {{.BIN_DIR}}/{{.APP_NAME}}.apk to device $DEVICE..."
         "{{.ADB}}" -s "$DEVICE" uninstall {{.APP_ID}} 2>/dev/null || true
         "{{.ADB}}" -s "$DEVICE" install "{{.BIN_DIR}}/{{.APP_NAME}}.apk"
-        "{{.ADB}}" -s "$DEVICE" shell am start -n {{.APP_ID}}/com.manga.reader.MainActivity
+        "{{.ADB}}" -s "$DEVICE" shell am start -n {{.APP_ID}}/com.wails.app.MainActivity
     preconditions:
       - sh: '[ -x "{{.ADB}}" ] || command -v adb'
         msg: "adb not found. Install the Android SDK platform-tools (or set ANDROID_HOME)"
@@ -428,7 +436,7 @@ tasks:
         echo "Deploying {{.BIN_DIR}}/{{.APP_NAME}}.apk to device $DEVICE..."
         "{{.ADB}}" -s "$DEVICE" uninstall {{.APP_ID}} 2>/dev/null || true
         "{{.ADB}}" -s "$DEVICE" install "{{.BIN_DIR}}/{{.APP_NAME}}.apk"
-        "{{.ADB}}" -s "$DEVICE" shell am start -n {{.APP_ID}}/com.manga.reader.MainActivity
+        "{{.ADB}}" -s "$DEVICE" shell am start -n {{.APP_ID}}/com.wails.app.MainActivity
     preconditions:
       - sh: '[ -x "{{.ADB}}" ] || command -v adb'
         msg: "adb not found. Install the Android SDK platform-tools (or set ANDROID_HOME)"
