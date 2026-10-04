@@ -18,12 +18,12 @@ export function Logo({ className, showWordmark = true }: LogoProps) {
           width="19"
           height="16"
           rx="3.5"
-          fill="var(--app-accent)"
+          fill="var(--color-kumo-base)"
         />
         <path
           d="M12 7.54c-1.4-1.31-3.24-1.92-5.25-1.92H4.56v10.85h2.19c2.01 0 3.85.61 5.25 1.92z"
           fill="none"
-          stroke="white"
+          stroke="var(--app-accent)"
           strokeWidth="1.6"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -31,7 +31,7 @@ export function Logo({ className, showWordmark = true }: LogoProps) {
         <path
           d="M12 7.54c1.4-1.31 3.24-1.92 5.25-1.92h2.19v10.85h-2.19c-2.01 0-3.85.61-5.25 1.92z"
           fill="none"
-          stroke="white"
+          stroke="var(--app-accent)"
           strokeWidth="1.6"
           strokeLinecap="round"
           strokeLinejoin="round"
