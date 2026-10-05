@@ -11,8 +11,6 @@ import (
 const (
 	// Label holds the string label denoting the bookshelf type in the database.
 	Label = "bookshelf"
-	// FieldID holds the string denoting the id field in the database.
-	FieldID = "id"
 	// FieldGalleryID holds the string denoting the gallery_id field in the database.
 	FieldGalleryID = "gallery_id"
 	// FieldToken holds the string denoting the token field in the database.
@@ -27,7 +25,6 @@ const (
 
 // Columns holds all SQL columns for bookshelf fields.
 var Columns = []string{
-	FieldID,
 	FieldGalleryID,
 	FieldToken,
 	FieldCreatedAt,
@@ -55,11 +52,6 @@ var (
 
 // OrderOption defines the ordering options for the Bookshelf queries.
 type OrderOption func(*sql.Selector)
-
-// ByID orders the results by the id field.
-func ByID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldID, opts...).ToFunc()
-}
 
 // ByGalleryID orders the results by the gallery_id field.
 func ByGalleryID(opts ...sql.OrderTermOption) OrderOption {

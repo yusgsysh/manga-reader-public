@@ -516,17 +516,13 @@ func (_c *GalleryCacheCreate) sqlSave(ctx context.Context) (*GalleryCache, error
 		}
 		return nil, err
 	}
-	id := _spec.ID.Value.(int64)
-	_node.ID = int(id)
-	_c.mutation.id = &_node.ID
-	_c.mutation.done = true
 	return _node, nil
 }
 
 func (_c *GalleryCacheCreate) createSpec() (*GalleryCache, *sqlgraph.CreateSpec) {
 	var (
 		_node = &GalleryCache{config: _c.config}
-		_spec = sqlgraph.NewCreateSpec(gallerycache.Table, sqlgraph.NewFieldSpec(gallerycache.FieldID, field.TypeInt))
+		_spec = sqlgraph.NewCreateSpec(gallerycache.Table, nil)
 	)
 	if value, ok := _c.mutation.GalleryID(); ok {
 		_spec.SetField(gallerycache.FieldGalleryID, field.TypeInt64, value)
@@ -678,11 +674,6 @@ func (_c *GalleryCacheCreateBulk) Save(ctx context.Context) ([]*GalleryCache, er
 				}
 				if err != nil {
 					return nil, err
-				}
-				mutation.id = &nodes[i].ID
-				if specs[i].ID.Value != nil {
-					id := specs[i].ID.Value.(int64)
-					nodes[i].ID = int(id)
 				}
 				mutation.done = true
 				return nodes[i], nil

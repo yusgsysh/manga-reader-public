@@ -206,17 +206,13 @@ func (_c *ReadingProgressCreate) sqlSave(ctx context.Context) (*ReadingProgress,
 		}
 		return nil, err
 	}
-	id := _spec.ID.Value.(int64)
-	_node.ID = int(id)
-	_c.mutation.id = &_node.ID
-	_c.mutation.done = true
 	return _node, nil
 }
 
 func (_c *ReadingProgressCreate) createSpec() (*ReadingProgress, *sqlgraph.CreateSpec) {
 	var (
 		_node = &ReadingProgress{config: _c.config}
-		_spec = sqlgraph.NewCreateSpec(readingprogress.Table, sqlgraph.NewFieldSpec(readingprogress.FieldID, field.TypeInt))
+		_spec = sqlgraph.NewCreateSpec(readingprogress.Table, nil)
 	)
 	if value, ok := _c.mutation.GalleryID(); ok {
 		_spec.SetField(readingprogress.FieldGalleryID, field.TypeInt64, value)
@@ -292,11 +288,6 @@ func (_c *ReadingProgressCreateBulk) Save(ctx context.Context) ([]*ReadingProgre
 				}
 				if err != nil {
 					return nil, err
-				}
-				mutation.id = &nodes[i].ID
-				if specs[i].ID.Value != nil {
-					id := specs[i].ID.Value.(int64)
-					nodes[i].ID = int(id)
 				}
 				mutation.done = true
 				return nodes[i], nil

@@ -18,6 +18,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/google/uuid"
 )
 
 const (
@@ -41,7 +42,6 @@ type BookshelfMutation struct {
 	config
 	op            Op
 	typ           string
-	id            *int
 	gallery_id    *int64
 	addgallery_id *int64
 	token         *string
@@ -72,38 +72,6 @@ func newBookshelfMutation(c config, op Op, opts ...bookshelfOption) *BookshelfMu
 	return m
 }
 
-// withBookshelfID sets the ID field of the mutation.
-func withBookshelfID(id int) bookshelfOption {
-	return func(m *BookshelfMutation) {
-		var (
-			err   error
-			once  sync.Once
-			value *Bookshelf
-		)
-		m.oldValue = func(ctx context.Context) (*Bookshelf, error) {
-			once.Do(func() {
-				if m.done {
-					err = errors.New("querying old values post mutation is not allowed")
-				} else {
-					value, err = m.Client().Bookshelf.Get(ctx, id)
-				}
-			})
-			return value, err
-		}
-		m.id = &id
-	}
-}
-
-// withBookshelf sets the old Bookshelf of the mutation.
-func withBookshelf(node *Bookshelf) bookshelfOption {
-	return func(m *BookshelfMutation) {
-		m.oldValue = func(context.Context) (*Bookshelf, error) {
-			return node, nil
-		}
-		m.id = &node.ID
-	}
-}
-
 // Client returns a new `ent.Client` from the mutation. If the mutation was
 // executed in a transaction (ent.Tx), a transactional client is returned.
 func (m BookshelfMutation) Client() *Client {
@@ -123,34 +91,6 @@ func (m BookshelfMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// ID returns the ID value in the mutation. Note that the ID is only available
-// if it was provided to the builder or after it was returned from the database.
-func (m *BookshelfMutation) ID() (id int, exists bool) {
-	if m.id == nil {
-		return
-	}
-	return *m.id, true
-}
-
-// IDs queries the database and returns the entity ids that match the mutation's predicate.
-// That means, if the mutation is applied within a transaction with an isolation level such
-// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
-// or updated by the mutation.
-func (m *BookshelfMutation) IDs(ctx context.Context) ([]int, error) {
-	switch {
-	case m.op.Is(OpUpdateOne | OpDeleteOne):
-		id, exists := m.ID()
-		if exists {
-			return []int{id}, nil
-		}
-		fallthrough
-	case m.op.Is(OpUpdate | OpDelete):
-		return m.Client().Bookshelf.Query().Where(m.predicates...).IDs(ctx)
-	default:
-		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
-	}
-}
-
 // SetGalleryID sets the "gallery_id" field.
 func (m *BookshelfMutation) SetGalleryID(i int64) {
 	m.gallery_id = &i
@@ -164,23 +104,6 @@ func (m *BookshelfMutation) GalleryID() (r int64, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldGalleryID returns the old "gallery_id" field's value of the Bookshelf entity.
-// If the Bookshelf object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *BookshelfMutation) OldGalleryID(ctx context.Context) (v int64, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldGalleryID is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldGalleryID requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldGalleryID: %w", err)
-	}
-	return oldValue.GalleryID, nil
 }
 
 // AddGalleryID adds i to the "gallery_id" field.
@@ -221,23 +144,6 @@ func (m *BookshelfMutation) Token() (r string, exists bool) {
 	return *v, true
 }
 
-// OldToken returns the old "token" field's value of the Bookshelf entity.
-// If the Bookshelf object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *BookshelfMutation) OldToken(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldToken is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldToken requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldToken: %w", err)
-	}
-	return oldValue.Token, nil
-}
-
 // ResetToken resets all changes to the "token" field.
 func (m *BookshelfMutation) ResetToken() {
 	m.token = nil
@@ -257,23 +163,6 @@ func (m *BookshelfMutation) CreatedAt() (r time.Time, exists bool) {
 	return *v, true
 }
 
-// OldCreatedAt returns the old "created_at" field's value of the Bookshelf entity.
-// If the Bookshelf object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *BookshelfMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
-	}
-	return oldValue.CreatedAt, nil
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *BookshelfMutation) ResetCreatedAt() {
 	m.created_at = nil
@@ -291,23 +180,6 @@ func (m *BookshelfMutation) UpdatedAt() (r time.Time, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldUpdatedAt returns the old "updated_at" field's value of the Bookshelf entity.
-// If the Bookshelf object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *BookshelfMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
-	}
-	return oldValue.UpdatedAt, nil
 }
 
 // ResetUpdatedAt resets all changes to the "updated_at" field.
@@ -386,17 +258,7 @@ func (m *BookshelfMutation) Field(name string) (ent.Value, bool) {
 // returned if the mutation operation is not UpdateOne, or the query to the
 // database failed.
 func (m *BookshelfMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
-	switch name {
-	case bookshelf.FieldGalleryID:
-		return m.OldGalleryID(ctx)
-	case bookshelf.FieldToken:
-		return m.OldToken(ctx)
-	case bookshelf.FieldCreatedAt:
-		return m.OldCreatedAt(ctx)
-	case bookshelf.FieldUpdatedAt:
-		return m.OldUpdatedAt(ctx)
-	}
-	return nil, fmt.Errorf("unknown Bookshelf field %s", name)
+	return nil, errors.New("edge schema Bookshelf does not support getting old values")
 }
 
 // SetField sets the value of a field with the given name. It returns an error if
@@ -565,7 +427,6 @@ type GalleryCacheMutation struct {
 	config
 	op                   Op
 	typ                  string
-	id                   *int
 	gallery_id           *int64
 	addgallery_id        *int64
 	token                *string
@@ -625,38 +486,6 @@ func newGalleryCacheMutation(c config, op Op, opts ...gallerycacheOption) *Galle
 	return m
 }
 
-// withGalleryCacheID sets the ID field of the mutation.
-func withGalleryCacheID(id int) gallerycacheOption {
-	return func(m *GalleryCacheMutation) {
-		var (
-			err   error
-			once  sync.Once
-			value *GalleryCache
-		)
-		m.oldValue = func(ctx context.Context) (*GalleryCache, error) {
-			once.Do(func() {
-				if m.done {
-					err = errors.New("querying old values post mutation is not allowed")
-				} else {
-					value, err = m.Client().GalleryCache.Get(ctx, id)
-				}
-			})
-			return value, err
-		}
-		m.id = &id
-	}
-}
-
-// withGalleryCache sets the old GalleryCache of the mutation.
-func withGalleryCache(node *GalleryCache) gallerycacheOption {
-	return func(m *GalleryCacheMutation) {
-		m.oldValue = func(context.Context) (*GalleryCache, error) {
-			return node, nil
-		}
-		m.id = &node.ID
-	}
-}
-
 // Client returns a new `ent.Client` from the mutation. If the mutation was
 // executed in a transaction (ent.Tx), a transactional client is returned.
 func (m GalleryCacheMutation) Client() *Client {
@@ -676,34 +505,6 @@ func (m GalleryCacheMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// ID returns the ID value in the mutation. Note that the ID is only available
-// if it was provided to the builder or after it was returned from the database.
-func (m *GalleryCacheMutation) ID() (id int, exists bool) {
-	if m.id == nil {
-		return
-	}
-	return *m.id, true
-}
-
-// IDs queries the database and returns the entity ids that match the mutation's predicate.
-// That means, if the mutation is applied within a transaction with an isolation level such
-// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
-// or updated by the mutation.
-func (m *GalleryCacheMutation) IDs(ctx context.Context) ([]int, error) {
-	switch {
-	case m.op.Is(OpUpdateOne | OpDeleteOne):
-		id, exists := m.ID()
-		if exists {
-			return []int{id}, nil
-		}
-		fallthrough
-	case m.op.Is(OpUpdate | OpDelete):
-		return m.Client().GalleryCache.Query().Where(m.predicates...).IDs(ctx)
-	default:
-		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
-	}
-}
-
 // SetGalleryID sets the "gallery_id" field.
 func (m *GalleryCacheMutation) SetGalleryID(i int64) {
 	m.gallery_id = &i
@@ -717,23 +518,6 @@ func (m *GalleryCacheMutation) GalleryID() (r int64, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldGalleryID returns the old "gallery_id" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldGalleryID(ctx context.Context) (v int64, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldGalleryID is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldGalleryID requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldGalleryID: %w", err)
-	}
-	return oldValue.GalleryID, nil
 }
 
 // AddGalleryID adds i to the "gallery_id" field.
@@ -774,23 +558,6 @@ func (m *GalleryCacheMutation) Token() (r string, exists bool) {
 	return *v, true
 }
 
-// OldToken returns the old "token" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldToken(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldToken is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldToken requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldToken: %w", err)
-	}
-	return oldValue.Token, nil
-}
-
 // ResetToken resets all changes to the "token" field.
 func (m *GalleryCacheMutation) ResetToken() {
 	m.token = nil
@@ -808,23 +575,6 @@ func (m *GalleryCacheMutation) CreatedAt() (r time.Time, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldCreatedAt returns the old "created_at" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
-	}
-	return oldValue.CreatedAt, nil
 }
 
 // ResetCreatedAt resets all changes to the "created_at" field.
@@ -846,23 +596,6 @@ func (m *GalleryCacheMutation) Title() (r string, exists bool) {
 	return *v, true
 }
 
-// OldTitle returns the old "title" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldTitle(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldTitle is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldTitle requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldTitle: %w", err)
-	}
-	return oldValue.Title, nil
-}
-
 // ResetTitle resets all changes to the "title" field.
 func (m *GalleryCacheMutation) ResetTitle() {
 	m.title = nil
@@ -880,23 +613,6 @@ func (m *GalleryCacheMutation) TitleJpn() (r string, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldTitleJpn returns the old "title_jpn" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldTitleJpn(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldTitleJpn is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldTitleJpn requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldTitleJpn: %w", err)
-	}
-	return oldValue.TitleJpn, nil
 }
 
 // ResetTitleJpn resets all changes to the "title_jpn" field.
@@ -918,23 +634,6 @@ func (m *GalleryCacheMutation) Category() (r string, exists bool) {
 	return *v, true
 }
 
-// OldCategory returns the old "category" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldCategory(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCategory is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCategory requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCategory: %w", err)
-	}
-	return oldValue.Category, nil
-}
-
 // ResetCategory resets all changes to the "category" field.
 func (m *GalleryCacheMutation) ResetCategory() {
 	m.category = nil
@@ -952,23 +651,6 @@ func (m *GalleryCacheMutation) Thumbnail() (r string, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldThumbnail returns the old "thumbnail" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldThumbnail(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldThumbnail is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldThumbnail requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldThumbnail: %w", err)
-	}
-	return oldValue.Thumbnail, nil
 }
 
 // ResetThumbnail resets all changes to the "thumbnail" field.
@@ -989,23 +671,6 @@ func (m *GalleryCacheMutation) PageCount() (r int, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldPageCount returns the old "page_count" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldPageCount(ctx context.Context) (v int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldPageCount is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldPageCount requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldPageCount: %w", err)
-	}
-	return oldValue.PageCount, nil
 }
 
 // AddPageCount adds i to the "page_count" field.
@@ -1047,23 +712,6 @@ func (m *GalleryCacheMutation) Rating() (r float64, exists bool) {
 	return *v, true
 }
 
-// OldRating returns the old "rating" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldRating(ctx context.Context) (v float64, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldRating is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldRating requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldRating: %w", err)
-	}
-	return oldValue.Rating, nil
-}
-
 // AddRating adds f to the "rating" field.
 func (m *GalleryCacheMutation) AddRating(f float64) {
 	if m.addrating != nil {
@@ -1101,23 +749,6 @@ func (m *GalleryCacheMutation) RatingCount() (r int, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldRatingCount returns the old "rating_count" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldRatingCount(ctx context.Context) (v int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldRatingCount is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldRatingCount requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldRatingCount: %w", err)
-	}
-	return oldValue.RatingCount, nil
 }
 
 // AddRatingCount adds i to the "rating_count" field.
@@ -1158,23 +789,6 @@ func (m *GalleryCacheMutation) Uploader() (r string, exists bool) {
 	return *v, true
 }
 
-// OldUploader returns the old "uploader" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldUploader(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldUploader is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldUploader requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldUploader: %w", err)
-	}
-	return oldValue.Uploader, nil
-}
-
 // ResetUploader resets all changes to the "uploader" field.
 func (m *GalleryCacheMutation) ResetUploader() {
 	m.uploader = nil
@@ -1194,23 +808,6 @@ func (m *GalleryCacheMutation) Posted() (r string, exists bool) {
 	return *v, true
 }
 
-// OldPosted returns the old "posted" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldPosted(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldPosted is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldPosted requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldPosted: %w", err)
-	}
-	return oldValue.Posted, nil
-}
-
 // ResetPosted resets all changes to the "posted" field.
 func (m *GalleryCacheMutation) ResetPosted() {
 	m.posted = nil
@@ -1228,23 +825,6 @@ func (m *GalleryCacheMutation) PostedAt() (r time.Time, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldPostedAt returns the old "posted_at" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldPostedAt(ctx context.Context) (v *time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldPostedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldPostedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldPostedAt: %w", err)
-	}
-	return oldValue.PostedAt, nil
 }
 
 // ClearPostedAt clears the value of the "posted_at" field.
@@ -1279,23 +859,6 @@ func (m *GalleryCacheMutation) Language() (r string, exists bool) {
 	return *v, true
 }
 
-// OldLanguage returns the old "language" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldLanguage(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldLanguage is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldLanguage requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldLanguage: %w", err)
-	}
-	return oldValue.Language, nil
-}
-
 // ResetLanguage resets all changes to the "language" field.
 func (m *GalleryCacheMutation) ResetLanguage() {
 	m.language = nil
@@ -1313,23 +876,6 @@ func (m *GalleryCacheMutation) Translated() (r bool, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldTranslated returns the old "translated" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldTranslated(ctx context.Context) (v bool, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldTranslated is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldTranslated requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldTranslated: %w", err)
-	}
-	return oldValue.Translated, nil
 }
 
 // ResetTranslated resets all changes to the "translated" field.
@@ -1351,23 +897,6 @@ func (m *GalleryCacheMutation) FileSize() (r string, exists bool) {
 	return *v, true
 }
 
-// OldFileSize returns the old "file_size" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldFileSize(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldFileSize is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldFileSize requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldFileSize: %w", err)
-	}
-	return oldValue.FileSize, nil
-}
-
 // ResetFileSize resets all changes to the "file_size" field.
 func (m *GalleryCacheMutation) ResetFileSize() {
 	m.file_size = nil
@@ -1386,23 +915,6 @@ func (m *GalleryCacheMutation) Favorited() (r int, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldFavorited returns the old "favorited" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldFavorited(ctx context.Context) (v int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldFavorited is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldFavorited requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldFavorited: %w", err)
-	}
-	return oldValue.Favorited, nil
 }
 
 // AddFavorited adds i to the "favorited" field.
@@ -1443,23 +955,6 @@ func (m *GalleryCacheMutation) Expunged() (r bool, exists bool) {
 	return *v, true
 }
 
-// OldExpunged returns the old "expunged" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldExpunged(ctx context.Context) (v bool, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldExpunged is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldExpunged requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldExpunged: %w", err)
-	}
-	return oldValue.Expunged, nil
-}
-
 // ResetExpunged resets all changes to the "expunged" field.
 func (m *GalleryCacheMutation) ResetExpunged() {
 	m.expunged = nil
@@ -1478,23 +973,6 @@ func (m *GalleryCacheMutation) Tags() (r []model.Tag, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldTags returns the old "tags" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldTags(ctx context.Context) (v []model.Tag, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldTags is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldTags requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldTags: %w", err)
-	}
-	return oldValue.Tags, nil
 }
 
 // AppendTags adds value to the "tags" field.
@@ -1545,23 +1023,6 @@ func (m *GalleryCacheMutation) Pages() (r []string, exists bool) {
 	return *v, true
 }
 
-// OldPages returns the old "pages" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldPages(ctx context.Context) (v []string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldPages is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldPages requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldPages: %w", err)
-	}
-	return oldValue.Pages, nil
-}
-
 // AppendPages adds s to the "pages" field.
 func (m *GalleryCacheMutation) AppendPages(s []string) {
 	m.appendpages = append(m.appendpages, s...)
@@ -1608,23 +1069,6 @@ func (m *GalleryCacheMutation) Thumbnails() (r []model.GalleryPageThumb, exists 
 		return
 	}
 	return *v, true
-}
-
-// OldThumbnails returns the old "thumbnails" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldThumbnails(ctx context.Context) (v []model.GalleryPageThumb, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldThumbnails is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldThumbnails requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldThumbnails: %w", err)
-	}
-	return oldValue.Thumbnails, nil
 }
 
 // AppendThumbnails adds mpt to the "thumbnails" field.
@@ -1674,23 +1118,6 @@ func (m *GalleryCacheMutation) MetaFetchedAt() (r time.Time, exists bool) {
 	return *v, true
 }
 
-// OldMetaFetchedAt returns the old "meta_fetched_at" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldMetaFetchedAt(ctx context.Context) (v *time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldMetaFetchedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldMetaFetchedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldMetaFetchedAt: %w", err)
-	}
-	return oldValue.MetaFetchedAt, nil
-}
-
 // ClearMetaFetchedAt clears the value of the "meta_fetched_at" field.
 func (m *GalleryCacheMutation) ClearMetaFetchedAt() {
 	m.meta_fetched_at = nil
@@ -1721,23 +1148,6 @@ func (m *GalleryCacheMutation) DetailsFetchedAt() (r time.Time, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldDetailsFetchedAt returns the old "details_fetched_at" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldDetailsFetchedAt(ctx context.Context) (v *time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldDetailsFetchedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldDetailsFetchedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldDetailsFetchedAt: %w", err)
-	}
-	return oldValue.DetailsFetchedAt, nil
 }
 
 // ClearDetailsFetchedAt clears the value of the "details_fetched_at" field.
@@ -1772,23 +1182,6 @@ func (m *GalleryCacheMutation) PagesFetchedAt() (r time.Time, exists bool) {
 	return *v, true
 }
 
-// OldPagesFetchedAt returns the old "pages_fetched_at" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldPagesFetchedAt(ctx context.Context) (v *time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldPagesFetchedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldPagesFetchedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldPagesFetchedAt: %w", err)
-	}
-	return oldValue.PagesFetchedAt, nil
-}
-
 // ClearPagesFetchedAt clears the value of the "pages_fetched_at" field.
 func (m *GalleryCacheMutation) ClearPagesFetchedAt() {
 	m.pages_fetched_at = nil
@@ -1821,23 +1214,6 @@ func (m *GalleryCacheMutation) ThumbnailFetchedAt() (r time.Time, exists bool) {
 	return *v, true
 }
 
-// OldThumbnailFetchedAt returns the old "thumbnail_fetched_at" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldThumbnailFetchedAt(ctx context.Context) (v *time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldThumbnailFetchedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldThumbnailFetchedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldThumbnailFetchedAt: %w", err)
-	}
-	return oldValue.ThumbnailFetchedAt, nil
-}
-
 // ClearThumbnailFetchedAt clears the value of the "thumbnail_fetched_at" field.
 func (m *GalleryCacheMutation) ClearThumbnailFetchedAt() {
 	m.thumbnail_fetched_at = nil
@@ -1868,23 +1244,6 @@ func (m *GalleryCacheMutation) UpdatedAt() (r time.Time, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldUpdatedAt returns the old "updated_at" field's value of the GalleryCache entity.
-// If the GalleryCache object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GalleryCacheMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
-	}
-	return oldValue.UpdatedAt, nil
 }
 
 // ResetUpdatedAt resets all changes to the "updated_at" field.
@@ -2073,61 +1432,7 @@ func (m *GalleryCacheMutation) Field(name string) (ent.Value, bool) {
 // returned if the mutation operation is not UpdateOne, or the query to the
 // database failed.
 func (m *GalleryCacheMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
-	switch name {
-	case gallerycache.FieldGalleryID:
-		return m.OldGalleryID(ctx)
-	case gallerycache.FieldToken:
-		return m.OldToken(ctx)
-	case gallerycache.FieldCreatedAt:
-		return m.OldCreatedAt(ctx)
-	case gallerycache.FieldTitle:
-		return m.OldTitle(ctx)
-	case gallerycache.FieldTitleJpn:
-		return m.OldTitleJpn(ctx)
-	case gallerycache.FieldCategory:
-		return m.OldCategory(ctx)
-	case gallerycache.FieldThumbnail:
-		return m.OldThumbnail(ctx)
-	case gallerycache.FieldPageCount:
-		return m.OldPageCount(ctx)
-	case gallerycache.FieldRating:
-		return m.OldRating(ctx)
-	case gallerycache.FieldRatingCount:
-		return m.OldRatingCount(ctx)
-	case gallerycache.FieldUploader:
-		return m.OldUploader(ctx)
-	case gallerycache.FieldPosted:
-		return m.OldPosted(ctx)
-	case gallerycache.FieldPostedAt:
-		return m.OldPostedAt(ctx)
-	case gallerycache.FieldLanguage:
-		return m.OldLanguage(ctx)
-	case gallerycache.FieldTranslated:
-		return m.OldTranslated(ctx)
-	case gallerycache.FieldFileSize:
-		return m.OldFileSize(ctx)
-	case gallerycache.FieldFavorited:
-		return m.OldFavorited(ctx)
-	case gallerycache.FieldExpunged:
-		return m.OldExpunged(ctx)
-	case gallerycache.FieldTags:
-		return m.OldTags(ctx)
-	case gallerycache.FieldPages:
-		return m.OldPages(ctx)
-	case gallerycache.FieldThumbnails:
-		return m.OldThumbnails(ctx)
-	case gallerycache.FieldMetaFetchedAt:
-		return m.OldMetaFetchedAt(ctx)
-	case gallerycache.FieldDetailsFetchedAt:
-		return m.OldDetailsFetchedAt(ctx)
-	case gallerycache.FieldPagesFetchedAt:
-		return m.OldPagesFetchedAt(ctx)
-	case gallerycache.FieldThumbnailFetchedAt:
-		return m.OldThumbnailFetchedAt(ctx)
-	case gallerycache.FieldUpdatedAt:
-		return m.OldUpdatedAt(ctx)
-	}
-	return nil, fmt.Errorf("unknown GalleryCache field %s", name)
+	return nil, errors.New("edge schema GalleryCache does not support getting old values")
 }
 
 // SetField sets the value of a field with the given name. It returns an error if
@@ -2615,7 +1920,7 @@ type PrefillJobMutation struct {
 	config
 	op              Op
 	typ             string
-	id              *int
+	id              *uuid.UUID
 	gallery_id      *int64
 	addgallery_id   *int64
 	token           *string
@@ -2658,7 +1963,7 @@ func newPrefillJobMutation(c config, op Op, opts ...prefilljobOption) *PrefillJo
 }
 
 // withPrefillJobID sets the ID field of the mutation.
-func withPrefillJobID(id int) prefilljobOption {
+func withPrefillJobID(id uuid.UUID) prefilljobOption {
 	return func(m *PrefillJobMutation) {
 		var (
 			err   error
@@ -2708,9 +2013,15 @@ func (m PrefillJobMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of PrefillJob entities.
+func (m *PrefillJobMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
 // ID returns the ID value in the mutation. Note that the ID is only available
 // if it was provided to the builder or after it was returned from the database.
-func (m *PrefillJobMutation) ID() (id int, exists bool) {
+func (m *PrefillJobMutation) ID() (id uuid.UUID, exists bool) {
 	if m.id == nil {
 		return
 	}
@@ -2721,12 +2032,12 @@ func (m *PrefillJobMutation) ID() (id int, exists bool) {
 // That means, if the mutation is applied within a transaction with an isolation level such
 // as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
 // or updated by the mutation.
-func (m *PrefillJobMutation) IDs(ctx context.Context) ([]int, error) {
+func (m *PrefillJobMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
 	switch {
 	case m.op.Is(OpUpdateOne | OpDeleteOne):
 		id, exists := m.ID()
 		if exists {
-			return []int{id}, nil
+			return []uuid.UUID{id}, nil
 		}
 		fallthrough
 	case m.op.Is(OpUpdate | OpDelete):
@@ -3677,7 +2988,6 @@ type ReadingProgressMutation struct {
 	config
 	op              Op
 	typ             string
-	id              *int
 	gallery_id      *int64
 	addgallery_id   *int64
 	token           *string
@@ -3713,38 +3023,6 @@ func newReadingProgressMutation(c config, op Op, opts ...readingprogressOption) 
 	return m
 }
 
-// withReadingProgressID sets the ID field of the mutation.
-func withReadingProgressID(id int) readingprogressOption {
-	return func(m *ReadingProgressMutation) {
-		var (
-			err   error
-			once  sync.Once
-			value *ReadingProgress
-		)
-		m.oldValue = func(ctx context.Context) (*ReadingProgress, error) {
-			once.Do(func() {
-				if m.done {
-					err = errors.New("querying old values post mutation is not allowed")
-				} else {
-					value, err = m.Client().ReadingProgress.Get(ctx, id)
-				}
-			})
-			return value, err
-		}
-		m.id = &id
-	}
-}
-
-// withReadingProgress sets the old ReadingProgress of the mutation.
-func withReadingProgress(node *ReadingProgress) readingprogressOption {
-	return func(m *ReadingProgressMutation) {
-		m.oldValue = func(context.Context) (*ReadingProgress, error) {
-			return node, nil
-		}
-		m.id = &node.ID
-	}
-}
-
 // Client returns a new `ent.Client` from the mutation. If the mutation was
 // executed in a transaction (ent.Tx), a transactional client is returned.
 func (m ReadingProgressMutation) Client() *Client {
@@ -3764,34 +3042,6 @@ func (m ReadingProgressMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// ID returns the ID value in the mutation. Note that the ID is only available
-// if it was provided to the builder or after it was returned from the database.
-func (m *ReadingProgressMutation) ID() (id int, exists bool) {
-	if m.id == nil {
-		return
-	}
-	return *m.id, true
-}
-
-// IDs queries the database and returns the entity ids that match the mutation's predicate.
-// That means, if the mutation is applied within a transaction with an isolation level such
-// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
-// or updated by the mutation.
-func (m *ReadingProgressMutation) IDs(ctx context.Context) ([]int, error) {
-	switch {
-	case m.op.Is(OpUpdateOne | OpDeleteOne):
-		id, exists := m.ID()
-		if exists {
-			return []int{id}, nil
-		}
-		fallthrough
-	case m.op.Is(OpUpdate | OpDelete):
-		return m.Client().ReadingProgress.Query().Where(m.predicates...).IDs(ctx)
-	default:
-		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
-	}
-}
-
 // SetGalleryID sets the "gallery_id" field.
 func (m *ReadingProgressMutation) SetGalleryID(i int64) {
 	m.gallery_id = &i
@@ -3805,23 +3055,6 @@ func (m *ReadingProgressMutation) GalleryID() (r int64, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldGalleryID returns the old "gallery_id" field's value of the ReadingProgress entity.
-// If the ReadingProgress object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ReadingProgressMutation) OldGalleryID(ctx context.Context) (v int64, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldGalleryID is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldGalleryID requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldGalleryID: %w", err)
-	}
-	return oldValue.GalleryID, nil
 }
 
 // AddGalleryID adds i to the "gallery_id" field.
@@ -3862,23 +3095,6 @@ func (m *ReadingProgressMutation) Token() (r string, exists bool) {
 	return *v, true
 }
 
-// OldToken returns the old "token" field's value of the ReadingProgress entity.
-// If the ReadingProgress object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ReadingProgressMutation) OldToken(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldToken is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldToken requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldToken: %w", err)
-	}
-	return oldValue.Token, nil
-}
-
 // ResetToken resets all changes to the "token" field.
 func (m *ReadingProgressMutation) ResetToken() {
 	m.token = nil
@@ -3897,23 +3113,6 @@ func (m *ReadingProgressMutation) CurrentPage() (r int, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldCurrentPage returns the old "current_page" field's value of the ReadingProgress entity.
-// If the ReadingProgress object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ReadingProgressMutation) OldCurrentPage(ctx context.Context) (v int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCurrentPage is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCurrentPage requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCurrentPage: %w", err)
-	}
-	return oldValue.CurrentPage, nil
 }
 
 // AddCurrentPage adds i to the "current_page" field.
@@ -3955,23 +3154,6 @@ func (m *ReadingProgressMutation) Progress() (r float64, exists bool) {
 	return *v, true
 }
 
-// OldProgress returns the old "progress" field's value of the ReadingProgress entity.
-// If the ReadingProgress object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ReadingProgressMutation) OldProgress(ctx context.Context) (v float64, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldProgress is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldProgress requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldProgress: %w", err)
-	}
-	return oldValue.Progress, nil
-}
-
 // AddProgress adds f to the "progress" field.
 func (m *ReadingProgressMutation) AddProgress(f float64) {
 	if m.addprogress != nil {
@@ -4010,23 +3192,6 @@ func (m *ReadingProgressMutation) Completed() (r bool, exists bool) {
 	return *v, true
 }
 
-// OldCompleted returns the old "completed" field's value of the ReadingProgress entity.
-// If the ReadingProgress object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ReadingProgressMutation) OldCompleted(ctx context.Context) (v bool, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCompleted is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCompleted requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCompleted: %w", err)
-	}
-	return oldValue.Completed, nil
-}
-
 // ResetCompleted resets all changes to the "completed" field.
 func (m *ReadingProgressMutation) ResetCompleted() {
 	m.completed = nil
@@ -4046,23 +3211,6 @@ func (m *ReadingProgressMutation) CreatedAt() (r time.Time, exists bool) {
 	return *v, true
 }
 
-// OldCreatedAt returns the old "created_at" field's value of the ReadingProgress entity.
-// If the ReadingProgress object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ReadingProgressMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
-	}
-	return oldValue.CreatedAt, nil
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *ReadingProgressMutation) ResetCreatedAt() {
 	m.created_at = nil
@@ -4080,23 +3228,6 @@ func (m *ReadingProgressMutation) UpdatedAt() (r time.Time, exists bool) {
 		return
 	}
 	return *v, true
-}
-
-// OldUpdatedAt returns the old "updated_at" field's value of the ReadingProgress entity.
-// If the ReadingProgress object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ReadingProgressMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
-	}
-	return oldValue.UpdatedAt, nil
 }
 
 // ResetUpdatedAt resets all changes to the "updated_at" field.
@@ -4190,23 +3321,7 @@ func (m *ReadingProgressMutation) Field(name string) (ent.Value, bool) {
 // returned if the mutation operation is not UpdateOne, or the query to the
 // database failed.
 func (m *ReadingProgressMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
-	switch name {
-	case readingprogress.FieldGalleryID:
-		return m.OldGalleryID(ctx)
-	case readingprogress.FieldToken:
-		return m.OldToken(ctx)
-	case readingprogress.FieldCurrentPage:
-		return m.OldCurrentPage(ctx)
-	case readingprogress.FieldProgress:
-		return m.OldProgress(ctx)
-	case readingprogress.FieldCompleted:
-		return m.OldCompleted(ctx)
-	case readingprogress.FieldCreatedAt:
-		return m.OldCreatedAt(ctx)
-	case readingprogress.FieldUpdatedAt:
-		return m.OldUpdatedAt(ctx)
-	}
-	return nil, fmt.Errorf("unknown ReadingProgress field %s", name)
+	return nil, errors.New("edge schema ReadingProgress does not support getting old values")
 }
 
 // SetField sets the value of a field with the given name. It returns an error if

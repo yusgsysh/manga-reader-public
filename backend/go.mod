@@ -7,6 +7,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/gen2brain/webp v0.6.4
 	github.com/gin-gonic/gin v1.12.0
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/minio/minio-go/v7 v7.3.0
 	github.com/wailsapp/wails/v2 v2.16.0

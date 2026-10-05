@@ -12,7 +12,7 @@ import type { PrefillJob } from "../types/prefill";
 const BASE = "http://localhost:8080";
 
 const sampleJob: PrefillJob = {
-  id: 7,
+  id: "11111111-2222-3333-4444-555555555555",
   gallery_id: 123,
   token: "tok",
   title: "title",
@@ -77,16 +77,16 @@ describe("prefill api", () => {
 
   it("cancelPrefillJob and deletePrefillJob target the job routes", async () => {
     fetchMock.mockResolvedValue(jsonResponse(sampleJob));
-    await cancelPrefillJob(7);
+    await cancelPrefillJob("11111111-2222-3333-4444-555555555555");
     expect((fetchMock.mock.calls[0] as [string, RequestInit])[0]).toBe(
-      `${BASE}/api/prefill/7/cancel`,
+      `${BASE}/api/prefill/11111111-2222-3333-4444-555555555555/cancel`,
     );
     expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].method).toBe(
       "POST",
     );
 
     fetchMock.mockResolvedValue(jsonResponse({ deleted: 1 }));
-    await deletePrefillJob(7);
+    await deletePrefillJob("11111111-2222-3333-4444-555555555555");
     expect((fetchMock.mock.calls[1] as [string, RequestInit])[1].method).toBe(
       "DELETE",
     );
@@ -102,13 +102,15 @@ describe("prefill api", () => {
   });
 
   it("prefillZipUrl builds the streaming zip URL", () => {
-    expect(prefillZipUrl(7)).toBe(`${BASE}/api/prefill/7/zip`);
+    expect(prefillZipUrl("11111111-2222-3333-4444-555555555555")).toBe(
+      `${BASE}/api/prefill/11111111-2222-3333-4444-555555555555/zip`,
+    );
   });
 
   it("surfaces the backend error envelope", async () => {
     fetchMock.mockResolvedValue(
       jsonResponse({ error: "job already finished" }, 409),
     );
-    await expect(cancelPrefillJob(7)).rejects.toThrow("job already finished");
+    await expect(cancelPrefillJob("7")).rejects.toThrow("job already finished");
   });
 });

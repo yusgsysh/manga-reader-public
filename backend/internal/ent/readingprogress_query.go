@@ -12,7 +12,6 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"entgo.io/ent/schema/field"
 )
 
 // ReadingProgressQuery is the builder for querying ReadingProgress entities.
@@ -80,29 +79,6 @@ func (_q *ReadingProgressQuery) FirstX(ctx context.Context) *ReadingProgress {
 	return node
 }
 
-// FirstID returns the first ReadingProgress ID from the query.
-// Returns a *NotFoundError when no ReadingProgress ID was found.
-func (_q *ReadingProgressQuery) FirstID(ctx context.Context) (id int, err error) {
-	var ids []int
-	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
-		return
-	}
-	if len(ids) == 0 {
-		err = &NotFoundError{readingprogress.Label}
-		return
-	}
-	return ids[0], nil
-}
-
-// FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *ReadingProgressQuery) FirstIDX(ctx context.Context) int {
-	id, err := _q.FirstID(ctx)
-	if err != nil && !IsNotFound(err) {
-		panic(err)
-	}
-	return id
-}
-
 // Only returns a single ReadingProgress entity found by the query, ensuring it only returns one.
 // Returns a *NotSingularError when more than one ReadingProgress entity is found.
 // Returns a *NotFoundError when no ReadingProgress entities are found.
@@ -130,34 +106,6 @@ func (_q *ReadingProgressQuery) OnlyX(ctx context.Context) *ReadingProgress {
 	return node
 }
 
-// OnlyID is like Only, but returns the only ReadingProgress ID in the query.
-// Returns a *NotSingularError when more than one ReadingProgress ID is found.
-// Returns a *NotFoundError when no entities are found.
-func (_q *ReadingProgressQuery) OnlyID(ctx context.Context) (id int, err error) {
-	var ids []int
-	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
-		return
-	}
-	switch len(ids) {
-	case 1:
-		id = ids[0]
-	case 0:
-		err = &NotFoundError{readingprogress.Label}
-	default:
-		err = &NotSingularError{readingprogress.Label}
-	}
-	return
-}
-
-// OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *ReadingProgressQuery) OnlyIDX(ctx context.Context) int {
-	id, err := _q.OnlyID(ctx)
-	if err != nil {
-		panic(err)
-	}
-	return id
-}
-
 // All executes the query and returns a list of ReadingProgresses.
 func (_q *ReadingProgressQuery) All(ctx context.Context) ([]*ReadingProgress, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryAll)
@@ -175,27 +123,6 @@ func (_q *ReadingProgressQuery) AllX(ctx context.Context) []*ReadingProgress {
 		panic(err)
 	}
 	return nodes
-}
-
-// IDs executes the query and returns a list of ReadingProgress IDs.
-func (_q *ReadingProgressQuery) IDs(ctx context.Context) (ids []int, err error) {
-	if _q.ctx.Unique == nil && _q.path != nil {
-		_q.Unique(true)
-	}
-	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryIDs)
-	if err = _q.Select(readingprogress.FieldID).Scan(ctx, &ids); err != nil {
-		return nil, err
-	}
-	return ids, nil
-}
-
-// IDsX is like IDs, but panics if an error occurs.
-func (_q *ReadingProgressQuery) IDsX(ctx context.Context) []int {
-	ids, err := _q.IDs(ctx)
-	if err != nil {
-		panic(err)
-	}
-	return ids
 }
 
 // Count returns the count of the given query.
@@ -219,7 +146,7 @@ func (_q *ReadingProgressQuery) CountX(ctx context.Context) int {
 // Exist returns true if the query has elements in the graph.
 func (_q *ReadingProgressQuery) Exist(ctx context.Context) (bool, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryExist)
-	switch _, err := _q.FirstID(ctx); {
+	switch _, err := _q.First(ctx); {
 	case IsNotFound(err):
 		return false, nil
 	case err != nil:
@@ -357,15 +284,13 @@ func (_q *ReadingProgressQuery) sqlAll(ctx context.Context, hooks ...queryHook) 
 
 func (_q *ReadingProgressQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
-	_spec.Node.Columns = _q.ctx.Fields
-	if len(_q.ctx.Fields) > 0 {
-		_spec.Unique = _q.ctx.Unique != nil && *_q.ctx.Unique
-	}
+	_spec.Unique = false
+	_spec.Node.Columns = nil
 	return sqlgraph.CountNodes(ctx, _q.driver, _spec)
 }
 
 func (_q *ReadingProgressQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(readingprogress.Table, readingprogress.Columns, sqlgraph.NewFieldSpec(readingprogress.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewQuerySpec(readingprogress.Table, readingprogress.Columns, nil)
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
@@ -374,11 +299,8 @@ func (_q *ReadingProgressQuery) querySpec() *sqlgraph.QuerySpec {
 	}
 	if fields := _q.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, readingprogress.FieldID)
 		for i := range fields {
-			if fields[i] != readingprogress.FieldID {
-				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
-			}
+			_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

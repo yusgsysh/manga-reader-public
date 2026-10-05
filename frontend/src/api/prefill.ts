@@ -22,11 +22,11 @@ export function fetchPrefillJobs(): Promise<PrefillListResponse> {
   return apiGet<PrefillListResponse>("/api/prefill");
 }
 
-export function cancelPrefillJob(id: number): Promise<PrefillJob> {
+export function cancelPrefillJob(id: string): Promise<PrefillJob> {
   return apiPost<PrefillJob>(`/api/prefill/${id}/cancel`);
 }
 
-export function deletePrefillJob(id: number): Promise<{ deleted: number }> {
+export function deletePrefillJob(id: string): Promise<{ deleted: number }> {
   return apiDelete<{ deleted: number }>(`/api/prefill/${id}`);
 }
 
@@ -36,7 +36,7 @@ export function cleanupPrefillJobs(
   return apiPost<PrefillCleanupResponse>("/api/prefill/cleanup", { days });
 }
 
-export async function headPrefillZip(id: number): Promise<boolean> {
+export async function headPrefillZip(id: string): Promise<boolean> {
   try {
     await apiHead(`/api/prefill/${id}/zip`);
     return true;
@@ -48,6 +48,6 @@ export async function headPrefillZip(id: number): Promise<boolean> {
   }
 }
 
-export function prefillZipUrl(id: number): string {
+export function prefillZipUrl(id: string): string {
   return buildApiUrl(`/api/prefill/${id}/zip`);
 }

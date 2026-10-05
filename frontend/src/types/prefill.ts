@@ -18,7 +18,7 @@ export interface PrefillItemError {
 }
 
 export interface PrefillJob {
-  id: number;
+  id: string;
   gallery_id: number | null;
   token: string;
   title: string;

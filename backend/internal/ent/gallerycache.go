@@ -17,8 +17,6 @@ import (
 // GalleryCache is the model entity for the GalleryCache schema.
 type GalleryCache struct {
 	config `json:"-"`
-	// ID of the ent.
-	ID int `json:"id,omitempty"`
 	// GalleryID holds the value of the "gallery_id" field.
 	GalleryID int64 `json:"gallery_id,omitempty"`
 	// Token holds the value of the "token" field.
@@ -85,7 +83,7 @@ func (*GalleryCache) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case gallerycache.FieldRating:
 			values[i] = new(sql.NullFloat64)
-		case gallerycache.FieldID, gallerycache.FieldGalleryID, gallerycache.FieldPageCount, gallerycache.FieldRatingCount, gallerycache.FieldFavorited:
+		case gallerycache.FieldGalleryID, gallerycache.FieldPageCount, gallerycache.FieldRatingCount, gallerycache.FieldFavorited:
 			values[i] = new(sql.NullInt64)
 		case gallerycache.FieldToken, gallerycache.FieldTitle, gallerycache.FieldTitleJpn, gallerycache.FieldCategory, gallerycache.FieldThumbnail, gallerycache.FieldUploader, gallerycache.FieldPosted, gallerycache.FieldLanguage, gallerycache.FieldFileSize:
 			values[i] = new(sql.NullString)
@@ -106,12 +104,6 @@ func (_m *GalleryCache) assignValues(columns []string, values []any) error {
 	}
 	for i := range columns {
 		switch columns[i] {
-		case gallerycache.FieldID:
-			value, ok := values[i].(*sql.NullInt64)
-			if !ok {
-				return fmt.Errorf("unexpected type %T for field id", value)
-			}
-			_m.ID = int(value.Int64)
 		case gallerycache.FieldGalleryID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field gallery_id", values[i])
@@ -314,7 +306,6 @@ func (_m *GalleryCache) Unwrap() *GalleryCache {
 func (_m *GalleryCache) String() string {
 	var builder strings.Builder
 	builder.WriteString("GalleryCache(")
-	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("gallery_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.GalleryID))
 	builder.WriteString(", ")

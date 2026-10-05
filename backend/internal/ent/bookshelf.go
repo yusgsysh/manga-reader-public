@@ -15,8 +15,6 @@ import (
 // Bookshelf is the model entity for the Bookshelf schema.
 type Bookshelf struct {
 	config `json:"-"`
-	// ID of the ent.
-	ID int `json:"id,omitempty"`
 	// GalleryID holds the value of the "gallery_id" field.
 	GalleryID int64 `json:"gallery_id,omitempty"`
 	// Token holds the value of the "token" field.
@@ -33,7 +31,7 @@ func (*Bookshelf) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case bookshelf.FieldID, bookshelf.FieldGalleryID:
+		case bookshelf.FieldGalleryID:
 			values[i] = new(sql.NullInt64)
 		case bookshelf.FieldToken:
 			values[i] = new(sql.NullString)
@@ -54,12 +52,6 @@ func (_m *Bookshelf) assignValues(columns []string, values []any) error {
 	}
 	for i := range columns {
 		switch columns[i] {
-		case bookshelf.FieldID:
-			value, ok := values[i].(*sql.NullInt64)
-			if !ok {
-				return fmt.Errorf("unexpected type %T for field id", value)
-			}
-			_m.ID = int(value.Int64)
 		case bookshelf.FieldGalleryID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field gallery_id", values[i])
@@ -119,7 +111,6 @@ func (_m *Bookshelf) Unwrap() *Bookshelf {
 func (_m *Bookshelf) String() string {
 	var builder strings.Builder
 	builder.WriteString("Bookshelf(")
-	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("gallery_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.GalleryID))
 	builder.WriteString(", ")

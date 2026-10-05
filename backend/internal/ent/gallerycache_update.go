@@ -491,7 +491,7 @@ func (_u *GalleryCacheUpdate) defaults() {
 }
 
 func (_u *GalleryCacheUpdate) sqlSave(ctx context.Context) (_node int, err error) {
-	_spec := sqlgraph.NewUpdateSpec(gallerycache.Table, gallerycache.Columns, sqlgraph.NewFieldSpec(gallerycache.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(gallerycache.Table, gallerycache.Columns, sqlgraph.NewFieldSpec(gallerycache.FieldGalleryID, field.TypeInt64), sqlgraph.NewFieldSpec(gallerycache.FieldToken, field.TypeString))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -1122,22 +1122,24 @@ func (_u *GalleryCacheUpdateOne) defaults() {
 }
 
 func (_u *GalleryCacheUpdateOne) sqlSave(ctx context.Context) (_node *GalleryCache, err error) {
-	_spec := sqlgraph.NewUpdateSpec(gallerycache.Table, gallerycache.Columns, sqlgraph.NewFieldSpec(gallerycache.FieldID, field.TypeInt))
-	id, ok := _u.mutation.ID()
-	if !ok {
-		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "GalleryCache.id" for update`)}
+	_spec := sqlgraph.NewUpdateSpec(gallerycache.Table, gallerycache.Columns, sqlgraph.NewFieldSpec(gallerycache.FieldGalleryID, field.TypeInt64), sqlgraph.NewFieldSpec(gallerycache.FieldToken, field.TypeString))
+	if id, ok := _u.mutation.GalleryID(); !ok {
+		return nil, &ValidationError{Name: "gallery_id", err: errors.New(`ent: missing "GalleryCache.gallery_id" for update`)}
+	} else {
+		_spec.Node.CompositeID[0].Value = id
 	}
-	_spec.Node.ID.Value = id
+	if id, ok := _u.mutation.Token(); !ok {
+		return nil, &ValidationError{Name: "token", err: errors.New(`ent: missing "GalleryCache.token" for update`)}
+	} else {
+		_spec.Node.CompositeID[1].Value = id
+	}
 	if fields := _u.fields; len(fields) > 0 {
-		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, gallerycache.FieldID)
-		for _, f := range fields {
+		_spec.Node.Columns = make([]string, len(fields))
+		for i, f := range fields {
 			if !gallerycache.ValidColumn(f) {
 				return nil, &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 			}
-			if f != gallerycache.FieldID {
-				_spec.Node.Columns = append(_spec.Node.Columns, f)
-			}
+			_spec.Node.Columns[i] = f
 		}
 	}
 	if ps := _u.mutation.predicates; len(ps) > 0 {
