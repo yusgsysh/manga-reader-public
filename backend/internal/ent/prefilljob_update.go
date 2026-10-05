@@ -239,7 +239,7 @@ func (_u *PrefillJobUpdate) defaults() {
 }
 
 func (_u *PrefillJobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
-	_spec := sqlgraph.NewUpdateSpec(prefilljob.Table, prefilljob.Columns, sqlgraph.NewFieldSpec(prefilljob.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(prefilljob.Table, prefilljob.Columns, sqlgraph.NewFieldSpec(prefilljob.FieldID, field.TypeUUID))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -547,7 +547,7 @@ func (_u *PrefillJobUpdateOne) defaults() {
 }
 
 func (_u *PrefillJobUpdateOne) sqlSave(ctx context.Context) (_node *PrefillJob, err error) {
-	_spec := sqlgraph.NewUpdateSpec(prefilljob.Table, prefilljob.Columns, sqlgraph.NewFieldSpec(prefilljob.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(prefilljob.Table, prefilljob.Columns, sqlgraph.NewFieldSpec(prefilljob.FieldID, field.TypeUUID))
 	id, ok := _u.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "PrefillJob.id" for update`)}

@@ -9,7 +9,6 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"entgo.io/ent/schema/field"
 )
 
 // ReadingProgressDelete is the builder for deleting a ReadingProgress entity.
@@ -40,7 +39,7 @@ func (_d *ReadingProgressDelete) ExecX(ctx context.Context) int {
 }
 
 func (_d *ReadingProgressDelete) sqlExec(ctx context.Context) (int, error) {
-	_spec := sqlgraph.NewDeleteSpec(readingprogress.Table, sqlgraph.NewFieldSpec(readingprogress.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewDeleteSpec(readingprogress.Table, nil)
 	if ps := _d.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {

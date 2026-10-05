@@ -3,7 +3,10 @@ package schema
 import (
 	"time"
 
+	"github.com/google/uuid"
+
 	"entgo.io/ent"
+	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
@@ -31,6 +34,23 @@ func (PrefillJob) Annotations() []schema.Annotation {
 // Fields of the PrefillJob.
 func (PrefillJob) Fields() []ent.Field {
 	return []ent.Field{
+		// Jobs are identified by a random UUID (stored as "job_id") instead of
+		// an auto-increment counter: one gallery may hold several jobs, so the
+		// (gallery_id, token) pair can only be a lookup key, never the identity.
+		field.UUID("id", uuid.UUID{}).
+			StorageKey("job_id").
+			Default(uuid.New).
+			// SQLite needs TEXT affinity: "uuid" would inherit NUMERIC affinity
+			// and silently coerce some generated values into floats.
+			SchemaType(map[string]string{dialect.SQLite: "text"}).
+			Annotations(entsql.Annotation{
+				// A database-level default lets an existing table that still has
+				// an integer "id" column be rebuilt without violating NOT NULL.
+				DefaultExprs: map[string]string{
+					dialect.SQLite:   "lower(hex(randomblob(16)))",
+					dialect.Postgres: "gen_random_uuid()",
+				},
+			}),
 		field.Int64("gallery_id").Optional().Nillable(),
 		field.String("token").Default(""),
 		field.String("title").Default(""),

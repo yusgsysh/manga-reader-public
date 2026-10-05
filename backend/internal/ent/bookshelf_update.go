@@ -111,7 +111,7 @@ func (_u *BookshelfUpdate) defaults() {
 }
 
 func (_u *BookshelfUpdate) sqlSave(ctx context.Context) (_node int, err error) {
-	_spec := sqlgraph.NewUpdateSpec(bookshelf.Table, bookshelf.Columns, sqlgraph.NewFieldSpec(bookshelf.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(bookshelf.Table, bookshelf.Columns, sqlgraph.NewFieldSpec(bookshelf.FieldGalleryID, field.TypeInt64), sqlgraph.NewFieldSpec(bookshelf.FieldToken, field.TypeString))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -247,22 +247,24 @@ func (_u *BookshelfUpdateOne) defaults() {
 }
 
 func (_u *BookshelfUpdateOne) sqlSave(ctx context.Context) (_node *Bookshelf, err error) {
-	_spec := sqlgraph.NewUpdateSpec(bookshelf.Table, bookshelf.Columns, sqlgraph.NewFieldSpec(bookshelf.FieldID, field.TypeInt))
-	id, ok := _u.mutation.ID()
-	if !ok {
-		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "Bookshelf.id" for update`)}
+	_spec := sqlgraph.NewUpdateSpec(bookshelf.Table, bookshelf.Columns, sqlgraph.NewFieldSpec(bookshelf.FieldGalleryID, field.TypeInt64), sqlgraph.NewFieldSpec(bookshelf.FieldToken, field.TypeString))
+	if id, ok := _u.mutation.GalleryID(); !ok {
+		return nil, &ValidationError{Name: "gallery_id", err: errors.New(`ent: missing "Bookshelf.gallery_id" for update`)}
+	} else {
+		_spec.Node.CompositeID[0].Value = id
 	}
-	_spec.Node.ID.Value = id
+	if id, ok := _u.mutation.Token(); !ok {
+		return nil, &ValidationError{Name: "token", err: errors.New(`ent: missing "Bookshelf.token" for update`)}
+	} else {
+		_spec.Node.CompositeID[1].Value = id
+	}
 	if fields := _u.fields; len(fields) > 0 {
-		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, bookshelf.FieldID)
-		for _, f := range fields {
+		_spec.Node.Columns = make([]string, len(fields))
+		for i, f := range fields {
 			if !bookshelf.ValidColumn(f) {
 				return nil, &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 			}
-			if f != bookshelf.FieldID {
-				_spec.Node.Columns = append(_spec.Node.Columns, f)
-			}
+			_spec.Node.Columns[i] = f
 		}
 	}
 	if ps := _u.mutation.predicates; len(ps) > 0 {

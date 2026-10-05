@@ -127,7 +127,7 @@ type prefillItemErrorResp struct {
 }
 
 type prefillJobResp struct {
-	ID        int    `json:"id"`
+	ID        string `json:"id"`
 	GalleryID *int64 `json:"gallery_id"`
 	Token     string `json:"token"`
 	Title     string `json:"title"`
@@ -145,11 +145,11 @@ type prefillJobResp struct {
 	FinishedAt  *string                `json:"finished_at"`
 }
 
-func getPrefillJob(t *testing.T, r *gin.Engine, id int) prefillJobResp {
+func getPrefillJob(t *testing.T, r *gin.Engine, id string) prefillJobResp {
 	t.Helper()
-	code, body := doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/prefill/%d", id), nil)
+	code, body := doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/prefill/%s", id), nil)
 	if code != http.StatusOK {
-		t.Fatalf("GET /api/prefill/%d = %d, body: %s", id, code, body)
+		t.Fatalf("GET /api/prefill/%s = %d, body: %s", id, code, body)
 	}
 	var job prefillJobResp
 	if err := json.Unmarshal(body, &job); err != nil {
@@ -158,12 +158,12 @@ func getPrefillJob(t *testing.T, r *gin.Engine, id int) prefillJobResp {
 	return job
 }
 
-func waitPrefillStatus(t *testing.T, r *gin.Engine, id int, timeout time.Duration, want ...string) prefillJobResp {
+func waitPrefillStatus(t *testing.T, r *gin.Engine, id string, timeout time.Duration, want ...string) prefillJobResp {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	var last prefillJobResp
 	for time.Now().Before(deadline) {
-		code, body := doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/prefill/%d", id), nil)
+		code, body := doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/prefill/%s", id), nil)
 		if code == http.StatusOK {
 			var job prefillJobResp
 			if json.Unmarshal(body, &job) == nil {
@@ -175,7 +175,7 @@ func waitPrefillStatus(t *testing.T, r *gin.Engine, id int, timeout time.Duratio
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("job %d did not reach %v within %s (last status=%q progress=%+v)",
+	t.Fatalf("job %s did not reach %v within %s (last status=%q progress=%+v)",
 		id, want, timeout, last.Status, last.Progress)
 	return last
 }
@@ -356,10 +356,10 @@ func TestPrefillStart_DedupeActiveGallery(t *testing.T) {
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got.ID != existing.ID {
-		t.Errorf("id = %d, want existing id %d", got.ID, existing.ID)
+	if got.ID != existing.ID.String() {
+		t.Errorf("id = %s, want existing id %s", got.ID, existing.ID.String())
 	}
-	waitPrefillStatus(t, r, existing.ID, 10*time.Second, prefillStatusCompleted)
+	waitPrefillStatus(t, r, existing.ID.String(), 10*time.Second, prefillStatusCompleted)
 }
 
 func TestPrefillStart_NoDedupeWithoutOrAfterGallery(t *testing.T) {
@@ -394,7 +394,7 @@ func TestPrefillStart_NoDedupeWithoutOrAfterGallery(t *testing.T) {
 	var second prefillJobResp
 	json.Unmarshal(body, &second)
 	if first.ID == second.ID {
-		t.Errorf("both jobs have id %d, want distinct ids", first.ID)
+		t.Errorf("both jobs have id %s, want distinct ids", first.ID)
 	}
 
 	waitPrefillStatus(t, r, first.ID, 10*time.Second, prefillStatusCompleted)
@@ -464,7 +464,7 @@ func TestPrefillRecoverPendingOnFirstRequest(t *testing.T) {
 		t.Fatalf("list: status = %d, body: %s", code, body)
 	}
 
-	job := waitPrefillStatus(t, r, interrupted.ID, 10*time.Second, prefillStatusCompleted)
+	job := waitPrefillStatus(t, r, interrupted.ID.String(), 10*time.Second, prefillStatusCompleted)
 	if job.FinishedAt == nil {
 		t.Error("finished_at should be set after recovery run")
 	}
@@ -500,7 +500,7 @@ func TestPrefillCancel_Running(t *testing.T) {
 				t.Fatal("job finished before it could be cancelled")
 			}
 			code, body := doJSON(t, r, http.MethodPost,
-				fmt.Sprintf("/api/prefill/%d/cancel", created.ID), nil)
+				fmt.Sprintf("/api/prefill/%s/cancel", created.ID), nil)
 			if code != http.StatusOK {
 				t.Fatalf("cancel: status = %d, body: %s", code, body)
 			}
@@ -553,14 +553,14 @@ func TestPrefillCancel_IdempotentAndTerminal(t *testing.T) {
 
 	// Cancelling a finished job conflicts.
 	code, body := doJSON(t, r, http.MethodPost,
-		fmt.Sprintf("/api/prefill/%d/cancel", completed.ID), nil)
+		fmt.Sprintf("/api/prefill/%s/cancel", completed.ID), nil)
 	if code != http.StatusConflict {
 		t.Errorf("cancel completed: status = %d, want 409, body: %s", code, body)
 	}
 
 	// Cancelling an already cancelled job is idempotent.
 	code, body = doJSON(t, r, http.MethodPost,
-		fmt.Sprintf("/api/prefill/%d/cancel", cancelled.ID), nil)
+		fmt.Sprintf("/api/prefill/%s/cancel", cancelled.ID), nil)
 	if code != http.StatusOK {
 		t.Errorf("cancel cancelled: status = %d, want 200, body: %s", code, body)
 	}
@@ -578,7 +578,7 @@ func TestPrefillCancel_StaleRunningRow(t *testing.T) {
 	stale := insertPrefillJob(t, server.DB.Client, prefillStatusRunning, pageURLs("st1"))
 
 	code, body := doJSON(t, r, http.MethodPost,
-		fmt.Sprintf("/api/prefill/%d/cancel", stale.ID), nil)
+		fmt.Sprintf("/api/prefill/%s/cancel", stale.ID), nil)
 	if code != http.StatusOK {
 		t.Fatalf("cancel stale: status = %d, body: %s", code, body)
 	}
@@ -597,7 +597,7 @@ func TestPrefillCancel_InvalidID(t *testing.T) {
 	if code != http.StatusBadRequest {
 		t.Errorf("invalid id: status = %d, want 400", code)
 	}
-	code, _ = doJSON(t, r, http.MethodPost, "/api/prefill/99999/cancel", nil)
+	code, _ = doJSON(t, r, http.MethodPost, "/api/prefill/00000000-0000-0000-0000-000000000001/cancel", nil)
 	if code != http.StatusNotFound {
 		t.Errorf("unknown id: status = %d, want 404", code)
 	}
@@ -636,21 +636,21 @@ func TestPrefillGetAndList(t *testing.T) {
 	if len(list.Jobs) != 2 {
 		t.Fatalf("jobs len = %d, want 2", len(list.Jobs))
 	}
-	if list.Jobs[0].ID != newer.ID || list.Jobs[1].ID != older.ID {
-		t.Errorf("order = [%d %d], want newest first [%d %d]",
-			list.Jobs[0].ID, list.Jobs[1].ID, newer.ID, older.ID)
+	if list.Jobs[0].ID != newer.ID.String() || list.Jobs[1].ID != older.ID.String() {
+		t.Errorf("order = [%s %s], want newest first [%s %s]",
+			list.Jobs[0].ID, list.Jobs[1].ID, newer.ID.String(), older.ID.String())
 	}
 	for _, j := range list.Jobs {
 		if j.Progress != nil {
-			t.Errorf("job %d progress = %+v, want null for terminal job", j.ID, j.Progress)
+			t.Errorf("job %s progress = %+v, want null for terminal job", j.ID, j.Progress)
 		}
 		if j.CreatedAt == "" || j.UpdatedAt == "" {
-			t.Errorf("job %d missing timestamps", j.ID)
+			t.Errorf("job %s missing timestamps", j.ID)
 		}
 	}
 
 	// Single get
-	got := getPrefillJob(t, r, newer.ID)
+	got := getPrefillJob(t, r, newer.ID.String())
 	if got.Title != "newer" || got.Status != prefillStatusCancelled {
 		t.Errorf("get = %+v, want title newer / status cancelled", got)
 	}
@@ -660,7 +660,7 @@ func TestPrefillGetAndList(t *testing.T) {
 	if code != http.StatusBadRequest {
 		t.Errorf("invalid id: status = %d, want 400", code)
 	}
-	code, _ = doJSON(t, r, http.MethodGet, "/api/prefill/99999", nil)
+	code, _ = doJSON(t, r, http.MethodGet, "/api/prefill/00000000-0000-0000-0000-000000000001", nil)
 	if code != http.StatusNotFound {
 		t.Errorf("unknown id: status = %d, want 404", code)
 	}
@@ -676,11 +676,11 @@ func TestPrefillDelete(t *testing.T) {
 		c.SetFinishedAt(time.Now())
 	})
 
-	code, body := doJSON(t, r, http.MethodDelete, fmt.Sprintf("/api/prefill/%d", terminal.ID), nil)
+	code, body := doJSON(t, r, http.MethodDelete, fmt.Sprintf("/api/prefill/%s", terminal.ID), nil)
 	if code != http.StatusOK {
 		t.Fatalf("delete: status = %d, body: %s", code, body)
 	}
-	code, _ = doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/prefill/%d", terminal.ID), nil)
+	code, _ = doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/prefill/%s", terminal.ID), nil)
 	if code != http.StatusNotFound {
 		t.Errorf("after delete: status = %d, want 404", code)
 	}
@@ -690,17 +690,17 @@ func TestPrefillDelete(t *testing.T) {
 		t.Fatal("list failed")
 	}
 	active := insertPrefillJob(t, server.DB.Client, prefillStatusRunning, pageURLs("del2"))
-	code, body = doJSON(t, r, http.MethodDelete, fmt.Sprintf("/api/prefill/%d", active.ID), nil)
+	code, body = doJSON(t, r, http.MethodDelete, fmt.Sprintf("/api/prefill/%s", active.ID), nil)
 	if code != http.StatusConflict {
 		t.Errorf("delete active: status = %d, want 409, body: %s", code, body)
 	}
 
 	code, body = doJSON(t, r, http.MethodPost,
-		fmt.Sprintf("/api/prefill/%d/cancel", active.ID), nil)
+		fmt.Sprintf("/api/prefill/%s/cancel", active.ID), nil)
 	if code != http.StatusOK {
 		t.Fatalf("cancel active: status = %d, body: %s", code, body)
 	}
-	code, body = doJSON(t, r, http.MethodDelete, fmt.Sprintf("/api/prefill/%d", active.ID), nil)
+	code, body = doJSON(t, r, http.MethodDelete, fmt.Sprintf("/api/prefill/%s", active.ID), nil)
 	if code != http.StatusOK {
 		t.Errorf("delete after cancel: status = %d, body: %s", code, body)
 	}
@@ -736,13 +736,13 @@ func TestPrefillCleanup(t *testing.T) {
 	if resp.Deleted != 1 {
 		t.Errorf("deleted = %d, want 1", resp.Deleted)
 	}
-	if code, _ := doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/prefill/%d", oldJob.ID), nil); code != http.StatusNotFound {
+	if code, _ := doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/prefill/%s", oldJob.ID), nil); code != http.StatusNotFound {
 		t.Errorf("old job should be deleted")
 	}
-	if code, _ := doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/prefill/%d", recentJob.ID), nil); code != http.StatusOK {
+	if code, _ := doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/prefill/%s", recentJob.ID), nil); code != http.StatusOK {
 		t.Errorf("recent job should survive days=30")
 	}
-	if code, _ := doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/prefill/%d", activeJob.ID), nil); code != http.StatusOK {
+	if code, _ := doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/prefill/%s", activeJob.ID), nil); code != http.StatusOK {
 		t.Errorf("active job must never be cleaned up")
 	}
 
@@ -755,7 +755,7 @@ func TestPrefillCleanup(t *testing.T) {
 	if resp.Deleted != 1 {
 		t.Errorf("deleted = %d, want 1", resp.Deleted)
 	}
-	if code, _ := doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/prefill/%d", activeJob.ID), nil); code != http.StatusOK {
+	if code, _ := doJSON(t, r, http.MethodGet, fmt.Sprintf("/api/prefill/%s", activeJob.ID), nil); code != http.StatusOK {
 		t.Errorf("active job must survive days=0")
 	}
 
@@ -847,7 +847,7 @@ func TestPrefillZip(t *testing.T) {
 		t.Fatalf("put cache 2: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/prefill/%d/zip", job.ID), nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/prefill/%s/zip", job.ID), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -939,7 +939,7 @@ func TestPrefillZip_Errors(t *testing.T) {
 	if code != http.StatusBadRequest {
 		t.Errorf("invalid id: status = %d, want 400", code)
 	}
-	code, _ = doJSON(t, r2, http.MethodGet, "/api/prefill/99999/zip", nil)
+	code, _ = doJSON(t, r2, http.MethodGet, "/api/prefill/00000000-0000-0000-0000-000000000001/zip", nil)
 	if code != http.StatusNotFound {
 		t.Errorf("unknown id: status = %d, want 404", code)
 	}

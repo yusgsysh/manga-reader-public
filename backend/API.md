@@ -1142,7 +1142,7 @@ Content-Type: application/json
 
 ```json
 {
-  "id": 1,
+  "id": "8f9fa365-bc81-4296-a9cd-8a9f5e0715b9",
   "gallery_id": 3138775,
   "token": "30b0285f9b",
   "title": "Test Gallery",
@@ -1161,7 +1161,7 @@ Content-Type: application/json
 
 | Field | Type | Description |
 |-------|------|-------------|
-| id | int | 任务 ID |
+| id | string | 任务 ID（UUID，`GET`/`POST`/`DELETE` 的 `:id` 路径参数即此值） |
 | gallery_id | int \| null | 画廊 ID（可空） |
 | token | string | 画廊 token |
 | title | string | 任务标题 |

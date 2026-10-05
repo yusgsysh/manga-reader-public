@@ -133,17 +133,13 @@ func (_c *BookshelfCreate) sqlSave(ctx context.Context) (*Bookshelf, error) {
 		}
 		return nil, err
 	}
-	id := _spec.ID.Value.(int64)
-	_node.ID = int(id)
-	_c.mutation.id = &_node.ID
-	_c.mutation.done = true
 	return _node, nil
 }
 
 func (_c *BookshelfCreate) createSpec() (*Bookshelf, *sqlgraph.CreateSpec) {
 	var (
 		_node = &Bookshelf{config: _c.config}
-		_spec = sqlgraph.NewCreateSpec(bookshelf.Table, sqlgraph.NewFieldSpec(bookshelf.FieldID, field.TypeInt))
+		_spec = sqlgraph.NewCreateSpec(bookshelf.Table, nil)
 	)
 	if value, ok := _c.mutation.GalleryID(); ok {
 		_spec.SetField(bookshelf.FieldGalleryID, field.TypeInt64, value)
@@ -207,11 +203,6 @@ func (_c *BookshelfCreateBulk) Save(ctx context.Context) ([]*Bookshelf, error) {
 				}
 				if err != nil {
 					return nil, err
-				}
-				mutation.id = &nodes[i].ID
-				if specs[i].ID.Value != nil {
-					id := specs[i].ID.Value.(int64)
-					nodes[i].ID = int(id)
 				}
 				mutation.done = true
 				return nodes[i], nil

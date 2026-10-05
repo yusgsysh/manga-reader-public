@@ -11,15 +11,13 @@ import (
 
 	"manga-reader/internal/ent/migrate"
 
-	"manga-reader/internal/ent/bookshelf"
-	"manga-reader/internal/ent/gallerycache"
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/readingprogress"
-	"manga-reader/internal/ent/setting"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
+	"github.com/google/uuid"
 )
 
 // Client is the client that holds all ent builders.
@@ -293,13 +291,9 @@ func (c *BookshelfClient) Update() *BookshelfUpdate {
 
 // UpdateOne returns an update builder for the given entity.
 func (c *BookshelfClient) UpdateOne(_m *Bookshelf) *BookshelfUpdateOne {
-	mutation := newBookshelfMutation(c.config, OpUpdateOne, withBookshelf(_m))
-	return &BookshelfUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *BookshelfClient) UpdateOneID(id int) *BookshelfUpdateOne {
-	mutation := newBookshelfMutation(c.config, OpUpdateOne, withBookshelfID(id))
+	mutation := newBookshelfMutation(c.config, OpUpdateOne)
+	mutation.gallery_id = &_m.GalleryID
+	mutation.token = &_m.Token
 	return &BookshelfUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
@@ -309,19 +303,6 @@ func (c *BookshelfClient) Delete() *BookshelfDelete {
 	return &BookshelfDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
-// DeleteOne returns a builder for deleting the given entity.
-func (c *BookshelfClient) DeleteOne(_m *Bookshelf) *BookshelfDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *BookshelfClient) DeleteOneID(id int) *BookshelfDeleteOne {
-	builder := c.Delete().Where(bookshelf.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &BookshelfDeleteOne{builder}
-}
-
 // Query returns a query builder for Bookshelf.
 func (c *BookshelfClient) Query() *BookshelfQuery {
 	return &BookshelfQuery{
@@ -329,20 +310,6 @@ func (c *BookshelfClient) Query() *BookshelfQuery {
 		ctx:    &QueryContext{Type: TypeBookshelf},
 		inters: c.Interceptors(),
 	}
-}
-
-// Get returns a Bookshelf entity by its id.
-func (c *BookshelfClient) Get(ctx context.Context, id int) (*Bookshelf, error) {
-	return c.Query().Where(bookshelf.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *BookshelfClient) GetX(ctx context.Context, id int) *Bookshelf {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
 }
 
 // Hooks returns the client hooks.
@@ -426,13 +393,9 @@ func (c *GalleryCacheClient) Update() *GalleryCacheUpdate {
 
 // UpdateOne returns an update builder for the given entity.
 func (c *GalleryCacheClient) UpdateOne(_m *GalleryCache) *GalleryCacheUpdateOne {
-	mutation := newGalleryCacheMutation(c.config, OpUpdateOne, withGalleryCache(_m))
-	return &GalleryCacheUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *GalleryCacheClient) UpdateOneID(id int) *GalleryCacheUpdateOne {
-	mutation := newGalleryCacheMutation(c.config, OpUpdateOne, withGalleryCacheID(id))
+	mutation := newGalleryCacheMutation(c.config, OpUpdateOne)
+	mutation.gallery_id = &_m.GalleryID
+	mutation.token = &_m.Token
 	return &GalleryCacheUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
@@ -442,19 +405,6 @@ func (c *GalleryCacheClient) Delete() *GalleryCacheDelete {
 	return &GalleryCacheDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
-// DeleteOne returns a builder for deleting the given entity.
-func (c *GalleryCacheClient) DeleteOne(_m *GalleryCache) *GalleryCacheDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *GalleryCacheClient) DeleteOneID(id int) *GalleryCacheDeleteOne {
-	builder := c.Delete().Where(gallerycache.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &GalleryCacheDeleteOne{builder}
-}
-
 // Query returns a query builder for GalleryCache.
 func (c *GalleryCacheClient) Query() *GalleryCacheQuery {
 	return &GalleryCacheQuery{
@@ -462,20 +412,6 @@ func (c *GalleryCacheClient) Query() *GalleryCacheQuery {
 		ctx:    &QueryContext{Type: TypeGalleryCache},
 		inters: c.Interceptors(),
 	}
-}
-
-// Get returns a GalleryCache entity by its id.
-func (c *GalleryCacheClient) Get(ctx context.Context, id int) (*GalleryCache, error) {
-	return c.Query().Where(gallerycache.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *GalleryCacheClient) GetX(ctx context.Context, id int) *GalleryCache {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
 }
 
 // Hooks returns the client hooks.
@@ -564,7 +500,7 @@ func (c *PrefillJobClient) UpdateOne(_m *PrefillJob) *PrefillJobUpdateOne {
 }
 
 // UpdateOneID returns an update builder for the given id.
-func (c *PrefillJobClient) UpdateOneID(id int) *PrefillJobUpdateOne {
+func (c *PrefillJobClient) UpdateOneID(id uuid.UUID) *PrefillJobUpdateOne {
 	mutation := newPrefillJobMutation(c.config, OpUpdateOne, withPrefillJobID(id))
 	return &PrefillJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
@@ -581,7 +517,7 @@ func (c *PrefillJobClient) DeleteOne(_m *PrefillJob) *PrefillJobDeleteOne {
 }
 
 // DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *PrefillJobClient) DeleteOneID(id int) *PrefillJobDeleteOne {
+func (c *PrefillJobClient) DeleteOneID(id uuid.UUID) *PrefillJobDeleteOne {
 	builder := c.Delete().Where(prefilljob.ID(id))
 	builder.mutation.id = &id
 	builder.mutation.op = OpDeleteOne
@@ -598,12 +534,12 @@ func (c *PrefillJobClient) Query() *PrefillJobQuery {
 }
 
 // Get returns a PrefillJob entity by its id.
-func (c *PrefillJobClient) Get(ctx context.Context, id int) (*PrefillJob, error) {
+func (c *PrefillJobClient) Get(ctx context.Context, id uuid.UUID) (*PrefillJob, error) {
 	return c.Query().Where(prefilljob.ID(id)).Only(ctx)
 }
 
 // GetX is like Get, but panics if an error occurs.
-func (c *PrefillJobClient) GetX(ctx context.Context, id int) *PrefillJob {
+func (c *PrefillJobClient) GetX(ctx context.Context, id uuid.UUID) *PrefillJob {
 	obj, err := c.Get(ctx, id)
 	if err != nil {
 		panic(err)
@@ -692,13 +628,9 @@ func (c *ReadingProgressClient) Update() *ReadingProgressUpdate {
 
 // UpdateOne returns an update builder for the given entity.
 func (c *ReadingProgressClient) UpdateOne(_m *ReadingProgress) *ReadingProgressUpdateOne {
-	mutation := newReadingProgressMutation(c.config, OpUpdateOne, withReadingProgress(_m))
-	return &ReadingProgressUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *ReadingProgressClient) UpdateOneID(id int) *ReadingProgressUpdateOne {
-	mutation := newReadingProgressMutation(c.config, OpUpdateOne, withReadingProgressID(id))
+	mutation := newReadingProgressMutation(c.config, OpUpdateOne)
+	mutation.gallery_id = &_m.GalleryID
+	mutation.token = &_m.Token
 	return &ReadingProgressUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
@@ -708,19 +640,6 @@ func (c *ReadingProgressClient) Delete() *ReadingProgressDelete {
 	return &ReadingProgressDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
-// DeleteOne returns a builder for deleting the given entity.
-func (c *ReadingProgressClient) DeleteOne(_m *ReadingProgress) *ReadingProgressDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *ReadingProgressClient) DeleteOneID(id int) *ReadingProgressDeleteOne {
-	builder := c.Delete().Where(readingprogress.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &ReadingProgressDeleteOne{builder}
-}
-
 // Query returns a query builder for ReadingProgress.
 func (c *ReadingProgressClient) Query() *ReadingProgressQuery {
 	return &ReadingProgressQuery{
@@ -728,20 +647,6 @@ func (c *ReadingProgressClient) Query() *ReadingProgressQuery {
 		ctx:    &QueryContext{Type: TypeReadingProgress},
 		inters: c.Interceptors(),
 	}
-}
-
-// Get returns a ReadingProgress entity by its id.
-func (c *ReadingProgressClient) Get(ctx context.Context, id int) (*ReadingProgress, error) {
-	return c.Query().Where(readingprogress.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *ReadingProgressClient) GetX(ctx context.Context, id int) *ReadingProgress {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
 }
 
 // Hooks returns the client hooks.

@@ -7,7 +7,6 @@ import (
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
-	"entgo.io/ent/schema/index"
 
 	"manga-reader/internal/model"
 )
@@ -22,6 +21,7 @@ type GalleryCache struct {
 func (GalleryCache) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		entsql.Annotation{Table: "gallery_cache"},
+		compositeID("gallery_id", "token"),
 	}
 }
 
@@ -54,12 +54,5 @@ func (GalleryCache) Fields() []ent.Field {
 		field.Time("pages_fetched_at").Optional().Nillable(),
 		field.Time("thumbnail_fetched_at").Optional().Nillable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
-	}
-}
-
-// Indexes of the GalleryCache.
-func (GalleryCache) Indexes() []ent.Index {
-	return []ent.Index{
-		index.Fields("gallery_id", "token").Unique(),
 	}
 }

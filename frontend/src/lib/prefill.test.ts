@@ -11,7 +11,7 @@ import type { PrefillJob } from "../types/prefill";
 
 function makeJob(overrides: Partial<PrefillJob> = {}): PrefillJob {
   return {
-    id: 1,
+    id: "1",
     gallery_id: null,
     token: "",
     title: "test",
@@ -44,8 +44,8 @@ describe("prefill status helpers", () => {
     expect(hasActivePrefillJob([makeJob({ status: "queued" })])).toBe(true);
     expect(
       hasActivePrefillJob([
-        makeJob({ id: 1, status: "completed" }),
-        makeJob({ id: 2, status: "running" }),
+        makeJob({ id: "1", status: "completed" }),
+        makeJob({ id: "2", status: "running" }),
       ]),
     ).toBe(true);
   });

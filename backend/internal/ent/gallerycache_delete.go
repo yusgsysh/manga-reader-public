@@ -9,7 +9,6 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"entgo.io/ent/schema/field"
 )
 
 // GalleryCacheDelete is the builder for deleting a GalleryCache entity.
@@ -40,7 +39,7 @@ func (_d *GalleryCacheDelete) ExecX(ctx context.Context) int {
 }
 
 func (_d *GalleryCacheDelete) sqlExec(ctx context.Context) (int, error) {
-	_spec := sqlgraph.NewDeleteSpec(gallerycache.Table, sqlgraph.NewFieldSpec(gallerycache.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewDeleteSpec(gallerycache.Table, nil)
 	if ps := _d.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {

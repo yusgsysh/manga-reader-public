@@ -185,7 +185,7 @@ func (_u *ReadingProgressUpdate) sqlSave(ctx context.Context) (_node int, err er
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(readingprogress.Table, readingprogress.Columns, sqlgraph.NewFieldSpec(readingprogress.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(readingprogress.Table, readingprogress.Columns, sqlgraph.NewFieldSpec(readingprogress.FieldGalleryID, field.TypeInt64), sqlgraph.NewFieldSpec(readingprogress.FieldToken, field.TypeString))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -410,22 +410,24 @@ func (_u *ReadingProgressUpdateOne) sqlSave(ctx context.Context) (_node *Reading
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(readingprogress.Table, readingprogress.Columns, sqlgraph.NewFieldSpec(readingprogress.FieldID, field.TypeInt))
-	id, ok := _u.mutation.ID()
-	if !ok {
-		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "ReadingProgress.id" for update`)}
+	_spec := sqlgraph.NewUpdateSpec(readingprogress.Table, readingprogress.Columns, sqlgraph.NewFieldSpec(readingprogress.FieldGalleryID, field.TypeInt64), sqlgraph.NewFieldSpec(readingprogress.FieldToken, field.TypeString))
+	if id, ok := _u.mutation.GalleryID(); !ok {
+		return nil, &ValidationError{Name: "gallery_id", err: errors.New(`ent: missing "ReadingProgress.gallery_id" for update`)}
+	} else {
+		_spec.Node.CompositeID[0].Value = id
 	}
-	_spec.Node.ID.Value = id
+	if id, ok := _u.mutation.Token(); !ok {
+		return nil, &ValidationError{Name: "token", err: errors.New(`ent: missing "ReadingProgress.token" for update`)}
+	} else {
+		_spec.Node.CompositeID[1].Value = id
+	}
 	if fields := _u.fields; len(fields) > 0 {
-		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, readingprogress.FieldID)
-		for _, f := range fields {
+		_spec.Node.Columns = make([]string, len(fields))
+		for i, f := range fields {
 			if !readingprogress.ValidColumn(f) {
 				return nil, &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 			}
-			if f != readingprogress.FieldID {
-				_spec.Node.Columns = append(_spec.Node.Columns, f)
-			}
+			_spec.Node.Columns[i] = f
 		}
 	}
 	if ps := _u.mutation.predicates; len(ps) > 0 {
