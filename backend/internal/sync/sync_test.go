@@ -18,6 +18,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"manga-reader/internal/ent"
+	"manga-reader/internal/ent/gallerycache"
 	"manga-reader/internal/ent/readingprogress"
 )
 
@@ -577,5 +578,234 @@ func TestEngineSnapshotWatermark(t *testing.T) {
 	}
 	if watermark != 1 {
 		t.Fatalf("watermark = %d, want 1", watermark)
+	}
+}
+
+// seedGalleryCacheRow inserts a gallery_cache row with the given updatedAt.
+func seedGalleryCacheRow(t *testing.T, client *ent.Client, galleryID int64, token string, updatedAt time.Time) {
+	t.Helper()
+	_, err := client.GalleryCache.Create().
+		SetGalleryID(galleryID).
+		SetToken(token).
+		SetTitle("Seed Title").
+		SetCategory("Seed Category").
+		SetPages([]string{"https://seed/page1.jpg"}).
+		SetCreatedAt(updatedAt).
+		SetUpdatedAt(updatedAt).
+		Save(t.Context())
+	if err != nil {
+		t.Fatalf("seed gallery cache: %v", err)
+	}
+}
+
+func getGalleryCacheRow(t *testing.T, client *ent.Client, galleryID int64, token string) *ent.GalleryCache {
+	t.Helper()
+	row, err := client.GalleryCache.Query().
+		Where(gallerycache.GalleryID(galleryID), gallerycache.Token(token)).
+		Only(t.Context())
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil
+		}
+		t.Fatalf("get gallery cache: %v", err)
+	}
+	return row
+}
+
+func TestApplyGalleryCacheCreateAndMerge(t *testing.T) {
+	client := newTestClient(t)
+	base := time.Now().UTC().Add(-time.Hour)
+
+	// Create a new row via incoming change.
+	create := Change{
+		Entity: EntityGalleryCache, GalleryID: 42, Token: "tok", Op: OpUpsert,
+		Row: &Row{
+			CreatedAt: base, UpdatedAt: base,
+			Title:       "Full Metaller",
+			Category:    "Manga",
+			Pages:       []string{"https://a/1.jpg"},
+			Rating:      4.5,
+			RatingCount: 10,
+		},
+	}
+	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{create})
+	if err != nil || applied != 1 || skipped != 0 {
+		t.Fatalf("create apply = %d/%d, err %v", applied, skipped, err)
+	}
+	row := getGalleryCacheRow(t, client, 42, "tok")
+	if row == nil {
+		t.Fatal("row missing after create")
+	}
+	if row.Title != "Full Metaller" || row.Category != "Manga" || len(row.Pages) != 1 || row.Rating != 4.5 || row.RatingCount != 10 {
+		t.Fatalf("row = %+v, want seeded fields", row)
+	}
+
+	// Newer row with only some fields set: Title empty (should preserve), Pages longer (should replace),
+	// Rating updated, Category not provided (should preserve).
+	metaAt := base.Add(10 * time.Minute)
+	newer := Change{
+		Entity: EntityGalleryCache, GalleryID: 42, Token: "tok", Op: OpUpsert,
+		Row: &Row{
+			CreatedAt: base, UpdatedAt: metaAt,
+			Title:       "",                                             // empty -> preserve existing
+			Category:    "",                                             // empty -> preserve existing
+			Pages:       []string{"https://b/1.jpg", "https://b/2.jpg"}, // len>0 -> replace
+			Rating:      4.8,                                            // non-zero -> update
+			RatingCount: 0,                                              // zero -> preserve
+			Uploader:    "NewUploader",
+		},
+	}
+	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{newer})
+	if err != nil || applied != 1 || skipped != 0 {
+		t.Fatalf("merge apply = %d/%d, err %v", applied, skipped, err)
+	}
+	row = getGalleryCacheRow(t, client, 42, "tok")
+	if row == nil {
+		t.Fatal("row missing after merge")
+	}
+	if row.Title != "Full Metaller" {
+		t.Errorf("Title = %q, want preserved %q", row.Title, "Full Metaller")
+	}
+	if row.Category != "Manga" {
+		t.Errorf("Category = %q, want preserved %q", row.Category, "Manga")
+	}
+	if len(row.Pages) != 2 {
+		t.Errorf("Pages = %v, want 2 new pages", row.Pages)
+	}
+	if row.Rating != 4.8 {
+		t.Errorf("Rating = %v, want 4.8", row.Rating)
+	}
+	if row.RatingCount != 10 {
+		t.Errorf("RatingCount = %v, want preserved 10", row.RatingCount)
+	}
+	if row.Uploader != "NewUploader" {
+		t.Errorf("Uploader = %q, want NewUploader", row.Uploader)
+	}
+	if !row.UpdatedAt.Equal(metaAt) {
+		t.Errorf("UpdatedAt = %v, want %v", row.UpdatedAt, metaAt)
+	}
+
+	// Stale row (UpdatedAt older) should be skipped entirely.
+	stale := Change{
+		Entity: EntityGalleryCache, GalleryID: 42, Token: "tok", Op: OpUpsert,
+		Row: &Row{
+			CreatedAt: base, UpdatedAt: base.Add(-time.Minute),
+			Title: "Stale Title",
+		},
+	}
+	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{stale})
+	if err != nil {
+		t.Fatalf("stale apply error: %v", err)
+	}
+	if applied != 0 || skipped != 1 {
+		t.Fatalf("stale apply = %d/%d, want 0/1", applied, skipped)
+	}
+	row = getGalleryCacheRow(t, client, 42, "tok")
+	if row.Title != "Full Metaller" {
+		t.Errorf("Title = %q after stale, want preserved %q", row.Title, "Full Metaller")
+	}
+}
+
+func TestApplyGalleryCacheTombstone(t *testing.T) {
+	client := newTestClient(t)
+	base := time.Now().UTC().Add(-time.Hour)
+	seedGalleryCacheRow(t, client, 99, "tok", base)
+
+	// Delete with newer tombstone.
+	del := Change{
+		Entity: EntityGalleryCache, GalleryID: 99, Token: "tok", Op: OpDelete,
+		DeletedAt: &[]time.Time{base.Add(time.Minute)}[0],
+	}
+	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{del})
+	if err != nil || applied != 1 || skipped != 0 {
+		t.Fatalf("delete apply = %d/%d, err %v", applied, skipped, err)
+	}
+	if getGalleryCacheRow(t, client, 99, "tok") != nil {
+		t.Fatal("row still exists after tombstone")
+	}
+
+	// Re-applying same tombstone: row gone -> skipped.
+	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{del})
+	if err != nil || applied != 0 || skipped != 1 {
+		t.Fatalf("repeat delete = %d/%d, err %v", applied, skipped, err)
+	}
+
+	// Older tombstone should be skipped.
+	olderDel := Change{
+		Entity: EntityGalleryCache, GalleryID: 99, Token: "tok", Op: OpDelete,
+		DeletedAt: &[]time.Time{base.Add(-time.Minute)}[0],
+	}
+	seedGalleryCacheRow(t, client, 99, "tok", base.Add(time.Hour)) // reseed with newer row
+	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{olderDel})
+	if err != nil || applied != 0 || skipped != 1 {
+		t.Fatalf("older tombstone = %d/%d, err %v", applied, skipped, err)
+	}
+	if getGalleryCacheRow(t, client, 99, "tok") == nil {
+		t.Fatal("newer row incorrectly deleted by older tombstone")
+	}
+}
+
+func TestExportSnapshotIncludesGalleryCache(t *testing.T) {
+	client := newTestClient(t)
+	now := time.Now().UTC()
+	seedGalleryCacheRow(t, client, 77, "snapTok", now)
+
+	snap, err := ExportSnapshot(t.Context(), client)
+	if err != nil {
+		t.Fatalf("export snapshot: %v", err)
+	}
+	found := false
+	for _, ch := range snap {
+		if ch.Entity == EntityGalleryCache && ch.GalleryID == 77 && ch.Token == "snapTok" {
+			found = true
+			if ch.Row == nil {
+				t.Fatal("snapshot gallery cache row is nil")
+			}
+			if ch.Row.Title != "Seed Title" {
+				t.Errorf("snapshot Title = %q, want Seed Title", ch.Row.Title)
+			}
+			if len(ch.Row.Pages) != 1 {
+				t.Errorf("snapshot Pages = %v, want 1", ch.Row.Pages)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("gallery_cache missing from snapshot; got %d entities", len(snap))
+	}
+}
+
+func TestReadChangesSinceFetchesGalleryCacheRow(t *testing.T) {
+	client := newTestClient(t)
+	svc := NewService(client, Options{})
+	now := time.Now().UTC()
+
+	// Seed a cache row and record its upsert so it appears in the outbox.
+	seedGalleryCacheRow(t, client, 55, "tok", now)
+	if err := svc.RecordUpsert(t.Context(), EntityGalleryCache, 55, "tok"); err != nil {
+		t.Fatalf("record upsert: %v", err)
+	}
+
+	changes, maxID, err := ReadChangesSince(t.Context(), client, 0)
+	if err != nil {
+		t.Fatalf("read changes: %v", err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("changes = %d, want 1", len(changes))
+	}
+	ch := changes[0]
+	if ch.Entity != EntityGalleryCache || ch.GalleryID != 55 || ch.Token != "tok" {
+		t.Fatalf("change = %+v, want gallery_cache 55/tok", ch)
+	}
+	if ch.Op != OpUpsert || ch.Row == nil {
+		t.Fatalf("change op/row = %q/%v, want upsert with row", ch.Op, ch.Row)
+	}
+	if ch.Row.Title != "Seed Title" {
+		t.Errorf("fetched row Title = %q, want Seed Title", ch.Row.Title)
+	}
+	if ch.Row.UpdatedAt.IsZero() {
+		t.Error("fetched row UpdatedAt is zero")
+	}
+	if maxID != 1 {
+		t.Fatalf("maxID = %d, want 1", maxID)
 	}
 }

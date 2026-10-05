@@ -43,6 +43,8 @@ func (s *Server) prefetchGallery(galleryID int64, token string, seed *model.Gall
 		if db != nil && seed != nil {
 			if err := gallerycache.UpsertMeta(ctx, db, galleryID, token, cacheMetaFromGallery(seed)); err != nil {
 				slog.Warn("gallery prefetch meta failed", "id", galleryID, "error", err)
+			} else {
+				s.recordGalleryCacheChange(ctx, galleryID, token)
 			}
 		}
 
@@ -60,6 +62,8 @@ func (s *Server) prefetchGallery(galleryID int64, token string, seed *model.Gall
 		} else if db != nil {
 			if err := gallerycache.UpsertDetails(ctx, db, galleryID, token, cacheMetaFromDetails(details)); err != nil {
 				slog.Warn("gallery prefetch details upsert failed", "id", galleryID, "error", err)
+			} else {
+				s.recordGalleryCacheChange(ctx, galleryID, token)
 			}
 		}
 		return nil, nil
@@ -307,13 +311,7 @@ func (s *Server) handleBookshelfRemove(c *gin.Context) {
 			synclib.EntityBookshelf, id, token)
 	}
 
-	if s.DB != nil {
-		if n, cleanErr := s.DB.CleanupGalleryCache(ctx); cleanErr != nil {
-			slog.Warn("gallery cache cleanup failed", "error", cleanErr)
-		} else if n > 0 {
-			slog.Debug("gallery cache cleanup", "deleted", n)
-		}
-	}
+	s.cleanupGalleryCache(ctx)
 
 	c.JSON(http.StatusOK, model.BookshelfMutationResponse{Success: true, InBookshelf: false})
 }

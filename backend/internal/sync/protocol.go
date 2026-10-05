@@ -1,6 +1,6 @@
-// Package sync implements bidirectional replication of reading progress and
-// bookshelf rows between two instances (typically the desktop app and a
-// self-hosted server).
+// Package sync implements bidirectional replication of reading progress,
+// bookshelf and gallery cache rows between two instances (typically the
+// desktop app and a self-hosted server).
 //
 // Design summary:
 //
@@ -13,21 +13,28 @@
 //     same round trip.
 //   - Merging is per-row last-write-wins on updated_at. Re-applying an
 //     already-seen row is a no-op, which makes the protocol idempotent and
-//     stops echoes from looping.
+//     stops echoes from looping. gallery_cache merges field-wise instead of
+//     replacing wholesale, mirroring the local upsert rule that empty incoming
+//     values never blank a richer stored field.
 //   - All connections are initiated by the client side (the server cannot
 //     dial into a NAT-ed desktop); the server signals fresh changes over SSE
 //     (/api/sync/events) and the engine also polls as a fallback.
 //   - Deletions are replicated as tombstones. Rows deleted by a retention
-//     purge (reading progress cleanup) propagate as well, so history cleanup
-//     is global.
+//     purge (reading progress cleanup) or the orphan gallery-cache sweep
+//     propagate as well, so cleanup is global.
 package sync
 
-import "time"
+import (
+	"time"
+
+	"manga-reader/internal/model"
+)
 
 // Entities replicated by this package.
 const (
 	EntityReadingProgress = "reading_progress"
 	EntityBookshelf       = "bookshelf"
+	EntityGalleryCache    = "gallery_cache"
 )
 
 // Change operations.
@@ -40,14 +47,44 @@ const (
 // the runtime settings page behaviour.
 const Mask = "********"
 
-// Row is the full replicated state of a synced record. Entity-specific fields
-// (current_page/progress/completed) are only meaningful for reading_progress.
+// Row is the full replicated state of a synced record.
+//
+// current_page/progress/completed only carry meaning for reading_progress.
+// The gallery_* style fields below (title through thumbnail_fetched_at) only
+// carry meaning for gallery_cache; empty/zero/nil values mean "no information"
+// and never clear an existing field on merge, matching gallerycache's own
+// never-blank upsert rule. JSON omitempty keeps reading-progress payloads
+// unaffected.
 type Row struct {
 	CurrentPage int       `json:"current_page,omitempty"`
 	Progress    float64   `json:"progress,omitempty"`
 	Completed   bool      `json:"completed,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+
+	// gallery_cache replication payload.
+	Title              string                   `json:"title,omitempty"`
+	TitleJPN           string                   `json:"title_jpn,omitempty"`
+	Category           string                   `json:"category,omitempty"`
+	Thumbnail          string                   `json:"thumbnail,omitempty"`
+	PageCount          int                      `json:"page_count,omitempty"`
+	Rating             float64                  `json:"rating,omitempty"`
+	RatingCount        int                      `json:"rating_count,omitempty"`
+	Uploader           string                   `json:"uploader,omitempty"`
+	Posted             string                   `json:"posted,omitempty"`
+	PostedAt           *time.Time               `json:"posted_at,omitempty"`
+	Language           string                   `json:"language,omitempty"`
+	Translated         bool                     `json:"translated,omitempty"`
+	FileSize           string                   `json:"file_size,omitempty"`
+	Favorited          int                      `json:"favorited,omitempty"`
+	Expunged           bool                     `json:"expunged,omitempty"`
+	Tags               []model.Tag              `json:"tags,omitempty"`
+	Pages              []string                 `json:"pages,omitempty"`
+	Thumbnails         []model.GalleryPageThumb `json:"thumbnails,omitempty"`
+	MetaFetchedAt      *time.Time               `json:"meta_fetched_at,omitempty"`
+	DetailsFetchedAt   *time.Time               `json:"details_fetched_at,omitempty"`
+	PagesFetchedAt     *time.Time               `json:"pages_fetched_at,omitempty"`
+	ThumbnailFetchedAt *time.Time               `json:"thumbnail_fetched_at,omitempty"`
 }
 
 // Change is a single replicated mutation: an upsert carries the row state at

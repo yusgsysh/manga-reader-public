@@ -101,12 +101,6 @@ func New(cfg *config.Config, logger *slog.Logger, opts ...Option) (*App, error) 
 		return nil, fmt.Errorf("database init failed: %w", err)
 	}
 
-	if n, cleanErr := db.CleanupGalleryCache(context.Background()); cleanErr != nil {
-		logger.Warn("gallery cache startup cleanup failed", "error", cleanErr)
-	} else if n > 0 {
-		logger.Info("gallery cache startup cleanup", "deleted", n)
-	}
-
 	settingsSvc := settings.New(db.Client, logger)
 	merged, settingsErr := settingsSvc.Load(context.Background(), cfg)
 	if settingsErr != nil {
@@ -122,6 +116,20 @@ func New(cfg *config.Config, logger *slog.Logger, opts ...Option) (*App, error) 
 	syncSvc := synclib.NewService(db.Client, synclib.Options{HostToken: merged.SyncToken})
 	if merged.SyncToken != "" {
 		logger.Info("sync host enabled")
+	}
+
+	// Record gallery cache cleanup tombstones after syncSvc is available.
+	if cacheKeys, cleanErr := db.CleanupGalleryCache(context.Background()); cleanErr != nil {
+		logger.Warn("gallery cache startup cleanup failed", "error", cleanErr)
+	} else if len(cacheKeys) > 0 {
+		logger.Info("gallery cache startup cleanup", "deleted", len(cacheKeys))
+		syncKeys := make([]synclib.Key, len(cacheKeys))
+		for i, k := range cacheKeys {
+			syncKeys[i] = synclib.Key{GalleryID: k.GalleryID, Token: k.Token}
+		}
+		if recErr := syncSvc.RecordDeletes(context.Background(), synclib.EntityGalleryCache, syncKeys); recErr != nil {
+			logger.Warn("record sync cache cleanup failed", "error", recErr)
+		}
 	}
 
 	initial, err := storage.New(context.Background(), merged.Storage)

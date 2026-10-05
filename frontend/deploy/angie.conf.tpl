@@ -234,6 +234,20 @@ http {
             proxy_buffering off;
         }
 
+        # =========================================================
+        # Sync push: snapshots of gallery_cache rows (pages, tags,
+        # thumbnail geometry) can exceed the default 1m
+        # client_max_body_size, so give this endpoint headroom.
+        # ========================================================
+
+        location = /api/sync/push {
+            client_max_body_size 64m;
+
+            proxy_pass http://backend;
+
+            proxy_buffering off;
+        }
+
         # ========================================================
         # EhTagTranslation dictionary
         # ========================================================
