@@ -10,6 +10,7 @@ import (
 	"github.com/minio/minio-go/v7"
 
 	"manga-reader/internal/database"
+	synclib "manga-reader/internal/sync"
 )
 
 type ImageCache interface {
@@ -23,6 +24,10 @@ type Server struct {
 	Client *http.Client
 	DB     *database.DB
 	Cache  ImageCache
+
+	// syncSvc serves the sync protocol endpoints and records outbox entries
+	// for local mutations of synced tables. Optional (nil disables sync).
+	syncSvc *synclib.Service
 
 	// devTools enables the /api/dev/* debug endpoints; simulateUpstreamDown is
 	// a runtime switch they toggle to make upstream-backed endpoints fail.
@@ -39,6 +44,7 @@ type Config struct {
 	DB       *database.DB
 	Cache    ImageCache
 	DevTools bool
+	Sync     *synclib.Service
 }
 
 func New(cfg Config) *Server {
@@ -46,6 +52,7 @@ func New(cfg Config) *Server {
 		Client:   cfg.Client,
 		DB:       cfg.DB,
 		Cache:    cfg.Cache,
+		syncSvc:  cfg.Sync,
 		devTools: cfg.DevTools,
 	}
 }
@@ -53,6 +60,10 @@ func New(cfg Config) *Server {
 func (s *Server) RegisterRoutes(r *gin.Engine) {
 	// Simulated upstream outage must be checked before any upstream handler.
 	r.Use(s.upstreamSimulationMiddleware())
+
+	if s.syncSvc != nil {
+		s.syncSvc.RegisterRoutes(r)
+	}
 
 	if s.devTools {
 		r.GET("/api/dev/upstream-down", s.handleDevUpstreamDownGet)

@@ -18,6 +18,7 @@ import (
 	"manga-reader/internal/database"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/handler"
+	synclib "manga-reader/internal/sync"
 )
 
 func CORSMiddleware() gin.HandlerFunc {
@@ -110,10 +111,16 @@ func run() error {
 		logger.Info("gallery cache startup cleanup", "deleted", n)
 	}
 
+	syncSvc := synclib.NewService(db.Client, synclib.Options{HostToken: cfg.SyncToken})
+	if cfg.SyncToken != "" {
+		logger.Info("sync host enabled")
+	}
+
 	handlerCfg := handler.Config{
 		Client:   client,
 		DB:       db,
 		DevTools: cfg.DevTools,
+		Sync:     syncSvc,
 	}
 
 	if cfg.MinIO.IsValid() {
@@ -162,6 +169,10 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Sync client engine: pushes local changes and maintains the SSE
+	// subscription to the configured peer. Exits with ctx on shutdown.
+	go syncSvc.RunEngine(ctx)
 
 	errCh := make(chan error, 1)
 	go func() {

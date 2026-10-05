@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"manga-reader/internal/model"
+	synclib "manga-reader/internal/sync"
 )
 
 func (s *Server) handleGetProgress(c *gin.Context) {
@@ -137,17 +138,27 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 		return
 	}
 
+	if s.syncSvc != nil {
+		synclib.LogRecordError(
+			s.syncSvc.RecordUpsert(ctx, synclib.EntityReadingProgress, id, token),
+			synclib.EntityReadingProgress, id, token)
+	}
+
 	// Reading activity refreshes the bookshelf entry's updated_at so the
 	// shelf can be ordered by recent activity. Best-effort: items not in the
 	// bookshelf affect zero rows.
-	if bErr := s.DB.Client.Bookshelf.Update().
+	if n, bErr := s.DB.Client.Bookshelf.Update().
 		Where(
 			bookshelf.GalleryID(id),
 			bookshelf.Token(token),
 		).
 		SetUpdatedAt(now).
-		Exec(ctx); bErr != nil {
+		Save(ctx); bErr != nil {
 		slog.Warn("bump bookshelf updated_at failed", "error", bErr)
+	} else if n > 0 && s.syncSvc != nil {
+		synclib.LogRecordError(
+			s.syncSvc.RecordUpsert(ctx, synclib.EntityBookshelf, id, token),
+			synclib.EntityBookshelf, id, token)
 	}
 
 	p, err := s.DB.Client.ReadingProgress.Query().
@@ -183,6 +194,29 @@ func (s *Server) handleReadingProgressCleanup(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
+	// Collect the keys first so the purge can be replicated as tombstones;
+	// history cleanup is global by design (both ends keep the same retention).
+	var purgeKeys []synclib.Key
+	if s.syncSvc != nil {
+		pred := readingprogress.UpdatedAtLT(time.Now().UTC().AddDate(0, 0, -days))
+		if days == 0 {
+			pred = nil
+		}
+		q := s.DB.Client.ReadingProgress.Query()
+		if pred != nil {
+			q = q.Where(pred)
+		}
+		rows, qErr := q.All(ctx)
+		if qErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to cleanup reading progress"})
+			return
+		}
+		purgeKeys = make([]synclib.Key, 0, len(rows))
+		for _, row := range rows {
+			purgeKeys = append(purgeKeys, synclib.Key{GalleryID: row.GalleryID, Token: row.Token})
+		}
+	}
+
 	var deleted int
 	if days == 0 {
 		deleted, err = s.DB.Client.ReadingProgress.Delete().Exec(ctx)
@@ -195,6 +229,12 @@ func (s *Server) handleReadingProgressCleanup(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to cleanup reading progress"})
 		return
+	}
+
+	if s.syncSvc != nil && len(purgeKeys) > 0 {
+		if recErr := s.syncSvc.RecordDeletes(ctx, synclib.EntityReadingProgress, purgeKeys); recErr != nil {
+			slog.Warn("record sync purge failed", "error", recErr)
+		}
 	}
 
 	if s.DB != nil {

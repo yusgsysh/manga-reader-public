@@ -1315,6 +1315,111 @@ Cache-Control: no-store
 
 ---
 
+### 28. Data Sync（数据同步）
+
+多实例双向同步阅读进度与书架。同步范围：`reading_progress`、`bookshelf`（settings 不同步）。
+
+架构：所有连接均由桌面端 / 客户端主动发起（`POST /api/sync/push` 推送 + `GET /api/sync/events` SSE 监听），服务端不反向连接客户端。本地变更写入 `sync_change` outbox 表（自增 `id` 即游标），由后台引擎合并推送；远端变更应用到本地后通过本地 SSE（`GET /api/events/changes`）通知前端刷新。
+
+合并语义：按行 LWW（比较 `updated_at`，相等跳过保证幂等、防回声）；删除使用 tombstone；应用远端变更不再写入 outbox。
+
+**同步实体：**
+
+| entity | 说明 | key |
+|--------|------|-----|
+| `reading_progress` | 阅读进度 | `gallery_id` + `token` |
+| `bookshelf` | 书架收藏 | `gallery_id` + `token` |
+
+**客户端配置（无鉴权，与全站一致）：**
+
+`GET /api/sync/config`
+
+```json
+{ "enabled": true, "server_url": "https://server.example.com", "token": "********" }
+```
+
+`PUT /api/sync/config` — 部分更新；`token` 传 `********` 保持原值，传空串清除：
+
+```json
+{ "enabled": true, "server_url": "https://server.example.com", "token": "my-secret" }
+```
+
+响应同 GET（脱敏）。设置 `enabled` 会即时启停后台同步引擎。
+
+`GET /api/sync/status`
+
+```json
+{
+  "enabled": true,
+  "configured": true,
+  "server_url": "https://server.example.com",
+  "sse_connected": true,
+  "last_sync_at": "2026-01-01T00:00:00Z",
+  "last_error": "",
+  "cursor": 12,
+  "last_pushed_id": 4,
+  "pending": 0
+}
+```
+
+**本地事件流（供前端刷新，无鉴权）：**
+
+`GET /api/events/changes` — SSE，连接后立即推送 `data: {}`；本地任意同步数据变更（含远端应用）再推 `data: {}`。Angie 需为该路径关闭缓冲（见 `frontend/deploy/angie.conf.tpl`）。
+
+**宿主端点（仅当服务端设置 `MANGA_READER_SYNC_TOKEN` 时注册，否则 `404`）：**
+
+鉴权：请求头 `X-Sync-Token: <token>`，不匹配返回 `401 {"error":"invalid sync token"}`。
+
+`POST /api/sync/push` — 一步推 + 拉。请求：
+
+```json
+{
+  "cursor": 12,
+  "snapshot": false,
+  "changes": [
+    { "entity": "reading_progress", "gallery_id": 100, "token": "abc", "op": "upsert",
+      "row": { "gallery_id": 100, "token": "abc", "current_page": 5, "progress": 0.5,
+               "completed": false, "created_at": "...", "updated_at": "..." } },
+    { "entity": "bookshelf", "gallery_id": 200, "token": "def", "op": "delete",
+      "deleted_at": "..." }
+  ]
+}
+```
+
+- `cursor == 0 && snapshot == true`：返回全量快照（首次引导）。
+- `cursor`：调用方已持有的 outbox 游标，响应会裁剪 `id <= cursor` 的 outbox。
+
+响应：
+
+```json
+{ "cursor": 15, "changes": [ ... ], "applied": 3, "skipped": 1 }
+```
+
+- `applied`：LWW 胜出并落库的远端行数；`skipped`：过期或回声跳过。
+- `cursor`：当前 outbox 最大 id，调用方**无条件采纳**（服务端重置时可回退）。
+
+`GET /api/sync/events` — 宿主 SSE。连接后推送 `data: {"cursor": N}`；此后每次 outbox 新增推送 `data: {"cursor": M}`（`M > N`）。客户端收到后延迟去抖（2s）执行 push 循环，心跳间隔 25s，断线指数退避（1s→60s），并有 60s 轮询兜底。
+
+**示例：**
+
+```bash
+# 服务端设置令牌后，桌面端配置并引导
+curl -X PUT http://localhost:8080/api/sync/config -H 'Content-Type: application/json' \
+  -d '{"enabled":true,"server_url":"http://server:8080","token":"my-secret"}'
+
+# 手动推 + 拉
+curl -X POST http://server:8080/api/sync/push \
+  -H 'Content-Type: application/json' -H 'X-Sync-Token: my-secret' \
+  -d '{"cursor":0,"snapshot":true,"changes":[]}'
+
+# 监听远端变更
+curl -N http://server:8080/api/sync/events -H 'X-Sync-Token: my-secret'
+```
+
+**Error Responses:** `400` 配置无效（如 `server_url` 缺少 http/https、请求体非法）、`401` 令牌不匹配、`404` 宿主端点未启用。
+
+---
+
 ## 缓存（gallery-cache，无 TTL + read-through）
 
 后端缓存**没有 TTL**：`gallery_cache` 一旦写入即被永久信任，命中直接返回，不再按时间回源。

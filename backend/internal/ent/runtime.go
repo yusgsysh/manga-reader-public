@@ -8,6 +8,8 @@ import (
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/readingprogress"
 	"manga-reader/internal/ent/schema"
+	"manga-reader/internal/ent/syncchange"
+	"manga-reader/internal/ent/syncstate"
 	"time"
 
 	"github.com/google/uuid"
@@ -175,4 +177,26 @@ func init() {
 	readingprogress.DefaultUpdatedAt = readingprogressDescUpdatedAt.Default.(func() time.Time)
 	// readingprogress.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	readingprogress.UpdateDefaultUpdatedAt = readingprogressDescUpdatedAt.UpdateDefault.(func() time.Time)
+	syncchangeFields := schema.SyncChange{}.Fields()
+	_ = syncchangeFields
+	// syncchangeDescOp is the schema descriptor for op field.
+	syncchangeDescOp := syncchangeFields[3].Descriptor()
+	// syncchange.DefaultOp holds the default value on creation for the op field.
+	syncchange.DefaultOp = syncchangeDescOp.Default.(string)
+	// syncchangeDescChangedAt is the schema descriptor for changed_at field.
+	syncchangeDescChangedAt := syncchangeFields[4].Descriptor()
+	// syncchange.DefaultChangedAt holds the default value on creation for the changed_at field.
+	syncchange.DefaultChangedAt = syncchangeDescChangedAt.Default.(func() time.Time)
+	syncstateFields := schema.SyncState{}.Fields()
+	_ = syncstateFields
+	// syncstateDescValue is the schema descriptor for value field.
+	syncstateDescValue := syncstateFields[1].Descriptor()
+	// syncstate.DefaultValue holds the default value on creation for the value field.
+	syncstate.DefaultValue = syncstateDescValue.Default.(string)
+	// syncstateDescUpdatedAt is the schema descriptor for updated_at field.
+	syncstateDescUpdatedAt := syncstateFields[2].Descriptor()
+	// syncstate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	syncstate.DefaultUpdatedAt = syncstateDescUpdatedAt.Default.(func() time.Time)
+	// syncstate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	syncstate.UpdateDefaultUpdatedAt = syncstateDescUpdatedAt.UpdateDefault.(func() time.Time)
 }

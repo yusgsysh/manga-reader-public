@@ -14,6 +14,9 @@ type Config struct {
 	MinIO       MinIOConfig
 	LogLevel    string
 	Environment string
+	// SyncToken enables the peer-facing sync endpoints when non-empty
+	// (/api/sync/push and /api/sync/events). Empty disables the sync host.
+	SyncToken string
 	// DevTools enables the /api/dev/* debug endpoints (off by default). They
 	// exist so a deployment can simulate an ExHentai outage at runtime to
 	// verify the frontend's offline fallback.
@@ -74,6 +77,7 @@ func Load() (*Config, error) {
 		LogLevel:    getEnv("LOG_LEVEL", "warn"),
 		Environment: getEnv("ENVIRONMENT", "production"),
 		DevTools:    parseBoolEnv("MANGA_READER_DEV_TOOLS", false),
+		SyncToken:   getEnv("MANGA_READER_SYNC_TOKEN", ""),
 		Cookie: CookieConfig{
 			IpbMemberID: getEnv("EHENTAI_COOKIE_IPB_MEMBER_ID", ""),
 			IpbPassHash: getEnv("EHENTAI_COOKIE_IPB_PASS_HASH", ""),

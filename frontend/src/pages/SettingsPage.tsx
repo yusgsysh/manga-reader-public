@@ -10,6 +10,7 @@ import {
 } from "@phosphor-icons/react";
 import {
   Button,
+  Input,
   Switch,
   useKumoToastManager,
   cn,
@@ -17,6 +18,14 @@ import {
 import { HexColorPicker, HexColorInput } from "react-colorful";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchUpstreamDown, setUpstreamDown } from "../api/dev";
+import {
+  SYNC_TOKEN_MASK,
+  fetchSyncConfig,
+  fetchSyncStatus,
+  saveSyncConfig,
+  type SyncConfig,
+  type SyncConfigUpdate,
+} from "../api/sync";
 import { ApiRequestError } from "../api/client";
 import { useTheme } from "../hooks/useTheme";
 import { useTagTranslation } from "../hooks/useTagTranslation";
@@ -303,6 +312,187 @@ function DevToolsSection() {
   );
 }
 
+function SyncSection() {
+  const toast = useKumoToastManager();
+  const queryClient = useQueryClient();
+
+  const configQuery = useQuery({
+    queryKey: ["sync-config"],
+    queryFn: fetchSyncConfig,
+    retry: false,
+    staleTime: SETTINGS_STALE_TIME,
+  });
+  const statusQuery = useQuery({
+    queryKey: ["sync-status"],
+    queryFn: fetchSyncStatus,
+    retry: false,
+    staleTime: 0,
+    refetchInterval: 5000,
+  });
+
+  const [serverURL, setServerURL] = useState("");
+  const [token, setToken] = useState("");
+  const [enabled, setEnabled] = useState(false);
+  const [tokenStored, setTokenStored] = useState(false);
+  // Adopt loaded config during render (React's "adjust state when a prop
+  // changes" pattern); structural sharing keeps the reference stable so
+  // typing is not clobbered by unrelated refetches.
+  const [appliedConfig, setAppliedConfig] = useState<SyncConfig | null>(null);
+  const config = configQuery.data;
+  if (config && config !== appliedConfig) {
+    setAppliedConfig(config);
+    setServerURL(config.server_url);
+    setEnabled(config.enabled);
+    setTokenStored(config.token === SYNC_TOKEN_MASK);
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: (update: SyncConfigUpdate) => saveSyncConfig(update),
+    onSuccess: (cfg) => {
+      queryClient.setQueryData(["sync-config"], cfg);
+      setTokenStored(cfg.token === SYNC_TOKEN_MASK);
+      setToken("");
+      void statusQuery.refetch();
+      toast.add({ title: "同步配置已保存", variant: "success" });
+    },
+    onError: (error) => {
+      toast.add({
+        title: "保存同步配置失败",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "error",
+      });
+    },
+  });
+
+  const handleSave = () => {
+    const update: SyncConfigUpdate = { enabled, server_url: serverURL.trim() };
+    const trimmedToken = token.trim();
+    if (trimmedToken !== "") update.token = trimmedToken;
+    saveMutation.mutate(update);
+  };
+
+  const handleClearToken = () => {
+    setToken("");
+    saveMutation.mutate({ token: "" });
+  };
+
+  const status = statusQuery.data;
+
+  return (
+    <Section title="数据同步">
+      <div className="space-y-4">
+        <div className="card-surface space-y-4 p-4 text-sm">
+          {configQuery.isLoading ? (
+            <div className="flex items-center gap-2 text-kumo-subtle">
+              <CircleNotch className="size-4 animate-spin" />
+              正在读取…
+            </div>
+          ) : configQuery.isError ? (
+            <p className="text-kumo-subtle">无法读取同步配置。</p>
+          ) : (
+            <>
+              <Switch
+                label="启用数据同步"
+                checked={enabled}
+                disabled={saveMutation.isPending}
+                onCheckedChange={setEnabled}
+              />
+              <div>
+                <div className="mb-2 text-sm font-medium">服务端地址</div>
+                <Input
+                  type="url"
+                  placeholder="https://your-server.example.com"
+                  aria-label="同步服务端地址"
+                  value={serverURL}
+                  onChange={(e) => setServerURL(e.target.value)}
+                  disabled={saveMutation.isPending}
+                />
+              </div>
+              <div>
+                <div className="mb-2 text-sm font-medium">
+                  同步令牌
+                  {tokenStored && (
+                    <span className="ml-2 text-xs font-normal text-kumo-subtle">
+                      已保存
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    type="password"
+                    autoComplete="off"
+                    placeholder={
+                      tokenStored ? "留空保持现有令牌" : "服务端 MANGA_READER_SYNC_TOKEN"
+                    }
+                    aria-label="同步令牌"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    disabled={saveMutation.isPending}
+                  />
+                  {tokenStored && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleClearToken}
+                      disabled={saveMutation.isPending}
+                    >
+                      清除
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button onClick={handleSave} disabled={saveMutation.isPending}>
+                  {saveMutation.isPending && (
+                    <CircleNotch className="mr-1 size-4 animate-spin" />
+                  )}
+                  保存
+                </Button>
+                <p className="text-xs text-kumo-subtle">
+                  双向同步阅读进度与书架；服务端需设置 MANGA_READER_SYNC_TOKEN。
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="card-surface p-4 text-sm">
+          <dl className="space-y-1.5">
+            <div className="flex justify-between gap-4">
+              <dt className="text-kumo-subtle">连接状态</dt>
+              <dd className="tnum">
+                {!status?.configured
+                  ? "未配置"
+                  : status.sse_connected
+                    ? "实时连接"
+                    : "未连接"}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-kumo-subtle">待推送变更</dt>
+              <dd className="tnum">{status?.pending ?? "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-kumo-subtle">最近同步</dt>
+              <dd className="tnum">
+                {status?.last_sync_at ? formatDateTime(status.last_sync_at) : "—"}
+              </dd>
+            </div>
+            {status?.last_error && (
+              <div className="flex justify-between gap-4">
+                <dt className="text-kumo-subtle">最近错误</dt>
+                <dd className="text-right text-xs text-red-500">
+                  {status.last_error}
+                </dd>
+              </div>
+            )}
+          </dl>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 export function SettingsPage() {
   useDocumentTitle("设置");
   return (
@@ -314,6 +504,7 @@ export function SettingsPage() {
       <div className="space-y-8">
         <AppearanceSection />
         <TagDatabaseSection />
+        <SyncSection />
         <DevToolsSection />
       </div>
     </div>

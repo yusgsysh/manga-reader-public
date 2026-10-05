@@ -17,3 +17,9 @@ type PrefillJob func(*sql.Selector)
 
 // ReadingProgress is the predicate function for readingprogress builders.
 type ReadingProgress func(*sql.Selector)
+
+// SyncChange is the predicate function for syncchange builders.
+type SyncChange func(*sql.Selector)
+
+// SyncState is the predicate function for syncstate builders.
+type SyncState func(*sql.Selector)
