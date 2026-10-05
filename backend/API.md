@@ -1399,11 +1399,11 @@ Cache-Control: no-store
 
 ### 28. Data Sync（数据同步）
 
-多实例双向同步阅读进度与书架。同步范围：`reading_progress`、`bookshelf`（settings 不同步）。
+多实例双向同步阅读进度、书架与画廊缓存。同步范围：`reading_progress`、`bookshelf`、`gallery_cache`（settings 不同步）。
 
 架构：所有连接均由桌面端 / 客户端主动发起（`POST /api/sync/push` 推送 + `GET /api/sync/events` SSE 监听），服务端不反向连接客户端。本地变更写入 `sync_change` outbox 表（自增 `id` 即游标），由后台引擎合并推送；远端变更应用到本地后通过本地 SSE（`GET /api/events/changes`）通知前端刷新。
 
-合并语义：按行 LWW（比较 `updated_at`，相等跳过保证幂等、防回声）；删除使用 tombstone；应用远端变更不再写入 outbox。
+合并语义：按行 LWW（比较 `updated_at`，相等跳过保证幂等、防回声）；删除使用 tombstone；应用远端变更不再写入 outbox。`gallery_cache` 行在 LWW 胜出时按字段合并（空值不覆盖），镜像本地 upsert 语义。
 
 **同步实体：**
 
@@ -1411,6 +1411,7 @@ Cache-Control: no-store
 |--------|------|-----|
 | `reading_progress` | 阅读进度 | `gallery_id` + `token` |
 | `bookshelf` | 书架收藏 | `gallery_id` + `token` |
+| `gallery_cache` | 画廊元数据/页面/缩略图 | `gallery_id` + `token` |
 
 **客户端配置（无鉴权，与全站一致）：**
 
