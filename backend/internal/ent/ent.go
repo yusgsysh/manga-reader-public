@@ -11,6 +11,8 @@ import (
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/readingprogress"
 	"manga-reader/internal/ent/setting"
+	"manga-reader/internal/ent/syncchange"
+	"manga-reader/internal/ent/syncstate"
 	"reflect"
 	"sync"
 
@@ -82,6 +84,8 @@ func checkColumn(t, c string) error {
 			prefilljob.Table:      prefilljob.ValidColumn,
 			readingprogress.Table: readingprogress.ValidColumn,
 			setting.Table:         setting.ValidColumn,
+			syncchange.Table:      syncchange.ValidColumn,
+			syncstate.Table:       syncstate.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

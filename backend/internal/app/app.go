@@ -22,6 +22,7 @@ import (
 	"manga-reader/internal/handler"
 	"manga-reader/internal/settings"
 	"manga-reader/internal/storage"
+	synclib "manga-reader/internal/sync"
 )
 
 // App owns every long lived resource of the service.
@@ -33,8 +34,10 @@ type App struct {
 	Handler  *handler.Server
 	Router   *gin.Engine
 	Settings *settings.Service
+	Sync     *synclib.Service
 
 	setLogLevel func(level string)
+	syncCancel  context.CancelFunc
 	server      *http.Server
 	closed      bool
 }
@@ -116,6 +119,11 @@ func New(cfg *config.Config, logger *slog.Logger, opts ...Option) (*App, error) 
 		logger.Warn("ExHentai cookies are not configured; set them on the settings page before searching")
 	}
 
+	syncSvc := synclib.NewService(db.Client, synclib.Options{HostToken: merged.SyncToken})
+	if merged.SyncToken != "" {
+		logger.Info("sync host enabled")
+	}
+
 	initial, err := storage.New(context.Background(), merged.Storage)
 	if err != nil {
 		db.Close()
@@ -132,6 +140,7 @@ func New(cfg *config.Config, logger *slog.Logger, opts ...Option) (*App, error) 
 		Cache:    store,
 		DevTools: merged.DevTools,
 		Settings: settingsSvc,
+		Sync:     syncSvc,
 	})
 
 	port := merged.Port
@@ -146,6 +155,7 @@ func New(cfg *config.Config, logger *slog.Logger, opts ...Option) (*App, error) 
 		Storage:  store,
 		Handler:  srv,
 		Settings: settingsSvc,
+		Sync:     syncSvc,
 		server: &http.Server{
 			Addr:              port,
 			Handler:           gin.New(),
@@ -191,6 +201,13 @@ func New(cfg *config.Config, logger *slog.Logger, opts ...Option) (*App, error) 
 	a.Router = r
 	a.server.Handler = r
 
+	// Sync client engine: pushes local changes and maintains the SSE
+	// subscription to the configured peer. Idle until sync is enabled from
+	// the settings page; exits with the context on shutdown.
+	engCtx, engCancel := context.WithCancel(context.Background())
+	a.syncCancel = engCancel
+	go syncSvc.RunEngine(engCtx)
+
 	return a, nil
 }
 
@@ -234,6 +251,9 @@ func (a *App) Shutdown(ctx context.Context) error {
 	}
 	a.closed = true
 
+	if a.syncCancel != nil {
+		a.syncCancel()
+	}
 	a.Handler.StopPrefill()
 
 	var errs []error

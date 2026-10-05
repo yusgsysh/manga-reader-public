@@ -202,6 +202,26 @@ http {
         }
 
         # ========================================================
+        # SSE change streams (peer sync + local cache invalidation)
+        #
+        # GET /api/sync/events | /api/events/changes
+        #
+        # Long-lived connections: buffering off so events flush
+        # immediately, a generous read timeout on top of the backend's
+        # 25s heartbeats, never cached or compressed.
+        # ========================================================
+
+        location ~ ^/api/(sync/events|events/changes)$ {
+            proxy_pass http://backend;
+
+            proxy_buffering off;
+            proxy_cache off;
+            gzip off;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+        }
+
+        # ========================================================
         # All other API endpoints: pass through, never cached.
         #
         # /api/bookshelf, /api/progress, /api/recently-read,
