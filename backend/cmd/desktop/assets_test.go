@@ -235,7 +235,7 @@ func TestApplyDesktopDefaults_DoesNotClobberExistingEnv(t *testing.T) {
 	}
 }
 
-func TestLoadDesktopEnvFile(t *testing.T) {
+func TestLoadEnvFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.env")
 	content := "# comment\n\nEHENTAI_COOKIE_IPB_MEMBER_ID=123\nEHENTAI_COOKIE_IPB_PASS_HASH=\"abc\"\nMALFORMED\nPRESET=from-shell\n"
@@ -248,8 +248,8 @@ func TestLoadDesktopEnvFile(t *testing.T) {
 	t.Setenv("EHENTAI_COOKIE_IPB_PASS_HASH", "")
 	t.Setenv("PRESET", "from-shell")
 
-	if got := loadDesktopEnvFile(); got != path {
-		t.Fatalf("loadDesktopEnvFile() = %q, want %q", got, path)
+	if got := loadEnvFile(); got != path {
+		t.Fatalf("loadEnvFile() = %q, want %q", got, path)
 	}
 	if os.Getenv("EHENTAI_COOKIE_IPB_MEMBER_ID") != "123" {
 		t.Fatalf("member id = %q", os.Getenv("EHENTAI_COOKIE_IPB_MEMBER_ID"))
@@ -262,10 +262,10 @@ func TestLoadDesktopEnvFile(t *testing.T) {
 	}
 }
 
-func TestLoadDesktopEnvFile_MissingFileIsNotAnError(t *testing.T) {
+func TestLoadEnvFile_MissingFileIsNotAnError(t *testing.T) {
 	t.Setenv("MANGA_READER_CONFIG_FILE", filepath.Join(t.TempDir(), "nope.env"))
-	if got := loadDesktopEnvFile(); got != "" {
-		t.Fatalf("loadDesktopEnvFile() = %q, want empty", got)
+	if got := loadEnvFile(); got != "" {
+		t.Fatalf("loadEnvFile() = %q, want empty", got)
 	}
 }
 
