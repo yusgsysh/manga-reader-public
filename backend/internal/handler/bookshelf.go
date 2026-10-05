@@ -18,6 +18,7 @@ import (
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/model"
+	synclib "manga-reader/internal/sync"
 )
 
 // galleryPrefetchGroup coalesces concurrent background prefetches for the same
@@ -231,6 +232,12 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 		return
 	}
 
+	if s.syncSvc != nil {
+		synclib.LogRecordError(
+			s.syncSvc.RecordUpsert(ctx, synclib.EntityBookshelf, id, token),
+			synclib.EntityBookshelf, id, token)
+	}
+
 	// Warm the offline cache in the background (metadata + pages).
 	go s.prefetchGallery(id, token, gallery)
 
@@ -290,6 +297,14 @@ func (s *Server) handleBookshelfRemove(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("remove bookshelf failed: %v", err)})
 		return
+	}
+
+	// Record even when the local row did not exist: the tombstone also
+	// removes a stale copy on the peer, matching the user's intent.
+	if s.syncSvc != nil {
+		synclib.LogRecordError(
+			s.syncSvc.RecordDelete(ctx, synclib.EntityBookshelf, id, token),
+			synclib.EntityBookshelf, id, token)
 	}
 
 	if s.DB != nil {

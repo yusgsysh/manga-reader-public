@@ -119,6 +119,41 @@ var (
 		Columns:    SettingsColumns,
 		PrimaryKey: []*schema.Column{SettingsColumns[0]},
 	}
+	// SyncChangeColumns holds the columns for the "sync_change" table.
+	SyncChangeColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "entity", Type: field.TypeString},
+		{Name: "gallery_id", Type: field.TypeInt64},
+		{Name: "token", Type: field.TypeString},
+		{Name: "op", Type: field.TypeString, Default: "upsert"},
+		{Name: "changed_at", Type: field.TypeTime},
+	}
+	// SyncChangeTable holds the schema information for the "sync_change" table.
+	SyncChangeTable = &schema.Table{
+		Name:       "sync_change",
+		Columns:    SyncChangeColumns,
+		PrimaryKey: []*schema.Column{SyncChangeColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "syncchange_entity_gallery_id_token",
+				Unique:  false,
+				Columns: []*schema.Column{SyncChangeColumns[1], SyncChangeColumns[2], SyncChangeColumns[3]},
+			},
+		},
+	}
+	// SyncStateColumns holds the columns for the "sync_state" table.
+	SyncStateColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "key", Type: field.TypeString, Unique: true},
+		{Name: "value", Type: field.TypeString, Default: ""},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// SyncStateTable holds the schema information for the "sync_state" table.
+	SyncStateTable = &schema.Table{
+		Name:       "sync_state",
+		Columns:    SyncStateColumns,
+		PrimaryKey: []*schema.Column{SyncStateColumns[0]},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		BookshelfTable,
@@ -126,6 +161,8 @@ var (
 		PrefillJobTable,
 		ReadingProgressTable,
 		SettingsTable,
+		SyncChangeTable,
+		SyncStateTable,
 	}
 )
 
@@ -144,5 +181,11 @@ func init() {
 	}
 	SettingsTable.Annotation = &entsql.Annotation{
 		Table: "settings",
+	}
+	SyncChangeTable.Annotation = &entsql.Annotation{
+		Table: "sync_change",
+	}
+	SyncStateTable.Annotation = &entsql.Annotation{
+		Table: "sync_state",
 	}
 }

@@ -20,3 +20,9 @@ type ReadingProgress func(*sql.Selector)
 
 // Setting is the predicate function for setting builders.
 type Setting func(*sql.Selector)
+
+// SyncChange is the predicate function for syncchange builders.
+type SyncChange func(*sql.Selector)
+
+// SyncState is the predicate function for syncstate builders.
+type SyncState func(*sql.Selector)

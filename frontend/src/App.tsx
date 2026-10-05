@@ -9,6 +9,7 @@ import {
 } from "@cloudflare/kumo";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { NavigationProvider } from "./context/NavigationContext";
+import { useSyncEvents } from "./hooks/useSyncEvents";
 import { GLOBAL_STALE_TIME } from "./lib/cacheConfig";
 import { scheduleIdle } from "./lib/idle";
 import { MotionProvider } from "./lib/motion";
@@ -31,6 +32,13 @@ const AppLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(
 );
 AppLink.displayName = "AppLink";
 
+// Refreshes progress/bookshelf caches when the backend signals a change
+// (local writes on other tabs, rows applied from a sync peer).
+function SyncEventBridge() {
+  useSyncEvents();
+  return null;
+}
+
 export default function App() {
   // The tag-translation database is a 1.75 MB payload whose inflate + index
   // build costs ~1 s of main-thread time on low-end devices. Kicking the load
@@ -43,6 +51,7 @@ export default function App() {
       <ThemeProvider>
         <MotionProvider>
           <QueryClientProvider client={queryClient}>
+            <SyncEventBridge />
             <LinkProvider component={AppLink}>
               <TooltipProvider>
                 <Toasty>

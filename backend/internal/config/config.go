@@ -14,6 +14,9 @@ type Config struct {
 	Storage     StorageConfig
 	LogLevel    string
 	Environment string
+	// SyncToken enables the peer-facing sync endpoints when non-empty
+	// (/api/sync/push and /api/sync/events). Empty disables the sync host.
+	SyncToken string
 	// DevTools enables the /api/dev/* debug endpoints (off by default). They
 	// exist so a deployment can simulate an ExHentai outage at runtime to
 	// verify the frontend's offline fallback.
@@ -155,6 +158,7 @@ func LoadWith(lookup EnvLookup) (*Config, error) {
 		LogLevel:    l.get("LOG_LEVEL", "warn"),
 		Environment: l.get("ENVIRONMENT", "production"),
 		DevTools:    l.getBool("MANGA_READER_DEV_TOOLS", false),
+		SyncToken:   l.get("MANGA_READER_SYNC_TOKEN", ""),
 		Storage:     l.storageConfig(),
 	}
 

@@ -11,6 +11,7 @@ import (
 	"manga-reader/internal/database"
 	"manga-reader/internal/settings"
 	"manga-reader/internal/storage"
+	synclib "manga-reader/internal/sync"
 )
 
 // ImageCache is the slice of storage.Storage the handlers actually use. The
@@ -31,6 +32,10 @@ type Server struct {
 	// nil in tests that do not care about it, which leaves the route unmounted.
 	settings *settings.Service
 
+	// syncSvc serves the sync protocol endpoints and records outbox entries
+	// for local mutations of synced tables. Optional (nil disables sync).
+	syncSvc *synclib.Service
+
 	// devTools enables the /api/dev/* debug endpoints and simulateUpstreamDown
 	// is the runtime switch they toggle to make upstream-backed endpoints fail.
 	// Both are atomic because the settings page can change them while requests
@@ -50,6 +55,8 @@ type Config struct {
 	DevTools bool
 	// Settings backs /api/settings. When nil the route is not mounted.
 	Settings *settings.Service
+	// Sync serves the sync protocol endpoints. When nil they are not mounted.
+	Sync *synclib.Service
 }
 
 func New(cfg Config) *Server {
@@ -58,6 +65,7 @@ func New(cfg Config) *Server {
 		DB:       cfg.DB,
 		Cache:    cfg.Cache,
 		settings: cfg.Settings,
+		syncSvc:  cfg.Sync,
 	}
 	s.devTools.Store(cfg.DevTools)
 	return s
@@ -79,6 +87,10 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 	// the setting can be toggled at runtime.
 	r.GET("/api/dev/upstream-down", s.handleDevUpstreamDownGet)
 	r.PUT("/api/dev/upstream-down", s.handleDevUpstreamDownPut)
+
+	if s.syncSvc != nil {
+		s.syncSvc.RegisterRoutes(r)
+	}
 
 	if s.settings != nil {
 		r.GET("/api/settings", s.handleSettingsGet)

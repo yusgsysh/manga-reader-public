@@ -68,6 +68,30 @@ func (f SettingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SettingMutation", m)
 }
 
+// The SyncChangeFunc type is an adapter to allow the use of ordinary
+// function as SyncChange mutator.
+type SyncChangeFunc func(context.Context, *ent.SyncChangeMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SyncChangeFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SyncChangeMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SyncChangeMutation", m)
+}
+
+// The SyncStateFunc type is an adapter to allow the use of ordinary
+// function as SyncState mutator.
+type SyncStateFunc func(context.Context, *ent.SyncStateMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SyncStateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SyncStateMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SyncStateMutation", m)
+}
+
 // Condition is a hook condition function.
 type Condition func(context.Context, ent.Mutation) bool
 

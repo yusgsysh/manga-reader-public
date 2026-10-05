@@ -13,6 +13,8 @@ import (
 
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/setting"
+	"manga-reader/internal/ent/syncchange"
+	"manga-reader/internal/ent/syncstate"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
@@ -35,6 +37,10 @@ type Client struct {
 	ReadingProgress *ReadingProgressClient
 	// Setting is the client for interacting with the Setting builders.
 	Setting *SettingClient
+	// SyncChange is the client for interacting with the SyncChange builders.
+	SyncChange *SyncChangeClient
+	// SyncState is the client for interacting with the SyncState builders.
+	SyncState *SyncStateClient
 }
 
 // NewClient creates a new client configured with the given options.
@@ -51,6 +57,8 @@ func (c *Client) init() {
 	c.PrefillJob = NewPrefillJobClient(c.config)
 	c.ReadingProgress = NewReadingProgressClient(c.config)
 	c.Setting = NewSettingClient(c.config)
+	c.SyncChange = NewSyncChangeClient(c.config)
+	c.SyncState = NewSyncStateClient(c.config)
 }
 
 type (
@@ -148,6 +156,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		PrefillJob:      NewPrefillJobClient(cfg),
 		ReadingProgress: NewReadingProgressClient(cfg),
 		Setting:         NewSettingClient(cfg),
+		SyncChange:      NewSyncChangeClient(cfg),
+		SyncState:       NewSyncStateClient(cfg),
 	}, nil
 }
 
@@ -172,6 +182,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		PrefillJob:      NewPrefillJobClient(cfg),
 		ReadingProgress: NewReadingProgressClient(cfg),
 		Setting:         NewSettingClient(cfg),
+		SyncChange:      NewSyncChangeClient(cfg),
+		SyncState:       NewSyncStateClient(cfg),
 	}, nil
 }
 
@@ -200,21 +212,23 @@ func (c *Client) Close() error {
 // Use adds the mutation hooks to all the entity clients.
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
-	c.Bookshelf.Use(hooks...)
-	c.GalleryCache.Use(hooks...)
-	c.PrefillJob.Use(hooks...)
-	c.ReadingProgress.Use(hooks...)
-	c.Setting.Use(hooks...)
+	for _, n := range []interface{ Use(...Hook) }{
+		c.Bookshelf, c.GalleryCache, c.PrefillJob, c.ReadingProgress, c.Setting,
+		c.SyncChange, c.SyncState,
+	} {
+		n.Use(hooks...)
+	}
 }
 
 // Intercept adds the query interceptors to all the entity clients.
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
-	c.Bookshelf.Intercept(interceptors...)
-	c.GalleryCache.Intercept(interceptors...)
-	c.PrefillJob.Intercept(interceptors...)
-	c.ReadingProgress.Intercept(interceptors...)
-	c.Setting.Intercept(interceptors...)
+	for _, n := range []interface{ Intercept(...Interceptor) }{
+		c.Bookshelf, c.GalleryCache, c.PrefillJob, c.ReadingProgress, c.Setting,
+		c.SyncChange, c.SyncState,
+	} {
+		n.Intercept(interceptors...)
+	}
 }
 
 // Mutate implements the ent.Mutator interface.
@@ -230,6 +244,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ReadingProgress.mutate(ctx, m)
 	case *SettingMutation:
 		return c.Setting.mutate(ctx, m)
+	case *SyncChangeMutation:
+		return c.SyncChange.mutate(ctx, m)
+	case *SyncStateMutation:
+		return c.SyncState.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
 	}
@@ -807,12 +825,280 @@ func (c *SettingClient) mutate(ctx context.Context, m *SettingMutation) (Value, 
 	}
 }
 
+// SyncChangeClient is a client for the SyncChange schema.
+type SyncChangeClient struct {
+	config
+}
+
+// NewSyncChangeClient returns a client for the SyncChange from the given config.
+func NewSyncChangeClient(c config) *SyncChangeClient {
+	return &SyncChangeClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `syncchange.Hooks(f(g(h())))`.
+func (c *SyncChangeClient) Use(hooks ...Hook) {
+	c.hooks.SyncChange = append(c.hooks.SyncChange, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `syncchange.Intercept(f(g(h())))`.
+func (c *SyncChangeClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SyncChange = append(c.inters.SyncChange, interceptors...)
+}
+
+// Create returns a builder for creating a SyncChange entity.
+func (c *SyncChangeClient) Create() *SyncChangeCreate {
+	mutation := newSyncChangeMutation(c.config, OpCreate)
+	return &SyncChangeCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SyncChange entities.
+func (c *SyncChangeClient) CreateBulk(builders ...*SyncChangeCreate) *SyncChangeCreateBulk {
+	return &SyncChangeCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SyncChangeClient) MapCreateBulk(slice any, setFunc func(*SyncChangeCreate, int)) *SyncChangeCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SyncChangeCreateBulk{err: fmt.Errorf("calling to SyncChangeClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SyncChangeCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SyncChangeCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SyncChange.
+func (c *SyncChangeClient) Update() *SyncChangeUpdate {
+	mutation := newSyncChangeMutation(c.config, OpUpdate)
+	return &SyncChangeUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SyncChangeClient) UpdateOne(_m *SyncChange) *SyncChangeUpdateOne {
+	mutation := newSyncChangeMutation(c.config, OpUpdateOne, withSyncChange(_m))
+	return &SyncChangeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SyncChangeClient) UpdateOneID(id int) *SyncChangeUpdateOne {
+	mutation := newSyncChangeMutation(c.config, OpUpdateOne, withSyncChangeID(id))
+	return &SyncChangeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SyncChange.
+func (c *SyncChangeClient) Delete() *SyncChangeDelete {
+	mutation := newSyncChangeMutation(c.config, OpDelete)
+	return &SyncChangeDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SyncChangeClient) DeleteOne(_m *SyncChange) *SyncChangeDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SyncChangeClient) DeleteOneID(id int) *SyncChangeDeleteOne {
+	builder := c.Delete().Where(syncchange.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SyncChangeDeleteOne{builder}
+}
+
+// Query returns a query builder for SyncChange.
+func (c *SyncChangeClient) Query() *SyncChangeQuery {
+	return &SyncChangeQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSyncChange},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SyncChange entity by its id.
+func (c *SyncChangeClient) Get(ctx context.Context, id int) (*SyncChange, error) {
+	return c.Query().Where(syncchange.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SyncChangeClient) GetX(ctx context.Context, id int) *SyncChange {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SyncChangeClient) Hooks() []Hook {
+	return c.hooks.SyncChange
+}
+
+// Interceptors returns the client interceptors.
+func (c *SyncChangeClient) Interceptors() []Interceptor {
+	return c.inters.SyncChange
+}
+
+func (c *SyncChangeClient) mutate(ctx context.Context, m *SyncChangeMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SyncChangeCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SyncChangeUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SyncChangeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SyncChangeDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SyncChange mutation op: %q", m.Op())
+	}
+}
+
+// SyncStateClient is a client for the SyncState schema.
+type SyncStateClient struct {
+	config
+}
+
+// NewSyncStateClient returns a client for the SyncState from the given config.
+func NewSyncStateClient(c config) *SyncStateClient {
+	return &SyncStateClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `syncstate.Hooks(f(g(h())))`.
+func (c *SyncStateClient) Use(hooks ...Hook) {
+	c.hooks.SyncState = append(c.hooks.SyncState, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `syncstate.Intercept(f(g(h())))`.
+func (c *SyncStateClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SyncState = append(c.inters.SyncState, interceptors...)
+}
+
+// Create returns a builder for creating a SyncState entity.
+func (c *SyncStateClient) Create() *SyncStateCreate {
+	mutation := newSyncStateMutation(c.config, OpCreate)
+	return &SyncStateCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SyncState entities.
+func (c *SyncStateClient) CreateBulk(builders ...*SyncStateCreate) *SyncStateCreateBulk {
+	return &SyncStateCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SyncStateClient) MapCreateBulk(slice any, setFunc func(*SyncStateCreate, int)) *SyncStateCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SyncStateCreateBulk{err: fmt.Errorf("calling to SyncStateClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SyncStateCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SyncStateCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SyncState.
+func (c *SyncStateClient) Update() *SyncStateUpdate {
+	mutation := newSyncStateMutation(c.config, OpUpdate)
+	return &SyncStateUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SyncStateClient) UpdateOne(_m *SyncState) *SyncStateUpdateOne {
+	mutation := newSyncStateMutation(c.config, OpUpdateOne, withSyncState(_m))
+	return &SyncStateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SyncStateClient) UpdateOneID(id int) *SyncStateUpdateOne {
+	mutation := newSyncStateMutation(c.config, OpUpdateOne, withSyncStateID(id))
+	return &SyncStateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SyncState.
+func (c *SyncStateClient) Delete() *SyncStateDelete {
+	mutation := newSyncStateMutation(c.config, OpDelete)
+	return &SyncStateDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SyncStateClient) DeleteOne(_m *SyncState) *SyncStateDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SyncStateClient) DeleteOneID(id int) *SyncStateDeleteOne {
+	builder := c.Delete().Where(syncstate.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SyncStateDeleteOne{builder}
+}
+
+// Query returns a query builder for SyncState.
+func (c *SyncStateClient) Query() *SyncStateQuery {
+	return &SyncStateQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSyncState},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SyncState entity by its id.
+func (c *SyncStateClient) Get(ctx context.Context, id int) (*SyncState, error) {
+	return c.Query().Where(syncstate.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SyncStateClient) GetX(ctx context.Context, id int) *SyncState {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SyncStateClient) Hooks() []Hook {
+	return c.hooks.SyncState
+}
+
+// Interceptors returns the client interceptors.
+func (c *SyncStateClient) Interceptors() []Interceptor {
+	return c.inters.SyncState
+}
+
+func (c *SyncStateClient) mutate(ctx context.Context, m *SyncStateMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SyncStateCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SyncStateUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SyncStateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SyncStateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SyncState mutation op: %q", m.Op())
+	}
+}
+
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Bookshelf, GalleryCache, PrefillJob, ReadingProgress, Setting []ent.Hook
+		Bookshelf, GalleryCache, PrefillJob, ReadingProgress, Setting, SyncChange,
+		SyncState []ent.Hook
 	}
 	inters struct {
-		Bookshelf, GalleryCache, PrefillJob, ReadingProgress, Setting []ent.Interceptor
+		Bookshelf, GalleryCache, PrefillJob, ReadingProgress, Setting, SyncChange,
+		SyncState []ent.Interceptor
 	}
 )

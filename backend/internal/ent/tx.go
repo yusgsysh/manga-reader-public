@@ -22,6 +22,10 @@ type Tx struct {
 	ReadingProgress *ReadingProgressClient
 	// Setting is the client for interacting with the Setting builders.
 	Setting *SettingClient
+	// SyncChange is the client for interacting with the SyncChange builders.
+	SyncChange *SyncChangeClient
+	// SyncState is the client for interacting with the SyncState builders.
+	SyncState *SyncStateClient
 
 	// lazily loaded.
 	client     *Client
@@ -158,6 +162,8 @@ func (tx *Tx) init() {
 	tx.PrefillJob = NewPrefillJobClient(tx.config)
 	tx.ReadingProgress = NewReadingProgressClient(tx.config)
 	tx.Setting = NewSettingClient(tx.config)
+	tx.SyncChange = NewSyncChangeClient(tx.config)
+	tx.SyncState = NewSyncStateClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.
