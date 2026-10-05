@@ -6,3 +6,10 @@ frontend/wailsjs/runtime/package.json
 frontend/package.json.md5
 frontend/wailsjs/runtime/runtime.d.ts
 frontend/wailsjs/runtime/runtime.js
+.task/*
+backend/desktop
+backend/cmd
+manga-reader-desktop.apk
+build/android/gen/main_android.gen.go
+frontend/frontend
+build/android/overlay.json
