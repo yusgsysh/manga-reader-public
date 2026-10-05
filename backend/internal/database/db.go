@@ -102,14 +102,22 @@ func initClient(conn *sql.DB, dialectName string) (*DB, error) {
 	return &DB{Client: client, Conn: conn}, nil
 }
 
+// GalleryCacheKey identifies a gallery_cache row by its composite primary key.
+type GalleryCacheKey struct {
+	GalleryID int64
+	Token     string
+}
+
 // CleanupGalleryCache deletes cached gallery metadata/pages that are no longer
-// referenced by either the bookshelf or the reading history.
-func (db *DB) CleanupGalleryCache(ctx context.Context) (int, error) {
+// referenced by either the bookshelf or the reading history, returning the
+// removed keys so callers can replicate the deletions as sync tombstones.
+// The DELETE ... RETURNING form reports exactly the rows it removed.
+func (db *DB) CleanupGalleryCache(ctx context.Context) ([]GalleryCacheKey, error) {
 	if db.Conn == nil {
-		return 0, nil
+		return nil, nil
 	}
 
-	res, err := db.Conn.ExecContext(ctx, `
+	rows, err := db.Conn.QueryContext(ctx, `
 		DELETE FROM gallery_cache
 		WHERE NOT EXISTS (
 			SELECT 1 FROM bookshelf b
@@ -119,15 +127,25 @@ func (db *DB) CleanupGalleryCache(ctx context.Context) (int, error) {
 			SELECT 1 FROM reading_progress r
 			WHERE r.gallery_id = gallery_cache.gallery_id
 			  AND r.token = gallery_cache.token
-		)`)
+		)
+		RETURNING gallery_id, token`)
 	if err != nil {
-		return 0, fmt.Errorf("cleanup gallery cache: %w", err)
+		return nil, fmt.Errorf("cleanup gallery cache: %w", err)
 	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return 0, fmt.Errorf("cleanup gallery cache rows affected: %w", err)
+	defer rows.Close()
+
+	var keys []GalleryCacheKey
+	for rows.Next() {
+		var k GalleryCacheKey
+		if err := rows.Scan(&k.GalleryID, &k.Token); err != nil {
+			return nil, fmt.Errorf("cleanup gallery cache scan: %w", err)
+		}
+		keys = append(keys, k)
 	}
-	return int(affected), nil
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("cleanup gallery cache rows: %w", err)
+	}
+	return keys, nil
 }
 
 func (db *DB) Close() error {

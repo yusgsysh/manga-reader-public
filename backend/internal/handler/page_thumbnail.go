@@ -413,6 +413,8 @@ func (s *Server) backfillThumbnail(ctx context.Context, galleryID int64, token s
 	sparse[index] = thumb
 	if err := gallerycache.UpsertThumbnails(ctx, db, galleryID, token, sparse); err != nil {
 		slog.Warn("page-thumbnail backfill failed", "id", galleryID, "index", index, "error", err)
+	} else {
+		s.recordGalleryCacheChange(ctx, galleryID, token)
 	}
 }
 

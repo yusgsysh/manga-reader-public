@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"manga-reader/internal/database"
 	"manga-reader/internal/ent"
+	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/model"
 	synclib "manga-reader/internal/sync"
 )
@@ -151,5 +153,113 @@ func TestReadingProgressCleanupRecordsTombstones(t *testing.T) {
 		if e.Op != synclib.OpDelete || e.Entity != synclib.EntityReadingProgress {
 			t.Fatalf("entry = %+v, want reading_progress delete", e)
 		}
+	}
+}
+
+func TestGalleryCacheDetailsRecordsSyncChange(t *testing.T) {
+	client := newTestDB(t)
+	syncSvc := newSyncService(t, client)
+
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, mockGalleryDetailHTML(123456, "Mock Gallery", 10))
+	})
+	defer mockServer.Close()
+
+	server := &Server{
+		Client:  newMockClient(mockServer.URL),
+		DB:      &database.DB{Client: client},
+		syncSvc: syncSvc,
+	}
+	r := setupMockRouter(server)
+
+	// Use the CACHE endpoint (/api/gallery-cache/...) which writes to cache,
+	// not the online endpoint (/api/gallery/...) which never writes cache.
+	req := httptest.NewRequest("GET", "/api/gallery-cache/123456/abcdef/details", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", w.Code, w.Body.String())
+	}
+	t.Logf("response: %s", w.Body.String())
+
+	// Verify cache row was written via handler
+	row, found, err := gallerycache.Get(t.Context(), client, 123456, "abcdef")
+	if err != nil || !found {
+		allRows, _ := client.GalleryCache.Query().All(t.Context())
+		t.Logf("all gallery_cache rows: %d", len(allRows))
+		for _, r := range allRows {
+			t.Logf("  row: id=%d token=%s title=%s", r.GalleryID, r.Token, r.Title)
+		}
+		t.Fatalf("cache row not created: found=%v err=%v", found, err)
+	}
+	t.Logf("cache row: %+v", row)
+	if row.Title != "Mock Gallery" {
+		t.Errorf("cache title = %q, want Mock Gallery", row.Title)
+	}
+
+	entries := outboxEntries(t, client)
+	if len(entries) != 1 {
+		t.Fatalf("outbox = %d entries, want 1", len(entries))
+	}
+	if entries[0].Entity != synclib.EntityGalleryCache || entries[0].Op != synclib.OpUpsert {
+		t.Fatalf("entry = %+v, want gallery_cache upsert", entries[0])
+	}
+	if entries[0].GalleryID != 123456 || entries[0].Token != "abcdef" {
+		t.Fatalf("entry key = %d/%s, want 123456/abcdef", entries[0].GalleryID, entries[0].Token)
+	}
+}
+
+func TestBookshelfRemoveSweepsCacheAndRecordsTombstone(t *testing.T) {
+	db := newTestDatabase(t)
+	client := db.Client
+
+	// Seed a bookshelf row and an orphaned gallery_cache row with the same key.
+	if _, err := client.Bookshelf.Create().
+		SetGalleryID(123456).
+		SetToken("abcdef").
+		Save(t.Context()); err != nil {
+		t.Fatalf("seed bookshelf: %v", err)
+	}
+	_, err := client.GalleryCache.Create().
+		SetGalleryID(123456).
+		SetToken("abcdef").
+		SetTitle("Cached Title").
+		Save(t.Context())
+	if err != nil {
+		t.Fatalf("seed gallery cache: %v", err)
+	}
+
+	syncSvc := newSyncService(t, client)
+	server := &Server{DB: db, syncSvc: syncSvc}
+	r := setupTestRouter()
+	r.DELETE("/api/bookshelf/:id/:token", server.handleBookshelfRemove)
+
+	req := httptest.NewRequest("DELETE", "/api/bookshelf/123456/abcdef", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+
+	entries := outboxEntries(t, client)
+	if len(entries) != 2 {
+		t.Fatalf("outbox = %d entries, want 2 (bookshelf delete + cache delete)", len(entries))
+	}
+	seen := map[string]bool{}
+	for _, e := range entries {
+		seen[e.Entity] = true
+		if e.Op != synclib.OpUpsert && e.Op != synclib.OpDelete {
+			t.Fatalf("entry = %+v, want upsert or delete", e)
+		}
+	}
+	if !seen[synclib.EntityBookshelf] || !seen[synclib.EntityGalleryCache] {
+		t.Fatalf("outbox entities = %v, want both bookshelf and gallery_cache deletes", seen)
+	}
+
+	// Cache row should be gone.
+	if _, found, _ := gallerycache.Get(t.Context(), client, 123456, "abcdef"); found {
+		t.Error("gallery cache row should have been deleted by cleanup")
 	}
 }

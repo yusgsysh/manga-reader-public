@@ -13,7 +13,7 @@
 - 阅读进度（Reading Progress）、最近阅读（Recently Read）
 - 阅读器（comimi 集成）：返回 / 全屏入口、触屏进度条缩略图预览、预加载页加载动画
 - 阅读记录手动清理（Cleanup API）
-- 数据同步：桌面端 ↔ 自建服务端双向实时同步阅读进度与书架（SSE 推送 + LWW 合并，见「数据同步」）
+- 数据同步：桌面端 ↔ 自建服务端双向实时同步阅读进度、书架与画廊缓存（SSE 推送 + LWW 合并，见「数据同步」）
 - 离线下载任务（Prefill）：后台排队预填充图片缓存、下载管理页、流式 ZIP 下载
 - 缩略图源站代理与 MinIO 缓存
 - 页面图片 MinIO 缓存（可选）
@@ -252,12 +252,12 @@ curl -X POST http://localhost:8080/api/reading-progress/cleanup?days=0
 
 ### 数据同步
 
-多实例双向同步**阅读进度与书架**（settings 不同步），所有连接由桌面端主动发起（NAT 友好）：
+多实例双向同步**阅读进度、书架与画廊缓存**（settings 不同步），所有连接由桌面端主动发起（NAT 友好）：
 
 - **服务端**：设置 `MANGA_READER_SYNC_TOKEN` 启用宿主端点，写入的数据进 outbox。
 - **桌面端 / 客户端**：设置页「数据同步」填服务端地址 + 同一令牌并启用（配置存 `sync_state` 表）。
 - 双方通过 `POST /api/sync/push` 推送 + 拉取，`GET /api/sync/events` SSE 监听对端新变更（写后 2s 去抖推送，心跳 25s，断线退避 1s→60s，60s 轮询兜底）。
-- 合并规则：按行 LWW（`updated_at` 新者胜），删除用 tombstone；首次连接返回全量快照。
+- 合并规则：按行 LWW（`updated_at` 新者胜），删除用 tombstone；首次连接返回全量快照。`gallery_cache` 行在 LWW 胜出时按字段合并（空值不覆盖），镜像本地 upsert 语义。
 - 桌面端本地通过 `GET /api/events/changes` SSE 通知前端刷新（Angie 已为该路径关闭缓冲，见 `frontend/deploy/angie.conf.tpl`）。
 
 ```bash

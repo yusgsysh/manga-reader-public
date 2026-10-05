@@ -105,15 +105,24 @@ func run() error {
 	}
 	defer db.Close()
 
-	if n, cleanErr := db.CleanupGalleryCache(context.Background()); cleanErr != nil {
-		logger.Warn("gallery cache startup cleanup failed", "error", cleanErr)
-	} else if n > 0 {
-		logger.Info("gallery cache startup cleanup", "deleted", n)
-	}
-
 	syncSvc := synclib.NewService(db.Client, synclib.Options{HostToken: cfg.SyncToken})
 	if cfg.SyncToken != "" {
 		logger.Info("sync host enabled")
+	}
+
+	// Startup sweep of cache rows orphaned by the last run; moved after
+	// syncSvc exists so removals propagate as tombstones to the peer.
+	if cacheKeys, cleanErr := db.CleanupGalleryCache(context.Background()); cleanErr != nil {
+		logger.Warn("gallery cache startup cleanup failed", "error", cleanErr)
+	} else if len(cacheKeys) > 0 {
+		logger.Info("gallery cache startup cleanup", "deleted", len(cacheKeys))
+		syncKeys := make([]synclib.Key, len(cacheKeys))
+		for i, k := range cacheKeys {
+			syncKeys[i] = synclib.Key{GalleryID: k.GalleryID, Token: k.Token}
+		}
+		if recErr := syncSvc.RecordDeletes(context.Background(), synclib.EntityGalleryCache, syncKeys); recErr != nil {
+			logger.Warn("record sync cache cleanup failed", "error", recErr)
+		}
 	}
 
 	handlerCfg := handler.Config{

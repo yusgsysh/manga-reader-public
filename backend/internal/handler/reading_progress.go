@@ -237,13 +237,7 @@ func (s *Server) handleReadingProgressCleanup(c *gin.Context) {
 		}
 	}
 
-	if s.DB != nil {
-		if n, cleanErr := s.DB.CleanupGalleryCache(ctx); cleanErr != nil {
-			slog.Warn("gallery cache cleanup failed", "error", cleanErr)
-		} else if n > 0 {
-			slog.Debug("gallery cache cleanup", "deleted", n)
-		}
-	}
+	s.cleanupGalleryCache(ctx)
 
 	c.JSON(http.StatusOK, gin.H{
 		"days":    days,

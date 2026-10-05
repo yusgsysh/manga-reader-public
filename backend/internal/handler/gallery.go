@@ -460,11 +460,16 @@ func (s *Server) scrapeAndCache(
 		return count, err
 	}
 	if db := s.cacheDB(); db != nil {
-		if cacheErr := gallerycache.ReplacePages(ctx, db, galleryID, token, pageURLs); cacheErr != nil {
-			slog.Warn("gallery cache pages replace failed", "id", galleryID, "error", cacheErr)
+		pagesErr := gallerycache.ReplacePages(ctx, db, galleryID, token, pageURLs)
+		thumbErr := gallerycache.ReplaceThumbnails(ctx, db, galleryID, token, thumbnails)
+		if pagesErr != nil {
+			slog.Warn("gallery cache pages replace failed", "id", galleryID, "error", pagesErr)
 		}
-		if cacheErr := gallerycache.ReplaceThumbnails(ctx, db, galleryID, token, thumbnails); cacheErr != nil {
-			slog.Warn("gallery cache thumbnails replace failed", "id", galleryID, "error", cacheErr)
+		if thumbErr != nil {
+			slog.Warn("gallery cache thumbnails replace failed", "id", galleryID, "error", thumbErr)
+		}
+		if pagesErr == nil || thumbErr == nil {
+			s.recordGalleryCacheChange(ctx, galleryID, token)
 		}
 	}
 	return count, nil
@@ -787,6 +792,8 @@ func (s *Server) handleCachedGallery(c *gin.Context) {
 	if db := s.cacheDB(); db != nil {
 		if cacheErr := gallerycache.UpsertMeta(ctx, db, id, token, cacheMetaFromGallery(gallery)); cacheErr != nil {
 			slog.Warn("gallery cache meta upsert failed", "id", id, "error", cacheErr)
+		} else {
+			s.recordGalleryCacheChange(ctx, id, token)
 		}
 	}
 	c.Header("Cache-Control", "no-store")
@@ -820,6 +827,8 @@ func (s *Server) handleCachedGalleryDetails(c *gin.Context) {
 	if db := s.cacheDB(); db != nil {
 		if cacheErr := gallerycache.UpsertDetails(ctx, db, id, token, cacheMetaFromDetails(details)); cacheErr != nil {
 			slog.Warn("gallery cache details upsert failed", "id", id, "error", cacheErr)
+		} else {
+			s.recordGalleryCacheChange(ctx, id, token)
 		}
 	}
 	c.Header("Cache-Control", "no-store")

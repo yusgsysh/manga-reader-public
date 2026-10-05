@@ -1251,12 +1251,15 @@ func TestCleanupGalleryCache_RemovesOrphans(t *testing.T) {
 		t.Fatalf("insert progress: %v", err)
 	}
 
-	deleted, err := db.CleanupGalleryCache(ctx)
+	keys, err := db.CleanupGalleryCache(ctx)
 	if err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
-	if deleted != 1 {
-		t.Errorf("deleted = %d, want 1", deleted)
+	if len(keys) != 1 {
+		t.Fatalf("deleted = %d, want 1", len(keys))
+	}
+	if keys[0].GalleryID != 1003 || keys[0].Token != "tokC" {
+		t.Errorf("deleted key = (%d, %q), want (1003, tokC)", keys[0].GalleryID, keys[0].Token)
 	}
 
 	if _, found, _ := gallerycache.Get(ctx, db.Client, 1001, "tokA"); !found {

@@ -7,13 +7,14 @@ const SYNCED_QUERY_KEYS = [
   ["reading-progress"],
   ["bookshelf"],
   ["recently-read"],
+  ["gallery-cache"],
 ] as const;
 
 /**
  * Subscribes to the backend's local change stream (/api/events/changes) and
- * invalidates the synced query caches whenever progress/bookshelf data
- * changes — including rows applied from a remote sync peer, which the local
- * UI would otherwise never see until their staleTime expires.
+ * invalidates the synced query caches whenever progress/bookshelf/gallery-cache
+ * data changes — including rows applied from a remote sync peer, which the
+ * local UI would otherwise never see until their staleTime expires.
  *
  * EventSource reconnects on its own after transient failures.
  */
