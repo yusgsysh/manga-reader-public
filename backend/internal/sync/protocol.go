@@ -63,7 +63,7 @@ type Change struct {
 
 // Key identifies a synced record by its composite primary key.
 type Key struct {
-	GalleryID int64 `json:"gallery_id"`
+	GalleryID int64  `json:"gallery_id"`
 	Token     string `json:"token"`
 }
 
