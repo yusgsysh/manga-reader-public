@@ -12,6 +12,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/google/uuid"
 )
 
 // PrefillJobCreate is the builder for creating a PrefillJob entity.
@@ -159,6 +160,20 @@ func (_c *PrefillJobCreate) SetNillableFinishedAt(v *time.Time) *PrefillJobCreat
 	return _c
 }
 
+// SetID sets the "id" field.
+func (_c *PrefillJobCreate) SetID(v uuid.UUID) *PrefillJobCreate {
+	_c.mutation.SetID(v)
+	return _c
+}
+
+// SetNillableID sets the "id" field if the given value is not nil.
+func (_c *PrefillJobCreate) SetNillableID(v *uuid.UUID) *PrefillJobCreate {
+	if v != nil {
+		_c.SetID(*v)
+	}
+	return _c
+}
+
 // Mutation returns the PrefillJobMutation object of the builder.
 func (_c *PrefillJobCreate) Mutation() *PrefillJobMutation {
 	return _c.mutation
@@ -222,6 +237,10 @@ func (_c *PrefillJobCreate) defaults() {
 		v := prefilljob.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.ID(); !ok {
+		v := prefilljob.DefaultID()
+		_c.mutation.SetID(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -264,8 +283,13 @@ func (_c *PrefillJobCreate) sqlSave(ctx context.Context) (*PrefillJob, error) {
 		}
 		return nil, err
 	}
-	id := _spec.ID.Value.(int64)
-	_node.ID = int(id)
+	if _spec.ID.Value != nil {
+		if id, ok := _spec.ID.Value.(*uuid.UUID); ok {
+			_node.ID = *id
+		} else if err := _node.ID.Scan(_spec.ID.Value); err != nil {
+			return nil, err
+		}
+	}
 	_c.mutation.id = &_node.ID
 	_c.mutation.done = true
 	return _node, nil
@@ -274,8 +298,12 @@ func (_c *PrefillJobCreate) sqlSave(ctx context.Context) (*PrefillJob, error) {
 func (_c *PrefillJobCreate) createSpec() (*PrefillJob, *sqlgraph.CreateSpec) {
 	var (
 		_node = &PrefillJob{config: _c.config}
-		_spec = sqlgraph.NewCreateSpec(prefilljob.Table, sqlgraph.NewFieldSpec(prefilljob.FieldID, field.TypeInt))
+		_spec = sqlgraph.NewCreateSpec(prefilljob.Table, sqlgraph.NewFieldSpec(prefilljob.FieldID, field.TypeUUID))
 	)
+	if id, ok := _c.mutation.ID(); ok {
+		_node.ID = id
+		_spec.ID.Value = &id
+	}
 	if value, ok := _c.mutation.GalleryID(); ok {
 		_spec.SetField(prefilljob.FieldGalleryID, field.TypeInt64, value)
 		_node.GalleryID = &value
@@ -368,10 +396,6 @@ func (_c *PrefillJobCreateBulk) Save(ctx context.Context) ([]*PrefillJob, error)
 					return nil, err
 				}
 				mutation.id = &nodes[i].ID
-				if specs[i].ID.Value != nil {
-					id := specs[i].ID.Value.(int64)
-					nodes[i].ID = int(id)
-				}
 				mutation.done = true
 				return nodes[i], nil
 			})

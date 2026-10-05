@@ -40,7 +40,7 @@ func (_d *PrefillJobDelete) ExecX(ctx context.Context) int {
 }
 
 func (_d *PrefillJobDelete) sqlExec(ctx context.Context) (int, error) {
-	_spec := sqlgraph.NewDeleteSpec(prefilljob.Table, sqlgraph.NewFieldSpec(prefilljob.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewDeleteSpec(prefilljob.Table, sqlgraph.NewFieldSpec(prefilljob.FieldID, field.TypeUUID))
 	if ps := _d.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {

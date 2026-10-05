@@ -166,7 +166,7 @@ func upsertMeta(ctx context.Context, client *ent.Client, galleryID int64, token 
 		return create.Exec(ctx)
 	}
 
-	update := client.GalleryCache.UpdateOneID(existing.ID)
+	update := client.GalleryCache.UpdateOne(existing)
 
 	if snap.Title != "" {
 		update.SetTitle(snap.Title)
@@ -291,7 +291,7 @@ func UpsertPages(ctx context.Context, client *ent.Client, galleryID int64, token
 	}
 
 	merged := mergeStrings(existing.Pages, pageURLs)
-	update := client.GalleryCache.UpdateOneID(existing.ID).SetPagesFetchedAt(now)
+	update := client.GalleryCache.UpdateOne(existing).SetPagesFetchedAt(now)
 	if !slices.Equal(merged, existing.Pages) {
 		update.SetPages(merged)
 	}
@@ -316,7 +316,7 @@ func UpsertThumbnails(ctx context.Context, client *ent.Client, galleryID int64, 
 	}
 	now := time.Now().UTC()
 
-	update := client.GalleryCache.UpdateOneID(existing.ID).SetThumbnailFetchedAt(now)
+	update := client.GalleryCache.UpdateOne(existing).SetThumbnailFetchedAt(now)
 	if countThumbnails(thumbnails) > 0 {
 		merged := mergeThumbs(existing.Thumbnails, thumbnails, len(existing.Pages))
 		if !slices.Equal(merged, existing.Thumbnails) {
@@ -344,7 +344,7 @@ func ReplacePages(ctx context.Context, client *ent.Client, galleryID int64, toke
 			SetPagesFetchedAt(now).
 			Exec(ctx)
 	}
-	return client.GalleryCache.UpdateOneID(existing.ID).
+	return client.GalleryCache.UpdateOne(existing).
 		SetPages(pageURLs).
 		SetPagesFetchedAt(now).
 		Exec(ctx)
@@ -366,7 +366,7 @@ func ReplaceThumbnails(ctx context.Context, client *ent.Client, galleryID int64,
 			SetThumbnailFetchedAt(now).
 			Exec(ctx)
 	}
-	return client.GalleryCache.UpdateOneID(existing.ID).
+	return client.GalleryCache.UpdateOne(existing).
 		SetThumbnails(thumbnails).
 		SetThumbnailFetchedAt(now).
 		Exec(ctx)

@@ -91,7 +91,11 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 	totalPages := (total + pageSize - 1) / pageSize
 
 	items, err := s.DB.Client.Bookshelf.Query().
-		Order(ent.Desc(bookshelf.FieldUpdatedAt), ent.Desc(bookshelf.FieldID)).
+		Order(
+			ent.Desc(bookshelf.FieldUpdatedAt),
+			ent.Desc(bookshelf.FieldGalleryID),
+			ent.Desc(bookshelf.FieldToken),
+		).
 		Offset(offset).
 		Limit(pageSize).
 		All(ctx)

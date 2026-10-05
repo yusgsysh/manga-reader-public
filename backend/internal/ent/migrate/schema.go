@@ -11,7 +11,6 @@ import (
 var (
 	// BookshelfColumns holds the columns for the "bookshelf" table.
 	BookshelfColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "gallery_id", Type: field.TypeInt64},
 		{Name: "token", Type: field.TypeString},
 		{Name: "created_at", Type: field.TypeTime},
@@ -21,18 +20,10 @@ var (
 	BookshelfTable = &schema.Table{
 		Name:       "bookshelf",
 		Columns:    BookshelfColumns,
-		PrimaryKey: []*schema.Column{BookshelfColumns[0]},
-		Indexes: []*schema.Index{
-			{
-				Name:    "bookshelf_gallery_id_token",
-				Unique:  true,
-				Columns: []*schema.Column{BookshelfColumns[1], BookshelfColumns[2]},
-			},
-		},
+		PrimaryKey: []*schema.Column{BookshelfColumns[0], BookshelfColumns[1]},
 	}
 	// GalleryCacheColumns holds the columns for the "gallery_cache" table.
 	GalleryCacheColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "gallery_id", Type: field.TypeInt64},
 		{Name: "token", Type: field.TypeString},
 		{Name: "created_at", Type: field.TypeTime},
@@ -64,18 +55,11 @@ var (
 	GalleryCacheTable = &schema.Table{
 		Name:       "gallery_cache",
 		Columns:    GalleryCacheColumns,
-		PrimaryKey: []*schema.Column{GalleryCacheColumns[0]},
-		Indexes: []*schema.Index{
-			{
-				Name:    "gallerycache_gallery_id_token",
-				Unique:  true,
-				Columns: []*schema.Column{GalleryCacheColumns[1], GalleryCacheColumns[2]},
-			},
-		},
+		PrimaryKey: []*schema.Column{GalleryCacheColumns[0], GalleryCacheColumns[1]},
 	}
 	// PrefillJobColumns holds the columns for the "prefill_job" table.
 	PrefillJobColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "job_id", Type: field.TypeUUID, Default: map[string]schema.Expr{"postgres": "gen_random_uuid()", "sqlite3": "lower(hex(randomblob(16)))"}, SchemaType: map[string]string{"sqlite3": "text"}},
 		{Name: "gallery_id", Type: field.TypeInt64, Nullable: true},
 		{Name: "token", Type: field.TypeString, Default: ""},
 		{Name: "title", Type: field.TypeString, Default: ""},
@@ -108,7 +92,6 @@ var (
 	}
 	// ReadingProgressColumns holds the columns for the "reading_progress" table.
 	ReadingProgressColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "gallery_id", Type: field.TypeInt64},
 		{Name: "token", Type: field.TypeString},
 		{Name: "current_page", Type: field.TypeInt, Default: 0},
@@ -121,14 +104,7 @@ var (
 	ReadingProgressTable = &schema.Table{
 		Name:       "reading_progress",
 		Columns:    ReadingProgressColumns,
-		PrimaryKey: []*schema.Column{ReadingProgressColumns[0]},
-		Indexes: []*schema.Index{
-			{
-				Name:    "readingprogress_gallery_id_token",
-				Unique:  true,
-				Columns: []*schema.Column{ReadingProgressColumns[1], ReadingProgressColumns[2]},
-			},
-		},
+		PrimaryKey: []*schema.Column{ReadingProgressColumns[0], ReadingProgressColumns[1]},
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{

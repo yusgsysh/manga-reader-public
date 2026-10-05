@@ -57,7 +57,7 @@ export function useCancelPrefillJob() {
   const invalidate = usePrefillInvalidation();
   const toast = useKumoToastManager();
   return useMutation({
-    mutationFn: (id: number) => cancelPrefillJob(id),
+    mutationFn: (id: string) => cancelPrefillJob(id),
     onSuccess: () => {
       toast.add({ title: "任务已取消", variant: "info" });
     },
@@ -82,7 +82,7 @@ export function useDeletePrefillJob() {
   const invalidate = usePrefillInvalidation();
   const toast = useKumoToastManager();
   return useMutation({
-    mutationFn: (id: number) => deletePrefillJob(id),
+    mutationFn: (id: string) => deletePrefillJob(id),
     onSuccess: () => {
       toast.add({ title: "记录已删除", variant: "success" });
     },

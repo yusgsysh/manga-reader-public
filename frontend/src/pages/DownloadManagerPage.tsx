@@ -47,8 +47,8 @@ function statusBadgeVariant(
 
 interface JobRowProps {
   job: PrefillJob;
-  zippingIds: Set<number>;
-  onZipStart: (id: number) => void;
+  zippingIds: Set<string>;
+  onZipStart: (id: string) => void;
 }
 
 function JobRow({ job, zippingIds, onZipStart }: JobRowProps) {
@@ -198,7 +198,7 @@ export function DownloadManagerPage() {
   const { data, isLoading, error, refetch } = usePrefillJobs();
   const cleanup = useCleanupPrefillJobs();
   const [cleanupOpen, setCleanupOpen] = useState(false);
-  const [zippingIds, setZippingIds] = useState<Set<number>>(new Set());
+  const [zippingIds, setZippingIds] = useState<Set<string>>(new Set());
 
   const jobs = data?.jobs ?? [];
   const activeJobs = jobs.filter((job) => isActivePrefillStatus(job.status));
@@ -209,7 +209,7 @@ export function DownloadManagerPage() {
     setCleanupOpen(false);
   };
 
-  const onZipStart = (id: number) => {
+  const onZipStart = (id: string) => {
     setZippingIds((prev) => new Set(prev).add(id));
     headPrefillZip(id)
       .then((ok) => {

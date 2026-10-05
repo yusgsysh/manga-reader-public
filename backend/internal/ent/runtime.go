@@ -9,6 +9,8 @@ import (
 	"manga-reader/internal/ent/readingprogress"
 	"manga-reader/internal/ent/schema"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // The init function reads all schema descriptors with runtime code
@@ -98,35 +100,39 @@ func init() {
 	prefilljobFields := schema.PrefillJob{}.Fields()
 	_ = prefilljobFields
 	// prefilljobDescToken is the schema descriptor for token field.
-	prefilljobDescToken := prefilljobFields[1].Descriptor()
+	prefilljobDescToken := prefilljobFields[2].Descriptor()
 	// prefilljob.DefaultToken holds the default value on creation for the token field.
 	prefilljob.DefaultToken = prefilljobDescToken.Default.(string)
 	// prefilljobDescTitle is the schema descriptor for title field.
-	prefilljobDescTitle := prefilljobFields[2].Descriptor()
+	prefilljobDescTitle := prefilljobFields[3].Descriptor()
 	// prefilljob.DefaultTitle holds the default value on creation for the title field.
 	prefilljob.DefaultTitle = prefilljobDescTitle.Default.(string)
 	// prefilljobDescStatus is the schema descriptor for status field.
-	prefilljobDescStatus := prefilljobFields[4].Descriptor()
+	prefilljobDescStatus := prefilljobFields[5].Descriptor()
 	// prefilljob.DefaultStatus holds the default value on creation for the status field.
 	prefilljob.DefaultStatus = prefilljobDescStatus.Default.(string)
 	// prefilljobDescTotal is the schema descriptor for total field.
-	prefilljobDescTotal := prefilljobFields[5].Descriptor()
+	prefilljobDescTotal := prefilljobFields[6].Descriptor()
 	// prefilljob.DefaultTotal holds the default value on creation for the total field.
 	prefilljob.DefaultTotal = prefilljobDescTotal.Default.(int)
 	// prefilljobDescFailedCount is the schema descriptor for failed_count field.
-	prefilljobDescFailedCount := prefilljobFields[6].Descriptor()
+	prefilljobDescFailedCount := prefilljobFields[7].Descriptor()
 	// prefilljob.DefaultFailedCount holds the default value on creation for the failed_count field.
 	prefilljob.DefaultFailedCount = prefilljobDescFailedCount.Default.(int)
 	// prefilljobDescCreatedAt is the schema descriptor for created_at field.
-	prefilljobDescCreatedAt := prefilljobFields[8].Descriptor()
+	prefilljobDescCreatedAt := prefilljobFields[9].Descriptor()
 	// prefilljob.DefaultCreatedAt holds the default value on creation for the created_at field.
 	prefilljob.DefaultCreatedAt = prefilljobDescCreatedAt.Default.(func() time.Time)
 	// prefilljobDescUpdatedAt is the schema descriptor for updated_at field.
-	prefilljobDescUpdatedAt := prefilljobFields[9].Descriptor()
+	prefilljobDescUpdatedAt := prefilljobFields[10].Descriptor()
 	// prefilljob.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	prefilljob.DefaultUpdatedAt = prefilljobDescUpdatedAt.Default.(func() time.Time)
 	// prefilljob.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	prefilljob.UpdateDefaultUpdatedAt = prefilljobDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// prefilljobDescID is the schema descriptor for id field.
+	prefilljobDescID := prefilljobFields[0].Descriptor()
+	// prefilljob.DefaultID holds the default value on creation for the id field.
+	prefilljob.DefaultID = prefilljobDescID.Default.(func() uuid.UUID)
 	readingprogressFields := schema.ReadingProgress{}.Fields()
 	_ = readingprogressFields
 	// readingprogressDescCurrentPage is the schema descriptor for current_page field.

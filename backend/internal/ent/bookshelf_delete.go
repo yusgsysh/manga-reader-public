@@ -9,7 +9,6 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"entgo.io/ent/schema/field"
 )
 
 // BookshelfDelete is the builder for deleting a Bookshelf entity.
@@ -40,7 +39,7 @@ func (_d *BookshelfDelete) ExecX(ctx context.Context) int {
 }
 
 func (_d *BookshelfDelete) sqlExec(ctx context.Context) (int, error) {
-	_spec := sqlgraph.NewDeleteSpec(bookshelf.Table, sqlgraph.NewFieldSpec(bookshelf.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewDeleteSpec(bookshelf.Table, nil)
 	if ps := _d.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {

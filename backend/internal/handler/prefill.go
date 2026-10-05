@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"manga-reader/internal/cache"
 	"manga-reader/internal/ent"
@@ -56,7 +57,7 @@ type prefillRun struct {
 type prefillManager struct {
 	mu sync.Mutex
 	// runs tracks in-memory progress for active jobs.
-	runs map[int]*prefillRun
+	runs map[uuid.UUID]*prefillRun
 	wake chan struct{}
 	stop chan struct{}
 	// stopOnce guards closing stop so shutdown is idempotent.
@@ -76,7 +77,7 @@ func (m *prefillManager) signal() {
 func (s *Server) ensurePrefill() *prefillManager {
 	s.prefillOnce.Do(func() {
 		m := &prefillManager{
-			runs: make(map[int]*prefillRun),
+			runs: make(map[uuid.UUID]*prefillRun),
 			wake: make(chan struct{}, 1),
 			stop: make(chan struct{}),
 		}
@@ -170,7 +171,7 @@ func (m *prefillManager) drain(s *Server) {
 
 // nextQueued claims the oldest queued job by atomically flipping it to
 // running. Returns false when the queue is empty.
-func (m *prefillManager) nextQueued(s *Server) (int, bool) {
+func (m *prefillManager) nextQueued(s *Server) (uuid.UUID, bool) {
 	ctx := context.Background()
 	for {
 		row, err := s.DB.Client.PrefillJob.Query().
@@ -181,7 +182,7 @@ func (m *prefillManager) nextQueued(s *Server) (int, bool) {
 			if !ent.IsNotFound(err) {
 				slog.Error("prefill queue query failed", "error", err)
 			}
-			return 0, false
+			return uuid.UUID{}, false
 		}
 		var lastErr error
 		for attempt := range 3 {
@@ -207,7 +208,7 @@ func (m *prefillManager) nextQueued(s *Server) (int, bool) {
 	}
 }
 
-func (m *prefillManager) runJob(s *Server, id int) {
+func (m *prefillManager) runJob(s *Server, id uuid.UUID) {
 	ctx := context.Background()
 
 	// Guard against missing cache configuration.
@@ -331,7 +332,7 @@ func (m *prefillManager) processPages(s *Server, ctx context.Context, run *prefi
 
 // finishPrefillJob writes the terminal state. The status predicate guarantees
 // it never overwrites a row that was already cancelled or deleted.
-func (s *Server) finishPrefillJob(id int, status string, failed int, errs []model.PrefillItemError) {
+func (s *Server) finishPrefillJob(id uuid.UUID, status string, failed int, errs []model.PrefillItemError) {
 	if errs == nil {
 		errs = []model.PrefillItemError{}
 	}
@@ -364,7 +365,7 @@ func (s *Server) finishPrefillJob(id int, status string, failed int, errs []mode
 
 // cancelRun stops an active run by cancelling its context.
 // Returns true when a live run was cancelled directly.
-func (m *prefillManager) cancelRun(id int) bool {
+func (m *prefillManager) cancelRun(id uuid.UUID) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if run, ok := m.runs[id]; ok && run.cancel != nil {
@@ -384,11 +385,11 @@ func (s *Server) requirePrefill(c *gin.Context) *prefillManager {
 	return s.ensurePrefill()
 }
 
-func prefillJobID(c *gin.Context) (int, bool) {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil || id <= 0 {
+func prefillJobID(c *gin.Context) (uuid.UUID, bool) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid job id"})
-		return 0, false
+		return uuid.UUID{}, false
 	}
 	return id, true
 }
@@ -425,7 +426,7 @@ func prefillJobJSON(m *prefillManager, row *ent.PrefillJob) gin.H {
 		finishedAt = row.FinishedAt.Format(time.RFC3339)
 	}
 	return gin.H{
-		"id":           row.ID,
+		"id":           row.ID.String(),
 		"gallery_id":   galleryID,
 		"token":        row.Token,
 		"title":        row.Title,
@@ -529,7 +530,7 @@ func (s *Server) handlePrefillList(c *gin.Context) {
 	}
 	// Snapshot active runs once to avoid per-row locking.
 	m.mu.Lock()
-	runSnapshot := make(map[int]*prefillRun, len(m.runs))
+	runSnapshot := make(map[uuid.UUID]*prefillRun, len(m.runs))
 	maps.Copy(runSnapshot, m.runs)
 	m.mu.Unlock()
 
@@ -563,7 +564,7 @@ func (s *Server) handlePrefillList(c *gin.Context) {
 }
 
 // prefillJobJSONWithRuns is like prefillJobJSON but takes a pre-snapshot of runs.
-func prefillJobJSONWithRuns(row *ent.PrefillJob, runs map[int]*prefillRun) gin.H {
+func prefillJobJSONWithRuns(row *ent.PrefillJob, runs map[uuid.UUID]*prefillRun) gin.H {
 	var progress gin.H
 	failedCount := row.FailedCount
 	errs := row.Errors
@@ -590,7 +591,7 @@ func prefillJobJSONWithRuns(row *ent.PrefillJob, runs map[int]*prefillRun) gin.H
 		finishedAt = row.FinishedAt.Format(time.RFC3339)
 	}
 	return gin.H{
-		"id":           row.ID,
+		"id":           row.ID.String(),
 		"gallery_id":   galleryID,
 		"token":        row.Token,
 		"title":        row.Title,
