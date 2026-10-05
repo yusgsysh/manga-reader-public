@@ -12,7 +12,7 @@ import (
 	"manga-reader/internal/ent/migrate"
 
 	"manga-reader/internal/ent/prefilljob"
-	"manga-reader/internal/ent/readingprogress"
+	"manga-reader/internal/ent/setting"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
