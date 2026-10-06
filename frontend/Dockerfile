@@ -39,13 +39,16 @@ RUN bun run build
 FROM git.09270721.xyz/abc/angie:alpine
 
 # envsubst：启动时用环境变量渲染 angie 配置
-RUN apk add --no-cache gettext-envsubst
+# apache2-utils：htpasswd（启用 HTTP Basic Auth 时生成 apr1 口令条目）
+RUN apk add --no-cache gettext-envsubst apache2-utils
 
 COPY deploy/angie.conf.tpl /etc/angie/angie.conf.tpl
+COPY deploy/basic-auth.conf /etc/angie/basic-auth.conf
+COPY deploy/generate-auth.sh /usr/local/bin/generate-auth.sh
 COPY deploy/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY --from=build /app/dist /usr/share/angie/html
 RUN chown -R angie:angie /usr/share/angie/html \
-    && chmod +x /usr/local/bin/docker-entrypoint.sh
+    && chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/generate-auth.sh
 
 ENV ANGIE_BACKEND_URL="backend:8080"
 

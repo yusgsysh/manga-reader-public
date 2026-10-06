@@ -241,14 +241,20 @@ func (e *Engine) sendPush(ctx context.Context, cfg ClientConfig, req PushRequest
 	url := cfg.ServerURL + "/api/sync/push"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return resp, fmt.Errorf("build push request: %w", err)
+		// The server URL may embed Basic Auth credentials (user:pass@host)
+		// for an auth-protected public peer; url.Parse errors echo the raw
+		// URL verbatim, so the error must not wrap them. It would otherwise
+		// end up in logs and in sync_state.last_error.
+		return resp, fmt.Errorf("build push request: invalid server url")
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set(headerToken, cfg.Token)
 
 	httpResp, err := e.http.Do(httpReq)
 	if err != nil {
-		return resp, fmt.Errorf("push to %s: %w", cfg.ServerURL, err)
+		// err is a *url.Error whose URL is redacted by net/http; never add
+		// cfg.ServerURL ourselves.
+		return resp, fmt.Errorf("push request failed: %w", err)
 	}
 	defer httpResp.Body.Close()
 

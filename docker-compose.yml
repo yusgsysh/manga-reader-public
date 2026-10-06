@@ -11,11 +11,15 @@
 #
 # 拓扑：
 #   frontend (Angie :80)
+#     ├── HTTP Basic Authentication（可选，MANGA_READER_BASIC_AUTH_*，默认关闭）
 #     ├── 静态文件
 #     └── /api/* → backend (:8080)
 #
 #   backend (Gin :8080)
 #     └── 不对外发布端口，仅通过 frontend 访问
+#
+# 公网部署：Basic Auth 必须开启且置于 HTTPS 之后；backend /
+# PostgreSQL / MinIO 均不发布公网端口（见 README「公网部署」）。
 #
 # 本地调试 backend 时，可临时取消注释：
 #   ports:
@@ -70,6 +74,15 @@ services:
       # backend:8080
       ANGIE_BACKEND_URL: ${ANGIE_BACKEND_URL:-backend:8080}
 
+      # HTTP Basic Auth（Angie 层，默认关闭；生产在 .env 开启）
+      # 注意：.env 中的 $ 需写成 $$（compose 会做变量插值）
+      MANGA_READER_BASIC_AUTH_ENABLED: ${MANGA_READER_BASIC_AUTH_ENABLED:-false}
+      MANGA_READER_BASIC_AUTH_USERNAME: ${MANGA_READER_BASIC_AUTH_USERNAME:-}
+      MANGA_READER_BASIC_AUTH_PASSWORD: ${MANGA_READER_BASIC_AUTH_PASSWORD:-}
+      # 口令/htpasswd 文件经 secret 注入时设置（见文件末尾 secrets 示例）
+      MANGA_READER_BASIC_AUTH_FILE: ${MANGA_READER_BASIC_AUTH_FILE:-}
+      MANGA_READER_BASIC_AUTH_PASSWORD_FILE: ${MANGA_READER_BASIC_AUTH_PASSWORD_FILE:-}
+
     depends_on:
       - backend
 
@@ -87,3 +100,26 @@ services:
 
 volumes:
   backend_data:
+
+# ------------------------------------------------------------
+# 生产环境 Basic Auth 推荐：口令不进 .env / 容器环境，而是以
+# htpasswd 文件（apr1 $1$ 哈希）经 docker secret 注入：
+#
+#   1) 宿主机生成（交互输入口令，不落命令行历史）：
+#        mkdir -p secrets
+#        htpasswd -nm admin > secrets/manga_reader.htpasswd
+#      注意：勿用 -B（bcrypt）—— Angie(Alpine/musl) 的 auth_basic
+#      不支持 bcrypt，正确口令也会验证失败。
+#   2) .env 中设置：
+#        MANGA_READER_BASIC_AUTH_ENABLED=true
+#        MANGA_READER_BASIC_AUTH_FILE=/run/secrets/manga_reader_htpasswd
+#   3) 取消下面的注释：
+#
+# secrets:
+#   manga_reader_htpasswd:
+#     file: ./secrets/manga_reader.htpasswd
+#
+#   并在 frontend 服务下追加：
+#     secrets:
+#       - manga_reader_htpasswd
+# ------------------------------------------------------------
