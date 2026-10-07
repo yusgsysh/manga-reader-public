@@ -97,7 +97,6 @@ func TestValidatePageURL_Valid(t *testing.T) {
 		{"exhentai page", "https://exhentai.org/s/51d1aa689c/4153369-29"},
 		{"e-hentai page", "https://e-hentai.org/s/859299c9ef/3138775-7"},
 		{"exhentai with query", "https://exhentai.org/s/abc/123-1?nl=SZF-483294"},
-		{"http allowed", "http://exhentai.org/s/abc/123-1"},
 	}
 
 	for _, tt := range tests {
@@ -117,6 +116,7 @@ func TestValidatePageURL_Invalid(t *testing.T) {
 		{"empty", ""},
 		{"no scheme", "exhentai.org/s/abc/123-1"},
 		{"ftp scheme", "ftp://exhentai.org/s/abc/123-1"},
+		{"http scheme", "http://exhentai.org/s/abc/123-1"},
 		{"file scheme", "file:///etc/passwd"},
 		{"gopher scheme", "gopher://exhentai.org"},
 		{"localhost", "https://localhost/s/abc/123-1"},

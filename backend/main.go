@@ -153,6 +153,11 @@ func run() error {
 
 	srv := handler.New(handlerCfg)
 
+	// Production runs release mode: gin's debug mode dumps the full route
+	// table at startup and logs every request line (including query strings).
+	if cfg.Environment == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	r := gin.Default()
 	r.Use(CORSMiddleware())
 
@@ -203,6 +208,14 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			// Open SSE streams (/api/events/changes, /api/sync/events) keep
+			// their connections alive and Shutdown waits for them forever;
+			// force-close instead of failing the exit status.
+			logger.Warn("graceful shutdown timed out; closing open connections")
+			_ = httpServer.Close()
+			return nil
+		}
 		logger.Error("graceful shutdown failed", "error", err)
 		return err
 	}

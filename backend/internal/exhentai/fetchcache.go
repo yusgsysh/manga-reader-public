@@ -34,6 +34,11 @@ var (
 	fetchCache   = map[string]fetchEntry{}
 )
 
+// fetchCacheMaxEntries bounds the shared document cache. Values are full
+// parsed upstream documents keyed by request URL, and query strings are
+// user-controlled, so without a cap distinct URLs would pin memory forever.
+const fetchCacheMaxEntries = 2048
+
 // fetchOnce returns the cached value for key while fresh, otherwise runs fetch
 // exactly once (concurrent callers wait on the same call) and caches the result
 // for fetchCacheTTL. The fetch runs on a context detached from any single
@@ -85,6 +90,20 @@ func getFetchEntry(key string) (any, bool) {
 func setFetchEntry(key string, value any) {
 	fetchCacheMu.Lock()
 	defer fetchCacheMu.Unlock()
+	if len(fetchCache) >= fetchCacheMaxEntries {
+		// Drop expired entries first; if the cache is still full of fresh
+		// entries, reset it — refetching is cheap (short TTL) compared to
+		// unbounded growth.
+		now := time.Now()
+		for k, e := range fetchCache {
+			if now.After(e.expires) {
+				delete(fetchCache, k)
+			}
+		}
+		if len(fetchCache) >= fetchCacheMaxEntries {
+			fetchCache = make(map[string]fetchEntry)
+		}
+	}
 	fetchCache[key] = fetchEntry{value: value, expires: time.Now().Add(fetchCacheTTL)}
 }
 

@@ -72,6 +72,9 @@ func TestParseGalleryURL(t *testing.T) {
 		{"ehentai url", "https://e-hentai.org/g/3138775/30b0285f9b/", "e-hentai.org", "3138775", "30b0285f9b"},
 		{"no trailing slash", "https://exhentai.org/g/3138775/30b0285f9b", "exhentai.org", "3138775", "30b0285f9b"},
 		{"invalid url", "https://exhentai.org/not/a/gallery", "", "", ""},
+		// "g" as the first path segment: splits[i-1] must not be read (panic
+		// regression: a relative href like this appeared in upstream HTML).
+		{"relative g href", "g/3138775/30b0285f9b", "", "", ""},
 	}
 
 	for _, tt := range tests {

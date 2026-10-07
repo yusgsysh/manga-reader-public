@@ -82,6 +82,10 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 	if page < 0 {
 		page = 0
 	}
+	if page > maxDBPage {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "page too large"})
+		return
+	}
 
 	ctx := c.Request.Context()
 	pageSize := 25

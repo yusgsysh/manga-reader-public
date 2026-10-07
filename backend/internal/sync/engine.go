@@ -218,11 +218,15 @@ func (e *Engine) pushCycle(ctx context.Context, cfg ClientConfig) {
 // the current outbox maximum.
 func (e *Engine) buildPushChanges(ctx context.Context, st EngineState) ([]Change, int, error) {
 	if !st.Bootstrapped {
-		changes, err := ExportSnapshot(ctx, e.svc.client)
+		// Read the watermark before the export: a row written in between
+		// keeps an outbox id above the watermark, so the next cycle pushes it
+		// as a delta instead of losing it (the old order could mark such a
+		// row delivered without ever sending it).
+		maxID, err := maxOutboxID(ctx, e.svc.client)
 		if err != nil {
 			return nil, 0, err
 		}
-		maxID, err := maxOutboxID(ctx, e.svc.client)
+		changes, err := ExportSnapshot(ctx, e.svc.client)
 		if err != nil {
 			return nil, 0, err
 		}

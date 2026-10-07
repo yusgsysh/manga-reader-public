@@ -2,7 +2,9 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/bookshelf"
@@ -26,6 +28,17 @@ func ApplyChanges(ctx context.Context, client *ent.Client, changes []Change) (ap
 	for _, ch := range changes {
 		ok, applyErr := applyChange(ctx, client, ch)
 		if applyErr != nil {
+			// A row that fails ent validation (e.g. progress > 1 from a
+			// divergent peer) must not wedge replication: the cursor would
+			// never advance and every cycle would resend the same batch.
+			// Log it and count it as skipped; real DB failures still abort.
+			var ve *ent.ValidationError
+			if errors.As(applyErr, &ve) {
+				slog.Warn("skipping invalid sync change",
+					"entity", ch.Entity, "gallery_id", ch.GalleryID, "token", ch.Token, "error", applyErr)
+				skipped++
+				continue
+			}
 			return applied, skipped, applyErr
 		}
 		if ok {

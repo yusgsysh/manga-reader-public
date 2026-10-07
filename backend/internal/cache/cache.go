@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -64,7 +65,11 @@ func NewMinIOCache(cfg *MinIOConfig) (*MinIOCache, error) {
 		autoCreate: true,
 	}
 
-	if err := cache.ensureBucket(context.Background()); err != nil {
+	// Bound startup: an unreachable MinIO must not hang boot forever with no
+	// health endpoint up.
+	bucketCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := cache.ensureBucket(bucketCtx); err != nil {
 		return nil, err
 	}
 
