@@ -32,7 +32,20 @@ const alphaThreshold = 8
 // Fully transparent padding around the cell content is trimmed so the returned
 // thumbnail tightly bounds the page image. This keeps consumers from rendering
 // the transparent letterbox as a solid (white) border.
+// maxSpritePixels caps the decoded sprite size. Compressed input is bounded
+// upstream (30 MiB) but a 16383x16383 WebP decodes to ~1 GB, so check the
+// dimensions from the header before allocating.
+const maxSpritePixels = 40_000_000
+
 func CropWEBP(data []byte, rect image.Rectangle) ([]byte, error) {
+	cfg, err := webp.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decode sprite config: %w", err)
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width*cfg.Height > maxSpritePixels {
+		return nil, fmt.Errorf("sprite dimensions too large: %dx%d", cfg.Width, cfg.Height)
+	}
+
 	src, err := webp.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode sprite: %w", err)

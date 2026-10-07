@@ -31,7 +31,7 @@ func ParseGalleryURL(u string) (domain, gId, gToken string) {
 	u = strings.TrimSuffix(u, "/")
 	splits := strings.Split(u, "/")
 	for i, s := range splits {
-		if s == "g" && i+2 < len(splits) {
+		if s == "g" && i > 0 && i+2 < len(splits) {
 			return splits[i-1], splits[i+1], splits[i+2]
 		}
 	}

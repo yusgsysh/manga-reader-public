@@ -129,7 +129,7 @@ func ScrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 			}
 			firstDoc, ferr := httpGetDoc(ctx, client, firstURL)
 			if ferr != nil {
-				return 0, []model.SearchResult{}, ListingNav{}, nil
+				return 0, nil, ListingNav{}, ferr
 			}
 			total, ok := parseSearchTotal(firstDoc)
 			if !ok || total == 0 {
@@ -142,7 +142,8 @@ func ScrapeSearch(ctx context.Context, client *http.Client, siteURL, keyword str
 
 	noHits := doc.Find("body > div.ido > div:nth-child(2) > p").Text()
 	if noHits != "" {
-		return 0, nil, ListingNav{}, fmt.Errorf("no hits found: %s", noHits)
+		// A "no results" page is a successful empty outcome, not an error.
+		return 0, []model.SearchResult{}, ListingNav{}, nil
 	}
 
 	total, ok := parseSearchTotal(doc)

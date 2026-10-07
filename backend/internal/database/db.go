@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
@@ -83,6 +84,11 @@ func newPostgresDB(dsn string) (*DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
+	// Go's defaults are MaxOpenConns=0 (unlimited), which lets concurrent
+	// image/prefill/search traffic exhaust postgres with "too many clients".
+	conn.SetMaxOpenConns(25)
+	conn.SetMaxIdleConns(5)
+	conn.SetConnMaxLifetime(30 * time.Minute)
 	return initClient(conn, dialect.Postgres)
 }
 
@@ -91,7 +97,9 @@ func initClient(conn *sql.DB, dialectName string) (*DB, error) {
 	drv := entsql.OpenDB(dialectName, conn)
 	client := ent.NewClient(ent.Driver(drv))
 
-	if err := client.Schema.Create(context.Background(),
+	migrateCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := client.Schema.Create(migrateCtx,
 		migrate.WithDropIndex(true),
 		migrate.WithDropColumn(true),
 	); err != nil {

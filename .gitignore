@@ -8,6 +8,26 @@ backend/cmd/desktop/desktop
 backend/cmd/desktop/build/bin/
 backend/cmd/desktop/dist/*
 !backend/cmd/desktop/dist/.gitkeep
+backend/cmd/desktop/.task/
+backend/cmd/desktop/build/android/.gradle/
+backend/cmd/desktop/build/android/build/
+backend/cmd/desktop/build/android/gen/
+backend/cmd/desktop/build/android/overlay.json
+backend/cmd/desktop/build/frontend
+backend/cmd/desktop/frontend/
 
 # Vite dependency hash
 frontend/package.json.md5
+frontend/wailsjs/runtime/package.json
+frontend/wailsjs/runtime/runtime.d.ts
+frontend/wailsjs/runtime/runtime.js
+.task/*
+backend/desktop
+manga-reader-desktop.apk
+build/android/gen/main_android.gen.go
+frontend/frontend
+build/android/overlay.json
+
+# HTTP Basic Auth credentials — never commit
+*.htpasswd
+secrets/

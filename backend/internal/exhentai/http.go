@@ -1,7 +1,10 @@
 package exhentai
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,6 +19,10 @@ const (
 	// upstreamDocTimeout bounds each HTML document fetch so a hung
 	// upstream connection cannot stall a request indefinitely.
 	upstreamDocTimeout = 15 * time.Second
+
+	// maxDocBytes caps an upstream HTML/JSON body before parsing, so an
+	// oversized or hostile gzip response cannot expand without bound.
+	maxDocBytes = 16 << 20
 )
 
 func httpGet(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
@@ -57,16 +64,21 @@ func fetchDoc(ctx context.Context, client *http.Client, target string) (*goquery
 	}
 	defer resp.Body.Close()
 
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	doc, err := readDocument(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
+	// Content heuristics run before the status check so the specific auth
+	// failure pages keep their dedicated error types.
 	if sadPandaCheck(doc) {
 		return nil, ErrSadPanda
 	}
 	if ipBannedCheck(doc) {
 		return nil, ErrIPBanned
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, &httpStatusError{code: resp.StatusCode}
 	}
 	return doc, nil
 }
@@ -101,7 +113,7 @@ func postFormDoc(ctx context.Context, client *http.Client, target string, form u
 	}
 	defer resp.Body.Close()
 
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	doc, err := readDocument(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +123,26 @@ func postFormDoc(ctx context.Context, client *http.Client, target string, form u
 	}
 	if ipBannedCheck(doc) {
 		return nil, ErrIPBanned
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, &httpStatusError{code: resp.StatusCode}
+	}
+	return doc, nil
+}
+
+// readDocument parses an upstream body, enforcing maxDocBytes so a decompression
+// bomb or oversized page cannot be buffered without limit.
+func readDocument(body io.Reader) (*goquery.Document, error) {
+	data, err := io.ReadAll(io.LimitReader(body, maxDocBytes))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) == maxDocBytes {
+		return nil, fmt.Errorf("upstream document exceeds %d bytes", maxDocBytes)
+	}
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
 	}
 	return doc, nil
 }

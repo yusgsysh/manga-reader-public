@@ -209,12 +209,26 @@ func fetchListingDoc(ctx context.Context, client *http.Client, firstURL string, 
 	}
 
 	// No cached cursor for this page: walk from the first page, caching as we go.
+	//
+	// The walk is bounded three ways: the caller rejects absurd page numbers,
+	// client cancellation aborts between hops, and a wall-clock budget caps a
+	// cold walk even if the caller keeps its connection open (each hop may
+	// block for upstreamDocTimeout). Progress is cached, so a retry resumes
+	// from the last reached cursor instead of restarting.
+	const walkBudget = 90 * time.Second
+	deadline := time.Now().Add(walkBudget)
 	doc, err := httpGetDoc(ctx, client, firstURL)
 	if err != nil {
 		return nil, err
 	}
 	setListingCursor(firstURL, 1, extractNextURL(doc))
 	for i := 1; i <= page; i++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("listing walk exceeded %s budget at page %d", walkBudget, i)
+		}
 		next, ok := getListingCursor(firstURL, i)
 		if !ok {
 			return nil, errNoNextPage

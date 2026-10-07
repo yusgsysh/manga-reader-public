@@ -218,11 +218,15 @@ func (e *Engine) pushCycle(ctx context.Context, cfg ClientConfig) {
 // the current outbox maximum.
 func (e *Engine) buildPushChanges(ctx context.Context, st EngineState) ([]Change, int, error) {
 	if !st.Bootstrapped {
-		changes, err := ExportSnapshot(ctx, e.svc.client)
+		// Read the watermark before the export: a row written in between
+		// keeps an outbox id above the watermark, so the next cycle pushes it
+		// as a delta instead of losing it (the old order could mark such a
+		// row delivered without ever sending it).
+		maxID, err := maxOutboxID(ctx, e.svc.client)
 		if err != nil {
 			return nil, 0, err
 		}
-		maxID, err := maxOutboxID(ctx, e.svc.client)
+		changes, err := ExportSnapshot(ctx, e.svc.client)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -241,14 +245,20 @@ func (e *Engine) sendPush(ctx context.Context, cfg ClientConfig, req PushRequest
 	url := cfg.ServerURL + "/api/sync/push"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return resp, fmt.Errorf("build push request: %w", err)
+		// The server URL may embed Basic Auth credentials (user:pass@host)
+		// for an auth-protected public peer; url.Parse errors echo the raw
+		// URL verbatim, so the error must not wrap them. It would otherwise
+		// end up in logs and in sync_state.last_error.
+		return resp, fmt.Errorf("build push request: invalid server url")
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set(headerToken, cfg.Token)
 
 	httpResp, err := e.http.Do(httpReq)
 	if err != nil {
-		return resp, fmt.Errorf("push to %s: %w", cfg.ServerURL, err)
+		// err is a *url.Error whose URL is redacted by net/http; never add
+		// cfg.ServerURL ourselves.
+		return resp, fmt.Errorf("push request failed: %w", err)
 	}
 	defer httpResp.Body.Close()
 

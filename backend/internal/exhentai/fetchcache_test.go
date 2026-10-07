@@ -2,6 +2,7 @@ package exhentai
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -113,5 +114,30 @@ func TestFetchOnce_DistinctKeysDoNotShare(t *testing.T) {
 	}
 	if got := calls.Load(); got != 2 {
 		t.Fatalf("fetch calls = %d, want 2 (distinct keys)", got)
+	}
+}
+
+// TestFetchCacheIsBounded: values are parsed upstream documents keyed by
+// request URL (user-controlled query strings), so an uncapped map would pin
+// memory forever as distinct URLs are fetched.
+func TestFetchCacheIsBounded(t *testing.T) {
+	fetchCacheMu.Lock()
+	fetchCache = make(map[string]fetchEntry)
+	fetchCacheMu.Unlock()
+	t.Cleanup(func() {
+		fetchCacheMu.Lock()
+		fetchCache = make(map[string]fetchEntry)
+		fetchCacheMu.Unlock()
+	})
+
+	for i := range fetchCacheMaxEntries + 64 {
+		setFetchEntry(fmt.Sprintf("bounded-test:%d", i), i)
+	}
+
+	fetchCacheMu.Lock()
+	n := len(fetchCache)
+	fetchCacheMu.Unlock()
+	if n > fetchCacheMaxEntries {
+		t.Fatalf("fetchCache holds %d entries, want <= %d", n, fetchCacheMaxEntries)
 	}
 }
