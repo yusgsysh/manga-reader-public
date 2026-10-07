@@ -1345,7 +1345,7 @@ Cache-Control: no-store
 { "enabled": true, "server_url": "https://server.example.com", "token": "my-secret" }
 ```
 
-响应同 GET（脱敏）。设置 `enabled` 会即时启停后台同步引擎。
+响应同 GET（脱敏）。设置 `enabled` 会即时启停后台同步引擎；`server_url` 实际变化时自动重置同步状态（`cursor`、`last_pushed_id`、引导标记、`last_sync_at`、`last_error`），下次交换对新对端重新全量快照。
 
 `GET /api/sync/status`
 
@@ -1408,6 +1408,11 @@ Cache-Control: no-store
 curl -X PUT http://localhost:8080/api/sync/config -H 'Content-Type: application/json' \
   -d '{"enabled":true,"server_url":"http://server:8080","token":"my-secret"}'
 
+# 公网服务端（Basic Auth 后）：请求本身与 server_url 均带凭据
+curl -u admin:你的口令 -X PUT https://manga.09270721.xyz/api/sync/config \
+  -H 'Content-Type: application/json' \
+  -d '{"enabled":true,"server_url":"https://admin:你的口令@manga.09270721.xyz","token":"my-secret"}'
+
 # 手动推 + 拉
 curl -X POST http://server:8080/api/sync/push \
   -H 'Content-Type: application/json' -H 'X-Sync-Token: my-secret' \
@@ -1417,7 +1422,7 @@ curl -X POST http://server:8080/api/sync/push \
 curl -N http://server:8080/api/sync/events -H 'X-Sync-Token: my-secret'
 ```
 
-> 公网服务端若在反向代理层开启 HTTP Basic Auth（见根 README「公网部署」），在 `server_url` 内嵌 Basic 凭据即可通过：`https://user:pass@server.example.com`。Go 客户端会自动携带 `Authorization` 头，它与 `X-Sync-Token` 相互独立、需同时提供；同步错误信息（`last_error`）不会包含该口令。
+> 公网服务端若在反向代理层开启 HTTP Basic Auth（见根 README「公网部署」），在 `server_url` 内嵌 Basic 凭据即可通过：`https://user:pass@server.example.com`，例如 `https://admin:你的口令@manga.09270721.xyz`（口令含 `@`、`:` 时需 URL 编码）。Go 客户端会自动携带 `Authorization` 头，它与 `X-Sync-Token` 相互独立、需同时提供；同步错误信息（`last_error`）不会包含该口令。
 
 **Error Responses:** `400` 配置无效（如 `server_url` 缺少 http/https、请求体非法）、`401` 令牌不匹配、`404` 宿主端点未启用。
 
