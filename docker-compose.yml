@@ -37,6 +37,12 @@ services:
     environment:
       MANGA_READER_DB_PATH: /app/data/manga-reader.db
 
+      # HTTP 代理（出站走代理，.env 中的 HTTP_PROXY/HTTPS_PROXY/NO_PROXY）
+      # 未设置时为空，Go 视为未配置代理即直连
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
+
     volumes:
       - backend_data:/app/data
 

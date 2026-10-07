@@ -210,6 +210,9 @@ docker build -t git.09270721.xyz/abc/manga-reader-backend:latest backend
 | `MANGA_READER_BASIC_AUTH_PASSWORD_FILE` | 否† | - | 单行口令文件路径（docker secret） |
 | `MANGA_READER_DEV_TOOLS` | 否 | `false` | 启用 `/api/dev/*` 调试接口（可运行时模拟 ExHentai 不可用，见 `backend/API.md` Dev Tools） |
 | `MANGA_READER_SYNC_TOKEN` | 否 | - | 同步宿主令牌；非空时启用服务端同步端点（`/api/sync/push`、`/api/sync/events`） |
+| `HTTP_PROXY` | 否 | - | backend 出站 HTTP 代理（`http://`、`https://`、`socks5://`），仅作用于后端抓取/同步请求 |
+| `HTTPS_PROXY` | 否 | - | 同上，用于 `https://` 目标（ExHentai 等） |
+| `NO_PROXY` | 否 | - | 绕过代理的主机/网段（内网 MinIO、数据库、compose 服务名等） |
 
 > \* `EHENTAI_COOKIE` 与 `EHENTAI_COOKIE_IPB_MEMBER_ID` + `EHENTAI_COOKIE_IPB_PASS_HASH` 至少配置一种，否则后端无法启动。
 > † Basic Auth 启用时必须提供凭据来源之一（用户名+口令、`_FILE`、或 `MANGA_READER_BASIC_AUTH_FILE`），否则 frontend 容器拒绝启动。
