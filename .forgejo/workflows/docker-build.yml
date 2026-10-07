@@ -16,7 +16,7 @@ env:
   BACKEND_IMAGE: git.09270721.xyz/abc/manga-reader-backend
 
   # Docker Compose deployment
-  DEPLOY_PATH: /root/manga-reader
+  DEPLOY_PATH: /root/manga-reader-public
 
 jobs:
   # ------------------------------------------------------------

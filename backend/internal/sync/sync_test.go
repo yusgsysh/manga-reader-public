@@ -474,6 +474,63 @@ func TestConfigRoundTripMasksToken(t *testing.T) {
 	}
 }
 
+func TestConfigPeerChangeResetsEngineState(t *testing.T) {
+	client := newTestClient(t)
+	svc := NewService(client, Options{})
+	router := newTestRouter(svc)
+
+	put := func(body string) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPut, "/api/sync/config", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("PUT config = %d, body %s", w.Code, w.Body.String())
+		}
+	}
+	loadState := func() EngineState {
+		t.Helper()
+		st, err := svc.LoadEngineState(t.Context())
+		if err != nil {
+			t.Fatalf("load engine state: %v", err)
+		}
+		return st
+	}
+
+	put(`{"server_url": "https://peer.example.com"}`)
+
+	// An established replication state against the current peer.
+	syncAt := time.Now().UTC().Truncate(time.Millisecond)
+	for key, value := range map[string]string{
+		keyCursor:       "42",
+		keyLastPushedID: "42",
+		keyBootstrapped: "true",
+		keyLastSyncAt:   syncAt.Format(time.RFC3339Nano),
+		keyLastError:    "boom",
+	} {
+		if err := svc.setState(t.Context(), key, value); err != nil {
+			t.Fatalf("seed state %s: %v", key, err)
+		}
+	}
+
+	// Re-saving the same peer (URL normalization, token rotation) keeps the
+	// bookkeeping: only an actual peer change resets it.
+	put(`{"server_url": "https://peer.example.com/", "token": "rotated"}`)
+	st := loadState()
+	if st.Cursor != 42 || st.LastPushedID != 42 || !st.Bootstrapped || st.LastError != "boom" || st.LastSyncAt == nil {
+		t.Fatalf("same-peer save state = %+v, want unchanged", st)
+	}
+
+	// A different peer starts from scratch so the next exchange is a full
+	// bidirectional snapshot instead of deltas against a foreign cursor.
+	put(`{"server_url": "https://other.example.com"}`)
+	st = loadState()
+	if st.Cursor != 0 || st.LastPushedID != 0 || st.Bootstrapped || st.LastSyncAt != nil || st.LastError != "" {
+		t.Fatalf("peer change state = %+v, want zeroed", st)
+	}
+}
+
 func TestLocalEventsStreamsPayloads(t *testing.T) {
 	client := newTestClient(t)
 	svc := NewService(client, Options{})

@@ -124,11 +124,21 @@ func (s *Service) SaveClientConfig(ctx context.Context, in ConfigUpdate) (Client
 		return current, err
 	}
 
+	peerChanged := false
 	if in.Enabled != nil {
 		current.Enabled = *in.Enabled
 	}
 	if in.ServerURL != nil {
-		current.ServerURL = strings.TrimRight(strings.TrimSpace(*in.ServerURL), "/")
+		u := strings.TrimRight(strings.TrimSpace(*in.ServerURL), "/")
+		if u != current.ServerURL {
+			// Replication bookkeeping (cursor, outbox watermark, bootstrap
+			// flag) is only meaningful for the peer it was collected against.
+			// Kept across a peer change it would skip the initial full
+			// snapshot: the new peer would receive deltas beyond a cursor it
+			// never sent, and its replies would be filtered by the old cursor.
+			peerChanged = true
+			current.ServerURL = u
+		}
 	}
 	if in.Token != nil {
 		t := strings.TrimSpace(*in.Token)
@@ -149,8 +159,25 @@ func (s *Service) SaveClientConfig(ctx context.Context, in ConfigUpdate) (Client
 	if err := s.setState(ctx, keyToken, current.Token); err != nil {
 		return current, err
 	}
+	if peerChanged {
+		if err := s.resetEngineState(ctx); err != nil {
+			return current, err
+		}
+	}
 	s.engine.Reload()
 	return current, nil
+}
+
+// resetEngineState clears the replication bookkeeping so the next exchange
+// bootstraps from scratch: the client re-exports a full snapshot and requests
+// the peer's full snapshot in the same first push.
+func (s *Service) resetEngineState(ctx context.Context) error {
+	for _, key := range []string{keyCursor, keyLastPushedID, keyBootstrapped, keyLastSyncAt, keyLastError} {
+		if err := s.setState(ctx, key, ""); err != nil {
+			return fmt.Errorf("reset sync state %q: %w", key, err)
+		}
+	}
+	return nil
 }
 
 // LoadEngineState reads the replication bookkeeping.
