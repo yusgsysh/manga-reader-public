@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 
 	json "encoding/json/v2"
@@ -67,7 +68,9 @@ func postGalleryMetadata(ctx context.Context, client *http.Client, gid int64, to
 	}
 
 	var result response
-	if err := json.UnmarshalRead(resp.Body, &result); err != nil {
+	// Bound the JSON body like the HTML paths: the upstream response is
+	// gunzipped transparently, so cap decompressed bytes before decoding.
+	if err := json.UnmarshalRead(io.LimitReader(resp.Body, maxDocBytes), &result); err != nil {
 		return model.GalleryMetadata{}, fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
 

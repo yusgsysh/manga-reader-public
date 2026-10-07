@@ -17,7 +17,7 @@
 - 离线下载任务（Prefill）：后台排队预填充图片缓存、下载管理页、流式 ZIP 下载
 - 缩略图源站代理与 MinIO 缓存
 - 页面图片 MinIO 缓存（可选）
-- 单用户设计，无登录、无多用户
+- 单用户设计，无用户系统；公网访问经反向代理层 HTTP Basic Authentication 保护（见「公网部署」）
 
 ## 目录结构
 
@@ -108,6 +108,67 @@ backend/
 
 数据位于 Docker 命名卷中，`docker compose down` 不会丢失；如需彻底清除使用 `docker compose down -v`。
 
+## 公网部署（HTTPS + HTTP Basic Authentication）
+
+开发环境 Basic Auth **默认关闭**（`MANGA_READER_BASIC_AUTH_ENABLED=false`），`bun dev`、`go run .`、Playwright、单元测试、桌面端均不受影响。公网部署必须显式开启，并满足：
+
+- **HTTPS 必须在 Basic Auth 之前**：Basic Auth 只是 `base64(user:pass)`，不是加密。TLS 由前置层（云负载均衡 / Caddy / 前置 nginx）提供，同时负责 HTTP :80 → HTTPS :443 跳转；HSTS 也由该层配置，确认域名永久 HTTPS 后再开启。
+- **后端不暴露公网**：backend `:8080`、PostgreSQL `:5432`、MinIO `:9000/:9001` 均不发布公网端口，只在 Docker 内网通信（本仓库 compose 已是此拓扑）；仅 frontend(Angie) 对外。
+- **保护范围**：`/`、静态资源、`/api/*`（含 SSE `/api/sync/events`、`/api/events/changes`、图片代理、Prefill、ZIP）全部经 Basic Auth；仅 `/healthz` 豁免（静态 `ok`，无 Cookie / 令牌 / 配置信息）。认证失败返回 `401` + `WWW-Authenticate: Basic realm="Manga Reader"`，由浏览器处理——前端没有、也不需要登录页。
+
+### 开关与凭据
+
+最小生产配置（`.env`，占位示例，勿提交真实口令；`secrets/` 与 `*.htpasswd` 已在 `.gitignore`）：
+
+```env
+MANGA_READER_BASIC_AUTH_ENABLED=true
+MANGA_READER_BASIC_AUTH_USERNAME=admin
+MANGA_READER_BASIC_AUTH_PASSWORD=change-me-strong-password
+```
+
+```bash
+docker compose up -d   # 环境变量变化会重建 frontend 容器
+```
+
+凭据注入三选一（启用时必须提供其一，否则 frontend 容器**拒绝启动**，fail closed）：
+
+1. **用户名 + 口令环境变量**（上例）：启动时经 `htpasswd` 生成 apr1 哈希交给 Angie；口令不写日志、不回传 API、不在日志中记录认证失败口令。
+2. **htpasswd 文件（推荐）**：口令不进容器环境变量，经 docker secret 挂载：
+
+   ```bash
+   mkdir -p secrets
+   htpasswd -nm admin > secrets/manga_reader.htpasswd   # 交互输入口令
+   chmod 644 secrets/manga_reader.htpasswd              # angie worker 需可读
+   ```
+
+   ```env
+   MANGA_READER_BASIC_AUTH_ENABLED=true
+   MANGA_READER_BASIC_AUTH_FILE=/run/secrets/manga_reader_htpasswd
+   ```
+
+   再按 `docker-compose.yml` 末尾示例取消 `secrets:` 注释并给 frontend 挂载该 secret。
+
+3. **口令文件**（明文单行，docker secret）：`MANGA_READER_BASIC_AUTH_PASSWORD_FILE=/run/secrets/...` + 用户名环境变量。
+
+注意事项：
+
+- **哈希必须是 apr1（`$1$`，`htpasswd -m`/`-n`），勿用 `-B` bcrypt**：Angie 运行于 Alpine/musl，其 `crypt()` 不支持 bcrypt，正确口令也会验证失败。用已有的 bcrypt 文件（`$2y$`）同样不行。
+- `.env` 中的 `$` 需写成 `$$`（compose 变量插值）。
+- 代理层消费 `Authorization` 并在转发前剔除（`proxy_set_header Authorization ""`），口令永不到达 backend 及其日志；SSE、图片、ZIP 均不受影响（认证只在连接建立时发生一次，`proxy_buffering off` 等 SSE 配置保持不变）。
+- **限流**：Basic Auth 开启时 Angie 按来源 IP 限 50 req/s（突发 200，超限 `429`），作为基础防洪水/防爆破；Angie access log 含 401 记录，需要更强防爆破时可在前置防火墙 / fail2ban 封禁。切勿因此放松口令强度。
+- **桌面端同步**：同步端点同样受 Basic Auth 保护。桌面端在设置页的服务器地址内嵌凭据即可：`https://user:pass@server.example.com`（Go HTTP 客户端自动携带 `Authorization`）。Basic 用户名/口令与 `MANGA_READER_SYNC_TOKEN` 是两套独立凭据，需同时正确（见 `backend/API.md` 28）。
+- 安全 Header 已由 Angie 添加：`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`；刻意不加 CSP（避免破坏 React、SSE、图片代理）。
+
+### 验证
+
+```bash
+# 无容器：生成逻辑 + 配置静态断言（需要 POSIX sh + htpasswd）
+sh frontend/deploy/test-auth-config.sh
+
+# 端到端：真实镜像 401/200/SSE/healthz/限流配置断言（需要 docker 或 podman + go + curl）
+sh frontend/deploy/test-basic-auth.sh
+```
+
 ## CI 与部署
 
 镜像构建与部署由 Forgejo Actions（`.forgejo/workflows/`）在自托管 runner 上完成：
@@ -153,10 +214,16 @@ docker build -t git.09270721.xyz/abc/manga-reader-backend:latest backend
 | `MINIO_*`（旧） | 否 | - | 旧变量名，与 `MANGA_READER_S3_*` 一一对应，新名优先 |
 | `LOG_LEVEL` | 否 | `warn` | `debug`/`info`/`warn`/`error`（桌面版默认 `info`），可在设置页运行时修改 |
 | `ANGIE_BACKEND_URL` | 否 | `backend:8080` | frontend(Angie) 反代后端地址（独立运行镜像时改为 `host:port`） |
+| `MANGA_READER_BASIC_AUTH_ENABLED` | 否 | `false` | Angie 层 HTTP Basic Auth 开关；公网生产必须 `true`（见「公网部署」） |
+| `MANGA_READER_BASIC_AUTH_USERNAME` | 否† | - | Basic Auth 用户名（启用且用环境变量/口令文件方式时必填） |
+| `MANGA_READER_BASIC_AUTH_PASSWORD` | 否† | - | Basic Auth 口令（生产建议改用 secret 文件，勿提交真实口令） |
+| `MANGA_READER_BASIC_AUTH_FILE` | 否† | - | 现成 htpasswd 文件路径（docker secret，推荐，apr1 `$1$` 条目） |
+| `MANGA_READER_BASIC_AUTH_PASSWORD_FILE` | 否† | - | 单行口令文件路径（docker secret） |
 | `MANGA_READER_DEV_TOOLS` | 否 | `false` | 启用 `/api/dev/*` 调试接口（可在设置页运行时开关，见 `backend/API.md` Dev Tools） |
 | `MANGA_READER_SYNC_TOKEN` | 否 | - | 同步宿主令牌；非空时启用服务端同步端点（`/api/sync/push`、`/api/sync/events`） |
 
 > \* Cookie 不配置也能启动：后端会打一条 warning 并照常提供服务，缺少的凭据在前端「设置」页补上即可（否则搜索 / 在线端点会失败）。
+> † Basic Auth 启用时必须提供凭据来源之一（用户名+口令、`_FILE`、或 `MANGA_READER_BASIC_AUTH_FILE`），否则 frontend 容器拒绝启动。
 >
 > 存储驱动不配置也能启动：`auto`（默认）只在 S3 配置**齐全**时才用 S3，否则落到本地文件目录；只有显式 `MANGA_READER_STORAGE_DRIVER=s3` 而配置不全时才会启动失败。
 >

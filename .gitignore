@@ -36,3 +36,7 @@ backend/cmd/desktop/build/android/overlay.json
 # Packaged Android artifacts
 *.apk
 *.aab
+
+# HTTP Basic Auth credentials — never commit
+*.htpasswd
+secrets/

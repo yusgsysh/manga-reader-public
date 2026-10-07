@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -49,7 +50,11 @@ func NewS3Storage(ctx context.Context, cfg config.S3Config) (*S3Storage, error) 
 	}
 
 	s := &S3Storage{client: client, bucket: cfg.Bucket, region: cfg.Region}
-	if err := s.ensureBucket(ctx); err != nil {
+	// Bound startup: an unreachable object store must not hang boot forever
+	// with no health endpoint up.
+	bucketCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	if err := s.ensureBucket(bucketCtx); err != nil {
 		return nil, err
 	}
 

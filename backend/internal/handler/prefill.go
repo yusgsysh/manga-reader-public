@@ -3,9 +3,9 @@ package handler
 import (
 	"archive/zip"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"net/http"
 	"net/url"
 	"path"
@@ -398,22 +398,50 @@ func prefillJobID(c *gin.Context) (uuid.UUID, bool) {
 // is running in this process; failed_count/errors come from memory while
 // running and from the database afterwards.
 func prefillJobJSON(m *prefillManager, row *ent.PrefillJob) gin.H {
+	return prefillJobJSONWithRuns(row, m.snapshotRuns())
+}
+
+// prefillRunSnapshot is an immutable copy of a live run's counters, taken
+// under prefillManager.mu so rendering never races the worker's updates
+// (run.errs in particular is append-ed by the worker).
+type prefillRunSnapshot struct {
+	done    int
+	cached  int
+	fetched int
+	failed  int
+	errs    []model.PrefillItemError
+}
+
+func (m *prefillManager) snapshotRuns() map[uuid.UUID]prefillRunSnapshot {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	snap := make(map[uuid.UUID]prefillRunSnapshot, len(m.runs))
+	for id, run := range m.runs {
+		snap[id] = prefillRunSnapshot{
+			done:    run.done,
+			cached:  run.cached,
+			fetched: run.fetched,
+			failed:  run.failed,
+			errs:    append([]model.PrefillItemError(nil), run.errs...),
+		}
+	}
+	return snap
+}
+
+func prefillJobJSONWithRuns(row *ent.PrefillJob, runs map[uuid.UUID]prefillRunSnapshot) gin.H {
 	var progress gin.H
 	failedCount := row.FailedCount
 	errs := row.Errors
 
-	m.mu.Lock()
-	if run, ok := m.runs[row.ID]; ok && row.Status == prefillStatusRunning {
+	if snap, ok := runs[row.ID]; ok && row.Status == prefillStatusRunning {
 		progress = gin.H{
-			"done":    run.done,
-			"cached":  run.cached,
-			"fetched": run.fetched,
+			"done":    snap.done,
+			"cached":  snap.cached,
+			"fetched": snap.fetched,
 		}
-		failedCount = run.failed
-		errs = run.errs
+		failedCount = snap.failed
+		errs = snap.errs
 	}
-	m.mu.Unlock()
-
 	if errs == nil {
 		errs = []model.PrefillItemError{}
 	}
@@ -452,7 +480,15 @@ func (s *Server) handlePrefillStart(c *gin.Context) {
 		Title     string   `json:"title"`
 		URLs      []string `json:"urls"`
 	}
+	// The urls array is materialized whole before any validation, so cap the
+	// body; ReadTimeout bounds time, not size.
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4<<20)
 	if err := c.ShouldBindJSON(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
@@ -529,10 +565,7 @@ func (s *Server) handlePrefillList(c *gin.Context) {
 		return
 	}
 	// Snapshot active runs once to avoid per-row locking.
-	m.mu.Lock()
-	runSnapshot := make(map[uuid.UUID]*prefillRun, len(m.runs))
-	maps.Copy(runSnapshot, m.runs)
-	m.mu.Unlock()
+	runSnapshot := m.snapshotRuns()
 
 	rows, err := s.DB.Client.PrefillJob.Query().
 		Select(
@@ -561,49 +594,6 @@ func (s *Server) handlePrefillList(c *gin.Context) {
 		jobs = append(jobs, prefillJobJSONWithRuns(row, runSnapshot))
 	}
 	c.JSON(http.StatusOK, gin.H{"jobs": jobs})
-}
-
-// prefillJobJSONWithRuns is like prefillJobJSON but takes a pre-snapshot of runs.
-func prefillJobJSONWithRuns(row *ent.PrefillJob, runs map[uuid.UUID]*prefillRun) gin.H {
-	var progress gin.H
-	failedCount := row.FailedCount
-	errs := row.Errors
-
-	if run, ok := runs[row.ID]; ok && row.Status == prefillStatusRunning {
-		progress = gin.H{
-			"done":    run.done,
-			"cached":  run.cached,
-			"fetched": run.fetched,
-		}
-		failedCount = run.failed
-		errs = run.errs
-	}
-
-	if errs == nil {
-		errs = []model.PrefillItemError{}
-	}
-	var galleryID any
-	if row.GalleryID != nil {
-		galleryID = *row.GalleryID
-	}
-	var finishedAt any
-	if row.FinishedAt != nil {
-		finishedAt = row.FinishedAt.Format(time.RFC3339)
-	}
-	return gin.H{
-		"id":           row.ID.String(),
-		"gallery_id":   galleryID,
-		"token":        row.Token,
-		"title":        row.Title,
-		"status":       row.Status,
-		"total":        row.Total,
-		"progress":     progress,
-		"failed_count": failedCount,
-		"errors":       errs,
-		"created_at":   row.CreatedAt.Format(time.RFC3339),
-		"updated_at":   row.UpdatedAt.Format(time.RFC3339),
-		"finished_at":  finishedAt,
-	}
 }
 
 // handlePrefillGet returns a single job snapshot.

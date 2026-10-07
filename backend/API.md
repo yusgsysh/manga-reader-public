@@ -1499,6 +1499,8 @@ curl -X POST http://server:8080/api/sync/push \
 curl -N http://server:8080/api/sync/events -H 'X-Sync-Token: my-secret'
 ```
 
+> 公网服务端若在反向代理层开启 HTTP Basic Auth（见根 README「公网部署」），在 `server_url` 内嵌 Basic 凭据即可通过：`https://user:pass@server.example.com`。Go 客户端会自动携带 `Authorization` 头，它与 `X-Sync-Token` 相互独立、需同时提供；同步错误信息（`last_error`）不会包含该口令。
+
 **Error Responses:** `400` 配置无效（如 `server_url` 缺少 http/https、请求体非法）、`401` 令牌不匹配、`404` 宿主端点未启用。
 
 ---

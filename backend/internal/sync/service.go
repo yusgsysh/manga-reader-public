@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -88,8 +89,16 @@ func (s *Service) requireToken() gin.HandlerFunc {
 
 // handlePush is the combined push+pull exchange (see PushRequest).
 func (s *Service) handlePush(c *gin.Context) {
+	// The body carries full rows (page/thumbnail arrays); bound it so a
+	// stolen token cannot stream an unbounded payload into memory.
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<20)
 	var req PushRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
@@ -110,6 +119,14 @@ func (s *Service) handlePush(c *gin.Context) {
 	var changes []Change
 	var cursor int
 	if req.Snapshot && req.Cursor == 0 {
+		// Read the watermark before the export so a row written in between
+		// keeps an outbox id above the returned cursor instead of landing in
+		// neither the snapshot nor the delta.
+		cursor, err = maxOutboxID(ctx, s.client)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "collect cursor failed"})
+			return
+		}
 		changes, err = ExportSnapshot(ctx, s.client)
 	} else {
 		changes, cursor, err = ReadChangesSince(ctx, s.client, req.Cursor)
@@ -119,21 +136,15 @@ func (s *Service) handlePush(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "collect changes failed"})
 		return
 	}
-	if cursor == 0 && req.Snapshot && req.Cursor == 0 {
-		// A snapshot response still needs a concrete cursor; use the current
-		// outbox maximum (0 on a quiet instance, which is fine: subsequent
-		// pulls with cursor 0 read the outbox delta and LWW-skips echoes).
-		cursor, err = maxOutboxID(ctx, s.client)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "collect cursor failed"})
-			return
-		}
-	}
 
-	// Entries at or below the caller's cursor are already held there; pruning
-	// them is safe even if this response never reaches the client.
-	if err := pruneOutbox(ctx, s.client, req.Cursor); err != nil {
-		slog.Warn("prune sync outbox failed", "error", err)
+	// Entries at or below the caller's cursor are already held there. Only
+	// prune when the cursor is plausible for this outbox: a cursor above the
+	// outbox max means the host was reset (rewind) or the client is stale, and
+	// pruning then would destroy changes the client has never seen.
+	if req.Cursor > 0 && req.Cursor <= cursor {
+		if err := pruneOutbox(ctx, s.client, req.Cursor); err != nil {
+			slog.Warn("prune sync outbox failed", "error", err)
+		}
 	}
 
 	c.JSON(http.StatusOK, PushResponse{

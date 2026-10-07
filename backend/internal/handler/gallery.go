@@ -28,6 +28,18 @@ import (
 // background work that continues after a client disconnects).
 const galleryPagesHardCap = 10 * time.Minute
 
+// maxListingPage bounds upstream listing pagination: a cold request for page N
+// walks N sequential upstream fetches, so unbounded page numbers would let one
+// request hammer the upstream for hours.
+const maxListingPage = 200
+
+// maxDBPage bounds DB-offset pagination so page*pageSize cannot overflow int.
+const maxDBPage = 1_000_000
+
+// gtidRe bounds the torrent id path parameter: it is echoed into a
+// Content-Disposition filename and forwarded upstream as a form value.
+var gtidRe = regexp.MustCompile(`^[0-9A-Za-z_-]{1,64}$`)
+
 // galleryPagesHub coalesces concurrent page-list scrapes for the same gallery
 // into a single upstream walk. Unlike a plain singleflight, subscribers receive
 // the batches already scraped as they arrive instead of blocking until the
@@ -504,7 +516,11 @@ func (s *Server) refreshPagesSync(ctx context.Context, galleryID int64, token st
 		return nil
 	}
 	key := fmt.Sprintf("%d:%s", galleryID, token)
-	_, err, _ := galleryPagesFillGroup.Do(key, func() (any, error) {
+	// DoChan instead of Do: group.Do blocks duplicate callers with a bare
+	// wg.Wait() that ignores their context, so a request could hang for the
+	// leader's full budget after its client is gone. DoChan lets us honour
+	// the caller's cancellation while the shared walk keeps running.
+	ch := galleryPagesFillGroup.DoChan(key, func() (any, error) {
 		ctx, cancel := context.WithTimeout(ctx, galleryPagesHardCap)
 		defer cancel()
 		_, err := s.scrapeAndCache(ctx, galleryID, token, nil)
@@ -513,7 +529,12 @@ func (s *Server) refreshPagesSync(ctx context.Context, galleryID int64, token st
 		}
 		return nil, err
 	})
-	return err
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case res := <-ch:
+		return res.Err
+	}
 }
 
 // writeNDJSONLine marshal line and writes it followed by a newline.
@@ -684,7 +705,7 @@ func (s *Server) handleGalleryTorrentInfo(c *gin.Context) {
 		return
 	}
 	gtid := strings.TrimSpace(c.Param("gtid"))
-	if gtid == "" {
+	if !gtidRe.MatchString(gtid) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid torrent id"})
 		return
 	}
@@ -706,7 +727,7 @@ func (s *Server) handleGalleryTorrentDownload(c *gin.Context) {
 		return
 	}
 	gtid := strings.TrimSpace(c.Param("gtid"))
-	if gtid == "" {
+	if !gtidRe.MatchString(gtid) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid torrent id"})
 		return
 	}
@@ -874,10 +895,13 @@ func (s *Server) verifyCachedPageCount(galleryID int64, token string, cached int
 	}
 	key := fmt.Sprintf("%d:%s", galleryID, token)
 	galleryPagesFillGroup.Do(key, func() (any, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+		// The probe and the refresh walk get separate budgets: the walk can
+		// take up to galleryPagesHardCap and must not consume the probe's
+		// 30s window, or the detected page-count change would never persist.
+		probeCtx, probeCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
-		total, err := exhentai.ScrapeGalleryTotal(ctx, s.Client, u)
+		total, err := exhentai.ScrapeGalleryTotal(probeCtx, s.Client, u)
+		probeCancel()
 		if err != nil {
 			slog.Debug("cached page-count check failed", "id", galleryID, "error", err)
 			return nil, nil
@@ -886,7 +910,9 @@ func (s *Server) verifyCachedPageCount(galleryID int64, token string, cached int
 			return nil, nil
 		}
 		slog.Info("cached page count changed; refreshing", "id", galleryID, "cached", cached, "upstream", total)
-		if _, err := s.scrapeAndCache(ctx, galleryID, token, nil); err != nil {
+		walkCtx, walkCancel := context.WithTimeout(context.Background(), galleryPagesHardCap)
+		defer walkCancel()
+		if _, err := s.scrapeAndCache(walkCtx, galleryID, token, nil); err != nil {
 			slog.Warn("cached page-count refresh failed", "id", galleryID, "error", err)
 		}
 		return nil, nil
@@ -900,6 +926,10 @@ func (s *Server) handleSearch(c *gin.Context) {
 	page, _ := strconv.Atoi(pageStr)
 	if page < 0 {
 		page = 0
+	}
+	if page > maxListingPage {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("page too large (max %d)", maxListingPage)})
+		return
 	}
 
 	opts, err := parseSearchOptions(c)
@@ -981,8 +1011,16 @@ func (s *Server) handlePageImage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing url parameter"})
 		return
 	}
+	// Same allowlist as the cached-page endpoint: without it this handler
+	// would fetch and return arbitrary caller-chosen URLs (SSRF) at the app
+	// origin with no CSP in front.
+	if err := exhentai.ValidatePageURL(pageURL); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-	ctx := c.Request.Context()
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	defer cancel()
 
 	data, contentType, err := exhentai.FetchPageImage(ctx, s.Client, pageURL)
 	if err != nil {
@@ -999,6 +1037,10 @@ func (s *Server) handleGalleryList(listURL string) gin.HandlerFunc {
 		page, _ := strconv.Atoi(pageStr)
 		if page < 0 {
 			page = 0
+		}
+		if page > maxListingPage {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("page too large (max %d)", maxListingPage)})
+			return
 		}
 
 		opts, err := parseSearchOptions(c)

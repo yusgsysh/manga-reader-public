@@ -1,6 +1,7 @@
 # angie.conf.tpl
 #
 # Rendered at container start by deploy/docker-entrypoint.sh:
+#   generate-auth.sh            (writes /etc/angie/basic-auth.conf first)
 #   envsubst '${ANGIE_BACKEND_URL}' < angie.conf.tpl > angie.conf
 #
 # Optimizations vs. the previous revision:
@@ -9,6 +10,9 @@
 #   - locations grouped (5m list cache, streamed gallery pages/images)
 #   - gzip, immutable caching for hashed /assets, no-store for index.html
 #   - cache stampede lock + stale-while-revalidate
+#   - HTTP Basic Auth for the whole app via generated include
+#     (/etc/angie/basic-auth.conf; comment-only when disabled) + per-IP
+#     rate limit; /healthz exempt. No CSP on purpose — see README.
 
 user angie;
 worker_processes auto;
@@ -82,6 +86,19 @@ http {
         image/svg+xml;
 
     # ============================================================
+    # Per-IP request rate limit (basic flood protection for the
+    # Basic Auth entry point).
+    #
+    # limit_req_zone is http-level, so the zone is declared here;
+    # the `limit_req` directive itself lives in the generated
+    # /etc/angie/basic-auth.conf, i.e. it only takes effect when
+    # Basic Auth is enabled — dev runs stay untouched.
+    # ============================================================
+
+    limit_req_zone $binary_remote_addr zone=auth_limit:10m rate=50r/s;
+    limit_req_status 429;
+
+    # ============================================================
     # Backend upstream (keepalive connection pool)
     # ============================================================
 
@@ -109,6 +126,30 @@ http {
         index index.html;
 
         # ========================================================
+        # HTTP Basic Authentication (public deployments).
+        #
+        # deploy/generate-auth.sh writes /etc/angie/basic-auth.conf
+        # at container start:
+        #   enabled  -> auth_basic + auth_basic_user_file + limit_req
+        #   disabled -> comment only (no behaviour change)
+        # Server-level, so it is inherited by every location below —
+        # SPA, /api/*, SSE, images, assets. /healthz opts out.
+        # ========================================================
+
+        include /etc/angie/basic-auth.conf;
+
+        # ========================================================
+        # Security headers. No Content-Security-Policy on purpose:
+        # a strict CSP risks breaking React, SSE, the image proxy
+        # and the reader. TLS / HSTS belong to the HTTPS layer in
+        # front of this proxy (see README 公网部署).
+        # ========================================================
+
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+        # ========================================================
         # Shared proxy defaults, inherited by every location that
         # proxies. A location only overrides what it needs.
         # ========================================================
@@ -119,6 +160,12 @@ http {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Connection "";
+
+        # Basic Auth is terminated here; the proxy password must never
+        # reach the backend or its logs (the app only ever needs the
+        # X-Sync-Token header for sync). An empty value removes the
+        # header from the proxied request.
+        proxy_set_header Authorization "";
 
         proxy_read_timeout 60s;
         proxy_send_timeout 60s;
@@ -145,6 +192,12 @@ http {
             proxy_cache_valid 200 5m;
 
             add_header X-Cache-Status $upstream_cache_status always;
+            # add_header at this level drops the inherited security
+            # headers — repeat them here (same for the other
+            # locations below that define their own add_header).
+            add_header X-Content-Type-Options nosniff always;
+            add_header X-Frame-Options SAMEORIGIN always;
+            add_header Referrer-Policy strict-origin-when-cross-origin always;
         }
 
         # ========================================================
@@ -254,14 +307,22 @@ http {
 
         location = /db.text.js {
             add_header Cache-Control "public, max-age=86400";
+            add_header X-Content-Type-Options nosniff always;
+            add_header X-Frame-Options SAMEORIGIN always;
+            add_header Referrer-Policy strict-origin-when-cross-origin always;
         }
 
         # ========================================================
-        # Health check
+        # Health check — exempt from Basic Auth so Docker healthchecks
+        # and external monitors keep working without credentials.
+        # The response is a static "ok": no backend data, no cookie,
+        # no credentials, no config.
         # ========================================================
 
         location = /healthz {
             access_log off;
+
+            auth_basic off;
 
             default_type text/plain;
 
@@ -275,11 +336,17 @@ http {
         # Vite emits content-hashed files under /assets/ -> cache forever.
         location /assets/ {
             add_header Cache-Control "public, max-age=31536000, immutable";
+            add_header X-Content-Type-Options nosniff always;
+            add_header X-Frame-Options SAMEORIGIN always;
+            add_header Referrer-Policy strict-origin-when-cross-origin always;
         }
 
         # The HTML shell must always be revalidated.
         location = /index.html {
             add_header Cache-Control "no-store";
+            add_header X-Content-Type-Options nosniff always;
+            add_header X-Frame-Options SAMEORIGIN always;
+            add_header Referrer-Policy strict-origin-when-cross-origin always;
         }
 
         location / {

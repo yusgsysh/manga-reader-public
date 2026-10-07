@@ -112,7 +112,7 @@ func validatePageURL(rawURL string) error {
 		return fmt.Errorf("invalid url")
 	}
 
-	if u.Scheme != "https" && u.Scheme != "http" {
+	if u.Scheme != "https" {
 		return fmt.Errorf("unsupported URL scheme: %s", u.Scheme)
 	}
 

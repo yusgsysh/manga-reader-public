@@ -809,3 +809,77 @@ func TestReadChangesSinceFetchesGalleryCacheRow(t *testing.T) {
 		t.Fatalf("maxID = %d, want 1", maxID)
 	}
 }
+
+// TestPushPruneSkipsRewoundCursor: a client cursor above the host outbox max
+// means the host was reset (or the client is stale). Pruning with that raw
+// value would delete host changes the client has never seen, destroying them
+// permanently.
+func TestPushPruneSkipsRewoundCursor(t *testing.T) {
+	serverClient := newTestClient(t)
+	svc := NewService(serverClient, Options{HostToken: "tok"})
+	router := newTestRouter(svc)
+
+	now := time.Now().UTC()
+	seedProgress(t, serverClient, 1, "a", 1, now)
+	for range 3 {
+		if err := svc.RecordUpsert(t.Context(), EntityReadingProgress, 1, "a"); err != nil {
+			t.Fatalf("record: %v", err)
+		}
+	}
+
+	// Client holds a cursor from a previous incarnation of this host.
+	w, resp := doPush(t, router, "tok", PushRequest{Cursor: 500})
+	if w.Code != http.StatusOK {
+		t.Fatalf("rewound push status = %d, body %s", w.Code, w.Body.String())
+	}
+	if resp.Cursor != 3 {
+		t.Fatalf("response cursor = %d, want 3 (current outbox max)", resp.Cursor)
+	}
+	count, err := serverClient.SyncChange.Query().Count(t.Context())
+	if err != nil {
+		t.Fatalf("count outbox: %v", err)
+	}
+	if count != 3 {
+		t.Fatalf("outbox after rewind push = %d entries, want 3 (prune must be skipped)", count)
+	}
+
+	// A plausible cursor still prunes up to itself.
+	if _, resp := doPush(t, router, "tok", PushRequest{Cursor: 1}); resp.Cursor != 3 {
+		t.Fatalf("second push cursor = %d, want 3", resp.Cursor)
+	}
+	count, err = serverClient.SyncChange.Query().Count(t.Context())
+	if err != nil {
+		t.Fatalf("count outbox: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("outbox after valid push = %d entries, want 2 (ids <= 1 pruned)", count)
+	}
+}
+
+// TestApplyChangesSkipsInvalidRow: one row that fails ent validation must not
+// abort the batch — the cursor would never advance and every cycle would
+// resend the same batch, wedging replication.
+func TestApplyChangesSkipsInvalidRow(t *testing.T) {
+	client := newTestClient(t)
+	base := time.Now().UTC()
+
+	valid := Change{
+		Entity: EntityReadingProgress, GalleryID: 1, Token: "tok", Op: OpUpsert,
+		Row: &Row{CurrentPage: 2, Progress: 0.2, CreatedAt: base, UpdatedAt: base},
+	}
+	invalid := Change{
+		Entity: EntityReadingProgress, GalleryID: 2, Token: "tok", Op: OpUpsert,
+		Row: &Row{CurrentPage: 1, Progress: 1.5, CreatedAt: base, UpdatedAt: base},
+	}
+
+	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{valid, invalid})
+	if err != nil {
+		t.Fatalf("invalid row must not abort the batch: %v", err)
+	}
+	if applied != 1 || skipped != 1 {
+		t.Fatalf("applied/skipped = %d/%d, want 1/1", applied, skipped)
+	}
+	if p := getProgress(t, client, 1, "tok"); p == nil || p.CurrentPage != 2 {
+		t.Fatalf("valid row not applied: %+v", p)
+	}
+}

@@ -72,10 +72,13 @@ func mockSearchHTML(count int) string {
 </div></body></html>`, count, float64(count), rows.String(), 1000+count)
 }
 
-// mockNoHitsHTML returns a search page with no results.
+// mockNoHitsHTML returns a search page with no results. Layout mirrors the
+// real page: the no-hits paragraph sits in ido's second child div, which is
+// what ScrapeSearch's noHits selector matches.
 func mockNoHitsHTML() string {
 	return `<!DOCTYPE html><html><head></head><body>
 <div class="ido">
+	<div><div class="searchtext"><p>Results</p></div></div>
 	<div><p>No unfiltered results found. Try lowering the search requirements.</p></div>
 </div></body></html>`
 }
@@ -330,8 +333,21 @@ func TestMockSearch_NoResults(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadGateway {
-		t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadGateway, w.Body.String())
+	// A "no results" page is a successful empty outcome, not a 502.
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp struct {
+		Total   int `json:"total"`
+		Results []struct {
+			ID int `json:"id"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Total != 0 || len(resp.Results) != 0 {
+		t.Errorf("total/results = %d/%d, want 0/0", resp.Total, len(resp.Results))
 	}
 }
 
@@ -936,7 +952,7 @@ func TestMockPageImage_Success(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	pageURL := mockServer.URL + "/s/abc123/3138775-1"
+	pageURL := "https://exhentai.org/s/abc123/3138775-1"
 
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
@@ -983,7 +999,7 @@ func TestMockPageImage_RetryOnImageDownloadFailure(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	pageURL := mockServer.URL + "/s/abc123/3138775-1"
+	pageURL := "https://exhentai.org/s/abc123/3138775-1"
 
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
@@ -1014,7 +1030,7 @@ func TestMockPageImage_RetryExhausted(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	pageURL := mockServer.URL + "/s/abc123/3138775-1"
+	pageURL := "https://exhentai.org/s/abc123/3138775-1"
 
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
@@ -1041,7 +1057,7 @@ func TestMockPageImage_NoFallbackNoRetry(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	pageURL := mockServer.URL + "/s/abc123/3138775-1"
+	pageURL := "https://exhentai.org/s/abc123/3138775-1"
 
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
@@ -1081,7 +1097,7 @@ func TestMockPageImage_RetryWithMultipleFailures(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	pageURL := mockServer.URL + "/s/abc123/3138775-1"
+	pageURL := "https://exhentai.org/s/abc123/3138775-1"
 
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)
@@ -1110,7 +1126,7 @@ func TestMockPageImage_RetryCancelledByContext(t *testing.T) {
 	})
 	defer mockServer.Close()
 
-	pageURL := mockServer.URL + "/s/abc123/3138775-1"
+	pageURL := "https://exhentai.org/s/abc123/3138775-1"
 
 	server := &Server{Client: newMockClient(mockServer.URL)}
 	r := setupMockRouter(server)

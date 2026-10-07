@@ -200,6 +200,11 @@ func New(cfg *config.Config, logger *slog.Logger, opts ...Option) (*App, error) 
 		a.setLogLevel(merged.LogLevel)
 	}
 
+	// Production runs release mode: gin's debug mode dumps the full route
+	// table at startup and logs every request line (including query strings).
+	if merged.Environment == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	r := gin.Default()
 	r.Use(CORSMiddleware())
 	r.GET("/healthz", func(c *gin.Context) {
@@ -266,7 +271,15 @@ func (a *App) Shutdown(ctx context.Context) error {
 
 	var errs []error
 	if err := a.server.Shutdown(ctx); err != nil {
-		errs = append(errs, err)
+		if errors.Is(err, context.DeadlineExceeded) {
+			// Open SSE streams (/api/events/changes, /api/sync/events) keep
+			// their connections alive and Shutdown waits for them forever;
+			// force-close instead of failing the exit status.
+			a.Logger.Warn("graceful shutdown timed out; closing open connections")
+			_ = a.server.Close()
+		} else {
+			errs = append(errs, err)
+		}
 	}
 	if err := a.DB.Close(); err != nil {
 		errs = append(errs, err)

@@ -24,6 +24,10 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid page"})
 		return
 	}
+	if page > maxDBPage {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "page too large"})
+		return
+	}
 
 	ctx := c.Request.Context()
 	offset := page * recentlyReadPageSize
