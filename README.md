@@ -156,7 +156,7 @@ docker compose up -d   # 环境变量变化会重建 frontend 容器
 - `.env` 中的 `$` 需写成 `$$`（compose 变量插值）。
 - 代理层消费 `Authorization` 并在转发前剔除（`proxy_set_header Authorization ""`），口令永不到达 backend 及其日志；SSE、图片、ZIP 均不受影响（认证只在连接建立时发生一次，`proxy_buffering off` 等 SSE 配置保持不变）。
 - **限流**：Basic Auth 开启时 Angie 按来源 IP 限 50 req/s（突发 200，超限 `429`），作为基础防洪水/防爆破；Angie access log 含 401 记录，需要更强防爆破时可在前置防火墙 / fail2ban 封禁。切勿因此放松口令强度。
-- **桌面端同步**：同步端点同样受 Basic Auth 保护。桌面端在设置页的服务器地址内嵌凭据即可：`https://user:pass@server.example.com`（Go HTTP 客户端自动携带 `Authorization`）。Basic 用户名/口令与 `MANGA_READER_SYNC_TOKEN` 是两套独立凭据，需同时正确（见 `backend/API.md` 28）。
+- **桌面端同步**：同步端点同样受 Basic Auth 保护。桌面端在设置页的服务器地址内嵌凭据即可：`https://user:pass@server.example.com`（Go HTTP 客户端自动携带 `Authorization`）；本仓库部署实例即 `https://admin:你的口令@manga.09270721.xyz`（口令含 `@`、`:` 时需 URL 编码）。Basic 用户名/口令与 `MANGA_READER_SYNC_TOKEN` 是两套独立凭据，需同时正确（见 `backend/API.md` 28）。
 - 安全 Header 已由 Angie 添加：`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`；刻意不加 CSP（避免破坏 React、SSE、图片代理）。
 
 ### 验证
@@ -358,9 +358,9 @@ curl -X POST http://localhost:8080/api/reading-progress/cleanup?days=0
 多实例双向同步**阅读进度、书架与画廊缓存**（settings 不同步），所有连接由桌面端主动发起（NAT 友好）：
 
 - **服务端**：设置 `MANGA_READER_SYNC_TOKEN` 启用宿主端点，写入的数据进 outbox。
-- **桌面端 / 客户端**：设置页「数据同步」填服务端地址 + 同一令牌并启用（配置存 `sync_state` 表）。
+- **桌面端 / 客户端**：设置页「数据同步」填服务端地址 + 同一令牌并启用（配置存 `sync_state` 表）。服务端在 Basic Auth 之后时，地址内嵌凭据：`https://admin:你的口令@manga.09270721.xyz`。
 - 双方通过 `POST /api/sync/push` 推送 + 拉取，`GET /api/sync/events` SSE 监听对端新变更（写后 2s 去抖推送，心跳 25s，断线退避 1s→60s，60s 轮询兜底）。
-- 合并规则：按行 LWW（`updated_at` 新者胜），删除用 tombstone；首次连接返回全量快照。`gallery_cache` 行在 LWW 胜出时按字段合并（空值不覆盖），镜像本地 upsert 语义。
+- 合并规则：按行 LWW（`updated_at` 新者胜），删除用 tombstone；首次连接返回全量快照；更换 `server_url` 会自动重置同步游标与引导标记，对新对端重新全量（`gallery_cache` 行在 LWW 胜出时按字段合并，空值不覆盖，镜像本地 upsert 语义）。
 - 桌面端本地通过 `GET /api/events/changes` SSE 通知前端刷新（Angie 已为该路径关闭缓冲，见 `frontend/deploy/angie.conf.tpl`）。
 
 ```bash
@@ -370,6 +370,12 @@ MANGA_READER_SYNC_TOKEN=my-secret go run .
 # 桌面端配置
 curl -X PUT http://localhost:8080/api/sync/config -H 'Content-Type: application/json' \
   -d '{"enabled":true,"server_url":"http://server:8080","token":"my-secret"}'
+
+# 桌面端配置（公网 Angie Basic Auth 之后：请求本身与 server_url 均带凭据）
+curl -u admin:你的口令 -X PUT https://manga.09270721.xyz/api/sync/config \
+  -H 'Content-Type: application/json' \
+  -d '{"enabled":true,"server_url":"https://admin:你的口令@manga.09270721.xyz","token":"my-secret"}'
+
 curl http://localhost:8080/api/sync/status
 ```
 
