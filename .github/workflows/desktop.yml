@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - main
+      - feat/wails-v3
     paths:
       - ".github/workflows/desktop.yml"
       - "backend/**"
