@@ -404,7 +404,7 @@ func (s *Server) scrapeGalleryPages(
 	key := fmt.Sprintf("%d:%s", galleryID, token)
 	stream, leader := galleryPagesHub.acquire(key)
 	if leader {
-		s.runGalleryPagesScrape(key, stream, galleryID, token)
+		s.runGalleryPagesScrape(ctx, key, stream, galleryID, token)
 	}
 	return stream.drain(ctx, 0, emit)
 }
@@ -414,6 +414,7 @@ func (s *Server) scrapeGalleryPages(
 // cache, and cache-filling subscribers persist the verified list themselves
 // once the walk completes.
 func (s *Server) runGalleryPagesScrape(
+	ctx context.Context,
 	key string,
 	stream *galleryPagesStream,
 	galleryID int64,
@@ -422,7 +423,9 @@ func (s *Server) runGalleryPagesScrape(
 	go func() {
 		defer galleryPagesHub.release(key, stream)
 
-		ctx, cancel := context.WithTimeout(context.Background(), galleryPagesHardCap)
+		// Detached from the subscriber: cancelling one subscriber must not
+		// abort the shared walk, so only values are inherited from ctx.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), galleryPagesHardCap)
 		defer cancel()
 
 		u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
@@ -491,13 +494,15 @@ func (s *Server) scrapeAndCache(
 // background. Concurrent triggers for the same gallery collapse into one walk
 // and one write via galleryPagesFillGroup. It is used by the page-count check,
 // image-failure recovery and thumbnail-resolve cache fill.
-func (s *Server) refreshPages(galleryID int64, token string) {
+func (s *Server) refreshPages(ctx context.Context, galleryID int64, token string) {
 	if s.cacheDB() == nil || s.Client == nil {
 		return
 	}
 	key := fmt.Sprintf("%d:%s", galleryID, token)
 	galleryPagesFillGroup.Do(key, func() (any, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), galleryPagesHardCap)
+		// The refresh runs on the full background budget regardless of the
+		// caller's lifetime; inherit values only, never cancellation.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), galleryPagesHardCap)
 		defer cancel()
 		if _, err := s.scrapeAndCache(ctx, galleryID, token, nil); err != nil {
 			slog.Debug("gallery page cache refresh failed", "id", galleryID, "error", err)

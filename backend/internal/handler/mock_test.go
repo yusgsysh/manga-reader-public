@@ -978,12 +978,13 @@ func TestMockPageImage_RetryOnImageDownloadFailure(t *testing.T) {
 	imgData := mockImageBytes()
 	callCount := 0
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/s/") {
+		switch {
+		case strings.Contains(r.URL.Path, "/s/"):
 			w.Header().Set("Content-Type", "text/html")
 			// First page request: provide image URL and nl fallback
 			// The fallback page will serve the same HTML but the image URL will work
 			fmt.Fprint(w, mockPageHTML("https://example.com/image.webp", "FALLBACK123"))
-		} else if r.URL.Path == "/image.webp" {
+		case r.URL.Path == "/image.webp":
 			callCount++
 			if callCount == 1 {
 				// First image download fails
@@ -993,7 +994,7 @@ func TestMockPageImage_RetryOnImageDownloadFailure(t *testing.T) {
 			// Second attempt (via fallback) succeeds
 			w.Header().Set("Content-Type", "image/webp")
 			w.Write(imgData)
-		} else {
+		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
 	})

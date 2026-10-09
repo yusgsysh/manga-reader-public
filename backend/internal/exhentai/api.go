@@ -9,6 +9,7 @@ import (
 
 	json "encoding/json/v2"
 
+	"manga-reader/internal/metrics"
 	"manga-reader/internal/model"
 )
 
@@ -64,6 +65,7 @@ func postGalleryMetadata(ctx context.Context, client *http.Client, gid int64, to
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		metrics.ObserveClassification(metrics.Endpoint(apiURL), metrics.OutcomeHTTPError)
 		return model.GalleryMetadata{}, &httpStatusError{code: resp.StatusCode}
 	}
 

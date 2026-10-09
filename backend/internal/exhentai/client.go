@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"manga-reader/internal/config"
+	"manga-reader/internal/metrics"
 )
 
 const ExhentaiBase = "https://exhentai.org"
@@ -107,6 +108,6 @@ func NewHTTPClient(cfg CookieConfig) (*http.Client, *HotJar) {
 
 	return &http.Client{
 		Jar:       jar,
-		Transport: transport,
+		Transport: metrics.NewTransport(transport),
 	}, jar
 }
