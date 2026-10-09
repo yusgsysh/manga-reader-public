@@ -303,11 +303,12 @@ func (m *prefillManager) processPages(s *Server, ctx context.Context, run *prefi
 			m.mu.Unlock()
 			continue
 		}
-		if res.cacheHit {
+		switch {
+		case res.cacheHit:
 			run.cached++
-		} else if res.stored {
+		case res.stored:
 			run.fetched++
-		} else {
+		default:
 			run.failed++
 			if len(run.errs) < prefillMaxErrors {
 				run.errs = append(run.errs, model.PrefillItemError{

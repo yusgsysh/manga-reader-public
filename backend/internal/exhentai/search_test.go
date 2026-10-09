@@ -237,9 +237,7 @@ func TestScrapeSearch_UsesCachedCursorAcrossPages(t *testing.T) {
 }
 
 func TestScrapeSearch_FallsBackToPageZeroForTotal(t *testing.T) {
-	srv, requests := cursorServer(t, func(withBanner bool, nextHref string) string {
-		return searchHTML(withBanner, nextHref)
-	})
+	srv, requests := cursorServer(t, searchHTML)
 
 	total, results, _, err := ScrapeSearch(t.Context(), srv.Client(), srv.URL+"/", "test", nil, 1, nil, nil)
 	if err != nil {

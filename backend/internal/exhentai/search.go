@@ -210,7 +210,8 @@ func parseSearchResults(doc *goquery.Document) ([]model.SearchResult, error) {
 		var tags []string
 		var stars string
 
-		if isExtended {
+		switch {
+		case isExtended:
 			gl1e := s.Find("td.gl1e")
 			if gl1e.Length() == 0 {
 				return
@@ -270,7 +271,7 @@ func parseSearchResults(doc *goquery.Document) ([]model.SearchResult, error) {
 					}
 				})
 			})
-		} else if isThumbnail {
+		case isThumbnail:
 			gl3m := s.Find("td.gl3m.glname")
 			if gl3m.Length() == 0 {
 				return
@@ -308,7 +309,7 @@ func parseSearchResults(doc *goquery.Document) ([]model.SearchResult, error) {
 			if cover == "" {
 				cover = coverImg.AttrOr("src", "")
 			}
-		} else {
+		default:
 			gl3c := s.Find("td.gl3c.glname")
 			if gl3c.Length() == 0 {
 				return

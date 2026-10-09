@@ -22,6 +22,7 @@ import (
 	"manga-reader/internal/database"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/handler"
+	"manga-reader/internal/metrics"
 	"manga-reader/internal/settings"
 	"manga-reader/internal/storage"
 	synclib "manga-reader/internal/sync"
@@ -232,6 +233,9 @@ func New(cfg *config.Config, logger *slog.Logger, opts ...Option) (*App, error) 
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+	// Prometheus exposition for upstream traffic. Registered after
+	// basicauth.Middleware so it is covered by Basic Auth like the API.
+	r.GET("/metrics", gin.WrapH(metrics.Handler()))
 	srv.RegisterRoutes(r)
 
 	// Static frontend: embedded at build time (see internal/web). A binary
