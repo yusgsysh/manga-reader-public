@@ -1,0 +1,37 @@
+# Manga Reader（单镜像：Gin API + 内嵌前端，容器 :8080 → 宿主 5173）
+# 安装：/etc/containers/systemd/manga-reader.container
+#
+# 迁移到单镜像：先停用并删除旧 unit，否则旧的 frontend(Angie) 容器会继续跑：
+#   systemctl disable --now manga-reader-frontend.service
+#   systemctl disable --now manga-reader-backend.service 2>/dev/null || true
+#   rm /etc/containers/systemd/manga-reader-{backend,frontend}.container /etc/containers/systemd/manga-reader.pod
+#   systemctl daemon-reload
+[Container]
+Image=git.09270721.xyz/abc/manga-reader:latest
+# 对外发布端口（原 frontend 的 5173 入口）
+PublishPort=5173:8080
+# 全量配置（EHENTAI_COOKIE、同步令牌、数据库驱动、Basic Auth 等）
+# 注意：键名必须是 EnvironmentFile=（EnvFile= 非法键，quadlet 会跳过整个 unit）
+# 该值经 podman --env-file 注入：每行须为 KEY=VALUE，且 $ 不做展开
+# HTTP_PROXY/HTTPS_PROXY/NO_PROXY 也在该文件中配置，出站经代理（见 .env.example）
+EnvironmentFile=/root/manga-reader-public/.env
+Environment=MANGA_READER_DB_PATH=/app/data/manga-reader.db
+
+# HTTP Basic Auth（Gin 层；生产置于 HTTPS 之后）
+# 开关与凭据优先读 EnvironmentFile（.env）；也可在此显式覆盖：
+#Environment=MANGA_READER_BASIC_AUTH_ENABLED=true
+#Environment=MANGA_READER_BASIC_AUTH_USERNAME=admin
+#Environment=MANGA_READER_BASIC_AUTH_PASSWORD=change-me-strong-password
+# htpasswd 文件模式（apr1/bcrypt 均可）：
+#Environment=MANGA_READER_BASIC_AUTH_FILE=/run/secrets/manga_reader_htpasswd
+#Secret=manga_reader_htpasswd
+
+# 数据卷：以 podman volume ls 实际名称为准
+Volume=manga-reader-public_backend_data:/app/data
+AutoUpdate=registry
+NoNewPrivileges=true
+PodmanArgs=--log-opt max-size=10m --log-opt max-file=3
+
+[Service]
+Restart=always
+RestartSec=5

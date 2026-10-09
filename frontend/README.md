@@ -253,20 +253,18 @@ bun run build            # Web/Docker 产物（dist/）
 bun run build:desktop    # 桌面产物（同 dist/，模式 desktop）
 ```
 
-## 部署（Docker / Angie）
+## 部署（内嵌进后端单镜像）
 
-镜像由 CI 构建（见根 `README.md` 的「CI 与部署」）。`frontend/Dockerfile` 分两阶段：Bun 构建生产产物（`VITE_API_BASE_URL` 强制留空 → 前端走同源 `/api/*`），运行阶段用 Angie 托管 `dist/` 并反代 `/api`。
+前端没有独立镜像：根 `Dockerfile` 先用 Bun 构建生产产物（`VITE_API_BASE_URL` 强制留空 → 前端走同源 `/api/*`），再把 `dist/` 拷进 `backend/internal/web/dist`，由 `//go:embed` 编译进 Go 二进制，Gin 同时服务静态文件与 `/api/*`（SPA 回退、缓存策略见 `backend/internal/web`）。
 
-- 反代目标由 `ANGIE_BACKEND_URL` 控制（compose 内默认 `backend:8080`）；`deploy/angie.conf.tpl` 在容器启动时由 `deploy/docker-entrypoint.sh` 用 `envsubst` 渲染成 `angie.conf`。
-- 根 `docker-compose.yml` 把前端发布到 `5173:80`，后端不对外发布端口。
-- 本地单独构建与运行：
+```bash
+# 仓库根目录
+docker build -t manga-reader .
+docker run -d -p 5173:8080 --env-file .env manga-reader
+```
 
-  ```bash
-  docker build -t manga-reader-frontend .
-  docker run -d -p 80:80 \
-    -e ANGIE_BACKEND_URL=192.168.1.100:8080 \
-    manga-reader-frontend
-  ```
+- 根 `docker-compose.yml` 把该服务发布到 `5173:8080`；镜像由 CI 构建推送（见根 `README.md` 的「CI 与部署」）。
+- 本地 `go run .` 想同时看到页面时，先 `bun run build` 并把 `dist/` 拷到 `backend/internal/web/dist`（否则后端以 API-only 模式启动）。
 
 纯静态部署（自行用 nginx / caddy 托管并反代 `/api`）也只需 `bun run build` 的 `dist/`：
 

@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"manga-reader/internal/basicauth"
 	"manga-reader/internal/config"
 	"manga-reader/internal/database"
 	"manga-reader/internal/exhentai"
@@ -23,6 +25,7 @@ import (
 	"manga-reader/internal/settings"
 	"manga-reader/internal/storage"
 	synclib "manga-reader/internal/sync"
+	"manga-reader/internal/web"
 )
 
 // App owns every long lived resource of the service.
@@ -71,6 +74,19 @@ func CORSMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		c.Next()
+	}
+}
+
+// securityHeadersMiddleware carries over the headers the removed proxy layer
+// used to add. CSP stays out on purpose: a strict policy risks breaking the
+// React app, SSE and the image proxy.
+func securityHeadersMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		h := c.Writer.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "SAMEORIGIN")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		c.Next()
 	}
 }
@@ -207,10 +223,29 @@ func New(cfg *config.Config, logger *slog.Logger, opts ...Option) (*App, error) 
 	}
 	r := gin.Default()
 	r.Use(CORSMiddleware())
+	r.Use(securityHeadersMiddleware())
+	r.Use(basicauth.Middleware(merged.BasicAuth))
+	if merged.BasicAuth.Enabled {
+		logger.Info("basic auth enabled",
+			"source", map[bool]string{true: "htpasswd file", false: "environment"}[merged.BasicAuth.File != ""])
+	}
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 	srv.RegisterRoutes(r)
+
+	// Static frontend: embedded at build time (see internal/web). A binary
+	// built without a dist bundle stays API-only, which is also how the
+	// desktop app behaves — Wails serves its own copy of the UI.
+	if fsys := web.FS(); fsys != nil {
+		if _, err := fs.Stat(fsys, "index.html"); err == nil {
+			web.Register(r, fsys)
+			logger.Info("embedded frontend enabled")
+		} else {
+			logger.Info("no frontend bundle embedded; serving the API only")
+		}
+	}
+
 	a.Router = r
 	a.server.Handler = r
 

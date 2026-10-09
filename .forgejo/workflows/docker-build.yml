@@ -1,4 +1,4 @@
-name: Build and Push Docker Images
+name: Build and Push Docker Image
 
 on:
   push:
@@ -12,8 +12,8 @@ on:
 env:
   REGISTRY: git.09270721.xyz
 
-  FRONTEND_IMAGE: git.09270721.xyz/abc/manga-reader-frontend
-  BACKEND_IMAGE: git.09270721.xyz/abc/manga-reader-backend
+  # Single image: Gin API + the frontend bundle embedded at build time.
+  IMAGE: git.09270721.xyz/abc/manga-reader
 
   # Docker Compose deployment
   DEPLOY_PATH: /root/manga-reader-public
@@ -29,6 +29,7 @@ jobs:
     outputs:
       frontend: ${{ steps.changes.outputs.frontend }}
       backend: ${{ steps.changes.outputs.backend }}
+      image: ${{ steps.changes.outputs.image }}
       any: ${{ steps.changes.outputs.any }}
 
     steps:
@@ -93,7 +94,16 @@ jobs:
             BACKEND=false
           fi
 
-          if [[ "$FRONTEND" == "true" || "$BACKEND" == "true" ]]; then
+          # ------------------------------------------------------
+          # Image build definition (root Dockerfile embeds the frontend)
+          # ------------------------------------------------------
+          if echo "$CHANGED_FILES" | grep -qE '^(Dockerfile|\.dockerignore)$'; then
+            IMAGE=true
+          else
+            IMAGE=false
+          fi
+
+          if [[ "$FRONTEND" == "true" || "$BACKEND" == "true" || "$IMAGE" == "true" ]]; then
             ANY=true
           else
             ANY=false
@@ -101,16 +111,18 @@ jobs:
 
           echo "frontend=$FRONTEND" >> "$GITHUB_OUTPUT"
           echo "backend=$BACKEND" >> "$GITHUB_OUTPUT"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "any=$ANY" >> "$GITHUB_OUTPUT"
 
           echo
           echo "Change detection:"
           echo "  frontend: $FRONTEND"
           echo "  backend:  $BACKEND"
+          echo "  image:    $IMAGE"
           echo "  any:      $ANY"
 
   # ------------------------------------------------------------
-  # Build and push images
+  # Build and push the single image
   # ------------------------------------------------------------
   build-and-push:
     name: Build and Push
@@ -143,55 +155,32 @@ jobs:
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
       # ----------------------------------------------------------
-      # Frontend
+      # Frontend bundle + backend binary in one image (root Dockerfile)
       #
       # Registry cache:
       #
       #   image:
-      #     manga-reader-frontend:latest
+      #     manga-reader:latest
       #
       #   cache:
-      #     manga-reader-frontend:buildcache
+      #     manga-reader:buildcache
       #
       # This works independently from GitHub Actions Cache.
       # ----------------------------------------------------------
-      - name: Build and push Frontend
-        if: needs.detect-changes.outputs.frontend == 'true'
+      - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: frontend
+          context: .
           push: true
 
           tags: |
-            ${{ env.FRONTEND_IMAGE }}:latest
+            ${{ env.IMAGE }}:latest
 
           cache-from: |
-            type=registry,ref=${{ env.FRONTEND_IMAGE }}:buildcache
+            type=registry,ref=${{ env.IMAGE }}:buildcache
 
           cache-to: |
-            type=registry,ref=${{ env.FRONTEND_IMAGE }}:buildcache,mode=max
-
-          provenance: false
-          sbom: false
-
-      # ----------------------------------------------------------
-      # Backend
-      # ----------------------------------------------------------
-      - name: Build and push Backend
-        if: needs.detect-changes.outputs.backend == 'true'
-        uses: docker/build-push-action@v6
-        with:
-          context: backend
-          push: true
-
-          tags: |
-            ${{ env.BACKEND_IMAGE }}:latest
-
-          cache-from: |
-            type=registry,ref=${{ env.BACKEND_IMAGE }}:buildcache
-
-          cache-to: |
-            type=registry,ref=${{ env.BACKEND_IMAGE }}:buildcache,mode=max
+            type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
 
           provenance: false
           sbom: false

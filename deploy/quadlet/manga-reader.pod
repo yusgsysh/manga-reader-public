@@ -1,4 +1,0 @@
-# Manga Reader — 共享网络命名空间的 pod
-# 安装：/etc/containers/systemd/manga-reader.pod
-[Pod]
-PublishPort=5173:80

@@ -1,0 +1,2 @@
+# Placeholder so //go:embed all:dist compiles in a source checkout.
+# The image build overwrites this directory with frontend/dist.

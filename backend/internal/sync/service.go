@@ -22,8 +22,8 @@ const (
 	// client, so a single header covers the whole protocol.
 	headerToken = "X-Sync-Token"
 
-	// heartbeatInterval keeps proxies from reaping idle SSE streams (the
-	// default Angie read timeout is 60s).
+	// heartbeatInterval keeps proxies from reaping idle SSE streams (a
+	// typical reverse-proxy read timeout is 60s).
 	heartbeatInterval = 25 * time.Second
 )
 

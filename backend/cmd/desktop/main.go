@@ -126,12 +126,12 @@ func run() error {
 		})
 	} else {
 		wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
-			Title:    "Manga Reader",
-			Width:    1280,
-			Height:   820,
-			MinWidth: 960,
+			Title:     "Manga Reader",
+			Width:     1280,
+			Height:    820,
+			MinWidth:  960,
 			MinHeight: 640,
-			URL:      "/",
+			URL:       "/",
 		})
 	}
 
