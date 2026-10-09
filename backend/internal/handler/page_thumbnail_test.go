@@ -720,15 +720,16 @@ func TestCachedPageThumbnail_SpriteExpired_RefetchAndRetry(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, "-0.webp"): // Sprite image
 			spriteFetchCount.Add(1)
 			requestedURL := r.URL.String()
-			if strings.Contains(requestedURL, "OLD") {
+			switch {
+			case strings.Contains(requestedURL, "OLD"):
 				// First sprite fetch: 404 (expired)
 				w.WriteHeader(http.StatusNotFound)
-			} else if strings.Contains(requestedURL, "NEW") {
+			case strings.Contains(requestedURL, "NEW"):
 				// Second sprite fetch: 200
 				sprite := makeTestSprite(t)
 				w.Header().Set("Content-Type", "image/webp")
 				_, _ = w.Write(sprite)
-			} else {
+			default:
 				w.WriteHeader(http.StatusNotFound)
 			}
 		}
@@ -821,13 +822,14 @@ func TestCachedPageThumbnail_SpriteExpired_ConcurrentRequests(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, "-0.webp"):
 			spriteFetchCount.Add(1)
 			requestedURL := r.URL.String()
-			if strings.Contains(requestedURL, "OLD") {
+			switch {
+			case strings.Contains(requestedURL, "OLD"):
 				w.WriteHeader(http.StatusNotFound)
-			} else if strings.Contains(requestedURL, "NEW") {
+			case strings.Contains(requestedURL, "NEW"):
 				sprite := makeTestSprite(t)
 				w.Header().Set("Content-Type", "image/webp")
 				_, _ = w.Write(sprite)
-			} else {
+			default:
 				w.WriteHeader(http.StatusNotFound)
 			}
 		}

@@ -79,8 +79,7 @@ func Handler() http.Handler {
 
 // Endpoint classifies an upstream URL into a bounded label value.
 func Endpoint(rawURL string) string {
-	switch {
-	case strings.Contains(rawURL, "api.e-hentai.org"):
+	if strings.Contains(rawURL, "api.e-hentai.org") {
 		return "api"
 	}
 	// Strip query for path matching; search/listing pages are same-host with

@@ -186,7 +186,7 @@ func (s *Server) loadOrFetchImage(ctx context.Context, key string, decodedURL st
 
 		data, contentType, fetchErr := exhentai.FetchPageImage(fetchCtx, s.Client, decodedURL)
 		if fetchErr != nil {
-			s.triggerPageRefresh(decodedURL, fetchErr)
+			s.triggerPageRefresh(fetchCtx, decodedURL, fetchErr)
 			return nil, fetchErr
 		}
 
@@ -254,7 +254,7 @@ func (s *Server) loadOrFetchThumbnail(ctx context.Context, key string, rawURL st
 // Transient upstream errors are ignored. The refresh is best-effort: it never
 // blocks or fails the image request, and concurrent failures for the same
 // gallery collapse into one walk via the fill group.
-func (s *Server) triggerPageRefresh(pageURL string, fetchErr error) {
+func (s *Server) triggerPageRefresh(ctx context.Context, pageURL string, fetchErr error) {
 	if !exhentai.IsPermanentUpstreamError(fetchErr) {
 		return
 	}
@@ -265,10 +265,10 @@ func (s *Server) triggerPageRefresh(pageURL string, fetchErr error) {
 	if !ok {
 		return
 	}
-	row, found, err := gallerycache.GetByGalleryID(context.Background(), s.cacheDB(), galleryID)
+	row, found, err := gallerycache.GetByGalleryID(ctx, s.cacheDB(), galleryID)
 	if err != nil || !found {
 		return
 	}
 	slog.Info("cached page URL failed; refreshing gallery cache", "id", galleryID, "error", fetchErr)
-	go s.refreshPages(galleryID, row.Token)
+	go s.refreshPages(ctx, galleryID, row.Token)
 }

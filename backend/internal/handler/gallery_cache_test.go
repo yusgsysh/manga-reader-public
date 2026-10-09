@@ -1148,7 +1148,7 @@ func TestRefreshPages_Shrinks(t *testing.T) {
 	}
 
 	server := &Server{Client: newMockClient(mockServer.URL), DB: &database.DB{Client: client}}
-	server.refreshPages(12345, "tok12345")
+	server.refreshPages(t.Context(), 12345, "tok12345")
 
 	row, found, err := gallerycache.Get(t.Context(), client, 12345, "tok12345")
 	if err != nil || !found {

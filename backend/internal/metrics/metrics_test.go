@@ -70,7 +70,9 @@ func TestTransportRecordsError(t *testing.T) {
 	upstream.Close() // force connection error
 
 	client := &http.Client{Transport: NewTransport(http.DefaultTransport)}
-	_, _ = client.Get(url)
+	if resp, getErr := client.Get(url); getErr == nil {
+		_ = resp.Body.Close()
+	}
 
 	text := gather(t)
 	if !strings.Contains(text, `outcome="error"`) {

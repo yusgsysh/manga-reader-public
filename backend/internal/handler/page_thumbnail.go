@@ -381,7 +381,7 @@ func (s *Server) resolveGalleryPageThumb(ctx context.Context, galleryID int64, t
 	// Cache miss or missing geometry: fill the cache in the background from the
 	// same shared walk this resolve subscribes to, so the verified list is
 	// persisted even though the resolve itself only waits for one page.
-	go s.refreshPages(galleryID, token)
+	go s.refreshPages(ctx, galleryID, token)
 
 	resolveCtx, cancel := context.WithTimeout(ctx, pageThumbResolveTimeout)
 	defer cancel()
