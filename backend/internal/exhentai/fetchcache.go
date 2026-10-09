@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"golang.org/x/sync/singleflight"
+
+	"manga-reader/internal/metrics"
 )
 
 // Many endpoints derive different data from the same upstream page: the gallery
@@ -51,13 +53,16 @@ func fetchOnce(
 	fetch func(ctx context.Context) (any, error),
 ) (any, error) {
 	if value, ok := getFetchEntry(key); ok {
+		metrics.ObserveFetchCache("hit")
 		return value, nil
 	}
 
-	value, err, _ := fetchGroup.Do(key, func() (any, error) {
+	value, err, shared := fetchGroup.Do(key, func() (any, error) {
 		if cached, ok := getFetchEntry(key); ok {
+			metrics.ObserveFetchCache("hit")
 			return cached, nil
 		}
+		metrics.ObserveFetchCache("miss")
 		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), upstreamDocTimeout)
 		defer cancel()
 		result, fetchErr := fetch(fetchCtx)
@@ -67,6 +72,10 @@ func fetchOnce(
 		setFetchEntry(key, result)
 		return result, nil
 	})
+	// shared means this caller waited on an identical in-flight fetch.
+	if shared {
+		metrics.ObserveFetchCache("coalesced")
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -105,6 +114,7 @@ func setFetchEntry(key string, value any) {
 		}
 	}
 	fetchCache[key] = fetchEntry{value: value, expires: time.Now().Add(fetchCacheTTL)}
+	metrics.SetFetchCacheEntries(len(fetchCache))
 }
 
 // fetchCacheKey namespaces a request by client (cookies) and request shape, so

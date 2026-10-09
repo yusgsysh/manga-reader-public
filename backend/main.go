@@ -19,6 +19,7 @@ import (
 	"manga-reader/internal/database"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/handler"
+	"manga-reader/internal/metrics"
 	synclib "manga-reader/internal/sync"
 	"manga-reader/internal/web"
 )
@@ -185,6 +186,10 @@ func run() error {
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+
+	// Prometheus exposition for upstream traffic. Registered before
+	// basicauth.Middleware so it is covered by Basic Auth like the API.
+	r.GET("/metrics", gin.WrapH(metrics.Handler()))
 
 	srv.RegisterRoutes(r)
 

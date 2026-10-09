@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+
+	"manga-reader/internal/metrics"
 )
 
 const (
@@ -72,12 +74,15 @@ func fetchDoc(ctx context.Context, client *http.Client, target string) (*goquery
 	// Content heuristics run before the status check so the specific auth
 	// failure pages keep their dedicated error types.
 	if sadPandaCheck(doc) {
+		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeSadPanda)
 		return nil, ErrSadPanda
 	}
 	if ipBannedCheck(doc) {
+		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeIPBanned)
 		return nil, ErrIPBanned
 	}
 	if resp.StatusCode != http.StatusOK {
+		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeHTTPError)
 		return nil, &httpStatusError{code: resp.StatusCode}
 	}
 	return doc, nil
@@ -119,12 +124,15 @@ func postFormDoc(ctx context.Context, client *http.Client, target string, form u
 	}
 
 	if sadPandaCheck(doc) {
+		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeSadPanda)
 		return nil, ErrSadPanda
 	}
 	if ipBannedCheck(doc) {
+		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeIPBanned)
 		return nil, ErrIPBanned
 	}
 	if resp.StatusCode != http.StatusOK {
+		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeHTTPError)
 		return nil, &httpStatusError{code: resp.StatusCode}
 	}
 	return doc, nil

@@ -10,6 +10,8 @@ import (
 	"regexp"
 
 	"github.com/PuerkitoBio/goquery"
+
+	"manga-reader/internal/metrics"
 )
 
 var nlReg = regexp.MustCompile(`nl\('(.+?)'\)`)
@@ -29,6 +31,7 @@ func ScrapePageImageURL(ctx context.Context, client *http.Client, pageURL string
 	// error so callers can classify it as permanent and refresh the gallery
 	// cache, instead of the generic "could not find image src" parse failure.
 	if resp.StatusCode != http.StatusOK {
+		metrics.ObserveClassification(metrics.Endpoint(pageURL), metrics.OutcomeHTTPError)
 		return "", "", &httpStatusError{code: resp.StatusCode}
 	}
 
@@ -113,6 +116,7 @@ func ProxyImage(ctx context.Context, client *http.Client, imgURL string) (data [
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		metrics.ObserveClassification(metrics.Endpoint(imgURL), metrics.OutcomeHTTPError)
 		return nil, "", &httpStatusError{code: resp.StatusCode}
 	}
 
