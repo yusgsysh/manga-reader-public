@@ -21,6 +21,23 @@ type Config struct {
 	// exist so a deployment can simulate an ExHentai outage at runtime to
 	// verify the frontend's offline fallback.
 	DevTools bool
+	// BasicAuth guards every route except /healthz with HTTP Basic Auth.
+	// It replaced the reverse-proxy layer that used to sit in front of the
+	// API, now that Gin serves the frontend too.
+	BasicAuth BasicAuthConfig
+}
+
+// BasicAuthConfig is the validated HTTP Basic Auth setup. Credentials come
+// from exactly one source: a single user in the environment, or an htpasswd
+// file (apr1 or bcrypt).
+type BasicAuthConfig struct {
+	Enabled bool
+	// Username/Password hold the single environment-provided user.
+	Username string
+	Password string
+	// File is a world-readable htpasswd file; empty when the credentials
+	// came from the environment.
+	File string
 }
 
 // DatabaseConfig selects the database backend. Driver defaults to "sqlite";
@@ -98,6 +115,12 @@ func Load() (*Config, error) {
 		cfg.Cookie = parseCookieString(cookieStr)
 	}
 
+	basicAuth, err := loadBasicAuth()
+	if err != nil {
+		return nil, err
+	}
+	cfg.BasicAuth = basicAuth
+
 	if !cfg.Cookie.IsValid() {
 		return nil, fmt.Errorf("missing required cookies: set EHENTAI_COOKIE or EHENTAI_COOKIE_IPB_MEMBER_ID + EHENTAI_COOKIE_IPB_PASS_HASH")
 	}
@@ -112,6 +135,73 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("unsupported MANGA_READER_DB_DRIVER %q: use sqlite or postgres", cfg.Database.Driver)
 	}
 
+	return cfg, nil
+}
+
+// loadBasicAuth reads and validates MANGA_READER_BASIC_AUTH_* the same way
+// the old proxy layer did: an unparsable switch value or a missing credential
+// source is a hard error, so a deployment can never come up anonymously by
+// accident (fail closed).
+func loadBasicAuth() (BasicAuthConfig, error) {
+	enabled := strings.ToLower(strings.TrimSpace(getEnv("MANGA_READER_BASIC_AUTH_ENABLED", "false")))
+	switch enabled {
+	case "true", "1", "yes":
+	case "false", "0", "no", "":
+		return BasicAuthConfig{}, nil
+	default:
+		// Deliberately does not echo the raw value: mis-pasted secrets stay
+		// out of the logs.
+		return BasicAuthConfig{}, fmt.Errorf("invalid MANGA_READER_BASIC_AUTH_ENABLED value (want true/false)")
+	}
+
+	cfg := BasicAuthConfig{Enabled: true}
+
+	if file := getEnv("MANGA_READER_BASIC_AUTH_FILE", ""); file != "" {
+		st, err := os.Stat(file)
+		if err != nil {
+			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_FILE not found: %s", file)
+		}
+		if st.Size() == 0 {
+			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_FILE is empty: %s", file)
+		}
+		if st.Mode().Perm()&0o004 == 0 {
+			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_FILE must be world-readable (chmod 644): %s", file)
+		}
+		cfg.File = file
+		return cfg, nil
+	}
+
+	user := getEnv("MANGA_READER_BASIC_AUTH_USERNAME", "")
+	if user == "" {
+		return BasicAuthConfig{}, fmt.Errorf("basic auth enabled but MANGA_READER_BASIC_AUTH_USERNAME is not set")
+	}
+	if strings.Contains(user, ":") {
+		return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_USERNAME must not contain ':'")
+	}
+
+	pass := getEnv("MANGA_READER_BASIC_AUTH_PASSWORD", "")
+	if pass == "" {
+		passFile := getEnv("MANGA_READER_BASIC_AUTH_PASSWORD_FILE", "")
+		if passFile == "" {
+			return BasicAuthConfig{}, fmt.Errorf("basic auth enabled but no password (set MANGA_READER_BASIC_AUTH_PASSWORD or MANGA_READER_BASIC_AUTH_PASSWORD_FILE)")
+		}
+		data, err := os.ReadFile(passFile)
+		if err != nil {
+			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_PASSWORD_FILE not readable: %s", passFile)
+		}
+		line, _, _ := strings.Cut(string(data), "\n")
+		line = strings.TrimRight(line, "\r")
+		if line == "" {
+			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_PASSWORD_FILE is empty: %s", passFile)
+		}
+		pass = line
+	}
+	if pass == "" {
+		return BasicAuthConfig{}, fmt.Errorf("basic auth enabled but the password is empty")
+	}
+
+	cfg.Username = user
+	cfg.Password = pass
 	return cfg, nil
 }
 

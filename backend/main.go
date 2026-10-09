@@ -13,12 +13,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"manga-reader/internal/basicauth"
 	"manga-reader/internal/cache"
 	"manga-reader/internal/config"
 	"manga-reader/internal/database"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/handler"
 	synclib "manga-reader/internal/sync"
+	"manga-reader/internal/web"
 )
 
 func CORSMiddleware() gin.HandlerFunc {
@@ -32,6 +34,19 @@ func CORSMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		c.Next()
+	}
+}
+
+// securityHeadersMiddleware carries over the headers the removed proxy layer
+// used to add. CSP stays out on purpose: a strict policy risks breaking the
+// React app, SSE and the image proxy.
+func securityHeadersMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		h := c.Writer.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "SAMEORIGIN")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		c.Next()
 	}
 }
@@ -160,12 +175,27 @@ func run() error {
 	}
 	r := gin.Default()
 	r.Use(CORSMiddleware())
+	r.Use(securityHeadersMiddleware())
+	r.Use(basicauth.Middleware(cfg.BasicAuth))
+
+	if cfg.BasicAuth.Enabled {
+		logger.Info("basic auth enabled", "source", map[bool]string{true: "htpasswd file", false: "environment"}[cfg.BasicAuth.File != ""])
+	}
 
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
 	srv.RegisterRoutes(r)
+
+	// Static frontend: embedded at build time (see internal/web). A binary
+	// built without dist stays API-only.
+	if fsys := web.FS(); fsys != nil {
+		web.Register(r, fsys)
+		logger.Info("embedded frontend enabled")
+	} else {
+		logger.Warn("no embedded frontend in this binary; serving the API only")
+	}
 
 	port := cfg.Port
 	if port[0] != ':' {

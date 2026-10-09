@@ -9,33 +9,41 @@
 #   docker compose pull
 #   docker compose up -d
 #
-# 拓扑：
-#   frontend (Angie :80)
-#     ├── HTTP Basic Authentication（可选，MANGA_READER_BASIC_AUTH_*，默认关闭）
-#     ├── 静态文件
-#     └── /api/* → backend (:8080)
+# 拓扑（单镜像）：
+#   backend (Gin :8080, 对外发布 5173)
+#     ├── 静态前端（构建时 embed 进二进制，不外挂静态文件）
+#     ├── /api/* 与 SPA 回退同进程处理
+#     ├── HTTP Basic Auth（可选，MANGA_READER_BASIC_AUTH_*，默认关闭）
+#     └── 数据卷 backend_data → /app/data
 #
-#   backend (Gin :8080)
-#     └── 不对外发布端口，仅通过 frontend 访问
+# 公网部署：Basic Auth 必须开启且置于 HTTPS 之后；PostgreSQL / MinIO
+# 均不发布公网端口（见 README「公网部署」）。
 #
-# 公网部署：Basic Auth 必须开启且置于 HTTPS 之后；backend /
-# PostgreSQL / MinIO 均不发布公网端口（见 README「公网部署」）。
-#
-# 本地调试 backend 时，可临时取消注释：
-#   ports:
-#     - "127.0.0.1:8080:8080"
+# 本地调试时可把端口改成 127.0.0.1:5173:8080。
 
 services:
   backend:
-    image: git.09270721.xyz/abc/manga-reader-backend:latest
+    image: git.09270721.xyz/abc/manga-reader:latest
 
     init: true
 
     env_file:
       - .env
 
+    ports:
+      - "5173:8080"
+
     environment:
       MANGA_READER_DB_PATH: /app/data/manga-reader.db
+
+      # HTTP Basic Auth（Gin 层，默认关闭；生产在 .env 开启）
+      # 注意：.env 中的 $ 需写成 $$（compose 会做变量插值）
+      MANGA_READER_BASIC_AUTH_ENABLED: ${MANGA_READER_BASIC_AUTH_ENABLED:-false}
+      MANGA_READER_BASIC_AUTH_USERNAME: ${MANGA_READER_BASIC_AUTH_USERNAME:-}
+      MANGA_READER_BASIC_AUTH_PASSWORD: ${MANGA_READER_BASIC_AUTH_PASSWORD:-}
+      # 口令/htpasswd 文件经 secret 注入时设置（见文件末尾 secrets 示例）
+      MANGA_READER_BASIC_AUTH_FILE: ${MANGA_READER_BASIC_AUTH_FILE:-}
+      MANGA_READER_BASIC_AUTH_PASSWORD_FILE: ${MANGA_READER_BASIC_AUTH_PASSWORD_FILE:-}
 
       # HTTP 代理（出站走代理，.env 中的 HTTP_PROXY/HTTPS_PROXY/NO_PROXY）
       # 未设置时为空，Go 视为未配置代理即直连
@@ -50,10 +58,6 @@ services:
     # extra_hosts:
     #   - "storage.09270721.xyz:192.168.1.100"
 
-    # 本地调试时使用，默认不对外暴露
-    # ports:
-    #   - "127.0.0.1:8080:8080"
-
     security_opt:
       - no-new-privileges:true
 
@@ -66,56 +70,16 @@ services:
     stop_grace_period: 30s
     restart: unless-stopped
 
-  frontend:
-    image: git.09270721.xyz/abc/manga-reader-frontend:latest
-
-    init: true
-
-    ports:
-      - "5173:80"
-
-    environment:
-      # 反代后端地址
-      # 默认使用 Compose 内部 DNS：
-      # backend:8080
-      ANGIE_BACKEND_URL: ${ANGIE_BACKEND_URL:-backend:8080}
-
-      # HTTP Basic Auth（Angie 层，默认关闭；生产在 .env 开启）
-      # 注意：.env 中的 $ 需写成 $$（compose 会做变量插值）
-      MANGA_READER_BASIC_AUTH_ENABLED: ${MANGA_READER_BASIC_AUTH_ENABLED:-false}
-      MANGA_READER_BASIC_AUTH_USERNAME: ${MANGA_READER_BASIC_AUTH_USERNAME:-}
-      MANGA_READER_BASIC_AUTH_PASSWORD: ${MANGA_READER_BASIC_AUTH_PASSWORD:-}
-      # 口令/htpasswd 文件经 secret 注入时设置（见文件末尾 secrets 示例）
-      MANGA_READER_BASIC_AUTH_FILE: ${MANGA_READER_BASIC_AUTH_FILE:-}
-      MANGA_READER_BASIC_AUTH_PASSWORD_FILE: ${MANGA_READER_BASIC_AUTH_PASSWORD_FILE:-}
-
-    depends_on:
-      - backend
-
-    security_opt:
-      - no-new-privileges:true
-
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-    stop_grace_period: 10s
-    restart: unless-stopped
-
 volumes:
   backend_data:
 
 # ------------------------------------------------------------
 # 生产环境 Basic Auth 推荐：口令不进 .env / 容器环境，而是以
-# htpasswd 文件（apr1 $1$ 哈希）经 docker secret 注入：
+# htpasswd 文件（apr1 $1$ 或 bcrypt $2$ 哈希）经 docker secret 注入：
 #
 #   1) 宿主机生成（交互输入口令，不落命令行历史）：
 #        mkdir -p secrets
 #        htpasswd -nm admin > secrets/manga_reader.htpasswd
-#      注意：勿用 -B（bcrypt）—— Angie(Alpine/musl) 的 auth_basic
-#      不支持 bcrypt，正确口令也会验证失败。
 #   2) .env 中设置：
 #        MANGA_READER_BASIC_AUTH_ENABLED=true
 #        MANGA_READER_BASIC_AUTH_FILE=/run/secrets/manga_reader_htpasswd
@@ -125,7 +89,7 @@ volumes:
 #   manga_reader_htpasswd:
 #     file: ./secrets/manga_reader.htpasswd
 #
-#   并在 frontend 服务下追加：
+#   并在 backend 服务下追加：
 #     secrets:
 #       - manga_reader_htpasswd
 # ------------------------------------------------------------

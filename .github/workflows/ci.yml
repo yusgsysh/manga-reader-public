@@ -93,16 +93,18 @@ jobs:
         run: bun run build
 
   # ------------------------------------------------------------
-  # Docker images — built only when all tests above succeeded.
+  # Single image — built only when all tests above succeeded.
+  # The frontend bundle is compiled and embedded into the Go binary
+  # by the root Dockerfile, so API + static files ship together.
   #
   # push to main / manual run:
-  #   pushed to ghcr.io/<owner>/<repo>-{frontend,backend}
+  #   pushed to ghcr.io/<owner>/manga-reader
   #
   # pull_request:
   #   built as validation only, not pushed
   # ------------------------------------------------------------
   docker:
-    name: Build Docker Images
+    name: Build Docker Image
     needs:
       - backend-test
       - frontend-test
@@ -119,11 +121,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Image base name (lowercase)
+      - name: Image name (lowercase namespace)
         id: base
         run: |
           set -euo pipefail
-          echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "name=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/manga-reader" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -136,48 +138,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Backend image metadata
-        id: backend-meta
+      - name: Image metadata
+        id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ steps.base.outputs.name }}-backend
+          images: ${{ steps.base.outputs.name }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Frontend image metadata
-        id: frontend-meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ steps.base.outputs.name }}-frontend
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Backend
+      - name: Build and push
         uses: docker/build-push-action@v7
         with:
-          context: backend
+          context: .
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.backend-meta.outputs.tags }}
-          labels: ${{ steps.backend-meta.outputs.labels }}
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,scope=backend,mode=max
-          provenance: false
-          sbom: false
-
-      - name: Build and push Frontend
-        uses: docker/build-push-action@v7
-        with:
-          context: frontend
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.frontend-meta.outputs.tags }}
-          labels: ${{ steps.frontend-meta.outputs.labels }}
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,scope=frontend,mode=max
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=manga-reader
+          cache-to: type=gha,scope=manga-reader,mode=max
           provenance: false
           sbom: false

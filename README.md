@@ -17,7 +17,7 @@
 - 离线下载任务（Prefill）：后台排队预填充图片缓存、下载管理页、流式 ZIP 下载
 - 缩略图源站代理与 MinIO 缓存
 - 页面图片 MinIO 缓存（可选）
-- 单用户设计，无用户系统；公网访问经反向代理层 HTTP Basic Authentication 保护（见「公网部署」）
+- 单用户设计，无用户系统；公网访问经内置 HTTP Basic Auth 保护（见「公网部署」）
 
 ## 目录结构
 
@@ -26,7 +26,10 @@ manga-reader/
 ├── backend/            # Go Backend（见 backend/API.md）
 ├── frontend/           # React 前端（见 frontend/README.md）
 ├── Manga Reader API/   # 接口集合（OpenCollection 请求定义，同 backend/API.md）
-├── .forgejo/           # CI：镜像构建 / 前端测试 / 部署
+├── Dockerfile          # 单镜像：前端构建 + 嵌入后端二进制
+├── .forgejo/           # CI：镜像构建 / 前端测试 / 部署（自托管 runner）
+├── .github/            # CI：测试 + GHCR 单镜像
+├── deploy/quadlet/     # podman quadlet 单元
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -47,13 +50,15 @@ backend/
 │   │   ├── prefilljob/           # PrefillJob 字段常量与查询辅助
 │   │   ├── gallerycache/         # GalleryCache 字段常量与查询辅助
 │   │   └── migrate/              # 数据库迁移逻辑
+│   ├── basicauth/                # HTTP Basic Auth（apr1/bcrypt 校验 + 限流）
 │   ├── exhentai/                 # ExHentai API / 页面抓取（含 10 秒请求去重）
 │   ├── gallerycache/             # gallery_cache 读写
 │   ├── handler/                  # HTTP 处理器 (Gin)
 │   ├── imageproc/                # 图片裁剪（精灵图页面缩略图）
 │   ├── model/                    # API 响应模型
 │   ├── sync/                     # 数据同步（outbox / SSE / 推送引擎，见 backend/API.md 28）
-│   └── ttl/                      # HTTP Cache-Control / listing cursor 常量
+│   ├── ttl/                      # HTTP Cache-Control / listing cursor 常量
+│   └── web/                      # 内嵌前端（//go:embed dist，SPA 回退与缓存策略）
 └── API.md                        # API 文档
 ```
 
@@ -77,7 +82,7 @@ backend/
    EHENTAI_COOKIE_IPB_PASS_HASH=xxx
    ```
 
-2. 启动全部服务（镜像由 CI 构建并推送到镜像仓库，compose 直接拉取，仓库内无 `build:` 配置）：
+2. 启动服务（单镜像：Gin API + 内嵌前端由 CI 构建推送，compose 直接拉取，仓库内无 `build:` 配置）：
 
    ```bash
    docker compose up -d
@@ -91,8 +96,7 @@ backend/
 
    | 服务 | 端口 | 说明 |
    |------|------|------|
-   | frontend | 5173 | Angie (nginx) 托管前端并反代 `/api/*`，后端不对外发布端口 |
-   | backend | 8080（容器内） | Gin API，仅通过 frontend 反代访问 |
+   | backend | 5173 | 单镜像：静态前端（构建时 embed）与 `/api/*` 同进程由 Gin 服务 |
 
 3. 打开 `http://localhost:5173` 使用。
 
@@ -107,8 +111,10 @@ backend/
 开发环境 Basic Auth **默认关闭**（`MANGA_READER_BASIC_AUTH_ENABLED=false`），`bun dev`、`go run .`、Playwright、单元测试、桌面端均不受影响。公网部署必须显式开启，并满足：
 
 - **HTTPS 必须在 Basic Auth 之前**：Basic Auth 只是 `base64(user:pass)`，不是加密。TLS 由前置层（云负载均衡 / Caddy / 前置 nginx）提供，同时负责 HTTP :80 → HTTPS :443 跳转；HSTS 也由该层配置，确认域名永久 HTTPS 后再开启。
-- **后端不暴露公网**：backend `:8080`、PostgreSQL `:5432`、MinIO `:9000/:9001` 均不发布公网端口，只在 Docker 内网通信（本仓库 compose 已是此拓扑）；仅 frontend(Angie) 对外。
-- **保护范围**：`/`、静态资源、`/api/*`（含 SSE `/api/sync/events`、`/api/events/changes`、图片代理、Prefill、ZIP）全部经 Basic Auth；仅 `/healthz` 豁免（静态 `ok`，无 Cookie / 令牌 / 配置信息）。认证失败返回 `401` + `WWW-Authenticate: Basic realm="Manga Reader"`，由浏览器处理——前端没有、也不需要登录页。
+- **应用端口不暴露公网**：容器 `:8080`、PostgreSQL `:5432`、MinIO `:9000/:9001` 不发布到公网，只在 Docker 内网通信；compose 的 `5173:8080` 可按需改成 `127.0.0.1:5173:8080`，公网只经过带 TLS 的前置反代。
+- **保护范围**：`/`、静态资源、`/api/*`（含 SSE `/api/sync/events`、`/api/events/changes`、图片代理、Prefill、ZIP）全部经 Basic Auth；仅 `/healthz` 豁免（`{"status":"ok"}`，无 Cookie / 令牌 / 配置信息）。认证失败返回 `401` + `WWW-Authenticate: Basic realm="Manga Reader"`，由浏览器处理——前端没有、也不需要登录页。
+
+认证、静态资源与 API 同在一个 Gin 进程内（前端在构建时 `//go:embed` 进二进制），因此没有反代层在中间消费 `Authorization`。
 
 ### 开关与凭据
 
@@ -121,18 +127,18 @@ MANGA_READER_BASIC_AUTH_PASSWORD=change-me-strong-password
 ```
 
 ```bash
-docker compose up -d   # 环境变量变化会重建 frontend 容器
+docker compose up -d   # 环境变量变化会重建容器
 ```
 
-凭据注入三选一（启用时必须提供其一，否则 frontend 容器**拒绝启动**，fail closed）：
+凭据注入三选一（启用时必须提供其一，否则后端**拒绝启动**，fail closed）：
 
-1. **用户名 + 口令环境变量**（上例）：启动时经 `htpasswd` 生成 apr1 哈希交给 Angie；口令不写日志、不回传 API、不在日志中记录认证失败口令。
+1. **用户名 + 口令环境变量**（上例）：口令在进程内以常数时间比较校验；不写日志、不回传 API。
 2. **htpasswd 文件（推荐）**：口令不进容器环境变量，经 docker secret 挂载：
 
    ```bash
    mkdir -p secrets
    htpasswd -nm admin > secrets/manga_reader.htpasswd   # 交互输入口令
-   chmod 644 secrets/manga_reader.htpasswd              # angie worker 需可读
+   chmod 644 secrets/manga_reader.htpasswd              # 进程用户需可读
    ```
 
    ```env
@@ -140,44 +146,51 @@ docker compose up -d   # 环境变量变化会重建 frontend 容器
    MANGA_READER_BASIC_AUTH_FILE=/run/secrets/manga_reader_htpasswd
    ```
 
-   再按 `docker-compose.yml` 末尾示例取消 `secrets:` 注释并给 frontend 挂载该 secret。
+   再按 `docker-compose.yml` 末尾示例取消 `secrets:` 注释并给 backend 服务挂载该 secret。
 
 3. **口令文件**（明文单行，docker secret）：`MANGA_READER_BASIC_AUTH_PASSWORD_FILE=/run/secrets/...` + 用户名环境变量。
 
 注意事项：
 
-- **哈希必须是 apr1（`$1$`，`htpasswd -m`/`-n`），勿用 `-B` bcrypt**：Angie 运行于 Alpine/musl，其 `crypt()` 不支持 bcrypt，正确口令也会验证失败。用已有的 bcrypt 文件（`$2y$`）同样不行。
+- **哈希格式**：apr1（`$1$` / `$apr1$`，`htpasswd -m`/`-n`）与 bcrypt（`$2$`，`htpasswd -B`）均可校验；`$5$`/`$6$`（sha-crypt）不支持，会被当作验证失败（锁死而非降级）。htpasswd 文件每次请求重新读取，轮换口令无需重启。
 - `.env` 中的 `$` 需写成 `$$`（compose 变量插值）。
-- 代理层消费 `Authorization` 并在转发前剔除（`proxy_set_header Authorization ""`），口令永不到达 backend 及其日志；SSE、图片、ZIP 均不受影响（认证只在连接建立时发生一次，`proxy_buffering off` 等 SSE 配置保持不变）。
-- **限流**：Basic Auth 开启时 Angie 按来源 IP 限 50 req/s（突发 200，超限 `429`），作为基础防洪水/防爆破；Angie access log 含 401 记录，需要更强防爆破时可在前置防火墙 / fail2ban 封禁。切勿因此放松口令强度。
+- **限流**：Basic Auth 开启时按来源 IP 限 50 req/s（突发 200，超限 `429` + `Retry-After`），作为基础防洪水/防爆破；需要更强防爆破时在前置防火墙 / fail2ban 封禁。切勿因此放松口令强度。计数键取自 `ClientIP()`（优先 `X-Forwarded-For`）：部署在反代之后时请让前置正确传该头，否则所有请求会共享同一个限流桶。
 - **桌面端同步**：同步端点同样受 Basic Auth 保护。桌面端在设置页的服务器地址内嵌凭据即可：`https://user:pass@server.example.com`（Go HTTP 客户端自动携带 `Authorization`）；本仓库部署实例即 `https://admin:你的口令@manga.09270721.xyz`（口令含 `@`、`:` 时需 URL 编码）。Basic 用户名/口令与 `MANGA_READER_SYNC_TOKEN` 是两套独立凭据，需同时正确（见 `backend/API.md` 28）。
-- 安全 Header 已由 Angie 添加：`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`；刻意不加 CSP（避免破坏 React、SSE、图片代理）。
+- **安全 Header** 由 Gin 统一添加：`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`；刻意不加 CSP（避免破坏 React、SSE、图片代理）。
 
 ### 验证
 
 ```bash
-# 无容器：生成逻辑 + 配置静态断言（需要 POSIX sh + htpasswd）
-sh frontend/deploy/test-auth-config.sh
-
-# 端到端：真实镜像 401/200/SSE/healthz/限流配置断言（需要 docker 或 podman + go + curl）
-sh frontend/deploy/test-basic-auth.sh
+cd backend
+go test ./internal/basicauth/ ./internal/web/ ./internal/config/
 ```
+
+覆盖：配置 fail-closed 矩阵、apr1/bcrypt 已知答案向量、`/healthz` 豁免、401 挑战头、限流 429、SPA 回退与缓存策略。
 
 ## CI 与部署
 
-镜像构建与部署由 Forgejo Actions（`.forgejo/workflows/`）在自托管 runner 上完成：
+两个 CI 并存，产物都是同一个单镜像 `manga-reader`：
+
+**Forgejo Actions**（`.forgejo/workflows/`，自托管 runner，构建 + 部署）
 
 | Workflow | 触发 | 作用 |
 |----------|------|------|
-| `docker-build.yml` | push 到 `main`、PR | 检测 frontend/backend 变更 → 构建并推送 `manga-reader-frontend:latest` 与 `manga-reader-backend:latest`；push 到 `main` 且有变更时在服务器上 `docker compose pull && docker compose up -d` 完成部署（PR 只构建不部署） |
+| `docker-build.yml` | push 到 `main`、PR | 检测 `frontend/`、`backend/` 或根 `Dockerfile` 变更 → 构建并推送 `git.09270721.xyz/abc/manga-reader:latest`；push 到 `main` 且有变更时在服务器上 `docker compose pull && docker compose up -d` 完成部署（PR 只构建不部署） |
 | `frontend-tests.yml` | push 到 `main`、PR | 在 `oven/bun:1` 容器内跑单测（vitest）+ reader e2e（Playwright） |
 | `deploy.yml` | 手动（workflow_dispatch） | 单独执行一次 pull + 重启部署 |
+
+**GitHub Actions**（`.github/workflows/ci.yml`，托管 runner，测试 + GHCR）
+
+| Job | 触发 | 作用 |
+|-----|------|------|
+| `backend-test` | push 到 `main`、PR | `gofmt` + `go vet` + `go test ./...` |
+| `frontend-test` | push 到 `main`、PR | `bun install --frozen-lockfile` + lint + 单测 + 生产构建 |
+| `docker` | 上面两个都成功后 | 构建单镜像；push 到 `main`/手动触发时推送 `ghcr.io/<owner>/manga-reader`，PR 只构建不推送 |
 
 本地构建同名镜像（覆盖 compose 引用的镜像，便于不依赖 CI 调试）：
 
 ```bash
-docker build -t git.09270721.xyz/abc/manga-reader-frontend:latest frontend
-docker build -t git.09270721.xyz/abc/manga-reader-backend:latest backend
+docker build -t git.09270721.xyz/abc/manga-reader:latest .
 ```
 
 ## 环境变量
@@ -202,11 +215,10 @@ docker build -t git.09270721.xyz/abc/manga-reader-backend:latest backend
 | `MINIO_BUCKET` | 否 | - | MinIO Bucket |
 | `MINIO_USE_SSL` | 否 | `false` | 是否启用 SSL |
 | `MINIO_REGION` | 否 | - | MinIO Region |
-| `ANGIE_BACKEND_URL` | 否 | `backend:8080` | frontend(Angie) 反代后端地址（独立运行镜像时改为 `host:port`） |
-| `MANGA_READER_BASIC_AUTH_ENABLED` | 否 | `false` | Angie 层 HTTP Basic Auth 开关；公网生产必须 `true`（见「公网部署」） |
+| `MANGA_READER_BASIC_AUTH_ENABLED` | 否 | `false` | 内置 HTTP Basic Auth 开关；公网生产必须 `true`（见「公网部署」） |
 | `MANGA_READER_BASIC_AUTH_USERNAME` | 否† | - | Basic Auth 用户名（启用且用环境变量/口令文件方式时必填） |
 | `MANGA_READER_BASIC_AUTH_PASSWORD` | 否† | - | Basic Auth 口令（生产建议改用 secret 文件，勿提交真实口令） |
-| `MANGA_READER_BASIC_AUTH_FILE` | 否† | - | 现成 htpasswd 文件路径（docker secret，推荐，apr1 `$1$` 条目） |
+| `MANGA_READER_BASIC_AUTH_FILE` | 否† | - | 现成 htpasswd 文件路径（docker secret，推荐；apr1 `$1$` / bcrypt `$2$`） |
 | `MANGA_READER_BASIC_AUTH_PASSWORD_FILE` | 否† | - | 单行口令文件路径（docker secret） |
 | `MANGA_READER_DEV_TOOLS` | 否 | `false` | 启用 `/api/dev/*` 调试接口（可运行时模拟 ExHentai 不可用，见 `backend/API.md` Dev Tools） |
 | `MANGA_READER_SYNC_TOKEN` | 否 | - | 同步宿主令牌；非空时启用服务端同步端点（`/api/sync/push`、`/api/sync/events`） |
@@ -215,7 +227,7 @@ docker build -t git.09270721.xyz/abc/manga-reader-backend:latest backend
 | `NO_PROXY` | 否 | - | 绕过代理的主机/网段（内网 MinIO、数据库、compose 服务名等） |
 
 > \* `EHENTAI_COOKIE` 与 `EHENTAI_COOKIE_IPB_MEMBER_ID` + `EHENTAI_COOKIE_IPB_PASS_HASH` 至少配置一种，否则后端无法启动。
-> † Basic Auth 启用时必须提供凭据来源之一（用户名+口令、`_FILE`、或 `MANGA_READER_BASIC_AUTH_FILE`），否则 frontend 容器拒绝启动。
+> † Basic Auth 启用时必须提供凭据来源之一（用户名+口令、`_FILE`、或 `MANGA_READER_BASIC_AUTH_FILE`），否则后端拒绝启动（fail closed）。
 
 ## 后端开发
 
@@ -224,6 +236,18 @@ cd backend
 go test ./...
 go vet ./...
 go run .
+```
+
+`go run .` 只提供 API：静态前端通过 `//go:embed` 在编译期打包进 `internal/web/dist`，源码检出默认只有占位文件（`.gitkeep`），此时后端以 API-only 模式启动并打一条 warning。要在本地同时看到完整页面：
+
+```bash
+# 方式一：Docker 构建（CI 同款，前端由镜像构建自动嵌入）
+docker build -t manga-reader .
+
+# 方式二：本地 go run 前先放一份前端产物
+cd ../frontend && bun install && bun run build
+rm -rf ../backend/internal/web/dist && cp -r dist ../backend/internal/web/dist
+cd ../backend && go run .
 ```
 
 ### Ent ORM 代码生成
@@ -328,7 +352,7 @@ curl -X POST http://localhost:8080/api/reading-progress/cleanup?days=0
 - **桌面端 / 客户端**：设置页「数据同步」填服务端地址 + 同一令牌并启用（配置存 `sync_state` 表）。服务端在 Basic Auth 之后时，地址内嵌凭据：`https://admin:你的口令@manga.09270721.xyz`。
 - 双方通过 `POST /api/sync/push` 推送 + 拉取，`GET /api/sync/events` SSE 监听对端新变更（写后 2s 去抖推送，心跳 25s，断线退避 1s→60s，60s 轮询兜底）。
 - 合并规则：按行 LWW（`updated_at` 新者胜），删除用 tombstone；首次连接返回全量快照；更换 `server_url` 会自动重置同步游标与引导标记，对新对端重新全量（`gallery_cache` 行在 LWW 胜出时按字段合并，空值不覆盖，镜像本地 upsert 语义）。
-- 桌面端本地通过 `GET /api/events/changes` SSE 通知前端刷新（Angie 已为该路径关闭缓冲，见 `frontend/deploy/angie.conf.tpl`）。
+- 桌面端本地通过 `GET /api/events/changes` SSE 通知前端刷新（Gin 直接写出长连接，无中间代理缓冲；`WriteTimeout` 刻意未设置以支持长流）。
 
 ```bash
 # 服务端
@@ -338,7 +362,7 @@ MANGA_READER_SYNC_TOKEN=my-secret go run .
 curl -X PUT http://localhost:8080/api/sync/config -H 'Content-Type: application/json' \
   -d '{"enabled":true,"server_url":"http://server:8080","token":"my-secret"}'
 
-# 桌面端配置（公网 Angie Basic Auth 之后：请求本身与 server_url 均带凭据）
+# 桌面端配置（公网 Basic Auth 之后：请求本身与 server_url 均带凭据）
 curl -u admin:你的口令 -X PUT https://manga.09270721.xyz/api/sync/config \
   -H 'Content-Type: application/json' \
   -d '{"enabled":true,"server_url":"https://admin:你的口令@manga.09270721.xyz","token":"my-secret"}'

@@ -1365,7 +1365,7 @@ Cache-Control: no-store
 
 **本地事件流（供前端刷新，无鉴权）：**
 
-`GET /api/events/changes` — SSE，连接后立即推送 `data: {}`；本地任意同步数据变更（含远端应用）再推 `data: {}`。Angie 需为该路径关闭缓冲（见 `frontend/deploy/angie.conf.tpl`）。
+`GET /api/events/changes` — SSE，连接后立即推送 `data: {}`；本地任意同步数据变更（含远端应用）再推 `data: {}`。该路径由 Gin 直接流式写出（无反代缓冲，`WriteTimeout` 未设置）。
 
 **宿主端点（仅当服务端设置 `MANGA_READER_SYNC_TOKEN` 时注册，否则 `404`）：**
 
