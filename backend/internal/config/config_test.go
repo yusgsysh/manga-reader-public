@@ -6,6 +6,17 @@ func setRequiredCookies(t *testing.T) {
 	t.Helper()
 	t.Setenv("EHENTAI_COOKIE_IPB_MEMBER_ID", "1")
 	t.Setenv("EHENTAI_COOKIE_IPB_PASS_HASH", "hash")
+	// Basic Auth defaults to off; an enabled setup in the developer's shell
+	// must not leak into tests that are about something else.
+	for _, key := range []string{
+		"MANGA_READER_BASIC_AUTH_ENABLED",
+		"MANGA_READER_BASIC_AUTH_USERNAME",
+		"MANGA_READER_BASIC_AUTH_PASSWORD",
+		"MANGA_READER_BASIC_AUTH_PASSWORD_FILE",
+		"MANGA_READER_BASIC_AUTH_FILE",
+	} {
+		t.Setenv(key, "")
+	}
 }
 
 func TestLoad_DefaultDriverIsSQLite(t *testing.T) {

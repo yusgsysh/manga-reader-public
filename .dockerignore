@@ -1,0 +1,28 @@
+# Build context for the root Dockerfile (single image: frontend + backend).
+.git
+.github
+.forgejo
+deploy
+
+# API design files are not part of the image
+Manga Reader API
+
+# Frontend build artifacts — the frontend stage starts clean
+frontend/node_modules
+frontend/dist
+frontend/e2e
+
+# Backend build artifacts — the backend stage builds its own binary
+backend/data
+backend/manga-reader
+
+# Local frontend bundle drops (stale assets must never be embedded)
+backend/internal/web/dist/*
+!backend/internal/web/dist/.gitkeep
+
+# Secrets and local config never enter the image
+.env
+.env.*
+!.env.example
+secrets
+*.htpasswd

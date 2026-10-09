@@ -614,9 +614,10 @@ func streamGalleryPagesNDJSON(
 		if !started {
 			c.Header("Content-Type", "application/x-ndjson; charset=utf-8")
 			c.Header("Cache-Control", "no-store")
-			// Defeat proxy buffering (nginx/Angie) even when the location's
-			// proxy_buffering is on, so lines reach the browser as they are
-			// scraped instead of after the whole response finishes.
+			// Defeat buffering in a reverse proxy sitting in front of the
+			// app (nginx and friends honour this header even when
+			// proxy_buffering is on), so lines reach the browser as they
+			// are scraped instead of after the whole response finishes.
 			c.Header("X-Accel-Buffering", "no")
 			c.Status(http.StatusOK)
 			started = true
