@@ -1,0 +1,221 @@
+name: Desktop & APK
+
+# Builds the Wails v3 desktop binaries (Linux, Windows) and the Android APK.
+# The frontend is copied next to the desktop module and symlinked into place,
+# exactly like backend/cmd/desktop/build/docker/Dockerfile.android does,
+# because the Taskfiles expect `frontend/` to live next to the desktop module.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/desktop.yml"
+      - "backend/**"
+      - "frontend/**"
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/desktop.yml"
+      - "backend/**"
+      - "frontend/**"
+
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Kept in sync with the wailsapp/wails/v3 requirement in backend/go.mod.
+  WAILS_VERSION: v3.0.0-beta.27
+  # Pinned by backend/cmd/desktop/build/docker/Dockerfile.android.
+  ANDROID_NDK_VERSION: 26.3.11579264
+
+jobs:
+  # ------------------------------------------------------------
+  # Desktop: `wails3 build` on Linux and Windows.
+  # Linux needs CGO (GTK4 + WebKitGTK 6.0); Windows builds with CGO disabled.
+  # ------------------------------------------------------------
+  desktop:
+    name: Desktop (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install GTK/WebKit build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Install Task and Wails CLI (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          go install github.com/go-task/task/v3/cmd/task@latest
+          go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Install Task and Wails CLI (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          go install github.com/go-task/task/v3/cmd/task@latest
+          go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
+          Add-Content -Path $env:GITHUB_PATH -Value "$(go env GOPATH)\bin"
+
+      - name: Place the frontend where the Taskfiles expect it (Linux)
+        if: runner.os == 'Linux'
+        working-directory: backend/cmd/desktop
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          rm -rf build/frontend frontend
+          cp -r ../../../frontend build/frontend
+          ln -s "$PWD/build/frontend" frontend
+          test -f frontend/package.json
+
+      - name: Place the frontend where the Taskfiles expect it (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: backend/cmd/desktop
+        run: |
+          New-Item -ItemType Directory -Force build | Out-Null
+          Remove-Item -Recurse -Force build/frontend, frontend -ErrorAction SilentlyContinue
+          Copy-Item -Recurse ..\..\..\frontend build\frontend
+          New-Item -ItemType Junction -Path frontend -Target (Resolve-Path build\frontend) | Out-Null
+          if (-not (Test-Path frontend/package.json)) { throw "frontend placement failed" }
+
+      - name: Build
+        working-directory: backend/cmd/desktop
+        run: wails3 build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: manga-reader-desktop-${{ matrix.os }}
+          path: |
+            backend/cmd/desktop/bin/manga-reader-desktop
+            backend/cmd/desktop/bin/manga-reader-desktop.exe
+          if-no-files-found: error
+
+  # ------------------------------------------------------------
+  # Android: `task android:package` compiles libwails.so with the NDK and
+  # assembles a signed release APK (debug keystore unless ANDROID_KEYSTORE_*).
+  # ------------------------------------------------------------
+  android-apk:
+    name: Android APK
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Install Android SDK packages
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "build-tools;34.0.0" \
+            "ndk;${{ env.ANDROID_NDK_VERSION }}"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ env.ANDROID_NDK_VERSION }}" >> "$GITHUB_ENV"
+
+      - name: Create the debug keystore
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Install Task and Wails CLI
+        run: |
+          set -euo pipefail
+          go install github.com/go-task/task/v3/cmd/task@latest
+          go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Place the frontend where the Taskfiles expect it
+        working-directory: backend/cmd/desktop
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          rm -rf build/frontend frontend
+          cp -r ../../../frontend build/frontend
+          ln -s "$PWD/build/frontend" frontend
+          test -f frontend/package.json
+
+      - name: Build APK
+        working-directory: backend/cmd/desktop
+        run: task android:package
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: manga-reader-desktop-android
+          path: backend/cmd/desktop/bin/*.apk
+          if-no-files-found: error
