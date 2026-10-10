@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/gin-gonic/gin"
 )
 
 func TestEndpointClassification(t *testing.T) {
@@ -152,6 +154,37 @@ func TestGalleryCacheCounters(t *testing.T) {
 		`gallery_cache_requests_total{kind="details",result="miss"} 1`,
 		`gallery_cache_requests_total{kind="pages",result="hit"} 1`,
 		`gallery_cache_requests_total{kind="page_thumb",result="miss"} 1`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("expected %q in exposition, got:\n%s", want, text)
+		}
+	}
+}
+
+func TestGinMiddlewareRecordsRequests(t *testing.T) {
+	ResetForTest()
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(GinMiddleware())
+	r.GET("/api/ping", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+	r.GET("/api/fail", func(c *gin.Context) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "boom"})
+	})
+
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/ping", nil))
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/ping", nil)) // 404, unmatched route
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/fail", nil))
+
+	text := gather(t)
+	for _, want := range []string{
+		`http_requests_total{method="GET",route="/api/ping",status_code="200"} 1`,
+		`http_requests_total{method="POST",route="unmatched",status_code="404"} 1`,
+		`http_requests_total{method="GET",route="/api/fail",status_code="500"} 1`,
+		`http_request_duration_seconds_count{method="GET",route="/api/fail"} 1`,
+		`go_goroutines `,
+		`process_resident_memory_bytes `,
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("expected %q in exposition, got:\n%s", want, text)

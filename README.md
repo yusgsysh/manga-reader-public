@@ -347,6 +347,10 @@ Schema 文件：
 | `exhentai_fetchcache_entries` | Gauge | — | 短共享缓存当前条目数 |
 | `image_cache_requests_total` | Counter | `kind, result` | MinIO 图片缓存查找：`kind` = page_image / thumbnail / sprite，`result` = hit / miss |
 | `gallery_cache_requests_total` | Counter | `kind, result` | `gallery_cache` 查找：`kind` = gallery / details / pages / page_thumb，`result` = hit / miss |
+| `http_requests_total` | Counter | `method, route, status_code` | 本应用 HTTP 请求（`route` 为路由模板，未匹配路径归入 `route="unmatched"`，含 Basic Auth 401） |
+| `http_request_duration_seconds` | Histogram | `method, route` | 本应用 HTTP 延迟（中间件入口 → 响应完成） |
+
+此外注册了 Go runtime 与进程指标（`go_goroutines`、`go_memstats_*`、`go_gc_*`、`process_resident_memory_bytes`、`process_cpu_seconds_total`、`process_open_fds` 等），无需手工采集。
 
 Hit rate 不单独存储为 gauge，用 `rate` 计算，例如：
 
@@ -357,6 +361,14 @@ sum(rate(image_cache_requests_total[5m]))
 ```
 
 `gallery_cache_requests_total` 同理；追加 `by (kind)` 或 `kind=` 过滤可按缓存类型拆分。计数口径：每次缓存 `Get` 查找计一次（hit 或 miss，读取错误不计）；gallery 缓存按端点实际判定（如 details 需 `DetailsFetchedAt` 非空、pages 需 `len(Pages) > 0` 才算命中）；sprite 路径的外层预检与 singleflight 内复检各计一次。离线兜底（书架）与批量装载（最近阅读）不计入。
+
+HTTP 5xx 率（`route` 可按接口拆分）：
+
+```promql
+sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+  /
+sum(rate(http_requests_total[5m]))
+```
 
 ### 阅读记录清理
 

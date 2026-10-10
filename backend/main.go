@@ -175,6 +175,8 @@ func run() error {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.Default()
+	// Outermost app middleware: counts every request including auth failures.
+	r.Use(metrics.GinMiddleware())
 	r.Use(CORSMiddleware())
 	r.Use(securityHeadersMiddleware())
 	r.Use(basicauth.Middleware(cfg.BasicAuth))

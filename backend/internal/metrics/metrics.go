@@ -1,6 +1,7 @@
 // Package metrics exposes Prometheus instrumentation for upstream ExHentai
-// traffic. The registry is package-private so tests can gather isolated
-// snapshots; production mounts Handler at /metrics behind Basic Auth.
+// traffic, the app's own HTTP surface and Go runtime/process stats. The
+// registry is package-private so tests can gather isolated snapshots;
+// production mounts Handler at /metrics behind Basic Auth.
 package metrics
 
 import (
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -68,6 +70,17 @@ var (
 		Name: "gallery_cache_requests_total",
 		Help: "Gallery metadata cache lookups by kind and result.",
 	}, []string{"kind", "result"})
+
+	httpRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "http_requests_total",
+		Help: "HTTP requests served by this app by method, route template and status code.",
+	}, []string{"method", "route", "status_code"})
+
+	httpRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "http_request_duration_seconds",
+		Help:    "HTTP request latency from middleware entry to response completion, by route template.",
+		Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+	}, []string{"method", "route"})
 )
 
 func init() {
@@ -80,7 +93,34 @@ func init() {
 		fetchCacheEntries,
 		imageCacheRequests,
 		galleryCacheRequests,
+		httpRequestsTotal,
+		httpRequestDuration,
 	)
+	// Runtime and process stats: goroutines, GC, heap, RSS, CPU, FDs. Not
+	// resettable, so ResetForTest leaves them alone.
+	registry.MustRegister(
+		prometheus.NewGoCollector(),
+		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
+	)
+}
+
+// GinMiddleware records request counts and latency for this app's own HTTP
+// surface. The route label is the registered route template (FullPath), so
+// cardinality stays bounded; unmatched paths (404s) collapse into
+// route="unmatched". Register it before auth so 401s are counted too.
+func GinMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+
+		route := c.FullPath()
+		if route == "" {
+			route = "unmatched"
+		}
+		method := c.Request.Method
+		httpRequestsTotal.WithLabelValues(method, route, strconv.Itoa(c.Writer.Status())).Inc()
+		httpRequestDuration.WithLabelValues(method, route).Observe(time.Since(start).Seconds())
+	}
 }
 
 // Handler serves the Prometheus text exposition format for this package's
@@ -212,4 +252,6 @@ func ResetForTest() {
 	fetchCacheEntries.Set(0)
 	imageCacheRequests.Reset()
 	galleryCacheRequests.Reset()
+	httpRequestsTotal.Reset()
+	httpRequestDuration.Reset()
 }
