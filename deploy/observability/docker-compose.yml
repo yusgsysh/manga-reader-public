@@ -1,0 +1,70 @@
+# 自部署监控栈：Prometheus 抓取 /metrics，Grafana 出图。
+#
+# 启动：cp .env.example .env && 按需改 .env && docker compose up -d
+# 访问：Grafana http://localhost:3000（默认 admin/admin，务必改密码）
+#       Prometheus http://localhost:9090（仅本机回环）
+#
+# 抓取目标默认 host.docker.internal:5173（宿主机上 compose 发布的 backend 端口）。
+# backend 开启 Basic Auth 时 /metrics 同样受保护，需在 .env 配置抓取凭据。
+#
+# Prometheus 不展开配置文件里的环境变量，所以抓取配置经 compose 的
+# configs.content 在 up 时用 .env 渲染（改 .env 后需重新 up 生效）。
+
+configs:
+  prometheus_config:
+    content: |
+      global:
+        scrape_interval: 15s
+        evaluation_interval: 15s
+
+      scrape_configs:
+        - job_name: manga-reader
+          scheme: ${MANGA_READER_SCHEME}
+          metrics_path: /metrics
+          static_configs:
+            - targets: ["${MANGA_READER_TARGET}"]
+          # backend 未开 Basic Auth 时凭据会被忽略，留默认值即可；
+          # 开启后在 .env 填与 MANGA_READER_BASIC_AUTH_* 一致的用户名/口令。
+          basic_auth:
+            username: ${MANGA_READER_METRICS_USERNAME}
+            password: ${MANGA_READER_METRICS_PASSWORD}
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: manga-reader-prometheus
+    restart: unless-stopped
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    extra_hosts:
+      # Linux 上解析宿主机（macOS/Windows Docker Desktop 原生支持）
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: manga-reader-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  prometheus-data:
+  grafana-data:

@@ -18,6 +18,9 @@ build/android/overlay.json
 *.htpasswd
 secrets/
 
+# Local environment files (cookies, passwords) — never commit
+.env
+
 # Frontend bundle embedded into the binary (the image build drops it here;
 # only the placeholder is tracked so `go build` works from a fresh clone)
 backend/internal/web/dist/*

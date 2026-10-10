@@ -30,6 +30,7 @@ manga-reader/
 ├── .forgejo/           # CI：镜像构建 / 前端测试 / 部署（自托管 runner）
 ├── .github/            # CI：测试 + GHCR 单镜像
 ├── deploy/quadlet/     # podman quadlet 单元
+├── deploy/observability/ # 自部署监控（Prometheus + Grafana，见「自部署监控」）
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -195,6 +196,29 @@ go test ./internal/basicauth/ ./internal/web/ ./internal/config/
 docker build -t ghcr.io/yusgsysh/manga-reader:latest .
 ```
 
+## 自部署监控（Prometheus + Grafana）
+
+独立 compose 项目，位于 `deploy/observability/`（与主应用分离，可部署在任意能访问 backend `/metrics` 的机器上）。Prometheus 每 15s 抓取一次指标、本地保留 15 天；Grafana 自动装载数据源与开箱即用的 dashboard。
+
+```bash
+cd deploy/observability
+cp .env.example .env        # 改抓取目标、/metrics 凭据、Grafana 口令
+docker compose up -d
+```
+
+| 组件 | 地址 | 说明 |
+|------|------|------|
+| Grafana | `http://localhost:3000` | 登录见 `.env`（默认 admin/admin，生产必改）；dashboard：**Manga Reader** |
+| Prometheus | `http://localhost:9090` | 仅绑定 127.0.0.1，仅作调试 |
+
+`.env` 关键项：
+
+- `MANGA_READER_TARGET`：抓取目标，默认 `host.docker.internal:5173`（宿主机上主 compose 发布的 backend 端口；跨机抓取填 `http` 目标所在主机与端口）
+- `MANGA_READER_METRICS_USERNAME/PASSWORD`：backend 开启 Basic Auth 时 `/metrics` 同样受保护，需与 `MANGA_READER_BASIC_AUTH_*` 一致；未开启时保持默认即可（凭据会被忽略）
+- `GRAFANA_ADMIN_USER/PASSWORD`：Grafana 管理员
+
+Dashboard 覆盖：HTTP QPS（按路由）/ 5xx 比例 / P95 延迟、图片与 gallery 缓存 hit rate、10 秒文档短共享结果、上游请求与 P95 延迟、sad_panda / IP 封禁 / HTTP 错误判定、goroutines / 内存 / FD。指标口径见「可观测性（Prometheus 指标）」。
+
 ## 环境变量
 
 全部变量见 `.env.example`：
@@ -335,7 +359,7 @@ Schema 文件：
 
 ### 可观测性（Prometheus 指标）
 
-`GET /metrics` 暴露 Prometheus 文本格式（Basic Auth 之后；指标实现见 `backend/internal/metrics`，使用包私有 registry，测试可隔离采集）。
+`GET /metrics` 暴露 Prometheus 文本格式（Basic Auth 之后；指标实现见 `backend/internal/metrics`，使用包私有 registry，测试可隔离采集）。可视化与抓取见「自部署监控（Prometheus + Grafana）」。
 
 | 指标 | 类型 | 标签 | 说明 |
 |------|------|------|------|
