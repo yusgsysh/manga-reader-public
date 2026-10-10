@@ -217,7 +217,9 @@ docker compose up -d
 - `MANGA_READER_METRICS_USERNAME/PASSWORD`：backend 开启 Basic Auth 时 `/metrics` 同样受保护，需与 `MANGA_READER_BASIC_AUTH_*` 一致；未开启时保持默认即可（凭据会被忽略）
 - `GRAFANA_ADMIN_USER/PASSWORD`：Grafana 管理员
 
-Dashboard 覆盖：HTTP QPS（按路由）/ 5xx 比例 / P95 延迟、图片与 gallery 缓存 hit rate、10 秒文档短共享结果、上游请求与 P95 延迟、sad_panda / IP 封禁 / HTTP 错误判定、goroutines / 内存 / FD。指标口径见「可观测性（Prometheus 指标）」。
+Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5xx 比例 / P95 延迟、图片与 gallery 缓存 hit rate、MinIO 操作速率与延迟、10 秒文档短共享结果（含当前条目数）、上游请求与 P95 延迟、上游在途请求与重试放大、sad_panda / IP 封禁 / HTTP 错误判定、goroutines / 内存 / FD。指标口径见「可观测性（Prometheus 指标）」。
+
+告警规则在 `deploy/observability/alerting/rules.yml`（Prometheus 自动装载，`/alerts` 查看）：抓取目标失联、应用 5xx 比例持续偏高、上游出现 sad_panda / IP 封禁、FD 接近上限、goroutines / RSS 异常增长、MinIO 操作错误率。
 
 ## 环境变量
 
@@ -363,16 +365,27 @@ Schema 文件：
 
 | 指标 | 类型 | 标签 | 说明 |
 |------|------|------|------|
-| `exhentai_upstream_requests_total` | Counter | `endpoint, method, status_code, outcome` | 上游请求（outcome = ok / error） |
+| `exhentai_upstream_requests_total` | Counter | `endpoint, method, status_code, outcome` | 上游请求。`outcome` 是**传输层**结果（ok = 拿到响应，**含 4xx/5xx**；error = 连接/超时失败），内容级失败见 `classification_total` |
 | `exhentai_upstream_request_duration_seconds` | Histogram | `endpoint, method` | 上游延迟（send → 响应头） |
-| `exhentai_upstream_response_bytes_total` | Counter | `endpoint` | 上游响应声明字节数（未声明则不计） |
-| `exhentai_upstream_classification_total` | Counter | `endpoint, outcome` | 内容级判定（sad_panda / ip_banned / http_error） |
+| `exhentai_upstream_response_bytes_total` | Counter | `endpoint` | 上游响应体**实际读取**字节数（透明 gzip 按解压后计；body 未被读取则不计） |
+| `exhentai_upstream_retries_total` | Counter | `endpoint, reason` | 上游重试放大：`reason` = thumbnail / nl_fallback |
+| `exhentai_upstream_inflight_requests` | Gauge | — | 正在进行中的上游请求数（send → 响应头） |
+| `exhentai_upstream_classification_total` | Counter | `endpoint, outcome, code` | 内容级判定（sad_panda / ip_banned / http_error）+ 观察到的 HTTP 状态码 |
 | `exhentai_fetchcache_requests_total` | Counter | `result` | 10 秒文档短共享：hit / miss / coalesced |
-| `exhentai_fetchcache_entries` | Gauge | — | 短共享缓存当前条目数 |
+| `exhentai_fetchcache_entries` | Gauge | — | 短共享缓存当前条目数（写入与过期删除都会更新） |
 | `image_cache_requests_total` | Counter | `kind, result` | MinIO 图片缓存查找：`kind` = page_image / thumbnail / sprite，`result` = hit / miss |
 | `gallery_cache_requests_total` | Counter | `kind, result` | `gallery_cache` 查找：`kind` = gallery / details / pages / page_thumb，`result` = hit / miss |
-| `http_requests_total` | Counter | `method, route, status_code` | 本应用 HTTP 请求（`route` 为路由模板，未匹配路径归入 `route="unmatched"`，含 Basic Auth 401） |
+| `minio_cache_requests_total` | Counter | `op, result` | MinIO 操作：`op` = get / put / head，`result` = ok / not_found / error（**miss 不是 error**） |
+| `minio_cache_operation_duration_seconds` | Histogram | `op` | MinIO 操作延迟 |
+| `http_requests_total` | Counter | `method, route, status_code` | 本应用 HTTP 请求（含 Basic Auth 401 与限流 429；handler panic 由 Recovery 转成 500 后同样计入） |
 | `http_request_duration_seconds` | Histogram | `method, route` | 本应用 HTTP 延迟（中间件入口 → 响应完成） |
+
+`http_*` 的 `route` 标签口径：
+
+- 注册过的路由取 gin 路由模板（基数有界）；
+- 静态文件与 SPA 首页由 `NoRoute` 提供，没有模板，因此显式标记为 `route="/static"` 与 `route="/spa"`；
+- 其余未匹配路径（真实 404）才归入 `route="unmatched"`；
+- 长连接（SSE `/api/events/changes`、`/api/sync/events`，NDJSON `/pages` 流，ZIP 下载）只计数、**不进延迟直方图**——它们能开数小时，记录会把观测全塞进 `+Inf` 桶，让该路由 P95 恒等于最后一个桶。
 
 此外注册了 Go runtime 与进程指标（`go_goroutines`、`go_memstats_*`、`go_gc_*`、`process_resident_memory_bytes`、`process_cpu_seconds_total`、`process_open_fds` 等），无需手工采集。
 
@@ -386,12 +399,12 @@ sum(rate(image_cache_requests_total[5m]))
 
 `gallery_cache_requests_total` 同理；追加 `by (kind)` 或 `kind=` 过滤可按缓存类型拆分。计数口径：每次缓存 `Get` 查找计一次（hit 或 miss，读取错误不计）；gallery 缓存按端点实际判定（如 details 需 `DetailsFetchedAt` 非空、pages 需 `len(Pages) > 0` 才算命中）；sprite 路径的外层预检与 singleflight 内复检各计一次。离线兜底（书架）与批量装载（最近阅读）不计入。
 
-HTTP 5xx 率（`route` 可按接口拆分）：
+HTTP 5xx 率（`route` 可按接口拆分；`/metrics` 抓取与 `/healthz` 探活恒为 200，过滤掉可避免稀释）：
 
 ```promql
-sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+sum(rate(http_requests_total{status_code=~"5..",route!~"/metrics|/healthz"}[5m]))
   /
-sum(rate(http_requests_total[5m]))
+sum(rate(http_requests_total{route!~"/metrics|/healthz"}[5m]))
 ```
 
 ### 阅读记录清理

@@ -174,9 +174,16 @@ func run() error {
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	r := gin.Default()
+	// gin.New() rather than gin.Default(): the metrics middleware has to be
+	// the outermost one. Recovery below converts a handler panic into a 500
+	// *before* the metrics middleware records the response, so panics still
+	// land in http_requests_total; with gin.Default() the Recovery would sit
+	// outside metrics and unwind past its recording code, hiding every panic.
+	r := gin.New()
 	// Outermost app middleware: counts every request including auth failures.
 	r.Use(metrics.GinMiddleware())
+	r.Use(gin.Logger())
+	r.Use(gin.Recovery())
 	r.Use(CORSMiddleware())
 	r.Use(securityHeadersMiddleware())
 	r.Use(basicauth.Middleware(cfg.BasicAuth))
@@ -189,8 +196,9 @@ func run() error {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// Prometheus exposition for upstream traffic. Registered before
-	// basicauth.Middleware so it is covered by Basic Auth like the API.
+	// Prometheus exposition for upstream traffic. Registered *after*
+	// basicauth.Middleware, which is what makes it covered by Basic Auth like
+	// the API (gin applies Use handlers to routes registered afterwards).
 	r.GET("/metrics", gin.WrapH(metrics.Handler()))
 
 	srv.RegisterRoutes(r)

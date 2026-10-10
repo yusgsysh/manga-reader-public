@@ -5,6 +5,7 @@
 package metrics
 
 import (
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -43,13 +45,23 @@ var (
 
 	responseBytes = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "exhentai_upstream_response_bytes_total",
-		Help: "Upstream response body bytes observed at the transport layer (may undercount truncated bodies).",
+		Help: "Upstream response body bytes read by callers (transparent gunzip is counted decompressed).",
 	}, []string{"endpoint"})
+
+	retriesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "exhentai_upstream_retries_total",
+		Help: "Retried upstream attempts after a failed first try, by endpoint and retry reason.",
+	}, []string{"endpoint", "reason"})
+
+	inflightRequests = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "exhentai_upstream_inflight_requests",
+		Help: "Upstream requests currently in flight (from send to response headers).",
+	})
 
 	classificationTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "exhentai_upstream_classification_total",
-		Help: "Content-level classification of upstream documents (sad panda, IP ban, HTTP status errors).",
-	}, []string{"endpoint", "outcome"})
+		Help: "Content-level classification of upstream documents (sad panda, IP ban, HTTP status errors) with the observed HTTP status code.",
+	}, []string{"endpoint", "outcome", "code"})
 
 	fetchCacheRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "exhentai_fetchcache_requests_total",
@@ -71,6 +83,17 @@ var (
 		Help: "Gallery metadata cache lookups by kind and result.",
 	}, []string{"kind", "result"})
 
+	minioCacheRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "minio_cache_requests_total",
+		Help: "MinIO cache operations by operation and result (ok, not_found, error).",
+	}, []string{"op", "result"})
+
+	minioCacheDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "minio_cache_operation_duration_seconds",
+		Help:    "MinIO cache operation latency from call start to completion, by operation.",
+		Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5},
+	}, []string{"op"})
+
 	httpRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "http_requests_total",
 		Help: "HTTP requests served by this app by method, route template and status code.",
@@ -88,38 +111,74 @@ func init() {
 		requestsTotal,
 		requestDuration,
 		responseBytes,
+		retriesTotal,
+		inflightRequests,
 		classificationTotal,
 		fetchCacheRequests,
 		fetchCacheEntries,
 		imageCacheRequests,
 		galleryCacheRequests,
+		minioCacheRequests,
+		minioCacheDuration,
 		httpRequestsTotal,
 		httpRequestDuration,
 	)
 	// Runtime and process stats: goroutines, GC, heap, RSS, CPU, FDs. Not
 	// resettable, so ResetForTest leaves them alone.
 	registry.MustRegister(
-		prometheus.NewGoCollector(),
-		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
+}
+
+// Context keys GinMiddleware reads after the handler chain. They are set by
+// handlers (see SetRouteLabel, MarkLongRunning) and never leave this package.
+const (
+	routeLabelKey  = "metrics.routeLabel"
+	longRunningKey = "metrics.longRunning"
+)
+
+// SetRouteLabel overrides the route label GinMiddleware records for this
+// request. Routes without a gin template (the static file server and the SPA
+// shell, both served from NoRoute) would otherwise all collapse into
+// route="unmatched", hiding real 404s and inflating that bucket with 200s.
+func SetRouteLabel(c *gin.Context, route string) {
+	c.Set(routeLabelKey, route)
+}
+
+// MarkLongRunning excludes this request from the HTTP latency histogram.
+// SSE streams, NDJSON page streams and ZIP downloads can stay open for hours;
+// recording them would park every observation in the +Inf bucket and pin the
+// route's P95 to the last finite bucket. They are still counted.
+func MarkLongRunning(c *gin.Context) {
+	c.Set(longRunningKey, true)
 }
 
 // GinMiddleware records request counts and latency for this app's own HTTP
 // surface. The route label is the registered route template (FullPath), so
 // cardinality stays bounded; unmatched paths (404s) collapse into
-// route="unmatched". Register it before auth so 401s are counted too.
+// route="unmatched" unless a handler called SetRouteLabel. It must stay the
+// outermost middleware (see main.go): a Recovery wrapped around it would
+// convert a panic into a 500 while unwinding past this recording code, so the
+// request would never be counted. Register it before auth so 401s are counted
+// too.
 func GinMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
 
-		route := c.FullPath()
+		route := c.GetString(routeLabelKey)
 		if route == "" {
-			route = "unmatched"
+			route = c.FullPath()
+			if route == "" {
+				route = "unmatched"
+			}
 		}
 		method := c.Request.Method
 		httpRequestsTotal.WithLabelValues(method, route, strconv.Itoa(c.Writer.Status())).Inc()
-		httpRequestDuration.WithLabelValues(method, route).Observe(time.Since(start).Seconds())
+		if !c.GetBool(longRunningKey) {
+			httpRequestDuration.WithLabelValues(method, route).Observe(time.Since(start).Seconds())
+		}
 	}
 }
 
@@ -179,27 +238,44 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	method := req.Method
 	start := time.Now()
 
+	inflightRequests.Inc()
 	resp, err := t.base.RoundTrip(req)
+	inflightRequests.Dec()
 
 	statusCode := "0"
 	outcome := OutcomeError
 	if err == nil {
 		statusCode = strconv.Itoa(resp.StatusCode)
 		outcome = OutcomeOK
-		requestsTotal.WithLabelValues(endpoint, method, statusCode, outcome).Inc()
-		requestDuration.WithLabelValues(endpoint, method).Observe(time.Since(start).Seconds())
-		// ContentLength is the announced size; actual body length is counted
-		// by callers that buffer (readDocument etc.) and would double-count
-		// here, so only record the announced value when non-negative.
-		if resp.ContentLength >= 0 {
-			responseBytes.WithLabelValues(endpoint).Add(float64(resp.ContentLength))
-		}
-		return resp, err
 	}
-
 	requestsTotal.WithLabelValues(endpoint, method, statusCode, outcome).Inc()
 	requestDuration.WithLabelValues(endpoint, method).Observe(time.Since(start).Seconds())
-	return nil, err
+	if err != nil {
+		return nil, err
+	}
+	// Body bytes are counted as callers read them (see countingBody) rather
+	// than from ContentLength: transparent gunzip makes ContentLength -1 and
+	// chunked responses never carry one, so the header alone silently drops
+	// most HTML document traffic.
+	if resp.Body != nil {
+		resp.Body = &countingBody{ReadCloser: resp.Body, endpoint: endpoint}
+	}
+	return resp, nil
+}
+
+// countingBody records the bytes callers actually consume, so the counter
+// reflects wire-adjacent usage instead of an announced length.
+type countingBody struct {
+	io.ReadCloser
+	endpoint string
+}
+
+func (b *countingBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if n > 0 {
+		responseBytes.WithLabelValues(b.endpoint).Add(float64(n))
+	}
+	return n, err
 }
 
 // classifyRequest picks the endpoint label from the request URL without
@@ -213,9 +289,23 @@ func classifyRequest(req *http.Request) string {
 }
 
 // ObserveClassification records a content-level verdict about a completed
-// upstream exchange (sad panda page, IP ban page, non-200 status).
-func ObserveClassification(endpoint, outcome string) {
-	classificationTotal.WithLabelValues(endpoint, outcome).Inc()
+// upstream exchange (sad panda page, IP ban page, non-200 status). code is
+// the HTTP status observed on that exchange.
+func ObserveClassification(endpoint, outcome string, code int) {
+	classificationTotal.WithLabelValues(endpoint, outcome, strconv.Itoa(code)).Inc()
+}
+
+// ObserveUpstreamRetry records an upstream attempt that repeats a failed try
+// (thumbnail retry loop, nl fallback). reason is a short fixed token.
+func ObserveUpstreamRetry(endpoint, reason string) {
+	retriesTotal.WithLabelValues(endpoint, reason).Inc()
+}
+
+// ObserveMinIOCache records one MinIO cache operation. result is "ok",
+// "not_found" or "error"; elapsed is the full operation duration.
+func ObserveMinIOCache(op, result string, elapsed time.Duration) {
+	minioCacheRequests.WithLabelValues(op, result).Inc()
+	minioCacheDuration.WithLabelValues(op).Observe(elapsed.Seconds())
 }
 
 // ObserveFetchCache records a shared-fetch cache lookup. result is one of
@@ -247,11 +337,15 @@ func ResetForTest() {
 	requestsTotal.Reset()
 	requestDuration.Reset()
 	responseBytes.Reset()
+	retriesTotal.Reset()
+	inflightRequests.Set(0)
 	classificationTotal.Reset()
 	fetchCacheRequests.Reset()
 	fetchCacheEntries.Set(0)
 	imageCacheRequests.Reset()
 	galleryCacheRequests.Reset()
+	minioCacheRequests.Reset()
+	minioCacheDuration.Reset()
 	httpRequestsTotal.Reset()
 	httpRequestDuration.Reset()
 }

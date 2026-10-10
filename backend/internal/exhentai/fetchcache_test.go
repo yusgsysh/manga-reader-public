@@ -4,10 +4,14 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"manga-reader/internal/metrics"
 )
 
 func TestFetchOnce_CoalescesConcurrent(t *testing.T) {
@@ -140,4 +144,50 @@ func TestFetchCacheIsBounded(t *testing.T) {
 	if n > fetchCacheMaxEntries {
 		t.Fatalf("fetchCache holds %d entries, want <= %d", n, fetchCacheMaxEntries)
 	}
+}
+
+// TestFetchCacheEntriesGaugeFollowsExpiry: the gauge is only written when an
+// entry is inserted, so the lazy expiry delete must refresh it too. Otherwise
+// a cache that stops receiving writes keeps reporting its last inserted size
+// long after every entry has expired.
+func TestFetchCacheEntriesGaugeFollowsExpiry(t *testing.T) {
+	metrics.ResetForTest()
+	prev := fetchCacheTTL
+	fetchCacheTTL = 20 * time.Millisecond
+	t.Cleanup(func() { fetchCacheTTL = prev })
+
+	fetchCacheMu.Lock()
+	fetchCache = make(map[string]fetchEntry)
+	fetchCacheMu.Unlock()
+	metrics.SetFetchCacheEntries(0)
+	t.Cleanup(func() {
+		fetchCacheMu.Lock()
+		fetchCache = make(map[string]fetchEntry)
+		fetchCacheMu.Unlock()
+		metrics.SetFetchCacheEntries(0)
+	})
+
+	setFetchEntry("gauge-expire-test", "value")
+	if want := "exhentai_fetchcache_entries 1"; !strings.Contains(gatherMetrics(t), want) {
+		t.Fatalf("after insert: expected %q, got:\n%s", want, gatherMetrics(t))
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	if _, ok := getFetchEntry("gauge-expire-test"); ok {
+		t.Fatal("entry should have expired")
+	}
+	if want := "exhentai_fetchcache_entries 0"; !strings.Contains(gatherMetrics(t), want) {
+		t.Fatalf("after expiry: expected %q, got:\n%s", want, gatherMetrics(t))
+	}
+}
+
+func gatherMetrics(t *testing.T) string {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("metrics handler status = %d", rec.Code)
+	}
+	return rec.Body.String()
 }

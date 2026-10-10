@@ -11,6 +11,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 
+	"manga-reader/internal/metrics"
 	"manga-reader/internal/model"
 )
 
@@ -169,6 +170,7 @@ func FetchTorrent(ctx context.Context, client *http.Client, rawURL string) ([]by
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		metrics.ObserveClassification(metrics.Endpoint(rawURL), metrics.OutcomeHTTPError, resp.StatusCode)
 		return nil, fmt.Errorf("torrent fetch failed with status %d", resp.StatusCode)
 	}
 

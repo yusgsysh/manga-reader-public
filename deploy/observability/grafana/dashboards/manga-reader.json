@@ -14,7 +14,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus-local" },
       "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
       "targets": [
-        { "refId": "A", "expr": "sum by (route) (rate(http_requests_total[5m]))", "legendFormat": "{{route}}", "editorMode": "code" }
+        { "refId": "A", "expr": "sum by (route) (rate(http_requests_total{route!~\"/metrics|/healthz\"}[5m]))", "legendFormat": "{{route}}", "editorMode": "code" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -35,7 +35,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus-local" },
       "gridPos": { "x": 12, "y": 0, "w": 6, "h": 8 },
       "targets": [
-        { "refId": "A", "expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))", "legendFormat": "5xx / total", "editorMode": "code" }
+        { "refId": "A", "expr": "sum(rate(http_requests_total{status_code=~\"5..\",route!~\"/metrics|/healthz\"}[5m])) / sum(rate(http_requests_total{route!~\"/metrics|/healthz\"}[5m]))", "legendFormat": "5xx / total", "editorMode": "code" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -65,7 +65,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus-local" },
       "gridPos": { "x": 18, "y": 0, "w": 6, "h": 8 },
       "targets": [
-        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket[5m])))", "legendFormat": "{{route}}", "editorMode": "code" }
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket{route!~\"/metrics|/healthz\"}[5m])))", "legendFormat": "{{route}}", "editorMode": "code" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -149,7 +149,7 @@
     {
       "id": 7,
       "type": "timeseries",
-      "title": "上游请求速率（按端点/结果）",
+      "title": "上游请求速率（按端点/传输结果）",
       "datasource": { "type": "prometheus", "uid": "prometheus-local" },
       "gridPos": { "x": 0, "y": 16, "w": 8, "h": 8 },
       "targets": [
@@ -271,6 +271,183 @@
       },
       "options": {
         "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "上游在途请求（MaxConnsPerHost=20）",
+      "datasource": { "type": "prometheus", "uid": "prometheus-local" },
+      "gridPos": { "x": 0, "y": 32, "w": 8, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "exhentai_upstream_inflight_requests", "legendFormat": "inflight", "editorMode": "code" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "max": 20,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "showPoints": "never", "spanNulls": true },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 15 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "single", "sort": "none" }
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "上游重试放大（按原因）",
+      "datasource": { "type": "prometheus", "uid": "prometheus-local" },
+      "gridPos": { "x": 8, "y": 32, "w": 8, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (reason) (rate(exhentai_upstream_retries_total[5m]))", "legendFormat": "{{reason}}", "editorMode": "code" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "上游响应字节速率（按端点）",
+      "datasource": { "type": "prometheus", "uid": "prometheus-local" },
+      "gridPos": { "x": 16, "y": 32, "w": 8, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (endpoint) (rate(exhentai_upstream_response_bytes_total[5m]))", "legendFormat": "{{endpoint}}", "editorMode": "code" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "短共享缓存条目数（10s fetchcache）",
+      "datasource": { "type": "prometheus", "uid": "prometheus-local" },
+      "gridPos": { "x": 0, "y": 40, "w": 8, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "exhentai_fetchcache_entries", "legendFormat": "entries", "editorMode": "code" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "single", "sort": "none" }
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "MinIO 缓存操作速率（按结果）",
+      "datasource": { "type": "prometheus", "uid": "prometheus-local" },
+      "gridPos": { "x": 8, "y": 40, "w": 8, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (result) (rate(minio_cache_requests_total[5m]))", "legendFormat": "{{result}}", "editorMode": "code" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "MinIO 操作 P95 延迟（按操作）",
+      "datasource": { "type": "prometheus", "uid": "prometheus-local" },
+      "gridPos": { "x": 16, "y": 40, "w": 8, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, op) (rate(minio_cache_operation_duration_seconds_bucket[5m])))", "legendFormat": "{{op}}", "editorMode": "code" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "认证与限流拒绝（401 / 429）",
+      "datasource": { "type": "prometheus", "uid": "prometheus-local" },
+      "gridPos": { "x": 0, "y": 48, "w": 8, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (status_code) (rate(http_requests_total{status_code=~\"401|429\"}[5m]))", "legendFormat": "{{status_code}}", "editorMode": "code" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "上游 HTTP 错误（按状态码）",
+      "datasource": { "type": "prometheus", "uid": "prometheus-local" },
+      "gridPos": { "x": 8, "y": 48, "w": 8, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (code) (rate(exhentai_upstream_classification_total{outcome=\"http_error\"}[5m]))", "legendFormat": "HTTP {{code}}", "editorMode": "code" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
         "tooltip": { "mode": "multi", "sort": "desc" }
       }
     }

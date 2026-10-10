@@ -31,7 +31,7 @@ func ScrapePageImageURL(ctx context.Context, client *http.Client, pageURL string
 	// error so callers can classify it as permanent and refresh the gallery
 	// cache, instead of the generic "could not find image src" parse failure.
 	if resp.StatusCode != http.StatusOK {
-		metrics.ObserveClassification(metrics.Endpoint(pageURL), metrics.OutcomeHTTPError)
+		metrics.ObserveClassification(metrics.Endpoint(pageURL), metrics.OutcomeHTTPError, resp.StatusCode)
 		return "", "", &httpStatusError{code: resp.StatusCode}
 	}
 
@@ -88,6 +88,7 @@ func FetchPageImage(ctx context.Context, client *http.Client, pageURL string) (d
 	data, contentType, err = ProxyImage(ctx, client, imgURL)
 	if err != nil && fallbackURL != "" {
 		for range MaxNlRetries {
+			metrics.ObserveUpstreamRetry(metrics.Endpoint(pageURL), "nl_fallback")
 			imgURL, fallbackURL, err = ScrapePageImageURL(ctx, client, fallbackURL)
 			if err != nil {
 				break
@@ -116,7 +117,7 @@ func ProxyImage(ctx context.Context, client *http.Client, imgURL string) (data [
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		metrics.ObserveClassification(metrics.Endpoint(imgURL), metrics.OutcomeHTTPError)
+		metrics.ObserveClassification(metrics.Endpoint(imgURL), metrics.OutcomeHTTPError, resp.StatusCode)
 		return nil, "", &httpStatusError{code: resp.StatusCode}
 	}
 

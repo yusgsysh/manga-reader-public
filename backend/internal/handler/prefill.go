@@ -21,6 +21,7 @@ import (
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/exhentai"
+	"manga-reader/internal/metrics"
 	"manga-reader/internal/model"
 )
 
@@ -758,6 +759,8 @@ func (s *Server) handlePrefillCleanup(c *gin.Context) {
 // through singleflight but not queued behind the worker) so the browser
 // receives a chunked, streaming download instead of an in-memory archive.
 func (s *Server) handlePrefillZip(c *gin.Context) {
+	// ZIP download streams for as long as the client reads it; skip latency.
+	metrics.MarkLongRunning(c)
 	if s.DB == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not configured"})
 		return

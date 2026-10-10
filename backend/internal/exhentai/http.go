@@ -74,15 +74,15 @@ func fetchDoc(ctx context.Context, client *http.Client, target string) (*goquery
 	// Content heuristics run before the status check so the specific auth
 	// failure pages keep their dedicated error types.
 	if sadPandaCheck(doc) {
-		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeSadPanda)
+		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeSadPanda, resp.StatusCode)
 		return nil, ErrSadPanda
 	}
 	if ipBannedCheck(doc) {
-		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeIPBanned)
+		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeIPBanned, resp.StatusCode)
 		return nil, ErrIPBanned
 	}
 	if resp.StatusCode != http.StatusOK {
-		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeHTTPError)
+		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeHTTPError, resp.StatusCode)
 		return nil, &httpStatusError{code: resp.StatusCode}
 	}
 	return doc, nil
@@ -124,15 +124,15 @@ func postFormDoc(ctx context.Context, client *http.Client, target string, form u
 	}
 
 	if sadPandaCheck(doc) {
-		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeSadPanda)
+		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeSadPanda, resp.StatusCode)
 		return nil, ErrSadPanda
 	}
 	if ipBannedCheck(doc) {
-		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeIPBanned)
+		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeIPBanned, resp.StatusCode)
 		return nil, ErrIPBanned
 	}
 	if resp.StatusCode != http.StatusOK {
-		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeHTTPError)
+		metrics.ObserveClassification(metrics.Endpoint(target), metrics.OutcomeHTTPError, resp.StatusCode)
 		return nil, &httpStatusError{code: resp.StatusCode}
 	}
 	return doc, nil

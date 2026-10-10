@@ -9,6 +9,8 @@ import (
 	"testing/fstest"
 
 	"github.com/gin-gonic/gin"
+
+	"manga-reader/internal/metrics"
 )
 
 func testFS() fs.FS {
@@ -163,6 +165,38 @@ func TestRegisterNilFSKeepsAPIOnly(t *testing.T) {
 	}
 	if strings.Contains(w.Body.String(), "<html>") {
 		t.Fatal("API-only build must not serve an HTML shell")
+	}
+}
+
+// TestRegisterLabelsRouteForMetrics: static files and the SPA shell are served
+// from NoRoute, where gin's FullPath() is empty. Without an explicit label
+// every 200 for /assets/* and index.html would pile into route="unmatched"
+// alongside real 404s, hiding them and diluting the 5xx ratio.
+func TestRegisterLabelsRouteForMetrics(t *testing.T) {
+	metrics.ResetForTest()
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(metrics.GinMiddleware())
+	r.GET("/api/ping", func(c *gin.Context) { c.Status(http.StatusOK) })
+	Register(r, testFS())
+
+	do(r, http.MethodGet, "/assets/app-abc.js") // static file
+	do(r, http.MethodGet, "/library/1/abcdef")  // SPA shell
+	do(r, http.MethodGet, "/api/nope")          // JSON 404, no override
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(rec, req)
+	text := rec.Body.String()
+
+	for _, want := range []string{
+		`http_requests_total{method="GET",route="/static",status_code="200"} 1`,
+		`http_requests_total{method="GET",route="/spa",status_code="200"} 1`,
+		`http_requests_total{method="GET",route="unmatched",status_code="404"} 1`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("expected %q in exposition, got:\n%s", want, text)
+		}
 	}
 }
 

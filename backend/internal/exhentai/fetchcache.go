@@ -91,6 +91,10 @@ func getFetchEntry(key string) (any, bool) {
 	}
 	if time.Now().After(entry.expires) {
 		delete(fetchCache, key)
+		// The gauge only observes inserts otherwise, so a cache that stops
+		// receiving writes would keep reporting the last inserted size while
+		// every entry has actually expired.
+		metrics.SetFetchCacheEntries(len(fetchCache))
 		return nil, false
 	}
 	return entry.value, true

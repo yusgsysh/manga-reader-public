@@ -14,6 +14,7 @@ import (
 
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/syncchange"
+	"manga-reader/internal/metrics"
 )
 
 const (
@@ -177,6 +178,9 @@ func (s *Service) handleLocalEvents(c *gin.Context) {
 }
 
 func (s *Service) serveEvents(c *gin.Context, sub <-chan struct{}, cancel func(), payload func() any) {
+	// SSE stays open for the life of the client; exclude it from the HTTP
+	// latency histogram (it is still counted in http_requests_total).
+	metrics.MarkLongRunning(c)
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")

@@ -13,6 +13,8 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+
+	"manga-reader/internal/metrics"
 )
 
 const (
@@ -112,7 +114,24 @@ func IsNotFound(err error) bool {
 	return false
 }
 
+// observe times a finished MinIO operation and classifies its error: a miss
+// (object absent) is not an operation failure, everything else is.
+func observe(op string, start time.Time, err error) {
+	result := "ok"
+	switch {
+	case err == nil:
+	case IsNotFound(err):
+		result = "not_found"
+	default:
+		result = "error"
+	}
+	metrics.ObserveMinIOCache(op, result, time.Since(start))
+}
+
 func (c *MinIOCache) Get(ctx context.Context, key string) (data []byte, contentType string, err error) {
+	start := time.Now()
+	defer func() { observe("get", start, err) }()
+
 	obj, err := c.client.GetObject(ctx, c.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, "", fmt.Errorf("minio get object: %w", err)
@@ -132,9 +151,12 @@ func (c *MinIOCache) Get(ctx context.Context, key string) (data []byte, contentT
 	return data, stat.ContentType, nil
 }
 
-func (c *MinIOCache) Put(ctx context.Context, key string, data []byte, contentType string, cacheControl string) error {
+func (c *MinIOCache) Put(ctx context.Context, key string, data []byte, contentType string, cacheControl string) (err error) {
+	start := time.Now()
+	defer func() { observe("put", start, err) }()
+
 	reader := bytes.NewReader(data)
-	_, err := c.client.PutObject(ctx, c.bucket, key, reader, int64(len(data)), minio.PutObjectOptions{
+	_, err = c.client.PutObject(ctx, c.bucket, key, reader, int64(len(data)), minio.PutObjectOptions{
 		ContentType:  contentType,
 		CacheControl: cacheControl,
 	})
@@ -144,9 +166,12 @@ func (c *MinIOCache) Put(ctx context.Context, key string, data []byte, contentTy
 	return nil
 }
 
-func (c *MinIOCache) PutWithMeta(ctx context.Context, key string, data []byte, contentType string, meta map[string]string, cacheControl string) error {
+func (c *MinIOCache) PutWithMeta(ctx context.Context, key string, data []byte, contentType string, meta map[string]string, cacheControl string) (err error) {
+	start := time.Now()
+	defer func() { observe("put", start, err) }()
+
 	reader := bytes.NewReader(data)
-	_, err := c.client.PutObject(ctx, c.bucket, key, reader, int64(len(data)), minio.PutObjectOptions{
+	_, err = c.client.PutObject(ctx, c.bucket, key, reader, int64(len(data)), minio.PutObjectOptions{
 		ContentType:  contentType,
 		CacheControl: cacheControl,
 		UserMetadata: meta,
@@ -157,6 +182,8 @@ func (c *MinIOCache) PutWithMeta(ctx context.Context, key string, data []byte, c
 	return nil
 }
 
-func (c *MinIOCache) Head(ctx context.Context, key string) (minio.ObjectInfo, error) {
+func (c *MinIOCache) Head(ctx context.Context, key string) (info minio.ObjectInfo, err error) {
+	start := time.Now()
+	defer func() { observe("head", start, err) }()
 	return c.client.StatObject(ctx, c.bucket, key, minio.StatObjectOptions{})
 }

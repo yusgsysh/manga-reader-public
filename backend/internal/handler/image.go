@@ -52,6 +52,7 @@ func fetchThumbnail(ctx context.Context, client *http.Client, thumbnailURL strin
 		return nil, "", err
 	}
 	for range maxThumbnailRetries {
+		metrics.ObserveUpstreamRetry(metrics.Endpoint(thumbnailURL), "thumbnail")
 		select {
 		case <-ctx.Done():
 			return nil, "", ctx.Err()

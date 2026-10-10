@@ -676,6 +676,8 @@ func streamGalleryPagesNDJSON(
 // handleGalleryPages is the online page endpoint: it always scrapes upstream
 // (via the shared, side-effect-free walk) and never reads or writes the cache.
 func (s *Server) handleGalleryPages(c *gin.Context) {
+	// NDJSON stream; duration is unbounded, so keep it out of the histogram.
+	metrics.MarkLongRunning(c)
 	galleryID, token, ok := parseGalleryIDToken(c)
 	if !ok {
 		return
@@ -870,6 +872,8 @@ func (s *Server) handleCachedGalleryDetails(c *gin.Context) {
 }
 
 func (s *Server) handleCachedGalleryPages(c *gin.Context) {
+	// NDJSON stream (plus a background revalidation); skip latency recording.
+	metrics.MarkLongRunning(c)
 	id, token, ok := parseGalleryIDToken(c)
 	if !ok || s.cacheUnavailable(c) {
 		return

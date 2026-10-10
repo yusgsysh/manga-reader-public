@@ -17,6 +17,9 @@ configs:
         scrape_interval: 15s
         evaluation_interval: 15s
 
+      rule_files:
+        - /etc/prometheus/rules/*.yml
+
       scrape_configs:
         - job_name: manga-reader
           scheme: ${MANGA_READER_SCHEME}
@@ -29,6 +32,10 @@ configs:
             username: ${MANGA_READER_METRICS_USERNAME}
             password: ${MANGA_READER_METRICS_PASSWORD}
 
+  # 告警规则（见 alerting/rules.yml）。修改后需 docker compose up -d 重挂。
+  prometheus_rules:
+    file: ./alerting/rules.yml
+
 services:
   prometheus:
     image: prom/prometheus:latest
@@ -37,6 +44,8 @@ services:
     configs:
       - source: prometheus_config
         target: /etc/prometheus/prometheus.yml
+      - source: prometheus_rules
+        target: /etc/prometheus/rules/rules.yml
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=15d

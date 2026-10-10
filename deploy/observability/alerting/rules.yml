@@ -1,0 +1,103 @@
+# Manga Reader 告警规则。
+#
+# 由 docker-compose.yml 里的 configs.prometheus_rules 挂进
+# /etc/prometheus/rules/，并由 prometheus.yml 的 rule_files 装载。
+# 查看：Prometheus http://localhost:9090/alerts
+#
+# 阈值是自部署单实例的经验值，按机器规格与实际流量调。
+
+groups:
+  - name: manga-reader
+    rules:
+      # ---- 抓取与自身可用性 ----
+      - alert: ScrapeTargetDown
+        expr: up{job="manga-reader"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "backend /metrics 抓取失败"
+          description: "Prometheus 已连续 2 分钟抓不到 {{ $labels.instance }} 的 /metrics。"
+
+      - alert: App5xxRatioHigh
+        expr: |
+          sum(rate(http_requests_total{status_code=~"5..",route!~"/metrics|/healthz"}[5m]))
+            /
+          sum(rate(http_requests_total{route!~"/metrics|/healthz"}[5m]))
+            > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "应用 5xx 比例超过 5%"
+          description: "近 5 分钟 5xx 比例 {{ $value | humanizePercentage }}（已排除 /metrics 与 /healthz）。"
+
+      # ---- 上游 ExHentai 状态 ----
+      - alert: UpstreamSadPanda
+        expr: sum(rate(exhentai_upstream_classification_total{outcome="sad_panda"}[5m])) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "上游返回 sad panda 页面"
+          description: "近 2 分钟持续出现 sad panda 判定，说明会话/凭据对上游不可用。"
+
+      - alert: UpstreamIPBanned
+        expr: sum(rate(exhentai_upstream_classification_total{outcome="ip_banned"}[5m])) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "上游 IP 被临时封禁"
+          description: "近 2 分钟持续出现 IP ban 判定，需降低抓取频率或更换出口。"
+
+      - alert: UpstreamInflightSaturated
+        expr: exhentai_upstream_inflight_requests >= 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "上游并发打满 MaxConnsPerHost=20"
+          description: "在途上游请求已 5 分钟顶到连接上限，请求会在队列里排队。"
+
+      # ---- 本机资源 ----
+      - alert: OpenFDsNearLimit
+        expr: process_open_fds / process_max_fds > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "进程打开的文件描述符超过 80%"
+          description: "当前 {{ $value | humanizePercentage }}，接近上限会导致 accept 失败。"
+
+      - alert: GoroutinesHigh
+        expr: go_goroutines > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "goroutine 数量异常增长"
+          description: "当前 {{ $value }} 个，可能有泄漏（SSE/上游请求未释放）。"
+
+      - alert: ResidentMemoryHigh
+        expr: process_resident_memory_bytes > 2 * 1024 * 1024 * 1024
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "常驻内存超过 2 GiB"
+          description: "当前 {{ $value | humanize1024 }}B，检查图片缓存与并发抓取。"
+
+      # ---- MinIO 图片缓存 ----
+      - alert: MinIOErrorRateHigh
+        expr: |
+          rate(minio_cache_requests_total{result="error"}[5m])
+            /
+          rate(minio_cache_requests_total[5m])
+            > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MinIO 操作错误率超过 10%"
+          description: "近 5 分钟错误占比 {{ $value | humanizePercentage }}（miss 不算错误）。"

@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"manga-reader/internal/metrics"
 )
 
 const indexPath = "index.html"
@@ -38,12 +40,17 @@ func Register(r *gin.Engine, fsys fs.FS) {
 		if name != "/" && name != "/"+indexPath {
 			if fi, err := fs.Stat(fsys, strings.TrimPrefix(name, "/")); err == nil && !fi.IsDir() {
 				setCacheControl(c, name)
+				// Static files and the SPA shell are served from NoRoute, so
+				// FullPath() is empty for them; label them explicitly instead
+				// of folding 200s into route="unmatched" with real 404s.
+				metrics.SetRouteLabel(c, "/static")
 				serveFile(c, fileServer, name)
 				return
 			}
 		}
 		// SPA fallback: the HTML shell always, so a deep link survives a
 		// reload and a fresh deploy is picked up on the next navigation.
+		metrics.SetRouteLabel(c, "/spa")
 		serveShell(c, fsys)
 	})
 }
