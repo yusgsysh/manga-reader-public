@@ -58,6 +58,16 @@ var (
 		Name: "exhentai_fetchcache_entries",
 		Help: "Current number of entries in the short-lived shared document cache.",
 	})
+
+	imageCacheRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "image_cache_requests_total",
+		Help: "MinIO read-through image cache lookups by object kind and result.",
+	}, []string{"kind", "result"})
+
+	galleryCacheRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "gallery_cache_requests_total",
+		Help: "Gallery metadata cache lookups by kind and result.",
+	}, []string{"kind", "result"})
 )
 
 func init() {
@@ -68,6 +78,8 @@ func init() {
 		classificationTotal,
 		fetchCacheRequests,
 		fetchCacheEntries,
+		imageCacheRequests,
+		galleryCacheRequests,
 	)
 }
 
@@ -177,6 +189,18 @@ func SetFetchCacheEntries(n int) {
 	fetchCacheEntries.Set(float64(n))
 }
 
+// ObserveImageCache records a MinIO read-through image cache lookup. kind is
+// one of "page_image", "thumbnail", "sprite"; result is "hit" or "miss".
+func ObserveImageCache(kind, result string) {
+	imageCacheRequests.WithLabelValues(kind, result).Inc()
+}
+
+// ObserveGalleryCache records a gallery metadata cache lookup. kind is one of
+// "gallery", "details", "pages", "page_thumb"; result is "hit" or "miss".
+func ObserveGalleryCache(kind, result string) {
+	galleryCacheRequests.WithLabelValues(kind, result).Inc()
+}
+
 // ResetForTest clears all metric values so tests start from zero. Not for
 // production use.
 func ResetForTest() {
@@ -186,4 +210,6 @@ func ResetForTest() {
 	classificationTotal.Reset()
 	fetchCacheRequests.Reset()
 	fetchCacheEntries.Set(0)
+	imageCacheRequests.Reset()
+	galleryCacheRequests.Reset()
 }

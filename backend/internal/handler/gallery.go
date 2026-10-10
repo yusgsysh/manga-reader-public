@@ -21,6 +21,7 @@ import (
 	"manga-reader/internal/ent"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/gallerycache"
+	"manga-reader/internal/metrics"
 	"manga-reader/internal/model"
 )
 
@@ -805,9 +806,12 @@ func (s *Server) handleCachedGallery(c *gin.Context) {
 	if row, found, err := gallerycache.Get(ctx, s.cacheDB(), id, token); err != nil {
 		slog.Warn("gallery cache read failed", "id", id, "error", err)
 	} else if found && row.Title != "" {
+		metrics.ObserveGalleryCache("gallery", "hit")
 		c.Header("Cache-Control", "no-store")
 		c.JSON(http.StatusOK, galleryFromCache(row))
 		return
+	} else {
+		metrics.ObserveGalleryCache("gallery", "miss")
 	}
 
 	meta, err := exhentai.PostGalleryMetadata(ctx, s.Client, id, token)
@@ -840,9 +844,12 @@ func (s *Server) handleCachedGalleryDetails(c *gin.Context) {
 	if row, found, err := gallerycache.Get(ctx, s.cacheDB(), id, token); err != nil {
 		slog.Warn("gallery cache read failed", "id", id, "error", err)
 	} else if found && row.Title != "" && row.DetailsFetchedAt != nil {
+		metrics.ObserveGalleryCache("details", "hit")
 		c.Header("Cache-Control", "no-store")
 		c.JSON(http.StatusOK, galleryDetailsFromCache(row))
 		return
+	} else {
+		metrics.ObserveGalleryCache("details", "miss")
 	}
 
 	u := exhentai.GalleryURL(c.Param("id"), token)
@@ -875,6 +882,7 @@ func (s *Server) handleCachedGalleryPages(c *gin.Context) {
 		return
 	}
 	if found && len(row.Pages) > 0 {
+		metrics.ObserveGalleryCache("pages", "hit")
 		if replayErr := replayGalleryPages(c, c.Param("id"), token, len(row.Pages), row.Pages, row.Thumbnails); replayErr != nil {
 			slog.Warn("cached gallery pages replay failed", "id", id, "error", replayErr)
 		}
@@ -886,6 +894,7 @@ func (s *Server) handleCachedGalleryPages(c *gin.Context) {
 	}
 
 	// Miss: stream upstream and backfill on a complete walk.
+	metrics.ObserveGalleryCache("pages", "miss")
 	streamGalleryPagesNDJSON(c, c.Param("id"), token, func(ctx context.Context, emit func(int, []string, []model.GalleryPageThumb) error) (int, error) {
 		return s.scrapeAndCache(ctx, id, token, emit)
 	})

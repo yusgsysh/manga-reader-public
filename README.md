@@ -55,6 +55,7 @@ backend/
 │   ├── gallerycache/             # gallery_cache 读写
 │   ├── handler/                  # HTTP 处理器 (Gin)
 │   ├── imageproc/                # 图片裁剪（精灵图页面缩略图）
+│   ├── metrics/                  # Prometheus 指标（私有 registry，挂在 /metrics）
 │   ├── model/                    # API 响应模型
 │   ├── sync/                     # 数据同步（outbox / SSE / 推送引擎，见 backend/API.md 28）
 │   ├── ttl/                      # HTTP Cache-Control / listing cursor 常量
@@ -112,7 +113,7 @@ backend/
 
 - **HTTPS 必须在 Basic Auth 之前**：Basic Auth 只是 `base64(user:pass)`，不是加密。TLS 由前置层（云负载均衡 / Caddy / 前置 nginx）提供，同时负责 HTTP :80 → HTTPS :443 跳转；HSTS 也由该层配置，确认域名永久 HTTPS 后再开启。
 - **应用端口不暴露公网**：容器 `:8080`、PostgreSQL `:5432`、MinIO `:9000/:9001` 不发布到公网，只在 Docker 内网通信；compose 的 `5173:8080` 可按需改成 `127.0.0.1:5173:8080`，公网只经过带 TLS 的前置反代。
-- **保护范围**：`/`、静态资源、`/api/*`（含 SSE `/api/sync/events`、`/api/events/changes`、图片代理、Prefill、ZIP）全部经 Basic Auth；仅 `/healthz` 豁免（`{"status":"ok"}`，无 Cookie / 令牌 / 配置信息）。认证失败返回 `401` + `WWW-Authenticate: Basic realm="Manga Reader"`，由浏览器处理——前端没有、也不需要登录页。
+- **保护范围**：`/`、静态资源、`/api/*`（含 SSE `/api/sync/events`、`/api/events/changes`、图片代理、Prefill、ZIP）、`/metrics`（Prometheus 指标，见「可观测性」）全部经 Basic Auth；仅 `/healthz` 豁免（`{"status":"ok"}`，无 Cookie / 令牌 / 配置信息）。认证失败返回 `401` + `WWW-Authenticate: Basic realm="Manga Reader"`，由浏览器处理——前端没有、也不需要登录页。
 
 认证、静态资源与 API 同在一个 Gin 进程内（前端在构建时 `//go:embed` 进二进制），因此没有反代层在中间消费 `Authorization`。
 
@@ -330,6 +331,31 @@ Schema 文件：
 | 前端 | react-query `staleTime` | 见 `cacheConfig.ts` | 全局 30s；pages 10m；gallery / detail / search 5m；bookshelf / recently-read / list 2m；progress / prefill 30s；settings 0 |
 
 > 注：`backend/internal/ttl` 现在只保留 HTTP `Cache-Control` 与 listing cursor；代码中另有一批**超时/预算**常量（如 `/pages` 抓取硬上限、缩略图解析超时、上游文档超时），它们限制单次操作的耗时，并非缓存 TTL。上游页面请求的 10 秒短共享见 `backend/internal/exhentai/fetchcache.go`（进程内去重，不落库）。
+
+### 可观测性（Prometheus 指标）
+
+`GET /metrics` 暴露 Prometheus 文本格式（Basic Auth 之后；指标实现见 `backend/internal/metrics`，使用包私有 registry，测试可隔离采集）。
+
+| 指标 | 类型 | 标签 | 说明 |
+|------|------|------|------|
+| `exhentai_upstream_requests_total` | Counter | `endpoint, method, status_code, outcome` | 上游请求（outcome = ok / error） |
+| `exhentai_upstream_request_duration_seconds` | Histogram | `endpoint, method` | 上游延迟（send → 响应头） |
+| `exhentai_upstream_response_bytes_total` | Counter | `endpoint` | 上游响应声明字节数（未声明则不计） |
+| `exhentai_upstream_classification_total` | Counter | `endpoint, outcome` | 内容级判定（sad_panda / ip_banned / http_error） |
+| `exhentai_fetchcache_requests_total` | Counter | `result` | 10 秒文档短共享：hit / miss / coalesced |
+| `exhentai_fetchcache_entries` | Gauge | — | 短共享缓存当前条目数 |
+| `image_cache_requests_total` | Counter | `kind, result` | MinIO 图片缓存查找：`kind` = page_image / thumbnail / sprite，`result` = hit / miss |
+| `gallery_cache_requests_total` | Counter | `kind, result` | `gallery_cache` 查找：`kind` = gallery / details / pages / page_thumb，`result` = hit / miss |
+
+Hit rate 不单独存储为 gauge，用 `rate` 计算，例如：
+
+```promql
+sum(rate(image_cache_requests_total{result="hit"}[5m]))
+  /
+sum(rate(image_cache_requests_total[5m]))
+```
+
+`gallery_cache_requests_total` 同理；追加 `by (kind)` 或 `kind=` 过滤可按缓存类型拆分。计数口径：每次缓存 `Get` 查找计一次（hit 或 miss，读取错误不计）；gallery 缓存按端点实际判定（如 details 需 `DetailsFetchedAt` 非空、pages 需 `len(Pages) > 0` 才算命中）；sprite 路径的外层预检与 singleflight 内复检各计一次。离线兜底（书架）与批量装载（最近阅读）不计入。
 
 ### 阅读记录清理
 

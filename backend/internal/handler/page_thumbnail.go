@@ -19,6 +19,7 @@ import (
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/imageproc"
+	"manga-reader/internal/metrics"
 	"manga-reader/internal/model"
 )
 
@@ -362,6 +363,7 @@ func (s *Server) resolveGalleryPageThumb(ctx context.Context, galleryID int64, t
 			behindStoredList := false
 			if index < len(row.Thumbnails) {
 				if thumb := row.Thumbnails[index]; thumb.SpriteURL != "" {
+					metrics.ObserveGalleryCache("page_thumb", "hit")
 					return thumb, true, nil
 				}
 				// Present but without geometry: fall through to a fresh walk,
@@ -373,8 +375,12 @@ func (s *Server) resolveGalleryPageThumb(ctx context.Context, galleryID int64, t
 			// not exist upstream either. Without this, probing an invalid
 			// index on a warm gallery would start a full walk every time.
 			if !behindStoredList && len(row.Thumbnails) > 0 && index >= len(row.Thumbnails) {
+				metrics.ObserveGalleryCache("page_thumb", "hit")
 				return model.GalleryPageThumb{}, false, nil
 			}
+			metrics.ObserveGalleryCache("page_thumb", "miss")
+		} else {
+			metrics.ObserveGalleryCache("page_thumb", "miss")
 		}
 	}
 
@@ -511,9 +517,12 @@ func (s *Server) loadOrFetchSprite(ctx context.Context, spriteURL string) ([]byt
 
 	if s.Cache != nil {
 		if data, _, getErr := s.Cache.Get(ctx, key); getErr == nil {
+			metrics.ObserveImageCache("sprite", "hit")
 			return data, nil
 		} else if !cache.IsNotFound(getErr) {
 			return nil, getErr
+		} else {
+			metrics.ObserveImageCache("sprite", "miss")
 		}
 	}
 
@@ -524,9 +533,12 @@ func (s *Server) loadOrFetchSprite(ctx context.Context, spriteURL string) ([]byt
 
 		if s.Cache != nil {
 			if data, _, getErr := s.Cache.Get(fetchCtx, key); getErr == nil {
+				metrics.ObserveImageCache("sprite", "hit")
 				return data, nil
 			} else if !cache.IsNotFound(getErr) {
 				return nil, getErr
+			} else {
+				metrics.ObserveImageCache("sprite", "miss")
 			}
 		}
 

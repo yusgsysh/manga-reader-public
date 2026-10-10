@@ -1428,6 +1428,31 @@ curl -N http://server:8080/api/sync/events -H 'X-Sync-Token: my-secret'
 
 ---
 
+### 29. Metrics（Prometheus）
+
+`GET /metrics` — Prometheus 文本格式（`Content-Type: text/plain; version=0.0.4`），在 Basic Auth 中间件之后（公网需带凭据）。指标实现见 `backend/internal/metrics`（包私有 registry，`promhttp` 暴露）。
+
+缓存命中率相关计数器（完整指标列表见根 README「可观测性」）：
+
+| 指标 | 标签 | 说明 |
+|------|------|------|
+| `image_cache_requests_total` | `kind` = page_image / thumbnail / sprite，`result` = hit / miss | MinIO 图片缓存（`/api/image-cache/*`）查找 |
+| `gallery_cache_requests_total` | `kind` = gallery / details / pages / page_thumb，`result` = hit / miss | `gallery_cache` 读通端点（`/api/gallery-cache/*`）与页面缩略图索引解析 |
+
+计数口径：每次缓存 `Get` 查找计一次（hit 或 miss，读取错误不计）；gallery 缓存按端点实际命中条件判定（details 需已抓取详情、pages 需有页面列表）；sprite 的外层预检与 singleflight 内复检各计一次；离线兜底（书架）与批量装载（最近阅读）不计入。
+
+Hit rate 不存 gauge，用 PromQL 计算：
+
+```promql
+sum(rate(image_cache_requests_total{result="hit"}[5m]))
+  /
+sum(rate(image_cache_requests_total[5m]))
+```
+
+**Error Responses:** `401` Basic Auth 凭据缺失或错误。
+
+---
+
 ## 缓存（gallery-cache，无 TTL + read-through）
 
 后端缓存**没有 TTL**：`gallery_cache` 一旦写入即被永久信任，命中直接返回，不再按时间回源。

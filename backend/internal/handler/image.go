@@ -15,6 +15,7 @@ import (
 	"manga-reader/internal/cache"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/gallerycache"
+	"manga-reader/internal/metrics"
 	"manga-reader/internal/ttl"
 )
 
@@ -178,11 +179,13 @@ func (s *Server) loadOrFetchImage(ctx context.Context, key string, decodedURL st
 
 		data, contentType, getErr := s.Cache.Get(fetchCtx, key)
 		if getErr == nil {
+			metrics.ObserveImageCache("page_image", "hit")
 			return &imageResult{data: data, contentType: contentType, cacheHit: true, stored: true}, nil
 		}
 		if !cache.IsNotFound(getErr) {
 			return nil, getErr
 		}
+		metrics.ObserveImageCache("page_image", "miss")
 
 		data, contentType, fetchErr := exhentai.FetchPageImage(fetchCtx, s.Client, decodedURL)
 		if fetchErr != nil {
@@ -219,11 +222,13 @@ func (s *Server) loadOrFetchThumbnail(ctx context.Context, key string, rawURL st
 
 		data, contentType, getErr := s.Cache.Get(fetchCtx, key)
 		if getErr == nil {
+			metrics.ObserveImageCache("thumbnail", "hit")
 			return &imageResult{data: data, contentType: contentType, cacheHit: true, stored: true}, nil
 		}
 		if !cache.IsNotFound(getErr) {
 			return nil, getErr
 		}
+		metrics.ObserveImageCache("thumbnail", "miss")
 
 		data, contentType, fetchErr := fetchThumbnail(fetchCtx, s.Client, rawURL)
 		if fetchErr != nil {

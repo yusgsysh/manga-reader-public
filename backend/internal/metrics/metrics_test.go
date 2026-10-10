@@ -118,6 +118,47 @@ func TestFetchCacheCounters(t *testing.T) {
 	}
 }
 
+func TestImageCacheCounters(t *testing.T) {
+	ResetForTest()
+	ObserveImageCache("page_image", "hit")
+	ObserveImageCache("page_image", "miss")
+	ObserveImageCache("thumbnail", "hit")
+	ObserveImageCache("sprite", "miss")
+	ObserveImageCache("sprite", "miss")
+
+	text := gather(t)
+	for _, want := range []string{
+		`image_cache_requests_total{kind="page_image",result="hit"} 1`,
+		`image_cache_requests_total{kind="page_image",result="miss"} 1`,
+		`image_cache_requests_total{kind="thumbnail",result="hit"} 1`,
+		`image_cache_requests_total{kind="sprite",result="miss"} 2`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("expected %q in exposition, got:\n%s", want, text)
+		}
+	}
+}
+
+func TestGalleryCacheCounters(t *testing.T) {
+	ResetForTest()
+	ObserveGalleryCache("gallery", "hit")
+	ObserveGalleryCache("details", "miss")
+	ObserveGalleryCache("pages", "hit")
+	ObserveGalleryCache("page_thumb", "miss")
+
+	text := gather(t)
+	for _, want := range []string{
+		`gallery_cache_requests_total{kind="gallery",result="hit"} 1`,
+		`gallery_cache_requests_total{kind="details",result="miss"} 1`,
+		`gallery_cache_requests_total{kind="pages",result="hit"} 1`,
+		`gallery_cache_requests_total{kind="page_thumb",result="miss"} 1`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("expected %q in exposition, got:\n%s", want, text)
+		}
+	}
+}
+
 func gather(t *testing.T) string {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
