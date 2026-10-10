@@ -23,7 +23,7 @@
 
 services:
   backend:
-    image: git.09270721.xyz/abc/manga-reader:latest
+    image: ghcr.io/yusgsysh/manga-reader:latest
 
     init: true
 

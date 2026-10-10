@@ -7,7 +7,7 @@
 #   rm /etc/containers/systemd/manga-reader-{backend,frontend}.container /etc/containers/systemd/manga-reader.pod
 #   systemctl daemon-reload
 [Container]
-Image=git.09270721.xyz/abc/manga-reader:latest
+Image=ghcr.io/yusgsysh/manga-reader:latest
 # 对外发布端口（原 frontend 的 5173 入口）
 PublishPort=5173:8080
 # 全量配置（EHENTAI_COOKIE、同步令牌、数据库驱动、Basic Auth 等）

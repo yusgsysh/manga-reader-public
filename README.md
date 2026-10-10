@@ -83,9 +83,10 @@ backend/
    EHENTAI_COOKIE_IPB_PASS_HASH=xxx
    ```
 
-2. 启动服务（单镜像：Gin API + 内嵌前端由 CI 构建推送，compose 直接拉取，仓库内无 `build:` 配置）：
+2. 启动服务（单镜像：Gin API + 内嵌前端由 GitHub Actions 构建推送到 `ghcr.io/yusgsysh/manga-reader`，compose 直接拉取，仓库内无 `build:` 配置）。GHCR 包为私有时先登录（PAT 需 `read:packages`）：
 
    ```bash
+   docker login ghcr.io
    docker compose up -d
    ```
 
@@ -176,7 +177,7 @@ go test ./internal/basicauth/ ./internal/web/ ./internal/config/
 
 | Workflow | 触发 | 作用 |
 |----------|------|------|
-| `docker-build.yml` | push 到 `main`、PR | 检测 `frontend/`、`backend/` 或根 `Dockerfile` 变更 → 构建并推送 `git.09270721.xyz/abc/manga-reader:latest`；push 到 `main` 且有变更时在服务器上 `docker compose pull && docker compose up -d` 完成部署（PR 只构建不部署） |
+| `docker-build.yml` | push 到 `main`、PR | 检测 `frontend/`、`backend/` 或根 `Dockerfile` 变更 → 构建并推送 `git.09270721.xyz/abc/manga-reader:latest`（仅自检/备用）；push 到 `main` 且有变更时在服务器上 `docker compose pull && docker compose up -d` 部署 compose 引用的镜像 `ghcr.io/yusgsysh/manga-reader:latest`（PR 只构建不部署） |
 | `frontend-tests.yml` | push 到 `main`、PR | 在 `oven/bun:1` 容器内跑单测（vitest）+ reader e2e（Playwright） |
 | `deploy.yml` | 手动（workflow_dispatch） | 单独执行一次 pull + 重启部署 |
 
@@ -186,12 +187,12 @@ go test ./internal/basicauth/ ./internal/web/ ./internal/config/
 |-----|------|------|
 | `backend-test` | push 到 `main`、PR | `gofmt` + `go vet` + `go test ./...` |
 | `frontend-test` | push 到 `main`、PR | `bun install --frozen-lockfile` + lint + 单测 + 生产构建 |
-| `docker` | 上面两个都成功后 | 构建单镜像；push 到 `main`/手动触发时推送 `ghcr.io/<owner>/manga-reader`，PR 只构建不推送 |
+| `docker` | 上面两个都成功后 | 构建单镜像；push 到 `main`/手动触发时推送 `ghcr.io/yusgsysh/manga-reader`（compose / quadlet 引用的镜像），PR 只构建不推送 |
 
 本地构建同名镜像（覆盖 compose 引用的镜像，便于不依赖 CI 调试）：
 
 ```bash
-docker build -t git.09270721.xyz/abc/manga-reader:latest .
+docker build -t ghcr.io/yusgsysh/manga-reader:latest .
 ```
 
 ## 环境变量
