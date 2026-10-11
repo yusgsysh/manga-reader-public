@@ -141,6 +141,20 @@ var (
 		Columns:    SyncStateColumns,
 		PrimaryKey: []*schema.Column{SyncStateColumns[0]},
 	}
+	// TagPreferenceColumns holds the columns for the "tag_preference" table.
+	TagPreferenceColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "tag", Type: field.TypeString, Unique: true},
+		{Name: "action", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// TagPreferenceTable holds the schema information for the "tag_preference" table.
+	TagPreferenceTable = &schema.Table{
+		Name:       "tag_preference",
+		Columns:    TagPreferenceColumns,
+		PrimaryKey: []*schema.Column{TagPreferenceColumns[0]},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		BookshelfTable,
@@ -149,6 +163,7 @@ var (
 		ReadingProgressTable,
 		SyncChangeTable,
 		SyncStateTable,
+		TagPreferenceTable,
 	}
 )
 
@@ -170,5 +185,8 @@ func init() {
 	}
 	SyncStateTable.Annotation = &entsql.Annotation{
 		Table: "sync_state",
+	}
+	TagPreferenceTable.Annotation = &entsql.Annotation{
+		Table: "tag_preference",
 	}
 }

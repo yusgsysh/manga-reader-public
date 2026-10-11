@@ -14,6 +14,7 @@ import {
   SearchPage,
   SettingsPage,
   SubscriptionsPage,
+  TagSettingsPage,
 } from "./pages";
 
 export const router = createBrowserRouter([
@@ -82,6 +83,14 @@ export const router = createBrowserRouter([
         element: (
           <LazyPage>
             <SettingsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "tag-settings",
+        element: (
+          <LazyPage>
+            <TagSettingsPage />
           </LazyPage>
         ),
       },

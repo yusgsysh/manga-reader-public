@@ -95,6 +95,10 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 	r.GET("/api/recently-read", s.handleRecentlyRead)
 	r.POST("/api/reading-progress/cleanup", s.handleReadingProgressCleanup)
 
+	// Tag preferences (like/dislike colours, persisted per user).
+	r.GET("/api/tag-settings", s.handleTagSettingsGet)
+	r.PUT("/api/tag-settings", s.handleTagSettingsPut)
+
 	// Image proxies (live): fetched straight from upstream, no caching.
 	r.GET("/api/image/page", s.handlePageImage)
 	r.GET("/api/image/thumbnail", s.handleThumbnail)

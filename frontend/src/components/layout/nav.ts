@@ -8,6 +8,7 @@ import {
   Gear,
   House,
   MagnifyingGlass,
+  Tag,
 } from "@phosphor-icons/react";
 
 export interface NavItem {
@@ -27,6 +28,7 @@ export const PRIMARY_NAV: NavItem[] = [
 export const SECONDARY_NAV: NavItem[] = [
   { to: "/recently-read", label: "阅读历史", icon: ClockCounterClockwise },
   { to: "/downloads", label: "下载管理", icon: DownloadSimple },
+  { to: "/tag-settings", label: "标签设置", icon: Tag },
   { to: "/settings", label: "设置", icon: Gear },
 ];
 

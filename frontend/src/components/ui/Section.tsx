@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import { cn } from "@cloudflare/kumo";
 
 interface SectionProps {
-  title?: string;
-  description?: string;
+  title?: ReactNode;
+  description?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
   className?: string;

@@ -307,6 +307,7 @@ Gallery 详情页也提供页面缩略图网格（`PageThumbnailGrid`，每页 2
 | `/bookshelf` | 书架 |
 | `/recently-read` | 最近阅读 |
 | `/downloads` | 下载管理 |
+| `/tag-settings` | 标签设置 |
 | `/settings` | 设置 |
 | `/gallery/:id/:token` | Gallery Detail |
 | `/reader/:id/:token` | Reader |

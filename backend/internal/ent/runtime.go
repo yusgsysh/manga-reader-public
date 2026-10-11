@@ -10,6 +10,7 @@ import (
 	"manga-reader/internal/ent/schema"
 	"manga-reader/internal/ent/syncchange"
 	"manga-reader/internal/ent/syncstate"
+	"manga-reader/internal/ent/tagpreference"
 	"time"
 
 	"github.com/google/uuid"
@@ -199,4 +200,24 @@ func init() {
 	syncstate.DefaultUpdatedAt = syncstateDescUpdatedAt.Default.(func() time.Time)
 	// syncstate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	syncstate.UpdateDefaultUpdatedAt = syncstateDescUpdatedAt.UpdateDefault.(func() time.Time)
+	tagpreferenceFields := schema.TagPreference{}.Fields()
+	_ = tagpreferenceFields
+	// tagpreferenceDescTag is the schema descriptor for tag field.
+	tagpreferenceDescTag := tagpreferenceFields[0].Descriptor()
+	// tagpreference.TagValidator is a validator for the "tag" field. It is called by the builders before save.
+	tagpreference.TagValidator = tagpreferenceDescTag.Validators[0].(func(string) error)
+	// tagpreferenceDescAction is the schema descriptor for action field.
+	tagpreferenceDescAction := tagpreferenceFields[1].Descriptor()
+	// tagpreference.ActionValidator is a validator for the "action" field. It is called by the builders before save.
+	tagpreference.ActionValidator = tagpreferenceDescAction.Validators[0].(func(string) error)
+	// tagpreferenceDescCreatedAt is the schema descriptor for created_at field.
+	tagpreferenceDescCreatedAt := tagpreferenceFields[2].Descriptor()
+	// tagpreference.DefaultCreatedAt holds the default value on creation for the created_at field.
+	tagpreference.DefaultCreatedAt = tagpreferenceDescCreatedAt.Default.(func() time.Time)
+	// tagpreferenceDescUpdatedAt is the schema descriptor for updated_at field.
+	tagpreferenceDescUpdatedAt := tagpreferenceFields[3].Descriptor()
+	// tagpreference.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	tagpreference.DefaultUpdatedAt = tagpreferenceDescUpdatedAt.Default.(func() time.Time)
+	// tagpreference.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	tagpreference.UpdateDefaultUpdatedAt = tagpreferenceDescUpdatedAt.UpdateDefault.(func() time.Time)
 }

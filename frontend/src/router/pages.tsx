@@ -40,6 +40,11 @@ const ReaderPage = lazy(() =>
 export const SettingsPage = lazy(() =>
   import("../pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
+export const TagSettingsPage = lazy(() =>
+  import("../pages/TagSettingsPage").then((m) => ({
+    default: m.TagSettingsPage,
+  })),
+);
 
 function PageLoading() {
   return (

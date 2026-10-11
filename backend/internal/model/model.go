@@ -219,3 +219,21 @@ type GalleryTorrentInfo struct {
 	Comments     string `json:"comments"`
 	Personalized bool   `json:"personalized"`
 }
+
+// Tag preference actions. A tag is either liked (shown blue) or disliked
+// (shown red); tags without a preference keep their default appearance.
+const (
+	TagActionLike    = "like"
+	TagActionDislike = "dislike"
+)
+
+// TagPreference is a user preference for a single tag (`namespace:name`).
+type TagPreference struct {
+	Tag    string `json:"tag"`
+	Action string `json:"action"`
+}
+
+// TagSettingsResponse is the payload of GET/PUT /api/tag-settings.
+type TagSettingsResponse struct {
+	Tags []TagPreference `json:"tags"`
+}

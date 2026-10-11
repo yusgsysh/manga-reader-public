@@ -47,6 +47,9 @@ const isDown = (id) => id === "1003";
 // Runtime state for the mocked /api/dev/upstream-down dev-tools endpoint.
 let devDown = false;
 
+// Runtime state for the mocked /api/tag-settings endpoint (in-memory list).
+let tagSettings = [];
+
 function page(i) {
   return {
     page_url: `https://exhentai.org/s/tok/${i + 1}-${i + 1}`,
@@ -305,6 +308,26 @@ const server = Bun.serve({
         devDown = !!body.down;
       }
       return json({ down: devDown });
+    }
+
+    // Mocked tag settings (like/dislike colours); full-replace PUT like the
+    // real backend.
+    if (path === "/api/tag-settings") {
+      if (req.method === "PUT") {
+        const body = await req.json().catch(() => ({ tags: [] }));
+        tagSettings = Array.isArray(body.tags)
+          ? body.tags
+              .filter((t) => t && typeof t.tag === "string" && t.tag)
+              .map((t) => ({
+                tag: t.tag.toLowerCase().trim(),
+                action: t.action === "dislike" ? "dislike" : "like",
+              }))
+          : [];
+      }
+      const sorted = [...tagSettings].sort((a, b) =>
+        a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0,
+      );
+      return json({ tags: sorted });
     }
 
     // ---- Cached (offline fallback) endpoints -----------------------------

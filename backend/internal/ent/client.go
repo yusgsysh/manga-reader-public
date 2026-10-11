@@ -14,6 +14,7 @@ import (
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/syncchange"
 	"manga-reader/internal/ent/syncstate"
+	"manga-reader/internal/ent/tagpreference"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
@@ -38,6 +39,8 @@ type Client struct {
 	SyncChange *SyncChangeClient
 	// SyncState is the client for interacting with the SyncState builders.
 	SyncState *SyncStateClient
+	// TagPreference is the client for interacting with the TagPreference builders.
+	TagPreference *TagPreferenceClient
 }
 
 // NewClient creates a new client configured with the given options.
@@ -55,6 +58,7 @@ func (c *Client) init() {
 	c.ReadingProgress = NewReadingProgressClient(c.config)
 	c.SyncChange = NewSyncChangeClient(c.config)
 	c.SyncState = NewSyncStateClient(c.config)
+	c.TagPreference = NewTagPreferenceClient(c.config)
 }
 
 type (
@@ -153,6 +157,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ReadingProgress: NewReadingProgressClient(cfg),
 		SyncChange:      NewSyncChangeClient(cfg),
 		SyncState:       NewSyncStateClient(cfg),
+		TagPreference:   NewTagPreferenceClient(cfg),
 	}, nil
 }
 
@@ -178,6 +183,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ReadingProgress: NewReadingProgressClient(cfg),
 		SyncChange:      NewSyncChangeClient(cfg),
 		SyncState:       NewSyncStateClient(cfg),
+		TagPreference:   NewTagPreferenceClient(cfg),
 	}, nil
 }
 
@@ -208,7 +214,7 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.Bookshelf, c.GalleryCache, c.PrefillJob, c.ReadingProgress, c.SyncChange,
-		c.SyncState,
+		c.SyncState, c.TagPreference,
 	} {
 		n.Use(hooks...)
 	}
@@ -219,7 +225,7 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.Bookshelf, c.GalleryCache, c.PrefillJob, c.ReadingProgress, c.SyncChange,
-		c.SyncState,
+		c.SyncState, c.TagPreference,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -240,6 +246,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.SyncChange.mutate(ctx, m)
 	case *SyncStateMutation:
 		return c.SyncState.mutate(ctx, m)
+	case *TagPreferenceMutation:
+		return c.TagPreference.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
 	}
@@ -950,14 +958,147 @@ func (c *SyncStateClient) mutate(ctx context.Context, m *SyncStateMutation) (Val
 	}
 }
 
+// TagPreferenceClient is a client for the TagPreference schema.
+type TagPreferenceClient struct {
+	config
+}
+
+// NewTagPreferenceClient returns a client for the TagPreference from the given config.
+func NewTagPreferenceClient(c config) *TagPreferenceClient {
+	return &TagPreferenceClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `tagpreference.Hooks(f(g(h())))`.
+func (c *TagPreferenceClient) Use(hooks ...Hook) {
+	c.hooks.TagPreference = append(c.hooks.TagPreference, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `tagpreference.Intercept(f(g(h())))`.
+func (c *TagPreferenceClient) Intercept(interceptors ...Interceptor) {
+	c.inters.TagPreference = append(c.inters.TagPreference, interceptors...)
+}
+
+// Create returns a builder for creating a TagPreference entity.
+func (c *TagPreferenceClient) Create() *TagPreferenceCreate {
+	mutation := newTagPreferenceMutation(c.config, OpCreate)
+	return &TagPreferenceCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of TagPreference entities.
+func (c *TagPreferenceClient) CreateBulk(builders ...*TagPreferenceCreate) *TagPreferenceCreateBulk {
+	return &TagPreferenceCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *TagPreferenceClient) MapCreateBulk(slice any, setFunc func(*TagPreferenceCreate, int)) *TagPreferenceCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &TagPreferenceCreateBulk{err: fmt.Errorf("calling to TagPreferenceClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*TagPreferenceCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &TagPreferenceCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for TagPreference.
+func (c *TagPreferenceClient) Update() *TagPreferenceUpdate {
+	mutation := newTagPreferenceMutation(c.config, OpUpdate)
+	return &TagPreferenceUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *TagPreferenceClient) UpdateOne(_m *TagPreference) *TagPreferenceUpdateOne {
+	mutation := newTagPreferenceMutation(c.config, OpUpdateOne, withTagPreference(_m))
+	return &TagPreferenceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *TagPreferenceClient) UpdateOneID(id int) *TagPreferenceUpdateOne {
+	mutation := newTagPreferenceMutation(c.config, OpUpdateOne, withTagPreferenceID(id))
+	return &TagPreferenceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for TagPreference.
+func (c *TagPreferenceClient) Delete() *TagPreferenceDelete {
+	mutation := newTagPreferenceMutation(c.config, OpDelete)
+	return &TagPreferenceDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *TagPreferenceClient) DeleteOne(_m *TagPreference) *TagPreferenceDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *TagPreferenceClient) DeleteOneID(id int) *TagPreferenceDeleteOne {
+	builder := c.Delete().Where(tagpreference.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &TagPreferenceDeleteOne{builder}
+}
+
+// Query returns a query builder for TagPreference.
+func (c *TagPreferenceClient) Query() *TagPreferenceQuery {
+	return &TagPreferenceQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeTagPreference},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a TagPreference entity by its id.
+func (c *TagPreferenceClient) Get(ctx context.Context, id int) (*TagPreference, error) {
+	return c.Query().Where(tagpreference.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *TagPreferenceClient) GetX(ctx context.Context, id int) *TagPreference {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *TagPreferenceClient) Hooks() []Hook {
+	return c.hooks.TagPreference
+}
+
+// Interceptors returns the client interceptors.
+func (c *TagPreferenceClient) Interceptors() []Interceptor {
+	return c.inters.TagPreference
+}
+
+func (c *TagPreferenceClient) mutate(ctx context.Context, m *TagPreferenceMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&TagPreferenceCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&TagPreferenceUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&TagPreferenceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&TagPreferenceDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown TagPreference mutation op: %q", m.Op())
+	}
+}
+
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Bookshelf, GalleryCache, PrefillJob, ReadingProgress, SyncChange,
-		SyncState []ent.Hook
+		Bookshelf, GalleryCache, PrefillJob, ReadingProgress, SyncChange, SyncState,
+		TagPreference []ent.Hook
 	}
 	inters struct {
-		Bookshelf, GalleryCache, PrefillJob, ReadingProgress, SyncChange,
-		SyncState []ent.Interceptor
+		Bookshelf, GalleryCache, PrefillJob, ReadingProgress, SyncChange, SyncState,
+		TagPreference []ent.Interceptor
 	}
 )

@@ -1,6 +1,10 @@
 import { useMemo } from "react";
 import type { Tag } from "../../types/gallery";
 import { useTagTranslation } from "../../hooks/useTagTranslation";
+import {
+  useTagPreferences,
+  sortTagsByPreference,
+} from "../../hooks/useTagPreferences";
 import { TagBadge } from "./TagBadge";
 
 interface TagGroupsProps {
@@ -8,10 +12,13 @@ interface TagGroupsProps {
 }
 
 // Renders tags grouped by namespace, preserving the order in which the
-// namespaces first appear. Each group is headed by the translated namespace
-// name, so the badges themselves omit the [namespace] prefix.
+// namespaces first appear. Within each group, liked (blue) tags sort before
+// disliked (red) ones and neutral tags last. Each group is headed by the
+// translated namespace name, so the badges themselves omit the [namespace]
+// prefix.
 export function TagGroups({ tags }: TagGroupsProps) {
   const { translateNamespace } = useTagTranslation();
+  const { getTagAction } = useTagPreferences();
 
   const groups = useMemo(() => {
     const byNamespace = new Map<string, Tag[]>();
@@ -21,8 +28,11 @@ export function TagGroups({ tags }: TagGroupsProps) {
       if (group) group.push(tag);
       else byNamespace.set(namespace, [tag]);
     }
-    return [...byNamespace.entries()];
-  }, [tags]);
+    return [...byNamespace.entries()].map(([namespace, groupTags]) => [
+      namespace,
+      sortTagsByPreference(groupTags, getTagAction),
+    ] as const);
+  }, [tags, getTagAction]);
 
   if (groups.length === 0) return null;
 

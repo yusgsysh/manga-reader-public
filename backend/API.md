@@ -1453,6 +1453,48 @@ sum(rate(image_cache_requests_total[5m]))
 
 ---
 
+### 30. Tag Settings（标签喜好）
+
+标签喜好用于在前端把标签标成蓝色（喜欢）或红色（不喜欢），语义对齐 ExHentai 的 My Tags 高亮。数据存于 `tag_preference` 表，一行一个标签（`namespace:name`），**只影响显示、不过滤列表**。
+
+#### GET `/api/tag-settings`
+
+返回全部规则，按 `tag` 升序。
+
+**Response (200):**
+
+```json
+{
+  "tags": [
+    { "tag": "female:yuri", "action": "like" },
+    { "tag": "tag:netorare", "action": "dislike" }
+  ]
+}
+```
+
+`action` 取值：`like`（蓝）/ `dislike`（红）。
+
+#### PUT `/api/tag-settings`
+
+**全量替换**：body 为完整规则列表，服务端先归一化（trim + 转小写）、按 `tag` 去重（后出现的 `action` 覆盖先出现的），再在事务内清空旧数据并写入新列表。`tags: []` 清空全部规则。
+
+**Request Body:**
+
+```json
+{
+  "tags": [
+    { "tag": "Female:Yuri ", "action": "like" },
+    { "tag": "tag:netorare", "action": "dislike" }
+  ]
+}
+```
+
+**Response (200):** 与 GET 相同结构，返回归一化、去重并按 `tag` 升序排列后的最终列表。
+
+**Error Responses:** `400`（非法 JSON、`tag` 为空、`action` 非 `like`/`dislike`、超过 10000 条）、`500` 数据库错误。校验失败时不写入任何数据。
+
+---
+
 ## 缓存（gallery-cache，无 TTL + read-through）
 
 后端缓存**没有 TTL**：`gallery_cache` 一旦写入即被永久信任，命中直接返回，不再按时间回源。

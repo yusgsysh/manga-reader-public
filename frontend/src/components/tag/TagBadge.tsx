@@ -1,8 +1,9 @@
 import { useState } from "react";
 import type { Tag } from "../../types/gallery";
 import { useTagTranslation } from "../../hooks/useTagTranslation";
+import { useTagPreferences, TAG_ACTION_TEXT_CLASS } from "../../hooks/useTagPreferences";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
-import { Popover, Tooltip } from "@cloudflare/kumo";
+import { Popover, Tooltip, cn } from "@cloudflare/kumo";
 import { Chip } from "../ui";
 
 interface TagBadgeProps {
@@ -13,6 +14,7 @@ interface TagBadgeProps {
 export function TagBadge({ tag, showNamespace = true }: TagBadgeProps) {
   const { translateTag, translateNamespace, hasTranslation, getTagInfo } =
     useTagTranslation();
+  const { getTagAction } = useTagPreferences();
   const noHover = useMediaQuery("(hover: none)");
   const [open, setOpen] = useState(false);
 
@@ -22,10 +24,17 @@ export function TagBadge({ tag, showNamespace = true }: TagBadgeProps) {
     showNamespace && tag.namespace ? translateNamespace(tag.namespace) : "";
   const rawName = tag.namespace ? `${tag.namespace}:${tag.name}` : tag.name;
 
+  // Colored blue (liked) / red (disliked) like the source site; neutral tags
+  // keep the default chip styling.
+  const action = getTagAction(tag);
+  const actionClass = action ? TAG_ACTION_TEXT_CLASS[action] : null;
+
   const chip = (
-    <Chip tone="neutral" className="font-normal">
+    <Chip tone="neutral" className={cn("font-normal", actionClass)}>
       {namespaceLabel && (
-        <span className="text-kumo-inactive">[{namespaceLabel}]</span>
+        <span className={actionClass ? "opacity-70" : "text-kumo-inactive"}>
+          [{namespaceLabel}]
+        </span>
       )}
       <span>{displayName}</span>
     </Chip>
@@ -35,7 +44,14 @@ export function TagBadge({ tag, showNamespace = true }: TagBadgeProps) {
 
   const detail = (
     <div className="max-w-xs space-y-1.5 text-left">
-      <div className="font-mono text-[11px] text-kumo-subtle">{rawName}</div>
+      <div
+        className={cn(
+          "font-mono text-[11px]",
+          actionClass ?? "text-kumo-subtle",
+        )}
+      >
+        {rawName}
+      </div>
       {info.translation && (
         <div className="text-sm font-medium">{info.translation}</div>
       )}

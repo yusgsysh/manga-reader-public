@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Input, cn } from "@cloudflare/kumo";
 import { X } from "@phosphor-icons/react";
 import { useTagTranslation } from "../../hooks/useTagTranslation";
+import {
+  useTagPreferences,
+  TAG_ACTION_TEXT_CLASS,
+} from "../../hooks/useTagPreferences";
 import { Section } from "../ui";
 import { FilterChip } from "./FilterChip";
 
@@ -42,6 +46,7 @@ export function TagFilterInput({
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
   const { searchTags, ready: tagDbReady } = useTagTranslation();
+  const { getTagAction } = useTagPreferences();
 
   const suggestions =
     pendingQuery.length > 0 && resultsQuery === pendingQuery
@@ -169,29 +174,39 @@ export function TagFilterInput({
 
       {(appliedTags.length > 0 || pendingTags.length > 0) && (
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {appliedTags.map((tag) => (
-            <FilterChip
-              key={`applied-${tag}`}
-              label={tag}
-              onRemove={() => onRemoveAppliedTag?.(tag)}
-            />
-          ))}
-          {pendingTags.map((tag) => (
-            <span
-              key={`pending-${tag}`}
-              className="inline-flex items-center gap-1 rounded-full bg-kumo-recessed px-2.5 py-1 text-xs font-medium text-kumo-subtle"
-            >
-              {tag}
-              <button
-                type="button"
-                onClick={() => onRemovePendingTag(tag)}
-                aria-label={`移除标签 ${tag}`}
-                className="transition-opacity hover:opacity-70"
+          {appliedTags.map((tag) => {
+            const action = getTagAction(tag);
+            return (
+              <FilterChip
+                key={`applied-${tag}`}
+                label={tag}
+                onRemove={() => onRemoveAppliedTag?.(tag)}
+                className={action ? TAG_ACTION_TEXT_CLASS[action] : undefined}
+              />
+            );
+          })}
+          {pendingTags.map((tag) => {
+            const action = getTagAction(tag);
+            return (
+              <span
+                key={`pending-${tag}`}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full bg-kumo-recessed px-2.5 py-1 text-xs font-medium",
+                  action ? TAG_ACTION_TEXT_CLASS[action] : "text-kumo-subtle",
+                )}
               >
-                <X className="size-3" weight="bold" />
-              </button>
-            </span>
-          ))}
+                {tag}
+                <button
+                  type="button"
+                  onClick={() => onRemovePendingTag(tag)}
+                  aria-label={`移除标签 ${tag}`}
+                  className="transition-opacity hover:opacity-70"
+                >
+                  <X className="size-3" weight="bold" />
+                </button>
+              </span>
+            );
+          })}
         </div>
       )}
     </Section>

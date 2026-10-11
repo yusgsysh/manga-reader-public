@@ -23,3 +23,6 @@ type SyncChange func(*sql.Selector)
 
 // SyncState is the predicate function for syncstate builders.
 type SyncState func(*sql.Selector)
+
+// TagPreference is the predicate function for tagpreference builders.
+type TagPreference func(*sql.Selector)

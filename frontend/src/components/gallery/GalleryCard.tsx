@@ -5,9 +5,15 @@ import { parseTagString } from "../../lib/tag";
 import { languageCodeFromTags } from "../../lib/language";
 import { formatPosted } from "../../lib/time";
 import { useTagTranslation } from "../../hooks/useTagTranslation";
+import {
+  useTagPreferences,
+  TAG_ACTION_TEXT_CLASS,
+  sortTagsByPreference,
+} from "../../hooks/useTagPreferences";
 import { Star, Tag as TagIcon } from "@phosphor-icons/react";
 import { createPortal } from "react-dom";
 import { memo, useState, useRef, useEffect, useMemo } from "react";
+import { cn } from "@cloudflare/kumo";
 import { CategoryChip } from "./CategoryChip";
 
 const TAG_POPOVER_WIDTH = 224;
@@ -64,6 +70,14 @@ function TagPopover({
   onHoverChange: (hovering: boolean) => void;
 }) {
   const { translateTag, ready } = useTagTranslation();
+  const { getTagAction } = useTagPreferences();
+
+  // Blue (liked) first, red (disliked) second, neutral last — same order as
+  // the detail page tag list.
+  const sortedTags = useMemo(
+    () => sortTagsByPreference(tags, getTagAction),
+    [tags, getTagAction],
+  );
 
   return createPortal(
     <div
@@ -73,17 +87,21 @@ function TagPopover({
       onMouseLeave={() => onHoverChange(false)}
     >
       <div className="flex flex-wrap gap-1">
-        {tags.map((raw) => {
+        {sortedTags.map((raw) => {
           const tag = parseTagString(raw);
           const label = ready
             ? translateTag(tag)
             : tag.namespace
               ? `${tag.namespace}:${tag.name}`
               : tag.name;
+          const action = getTagAction(tag);
           return (
             <span
               key={raw}
-              className="inline-block rounded-md bg-kumo-recessed px-1.5 py-0.5 text-[11px]"
+              className={cn(
+                "inline-block rounded-md bg-kumo-recessed px-1.5 py-0.5 text-[11px]",
+                action && TAG_ACTION_TEXT_CLASS[action],
+              )}
             >
               {label}
             </span>

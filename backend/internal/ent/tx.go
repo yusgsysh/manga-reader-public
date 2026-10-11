@@ -24,6 +24,8 @@ type Tx struct {
 	SyncChange *SyncChangeClient
 	// SyncState is the client for interacting with the SyncState builders.
 	SyncState *SyncStateClient
+	// TagPreference is the client for interacting with the TagPreference builders.
+	TagPreference *TagPreferenceClient
 
 	// lazily loaded.
 	client     *Client
@@ -161,6 +163,7 @@ func (tx *Tx) init() {
 	tx.ReadingProgress = NewReadingProgressClient(tx.config)
 	tx.SyncChange = NewSyncChangeClient(tx.config)
 	tx.SyncState = NewSyncStateClient(tx.config)
+	tx.TagPreference = NewTagPreferenceClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.
