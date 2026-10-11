@@ -24,15 +24,34 @@ export interface TagSyncFailure {
   error: string;
 }
 
-/** Result of POST /api/tag-settings/sync (full mirror to source My Tags). */
+/**
+ * One side of a sync conflict: the preference on that side, or null when the
+ * tag was deleted there (locally removed / gone from source My Tags).
+ */
+export type TagSyncSide = TagPreference | null;
+
+/** Tag changed on both sides since the last sync; the user picks one. */
+export interface TagSyncConflict {
+  tag: string;
+  local: TagSyncSide;
+  remote: TagSyncSide;
+}
+
+/** Result of POST /api/tag-settings/sync (three-way merge with source My Tags). */
 export interface TagSyncResult {
   added: number;
   updated: number;
   deleted: number;
+  /** Rules imported/updated/removed from the source (never writes the source). */
+  pulled: number;
   unchanged: number;
-  /** Remote-only tags not yet deleted (need confirm_deletes=true). */
+  /** Local-only deletions not yet applied to the source (need confirmation). */
   pending_deletes: string[];
+  /** Both sides changed; unresolved tags were left untouched on both sides. */
+  conflicts: TagSyncConflict[];
   failed: TagSyncFailure[];
+  /** Full merged rule list (sorted by tag) — replaces the local cache. */
+  tags: TagPreference[];
 }
 
 export function fetchTagSettings(): Promise<TagSettings> {
@@ -44,12 +63,27 @@ export function saveTagSettings(settings: TagSettings): Promise<TagSettings> {
   return apiPut<TagSettings>("/api/tag-settings", settings);
 }
 
+export interface SyncTagSettingsOptions {
+  /** Apply pending source deletions of locally-deleted tags. */
+  confirmDeletes?: boolean;
+  /**
+   * Resolve every conflict in this sync at once: "remote" keeps the source
+   * value (pull), "local" keeps the local value (push). Omitted = only report.
+   */
+  conflictResolution?: "remote" | "local";
+}
+
 /**
- * Mirror the local rules onto the source My Tags page. Adds/updates always
- * run; remote-only rows are deleted only when confirmDeletes is true.
+ * Bidirectional sync: pulls source changes into the local rules, pushes local
+ * changes to source My Tags, and reports tags changed on both sides.
  */
-export function syncTagSettings(confirmDeletes = false): Promise<TagSyncResult> {
+export function syncTagSettings(
+  options: SyncTagSettingsOptions = {},
+): Promise<TagSyncResult> {
   return apiPostJson<TagSyncResult>("/api/tag-settings/sync", {
-    confirm_deletes: confirmDeletes,
+    confirm_deletes: options.confirmDeletes ?? false,
+    ...(options.conflictResolution
+      ? { conflict_resolution: options.conflictResolution }
+      : {}),
   });
 }

@@ -1504,11 +1504,19 @@ sum(rate(image_cache_requests_total[5m]))
 
 #### POST `/api/tag-settings/sync`
 
-把本地规则**完整镜像**到源站 My Tags（需要后端配置了有效登录 Cookie）：
+**完整同步（三路合并）**：以 `tag_sync_baseline` 表为“上次同步时的源站快照”，对 `本地规则 / 基线 / 源站 My Tags` 做三路合并，**默认拉取源站的变更**，同时把本地变更推送到源站（需要后端配置了有效 Cookie）：
 
-- **新增**（本地有、源站没有）：表单 `usertag_action=add`
-- **更新**（双方都有但 watch/hide/weight/color 有差）：`s.exhentai.org/api.php` `setusertag`
-- **删除**（源站有、本地没有）：仅当 `confirm_deletes: true` 时执行批量删除（`usertag_action=mass`），否则只出现在 `pending_deletes` 里等客户端确认
+- **双方一致**（含同时不存在）→ 不动，基线收敛到一致状态（双方都不存在时基线行删除）
+- **仅本地变更**（相对基线；“不存在”也算变更）→ 推送源站：
+  - 新增：表单 `usertag_action=add`；更新：`s.exhentai.org/api.php` `setusertag`
+  - **本地删除**（基线有、本地无、源站未变）：仅当 `confirm_deletes: true` 或该删除已在冲突中被“保留本地”确认时才执行批量删除（`usertag_action=mass`），否则只出现在 `pending_deletes` 里等客户端确认
+- **仅源站变更** → **拉取**：导入/更新本地规则；源站已删则同步删除本地规则（拉取不写源站，也无需确认）
+- **双方都变更** → **冲突**：该标签不动（本地、源站、基线均保持原样），作为 `conflicts` 返回，由客户端弹窗让用户选择保留哪边：
+  - `conflict_resolution: "remote"`（保留源站）→ 拉取源站值
+  - `conflict_resolution: "local"`（保留本地）→ 推送本地值（含删除，视为已确认，无需 `confirm_deletes`）
+  - 省略 → 只报告冲突，其余非冲突标签仍正常同步
+
+首次运行（基线为空）：源站独有 → 全部导入本地；本地独有 → 推送源站；两边都有且不一致 → 冲突。源站行归一化：`Hidden → dislike`、`Watched → like`、两者皆无 → `weight<0 ? dislike : like`，weight 截断到 ±999 并按 action 修正符号，源站自定义色不参与比较。合并的拉取与基线更新在同一事务内完成；推送成功才把基线收敛到推送值（失败保留源站原值以便下次重试）。
 
 字段映射（对齐源站原生语义）：`like → tagwatch=1, taghide=0, weight≥0`；`dislike → tagwatch=0, taghide=1, weight≤0`；`tagcolor` 恒传空（让源站自己套默认蓝/红，同时会清掉源站上的自定义色）。
 
@@ -1517,23 +1525,41 @@ sum(rate(image_cache_requests_total[5m]))
 **Request Body（可选）:**
 
 ```json
-{ "confirm_deletes": false }
+{ "confirm_deletes": false, "conflict_resolution": "remote" }
 ```
+
+- `confirm_deletes`：确认执行 `pending_deletes` 里的源站删除（默认 `false`）
+- `conflict_resolution`：`"remote"` / `"local"`，一次性解决本次返回的全部冲突（省略则不解决）；其他值 → `400`
 
 **Response (200):**
 
 ```json
 {
-  "added": 2,
+  "added": 1,
   "updated": 1,
   "deleted": 0,
+  "pulled": 3,
   "unchanged": 96,
   "pending_deletes": ["male:males only"],
-  "failed": [{ "tag": "artist:x", "error": "api error: ..." }]
+  "conflicts": [
+    {
+      "tag": "male:gender change",
+      "local": { "tag": "male:gender change", "action": "dislike", "weight": -25 },
+      "remote": { "tag": "male:gender change", "action": "like", "weight": 6 }
+    }
+  ],
+  "failed": [{ "tag": "artist:x", "error": "api error: ..." }],
+  "tags": [
+    { "tag": "female:yuri", "action": "like", "weight": 10 }
+  ]
 }
 ```
 
-**Error Responses:** `502`（拿不到源站 `/mytags` 页面或未配置上游客户端）、`400` 非法 JSON。并发同步在服务端串行化。
+- `pulled`：本次从源站拉取到本地的条数（导入 + 更新 + 删除）
+- `conflicts[].local` / `.remote`：`null` 表示该侧已删除此标签；冲突未解决时对应标签不会被写入任何一侧
+- `tags`：合并后的**完整本地规则列表**（按 `tag` 升序），客户端可直接用它覆盖本地缓存
+
+**Error Responses:** `502`（拿不到源站 `/mytags` 页面或未配置上游客户端）、`400` 非法 JSON 或 `conflict_resolution` 取值非法。并发同步在服务端串行化。
 
 ---
 

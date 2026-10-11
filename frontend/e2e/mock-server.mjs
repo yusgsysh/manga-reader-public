@@ -347,9 +347,14 @@ const server = Bun.serve({
         added: 0,
         updated: 0,
         deleted: 0,
+        pulled: 0,
         unchanged: tagSettings.length,
         pending_deletes: [],
+        conflicts: [],
         failed: [],
+        tags: [...tagSettings].sort((a, b) =>
+          a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0,
+        ),
       });
     }
 

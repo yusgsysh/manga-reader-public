@@ -15,6 +15,7 @@ import (
 	"manga-reader/internal/ent/syncchange"
 	"manga-reader/internal/ent/syncstate"
 	"manga-reader/internal/ent/tagpreference"
+	"manga-reader/internal/ent/tagsyncbaseline"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
@@ -41,6 +42,8 @@ type Client struct {
 	SyncState *SyncStateClient
 	// TagPreference is the client for interacting with the TagPreference builders.
 	TagPreference *TagPreferenceClient
+	// TagSyncBaseline is the client for interacting with the TagSyncBaseline builders.
+	TagSyncBaseline *TagSyncBaselineClient
 }
 
 // NewClient creates a new client configured with the given options.
@@ -59,6 +62,7 @@ func (c *Client) init() {
 	c.SyncChange = NewSyncChangeClient(c.config)
 	c.SyncState = NewSyncStateClient(c.config)
 	c.TagPreference = NewTagPreferenceClient(c.config)
+	c.TagSyncBaseline = NewTagSyncBaselineClient(c.config)
 }
 
 type (
@@ -158,6 +162,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		SyncChange:      NewSyncChangeClient(cfg),
 		SyncState:       NewSyncStateClient(cfg),
 		TagPreference:   NewTagPreferenceClient(cfg),
+		TagSyncBaseline: NewTagSyncBaselineClient(cfg),
 	}, nil
 }
 
@@ -184,6 +189,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		SyncChange:      NewSyncChangeClient(cfg),
 		SyncState:       NewSyncStateClient(cfg),
 		TagPreference:   NewTagPreferenceClient(cfg),
+		TagSyncBaseline: NewTagSyncBaselineClient(cfg),
 	}, nil
 }
 
@@ -214,7 +220,7 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.Bookshelf, c.GalleryCache, c.PrefillJob, c.ReadingProgress, c.SyncChange,
-		c.SyncState, c.TagPreference,
+		c.SyncState, c.TagPreference, c.TagSyncBaseline,
 	} {
 		n.Use(hooks...)
 	}
@@ -225,7 +231,7 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.Bookshelf, c.GalleryCache, c.PrefillJob, c.ReadingProgress, c.SyncChange,
-		c.SyncState, c.TagPreference,
+		c.SyncState, c.TagPreference, c.TagSyncBaseline,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -248,6 +254,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.SyncState.mutate(ctx, m)
 	case *TagPreferenceMutation:
 		return c.TagPreference.mutate(ctx, m)
+	case *TagSyncBaselineMutation:
+		return c.TagSyncBaseline.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
 	}
@@ -1091,14 +1099,147 @@ func (c *TagPreferenceClient) mutate(ctx context.Context, m *TagPreferenceMutati
 	}
 }
 
+// TagSyncBaselineClient is a client for the TagSyncBaseline schema.
+type TagSyncBaselineClient struct {
+	config
+}
+
+// NewTagSyncBaselineClient returns a client for the TagSyncBaseline from the given config.
+func NewTagSyncBaselineClient(c config) *TagSyncBaselineClient {
+	return &TagSyncBaselineClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `tagsyncbaseline.Hooks(f(g(h())))`.
+func (c *TagSyncBaselineClient) Use(hooks ...Hook) {
+	c.hooks.TagSyncBaseline = append(c.hooks.TagSyncBaseline, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `tagsyncbaseline.Intercept(f(g(h())))`.
+func (c *TagSyncBaselineClient) Intercept(interceptors ...Interceptor) {
+	c.inters.TagSyncBaseline = append(c.inters.TagSyncBaseline, interceptors...)
+}
+
+// Create returns a builder for creating a TagSyncBaseline entity.
+func (c *TagSyncBaselineClient) Create() *TagSyncBaselineCreate {
+	mutation := newTagSyncBaselineMutation(c.config, OpCreate)
+	return &TagSyncBaselineCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of TagSyncBaseline entities.
+func (c *TagSyncBaselineClient) CreateBulk(builders ...*TagSyncBaselineCreate) *TagSyncBaselineCreateBulk {
+	return &TagSyncBaselineCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *TagSyncBaselineClient) MapCreateBulk(slice any, setFunc func(*TagSyncBaselineCreate, int)) *TagSyncBaselineCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &TagSyncBaselineCreateBulk{err: fmt.Errorf("calling to TagSyncBaselineClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*TagSyncBaselineCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &TagSyncBaselineCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for TagSyncBaseline.
+func (c *TagSyncBaselineClient) Update() *TagSyncBaselineUpdate {
+	mutation := newTagSyncBaselineMutation(c.config, OpUpdate)
+	return &TagSyncBaselineUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *TagSyncBaselineClient) UpdateOne(_m *TagSyncBaseline) *TagSyncBaselineUpdateOne {
+	mutation := newTagSyncBaselineMutation(c.config, OpUpdateOne, withTagSyncBaseline(_m))
+	return &TagSyncBaselineUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *TagSyncBaselineClient) UpdateOneID(id int) *TagSyncBaselineUpdateOne {
+	mutation := newTagSyncBaselineMutation(c.config, OpUpdateOne, withTagSyncBaselineID(id))
+	return &TagSyncBaselineUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for TagSyncBaseline.
+func (c *TagSyncBaselineClient) Delete() *TagSyncBaselineDelete {
+	mutation := newTagSyncBaselineMutation(c.config, OpDelete)
+	return &TagSyncBaselineDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *TagSyncBaselineClient) DeleteOne(_m *TagSyncBaseline) *TagSyncBaselineDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *TagSyncBaselineClient) DeleteOneID(id int) *TagSyncBaselineDeleteOne {
+	builder := c.Delete().Where(tagsyncbaseline.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &TagSyncBaselineDeleteOne{builder}
+}
+
+// Query returns a query builder for TagSyncBaseline.
+func (c *TagSyncBaselineClient) Query() *TagSyncBaselineQuery {
+	return &TagSyncBaselineQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeTagSyncBaseline},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a TagSyncBaseline entity by its id.
+func (c *TagSyncBaselineClient) Get(ctx context.Context, id int) (*TagSyncBaseline, error) {
+	return c.Query().Where(tagsyncbaseline.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *TagSyncBaselineClient) GetX(ctx context.Context, id int) *TagSyncBaseline {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *TagSyncBaselineClient) Hooks() []Hook {
+	return c.hooks.TagSyncBaseline
+}
+
+// Interceptors returns the client interceptors.
+func (c *TagSyncBaselineClient) Interceptors() []Interceptor {
+	return c.inters.TagSyncBaseline
+}
+
+func (c *TagSyncBaselineClient) mutate(ctx context.Context, m *TagSyncBaselineMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&TagSyncBaselineCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&TagSyncBaselineUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&TagSyncBaselineUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&TagSyncBaselineDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown TagSyncBaseline mutation op: %q", m.Op())
+	}
+}
+
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
 		Bookshelf, GalleryCache, PrefillJob, ReadingProgress, SyncChange, SyncState,
-		TagPreference []ent.Hook
+		TagPreference, TagSyncBaseline []ent.Hook
 	}
 	inters struct {
 		Bookshelf, GalleryCache, PrefillJob, ReadingProgress, SyncChange, SyncState,
-		TagPreference []ent.Interceptor
+		TagPreference, TagSyncBaseline []ent.Interceptor
 	}
 )

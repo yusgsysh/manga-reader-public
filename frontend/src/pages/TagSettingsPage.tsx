@@ -15,7 +15,12 @@ import {
   TAG_ACTION_CHIP_CLASS,
   type TagAction,
 } from "../hooks/useTagPreferences";
-import type { TagSyncResult } from "../api/tagSettings";
+import type {
+  SyncTagSettingsOptions,
+  TagSyncConflict,
+  TagSyncResult,
+  TagSyncSide,
+} from "../api/tagSettings";
 import { useTagTranslation } from "../hooks/useTagTranslation";
 import { PageHeader, Section } from "../components/ui";
 
@@ -65,10 +70,12 @@ function TagPicker({
   placeholder,
   onPick,
   exclude,
+  disabled = false,
 }: {
   placeholder: string;
   onPick: (tag: string) => void;
   exclude: ReadonlySet<string>;
+  disabled?: boolean;
 }) {
   const { searchTags, ready } = useTagTranslation();
   const [input, setInput] = useState("");
@@ -135,12 +142,13 @@ function TagPicker({
         aria-autocomplete="list"
         aria-expanded={suggestions.length > 0}
         value={input}
+        disabled={disabled}
         onChange={(e) => handleInput(e.target.value)}
         onKeyDown={onKeyDown}
         onFocus={() => setDismissed(false)}
         className="w-full"
       />
-      {suggestions.length > 0 && (
+      {suggestions.length > 0 && !disabled && (
         <div
           className="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-xl border border-kumo-hairline bg-kumo-elevated shadow-lg"
           role="listbox"
@@ -273,6 +281,28 @@ function RuleRow({
   );
 }
 
+/* One side of a conflict (本地/源站): solid action chip or 已删除. */
+function ConflictSide({ label, side }: { label: string; side: TagSyncSide }) {
+  return (
+    <div className="flex min-w-0 items-center gap-1.5 rounded bg-kumo-recessed px-2 py-1">
+      <span className="shrink-0 text-[11px] text-kumo-subtle">{label}</span>
+      {side === null ? (
+        <span className="text-[11px] text-kumo-subtle">已删除</span>
+      ) : (
+        <span
+          className={cn(
+            "truncate rounded px-1.5 py-0.5 text-[11px] font-medium",
+            TAG_ACTION_CHIP_CLASS[side.action],
+          )}
+        >
+          {side.action === "like" ? "喜欢" : "不喜欢"}
+          {side.action === "like" && side.weight >= 0 ? ` +${side.weight}` : ` ${side.weight}`}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function TagSettingsPage() {
   useDocumentTitle("标签设置");
   const toast = useKumoToastManager();
@@ -284,9 +314,12 @@ export function TagSettingsPage() {
   const [seeded, setSeeded] = useState(false);
   const [pendingDeletes, setPendingDeletes] = useState<string[] | null>(null);
   const [deleteDismissed, setDeleteDismissed] = useState(false);
+  const [conflicts, setConflicts] = useState<TagSyncConflict[] | null>(null);
 
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const syncQueuedRef = useRef(false);
+  const syncQueuedRef = useRef<SyncTagSettingsOptions | null>(null);
+  const syncStartedRef = useRef(false);
+  const stashedPendingRef = useRef<string[] | null>(null);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -309,9 +342,17 @@ export function TagSettingsPage() {
     );
   }
 
-  const busy = saveMutation.isPending;
+  // Inputs lock while saving or syncing so a pull can't race a local edit.
+  const busy = saveMutation.isPending || syncMutation.isPending;
   const exclude = useMemo(() => new Set(rules.map((r) => r.tag)), [rules]);
   const sortedRules = useMemo(() => sortRuleRows(rules), [rules]);
+
+  const rulesFromTags = (tags: { tag: string; action: TagAction; weight: number }[]) =>
+    tags.map((p) => ({
+      tag: p.tag,
+      action: p.action,
+      weight: p.weight ?? DEFAULT_WEIGHT[p.action],
+    }));
 
   const handleSyncSuccess = (result: TagSyncResult) => {
     if (!mountedRef.current) return;
@@ -322,6 +363,24 @@ export function TagSettingsPage() {
         description: `${result.failed.length} 个标签未能同步到源站（${first.tag}: ${first.error}）`,
         variant: "error",
       });
+    }
+    // Pulled source changes first: adopt them into the editable list
+    // (the hook has already reseeded the shared query cache).
+    if (result.pulled > 0 && result.tags.length > 0) {
+      setRules(rulesFromTags(result.tags));
+      toast.add({
+        title: "已从源站拉取变更",
+        description: `${result.pulled} 个标签已按源站 My Tags 更新到本地`,
+        variant: "info",
+      });
+    }
+    if (result.conflicts.length > 0) {
+      // Show the conflict picker; any pending deletions are re-reported by
+      // the resolution sync, or replayed when the dialog is dismissed.
+      stashedPendingRef.current =
+        result.pending_deletes.length > 0 ? result.pending_deletes : null;
+      setConflicts(result.conflicts);
+      return;
     }
     if (result.pending_deletes.length > 0) {
       if (!deleteDismissed) {
@@ -344,12 +403,18 @@ export function TagSettingsPage() {
     }
   };
 
-  const requestSync = (confirmDeletes: boolean) => {
+  const requestSync = (options: SyncTagSettingsOptions) => {
     if (syncMutation.isPending) {
-      syncQueuedRef.current = true;
+      // Coalesce queued requests, keeping confirmation/resolution flags.
+      const prev = syncQueuedRef.current;
+      syncQueuedRef.current = {
+        confirmDeletes: prev?.confirmDeletes || options.confirmDeletes || false,
+        conflictResolution:
+          options.conflictResolution ?? prev?.conflictResolution,
+      };
       return;
     }
-    syncMutation.mutate(confirmDeletes, {
+    syncMutation.mutate(options, {
       onSuccess: handleSyncSuccess,
       onError: (error) => {
         if (!mountedRef.current) return;
@@ -361,20 +426,28 @@ export function TagSettingsPage() {
       },
       onSettled: () => {
         if (!mountedRef.current) return;
-        if (syncQueuedRef.current) {
-          syncQueuedRef.current = false;
-          requestSync(false);
+        const queued = syncQueuedRef.current;
+        if (queued) {
+          syncQueuedRef.current = null;
+          requestSync(queued);
         }
       },
     });
   };
+
+  // Full sync on page open: pull source changes, push local ones, report conflicts.
+  useEffect(() => {
+    if (!seeded || isError || syncStartedRef.current) return;
+    syncStartedRef.current = true;
+    requestSync({});
+  });
 
   // Auto-sync after every successful save (debounced to coalesce rapid edits).
   const scheduleSync = () => {
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     syncTimerRef.current = setTimeout(() => {
       syncTimerRef.current = null;
-      requestSync(false);
+      requestSync({});
     }, SYNC_DEBOUNCE_MS);
   };
 
@@ -438,7 +511,22 @@ export function TagSettingsPage() {
   const confirmPendingDeletes = () => {
     setPendingDeletes(null);
     setDeleteDismissed(true);
-    requestSync(true);
+    requestSync({ confirmDeletes: true });
+  };
+
+  // Dismissing the conflict dialog (取消): replay any deferred deletions.
+  const closeConflictDialog = () => {
+    setConflicts(null);
+    const stashed = stashedPendingRef.current;
+    stashedPendingRef.current = null;
+    if (stashed) setPendingDeletes(stashed);
+  };
+
+  // One choice resolves every listed conflict: re-sync with the resolution.
+  const resolveConflicts = (resolution: "remote" | "local") => {
+    stashedPendingRef.current = null;
+    setConflicts(null);
+    requestSync({ conflictResolution: resolution });
   };
 
   return (
@@ -458,7 +546,8 @@ export function TagSettingsPage() {
           不喜欢
         </span>
         →中性排序。本应用内只着色排序、不过滤；保存后会自动同步到源站
-        （不喜欢在源站为 Hidden + 负权重，会按源站规则过滤）。
+        （不喜欢在源站为 Hidden + 负权重，会按源站规则过滤），打开本页也会
+        先拉取源站的变更——两边都改过的标签会弹窗询问保留哪一边。
       </p>
 
       {isLoading ? (
@@ -490,6 +579,7 @@ export function TagSettingsPage() {
               placeholder="搜索并添加标签（默认：喜欢 +10）"
               onPick={handleAdd}
               exclude={exclude}
+              disabled={busy}
             />
             {sortedRules.length === 0 ? (
               <p className="text-sm text-kumo-subtle">还没有标签规则</p>
@@ -510,6 +600,58 @@ export function TagSettingsPage() {
           </div>
         </Section>
       )}
+
+      <Dialog.Root
+        open={conflicts !== null}
+        onOpenChange={(open) => {
+          if (!open) closeConflictDialog();
+        }}
+      >
+        <Dialog className="w-[min(92vw,32rem)] p-6">
+          <Dialog.Title className="text-base font-semibold">
+            同步冲突：保留哪一边？
+          </Dialog.Title>
+          <Dialog.Description className="mt-1 text-sm text-kumo-subtle">
+            {conflicts?.length ?? 0} 个标签在本地和源站都被改过，本次同步先
+            暂不改动它们。统一选择要保留的一边：
+          </Dialog.Description>
+          <ul className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+            {conflicts?.map((conflict) => (
+              <li
+                key={conflict.tag}
+                className="rounded-lg border border-kumo-hairline px-2.5 py-2"
+              >
+                <div className="truncate font-mono text-[11px]">
+                  {conflict.tag}
+                </div>
+                <div className="mt-1.5 grid grid-cols-2 gap-2">
+                  <ConflictSide label="本地" side={conflict.local} />
+                  <ConflictSide label="源站" side={conflict.remote} />
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4 flex justify-end gap-2">
+            <Dialog.Close render={<Button variant="secondary">取消</Button>} />
+            <Button
+              variant="secondary"
+              onClick={() => resolveConflicts("local")}
+              disabled={syncMutation.isPending}
+            >
+              保留本地
+            </Button>
+            <Button
+              onClick={() => resolveConflicts("remote")}
+              disabled={syncMutation.isPending}
+            >
+              {syncMutation.isPending && (
+                <CircleNotch className="mr-1 size-4 animate-spin" />
+              )}
+              保留源站
+            </Button>
+          </div>
+        </Dialog>
+      </Dialog.Root>
 
       <Dialog.Root
         open={pendingDeletes !== null}

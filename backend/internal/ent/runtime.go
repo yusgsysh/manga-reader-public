@@ -11,6 +11,7 @@ import (
 	"manga-reader/internal/ent/syncchange"
 	"manga-reader/internal/ent/syncstate"
 	"manga-reader/internal/ent/tagpreference"
+	"manga-reader/internal/ent/tagsyncbaseline"
 	"time"
 
 	"github.com/google/uuid"
@@ -224,4 +225,28 @@ func init() {
 	tagpreference.DefaultUpdatedAt = tagpreferenceDescUpdatedAt.Default.(func() time.Time)
 	// tagpreference.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	tagpreference.UpdateDefaultUpdatedAt = tagpreferenceDescUpdatedAt.UpdateDefault.(func() time.Time)
+	tagsyncbaselineFields := schema.TagSyncBaseline{}.Fields()
+	_ = tagsyncbaselineFields
+	// tagsyncbaselineDescTag is the schema descriptor for tag field.
+	tagsyncbaselineDescTag := tagsyncbaselineFields[0].Descriptor()
+	// tagsyncbaseline.TagValidator is a validator for the "tag" field. It is called by the builders before save.
+	tagsyncbaseline.TagValidator = tagsyncbaselineDescTag.Validators[0].(func(string) error)
+	// tagsyncbaselineDescAction is the schema descriptor for action field.
+	tagsyncbaselineDescAction := tagsyncbaselineFields[1].Descriptor()
+	// tagsyncbaseline.ActionValidator is a validator for the "action" field. It is called by the builders before save.
+	tagsyncbaseline.ActionValidator = tagsyncbaselineDescAction.Validators[0].(func(string) error)
+	// tagsyncbaselineDescWeight is the schema descriptor for weight field.
+	tagsyncbaselineDescWeight := tagsyncbaselineFields[2].Descriptor()
+	// tagsyncbaseline.DefaultWeight holds the default value on creation for the weight field.
+	tagsyncbaseline.DefaultWeight = tagsyncbaselineDescWeight.Default.(int)
+	// tagsyncbaselineDescCreatedAt is the schema descriptor for created_at field.
+	tagsyncbaselineDescCreatedAt := tagsyncbaselineFields[3].Descriptor()
+	// tagsyncbaseline.DefaultCreatedAt holds the default value on creation for the created_at field.
+	tagsyncbaseline.DefaultCreatedAt = tagsyncbaselineDescCreatedAt.Default.(func() time.Time)
+	// tagsyncbaselineDescUpdatedAt is the schema descriptor for updated_at field.
+	tagsyncbaselineDescUpdatedAt := tagsyncbaselineFields[4].Descriptor()
+	// tagsyncbaseline.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	tagsyncbaseline.DefaultUpdatedAt = tagsyncbaselineDescUpdatedAt.Default.(func() time.Time)
+	// tagsyncbaseline.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	tagsyncbaseline.UpdateDefaultUpdatedAt = tagsyncbaselineDescUpdatedAt.UpdateDefault.(func() time.Time)
 }

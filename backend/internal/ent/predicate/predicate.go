@@ -26,3 +26,6 @@ type SyncState func(*sql.Selector)
 
 // TagPreference is the predicate function for tagpreference builders.
 type TagPreference func(*sql.Selector)
+
+// TagSyncBaseline is the predicate function for tagsyncbaseline builders.
+type TagSyncBaseline func(*sql.Selector)

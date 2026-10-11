@@ -14,6 +14,7 @@ import (
 	"manga-reader/internal/ent/syncchange"
 	"manga-reader/internal/ent/syncstate"
 	"manga-reader/internal/ent/tagpreference"
+	"manga-reader/internal/ent/tagsyncbaseline"
 	"manga-reader/internal/model"
 	"sync"
 	"time"
@@ -39,6 +40,7 @@ const (
 	TypeSyncChange      = "SyncChange"
 	TypeSyncState       = "SyncState"
 	TypeTagPreference   = "TagPreference"
+	TypeTagSyncBaseline = "TagSyncBaseline"
 )
 
 // BookshelfMutation represents an operation that mutates the Bookshelf nodes in the graph.
@@ -5131,4 +5133,582 @@ func (m *TagPreferenceMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *TagPreferenceMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown TagPreference edge %s", name)
+}
+
+// TagSyncBaselineMutation represents an operation that mutates the TagSyncBaseline nodes in the graph.
+type TagSyncBaselineMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	tag           *string
+	action        *string
+	weight        *int
+	addweight     *int
+	created_at    *time.Time
+	updated_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*TagSyncBaseline, error)
+	predicates    []predicate.TagSyncBaseline
+}
+
+var _ ent.Mutation = (*TagSyncBaselineMutation)(nil)
+
+// tagsyncbaselineOption allows management of the mutation configuration using functional options.
+type tagsyncbaselineOption func(*TagSyncBaselineMutation)
+
+// newTagSyncBaselineMutation creates new mutation for the TagSyncBaseline entity.
+func newTagSyncBaselineMutation(c config, op Op, opts ...tagsyncbaselineOption) *TagSyncBaselineMutation {
+	m := &TagSyncBaselineMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeTagSyncBaseline,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withTagSyncBaselineID sets the ID field of the mutation.
+func withTagSyncBaselineID(id int) tagsyncbaselineOption {
+	return func(m *TagSyncBaselineMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *TagSyncBaseline
+		)
+		m.oldValue = func(ctx context.Context) (*TagSyncBaseline, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().TagSyncBaseline.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withTagSyncBaseline sets the old TagSyncBaseline of the mutation.
+func withTagSyncBaseline(node *TagSyncBaseline) tagsyncbaselineOption {
+	return func(m *TagSyncBaselineMutation) {
+		m.oldValue = func(context.Context) (*TagSyncBaseline, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m TagSyncBaselineMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m TagSyncBaselineMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *TagSyncBaselineMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *TagSyncBaselineMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().TagSyncBaseline.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetTag sets the "tag" field.
+func (m *TagSyncBaselineMutation) SetTag(s string) {
+	m.tag = &s
+}
+
+// Tag returns the value of the "tag" field in the mutation.
+func (m *TagSyncBaselineMutation) Tag() (r string, exists bool) {
+	v := m.tag
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTag returns the old "tag" field's value of the TagSyncBaseline entity.
+// If the TagSyncBaseline object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TagSyncBaselineMutation) OldTag(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTag is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTag requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTag: %w", err)
+	}
+	return oldValue.Tag, nil
+}
+
+// ResetTag resets all changes to the "tag" field.
+func (m *TagSyncBaselineMutation) ResetTag() {
+	m.tag = nil
+}
+
+// SetAction sets the "action" field.
+func (m *TagSyncBaselineMutation) SetAction(s string) {
+	m.action = &s
+}
+
+// Action returns the value of the "action" field in the mutation.
+func (m *TagSyncBaselineMutation) Action() (r string, exists bool) {
+	v := m.action
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAction returns the old "action" field's value of the TagSyncBaseline entity.
+// If the TagSyncBaseline object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TagSyncBaselineMutation) OldAction(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAction is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAction requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAction: %w", err)
+	}
+	return oldValue.Action, nil
+}
+
+// ResetAction resets all changes to the "action" field.
+func (m *TagSyncBaselineMutation) ResetAction() {
+	m.action = nil
+}
+
+// SetWeight sets the "weight" field.
+func (m *TagSyncBaselineMutation) SetWeight(i int) {
+	m.weight = &i
+	m.addweight = nil
+}
+
+// Weight returns the value of the "weight" field in the mutation.
+func (m *TagSyncBaselineMutation) Weight() (r int, exists bool) {
+	v := m.weight
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWeight returns the old "weight" field's value of the TagSyncBaseline entity.
+// If the TagSyncBaseline object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TagSyncBaselineMutation) OldWeight(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWeight is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWeight requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWeight: %w", err)
+	}
+	return oldValue.Weight, nil
+}
+
+// AddWeight adds i to the "weight" field.
+func (m *TagSyncBaselineMutation) AddWeight(i int) {
+	if m.addweight != nil {
+		*m.addweight += i
+	} else {
+		m.addweight = &i
+	}
+}
+
+// AddedWeight returns the value that was added to the "weight" field in this mutation.
+func (m *TagSyncBaselineMutation) AddedWeight() (r int, exists bool) {
+	v := m.addweight
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetWeight resets all changes to the "weight" field.
+func (m *TagSyncBaselineMutation) ResetWeight() {
+	m.weight = nil
+	m.addweight = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *TagSyncBaselineMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *TagSyncBaselineMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the TagSyncBaseline entity.
+// If the TagSyncBaseline object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TagSyncBaselineMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *TagSyncBaselineMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *TagSyncBaselineMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *TagSyncBaselineMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the TagSyncBaseline entity.
+// If the TagSyncBaseline object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TagSyncBaselineMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *TagSyncBaselineMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the TagSyncBaselineMutation builder.
+func (m *TagSyncBaselineMutation) Where(ps ...predicate.TagSyncBaseline) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the TagSyncBaselineMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *TagSyncBaselineMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.TagSyncBaseline, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *TagSyncBaselineMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *TagSyncBaselineMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (TagSyncBaseline).
+func (m *TagSyncBaselineMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *TagSyncBaselineMutation) Fields() []string {
+	fields := make([]string, 0, 5)
+	if m.tag != nil {
+		fields = append(fields, tagsyncbaseline.FieldTag)
+	}
+	if m.action != nil {
+		fields = append(fields, tagsyncbaseline.FieldAction)
+	}
+	if m.weight != nil {
+		fields = append(fields, tagsyncbaseline.FieldWeight)
+	}
+	if m.created_at != nil {
+		fields = append(fields, tagsyncbaseline.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, tagsyncbaseline.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *TagSyncBaselineMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case tagsyncbaseline.FieldTag:
+		return m.Tag()
+	case tagsyncbaseline.FieldAction:
+		return m.Action()
+	case tagsyncbaseline.FieldWeight:
+		return m.Weight()
+	case tagsyncbaseline.FieldCreatedAt:
+		return m.CreatedAt()
+	case tagsyncbaseline.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *TagSyncBaselineMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case tagsyncbaseline.FieldTag:
+		return m.OldTag(ctx)
+	case tagsyncbaseline.FieldAction:
+		return m.OldAction(ctx)
+	case tagsyncbaseline.FieldWeight:
+		return m.OldWeight(ctx)
+	case tagsyncbaseline.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case tagsyncbaseline.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown TagSyncBaseline field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *TagSyncBaselineMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case tagsyncbaseline.FieldTag:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTag(v)
+		return nil
+	case tagsyncbaseline.FieldAction:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAction(v)
+		return nil
+	case tagsyncbaseline.FieldWeight:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWeight(v)
+		return nil
+	case tagsyncbaseline.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case tagsyncbaseline.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown TagSyncBaseline field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *TagSyncBaselineMutation) AddedFields() []string {
+	var fields []string
+	if m.addweight != nil {
+		fields = append(fields, tagsyncbaseline.FieldWeight)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *TagSyncBaselineMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case tagsyncbaseline.FieldWeight:
+		return m.AddedWeight()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *TagSyncBaselineMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case tagsyncbaseline.FieldWeight:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWeight(v)
+		return nil
+	}
+	return fmt.Errorf("unknown TagSyncBaseline numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *TagSyncBaselineMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *TagSyncBaselineMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *TagSyncBaselineMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown TagSyncBaseline nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *TagSyncBaselineMutation) ResetField(name string) error {
+	switch name {
+	case tagsyncbaseline.FieldTag:
+		m.ResetTag()
+		return nil
+	case tagsyncbaseline.FieldAction:
+		m.ResetAction()
+		return nil
+	case tagsyncbaseline.FieldWeight:
+		m.ResetWeight()
+		return nil
+	case tagsyncbaseline.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case tagsyncbaseline.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown TagSyncBaseline field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *TagSyncBaselineMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *TagSyncBaselineMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *TagSyncBaselineMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *TagSyncBaselineMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *TagSyncBaselineMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *TagSyncBaselineMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *TagSyncBaselineMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown TagSyncBaseline unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *TagSyncBaselineMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown TagSyncBaseline edge %s", name)
 }

@@ -156,6 +156,21 @@ var (
 		Columns:    TagPreferenceColumns,
 		PrimaryKey: []*schema.Column{TagPreferenceColumns[0]},
 	}
+	// TagSyncBaselineColumns holds the columns for the "tag_sync_baseline" table.
+	TagSyncBaselineColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "tag", Type: field.TypeString, Unique: true},
+		{Name: "action", Type: field.TypeString},
+		{Name: "weight", Type: field.TypeInt, Default: 10},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// TagSyncBaselineTable holds the schema information for the "tag_sync_baseline" table.
+	TagSyncBaselineTable = &schema.Table{
+		Name:       "tag_sync_baseline",
+		Columns:    TagSyncBaselineColumns,
+		PrimaryKey: []*schema.Column{TagSyncBaselineColumns[0]},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		BookshelfTable,
@@ -165,6 +180,7 @@ var (
 		SyncChangeTable,
 		SyncStateTable,
 		TagPreferenceTable,
+		TagSyncBaselineTable,
 	}
 )
 
@@ -189,5 +205,8 @@ func init() {
 	}
 	TagPreferenceTable.Annotation = &entsql.Annotation{
 		Table: "tag_preference",
+	}
+	TagSyncBaselineTable.Annotation = &entsql.Annotation{
+		Table: "tag_sync_baseline",
 	}
 }

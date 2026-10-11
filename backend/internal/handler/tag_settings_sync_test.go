@@ -10,6 +10,8 @@ import (
 
 	json "encoding/json/v2"
 
+	"github.com/gin-gonic/gin"
+
 	"manga-reader/internal/database"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/exhentai"
@@ -159,63 +161,322 @@ func newSyncMockServer(t *testing.T) *syncMockServer {
 	return m
 }
 
+// mutations records how many source mutations reached the mock upstream.
+func (m *syncMockServer) mutations() int {
+	return len(m.setUserTagCalls) + len(m.addForms) + len(m.massDeleteForms)
+}
+
 func seedTagRule(t *testing.T, client *ent.Client, tag, action string, weight int) {
 	t.Helper()
 	if _, err := client.TagPreference.Create().SetTag(tag).SetAction(action).SetWeight(weight).Save(t.Context()); err != nil {
-		t.Fatalf("seed %s: %v", tag, err)
+		t.Fatalf("seed rule %s: %v", tag, err)
 	}
 }
 
-// ==================== planTagSync (pure diff) ====================
+func seedBaseline(t *testing.T, client *ent.Client, tag, action string, weight int) {
+	t.Helper()
+	if _, err := client.TagSyncBaseline.Create().SetTag(tag).SetAction(action).SetWeight(weight).Save(t.Context()); err != nil {
+		t.Fatalf("seed baseline %s: %v", tag, err)
+	}
+}
 
-func TestPlanTagSync_AddUpdateDeleteUnchanged(t *testing.T) {
+// readRules loads the stored tag preference rows keyed by tag.
+func readRules(t *testing.T, client *ent.Client) map[string]model.TagPreference {
+	t.Helper()
+	rows, err := client.TagPreference.Query().All(t.Context())
+	if err != nil {
+		t.Fatalf("query tag preferences: %v", err)
+	}
+	out := make(map[string]model.TagPreference, len(rows))
+	for _, row := range rows {
+		out[row.Tag] = model.TagPreference{Tag: row.Tag, Action: row.Action, Weight: row.Weight}
+	}
+	return out
+}
+
+// readBaseline loads the sync baseline rows keyed by tag.
+func readBaseline(t *testing.T, client *ent.Client) map[string]model.TagPreference {
+	t.Helper()
+	rows, err := client.TagSyncBaseline.Query().All(t.Context())
+	if err != nil {
+		t.Fatalf("query tag sync baseline: %v", err)
+	}
+	out := make(map[string]model.TagPreference, len(rows))
+	for _, row := range rows {
+		out[row.Tag] = model.TagPreference{Tag: row.Tag, Action: row.Action, Weight: row.Weight}
+	}
+	return out
+}
+
+// setupSyncServer wires the sync handler against the mock upstream.
+func setupSyncServer(t *testing.T, upstream *syncMockServer, db *ent.Client) *gin.Engine {
+	t.Helper()
+	r := setupTestRouter()
+	server := &Server{Client: newMockClient(upstream.URL), DB: &database.DB{Client: db}}
+	r.POST("/api/tag-settings/sync", server.handleTagSettingsSync)
+	return r
+}
+
+// doSync POSTs a sync body and decodes a 200 response.
+func doSync(t *testing.T, r *gin.Engine, body string) (int, model.TagSyncResult) {
+	t.Helper()
+	req := httptest.NewRequest("POST", "/api/tag-settings/sync", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	var result model.TagSyncResult
+	if w.Code == http.StatusOK {
+		if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+			t.Fatalf("decode sync result: %v (body %s)", err, w.Body.String())
+		}
+	}
+	return w.Code, result
+}
+
+// ==================== mergeTagState (pure three-way merge) ====================
+
+func TestMergeTagState_FirstRunImportsSourceAndPushesLocalOnly(t *testing.T) {
 	local := []model.TagPreference{
 		{Tag: "language:chinese", Action: model.TagActionLike, Weight: 90},     // matches remote
-		{Tag: "male:gender change", Action: model.TagActionLike, Weight: 20},   // weight differs (+ colour to clear)
-		{Tag: "artist:new person", Action: model.TagActionDislike, Weight: -5}, // local-only add
+		{Tag: "artist:new person", Action: model.TagActionDislike, Weight: -5}, // local-only → push
 	}
 	remote := []exhentai.UserTag{
 		{TagID: 3437, Tag: "language:chinese", Watch: true, Weight: 90},
-		{TagID: 5354, Tag: "male:gender change", Watch: true, Weight: 6, Color: "#AABBCC"},
-		{TagID: 304301, Tag: "male:males only", Hide: true, Weight: -10}, // remote-only delete candidate
+		{TagID: 5354, Tag: "male:gender change", Watch: true, Weight: 6, Color: "#AABBCC"}, // remote-only → pull
+		{TagID: 304301, Tag: "male:males only", Hide: true, Weight: -10},                   // remote-only → pull
 	}
 
-	plan := planTagSync(local, remote)
+	plan := mergeTagState(local, nil, remote, "")
 
 	if len(plan.Adds) != 1 || plan.Adds[0].Tag != "artist:new person" {
 		t.Errorf("Adds = %+v, want artist:new person", plan.Adds)
 	}
-	if len(plan.Updates) != 1 || plan.Updates[0].Rule.Tag != "male:gender change" {
-		t.Errorf("Updates = %+v, want male:gender change", plan.Updates)
+	if len(plan.Pulls) != 2 {
+		t.Fatalf("Pulls = %+v, want 2 imports", plan.Pulls)
 	}
-	if plan.Updates[0].Remote.TagID != 5354 {
-		t.Errorf("update remote tagid = %d, want 5354", plan.Updates[0].Remote.TagID)
+	if plan.Pulls[0].Key != "male:gender change" || plan.Pulls[0].Remote == nil ||
+		plan.Pulls[0].Remote.Action != model.TagActionLike || plan.Pulls[0].Remote.Weight != 6 {
+		t.Errorf("pull[0] = %+v, want import male:gender change like 6", plan.Pulls[0])
 	}
-	if len(plan.Deletes) != 1 || plan.Deletes[0].Tag != "male:males only" {
-		t.Errorf("Deletes = %+v, want male:males only", plan.Deletes)
+	if plan.Pulls[1].Key != "male:males only" || plan.Pulls[1].Remote == nil ||
+		plan.Pulls[1].Remote.Action != model.TagActionDislike || plan.Pulls[1].Remote.Weight != -10 {
+		t.Errorf("pull[1] = %+v, want import male:males only dislike -10", plan.Pulls[1])
 	}
 	if plan.Unchanged != 1 {
 		t.Errorf("Unchanged = %d, want 1", plan.Unchanged)
 	}
-}
-
-func TestPlanTagSync_WatchHideFlipCountsAsUpdate(t *testing.T) {
-	local := []model.TagPreference{{Tag: "female:yuri", Action: model.TagActionDislike, Weight: -10}}
-	remote := []exhentai.UserTag{{TagID: 7, Tag: "female:yuri", Watch: true, Weight: 10}}
-
-	plan := planTagSync(local, remote)
-	if len(plan.Updates) != 1 || len(plan.Adds) != 0 || len(plan.Deletes) != 0 || plan.Unchanged != 0 {
-		t.Errorf("plan = %+v, want exactly one update", plan)
+	if len(plan.Conflicts) != 0 || len(plan.Updates) != 0 || len(plan.Deletes) != 0 {
+		t.Errorf("conflicts/updates/deletes = %d/%d/%d, want 0", len(plan.Conflicts), len(plan.Updates), len(plan.Deletes))
 	}
 }
 
-func TestPlanTagSync_CaseInsensitiveMatch(t *testing.T) {
+func TestMergeTagState_OnlyLocalChangedPushesUpdate(t *testing.T) {
+	local := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionDislike, Weight: -25}}
+	baseline := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionLike, Weight: 6}}
+	remote := []exhentai.UserTag{{TagID: 5354, Tag: "male:gender change", Watch: true, Weight: 6, Color: "#AABBCC"}}
+
+	plan := mergeTagState(local, baseline, remote, "")
+
+	if len(plan.Updates) != 1 || len(plan.Adds) != 0 || len(plan.Deletes) != 0 ||
+		len(plan.Pulls) != 0 || len(plan.Conflicts) != 0 || plan.Unchanged != 0 {
+		t.Fatalf("plan = %+v, want exactly one push update", plan)
+	}
+	if plan.Updates[0].Remote.TagID != 5354 {
+		t.Errorf("update tagid = %d, want 5354", plan.Updates[0].Remote.TagID)
+	}
+	// Failed-push default: baseline stays at the pre-write source state.
+	if got := plan.BaselineAfter["male:gender change"]; got == nil || got.Weight != 6 {
+		t.Errorf("baseline default = %+v, want source weight 6", got)
+	}
+}
+
+func TestMergeTagState_OnlyRemoteChangedPullsUpdate(t *testing.T) {
+	local := []model.TagPreference{{Tag: "language:chinese", Action: model.TagActionLike, Weight: 10}}
+	baseline := []model.TagPreference{{Tag: "language:chinese", Action: model.TagActionLike, Weight: 10}}
+	remote := []exhentai.UserTag{{TagID: 3437, Tag: "language:chinese", Watch: true, Weight: 90}}
+
+	plan := mergeTagState(local, baseline, remote, "")
+
+	if len(plan.Pulls) != 1 || plan.Pulls[0].Remote == nil ||
+		plan.Pulls[0].Remote.Weight != 90 || plan.Pulls[0].Existing == nil {
+		t.Fatalf("Pulls = %+v, want one update pull to weight 90", plan.Pulls)
+	}
+	if len(plan.Updates) != 0 || len(plan.Conflicts) != 0 {
+		t.Errorf("updates/conflicts = %d/%d, want 0", len(plan.Updates), len(plan.Conflicts))
+	}
+}
+
+func TestMergeTagState_BothChangedIsConflict(t *testing.T) {
+	local := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionDislike, Weight: -25}}
+	baseline := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionLike, Weight: 90}}
+	remote := []exhentai.UserTag{{TagID: 5354, Tag: "male:gender change", Watch: true, Weight: 6}}
+
+	plan := mergeTagState(local, baseline, remote, "")
+
+	if len(plan.Conflicts) != 1 {
+		t.Fatalf("Conflicts = %+v, want 1", plan.Conflicts)
+	}
+	c := plan.Conflicts[0]
+	if c.Tag != "male:gender change" {
+		t.Errorf("conflict tag = %q", c.Tag)
+	}
+	if c.Local == nil || c.Local.Action != model.TagActionDislike || c.Local.Weight != -25 {
+		t.Errorf("conflict local = %+v, want dislike -25", c.Local)
+	}
+	if c.Remote == nil || c.Remote.Action != model.TagActionLike || c.Remote.Weight != 6 {
+		t.Errorf("conflict remote = %+v, want like 6", c.Remote)
+	}
+	if len(plan.Updates) != 0 || len(plan.Pulls) != 0 || len(plan.Adds) != 0 || len(plan.Deletes) != 0 {
+		t.Errorf("unresolved conflict must not schedule ops: %+v", plan)
+	}
+	if _, touched := plan.BaselineAfter["male:gender change"]; touched {
+		t.Error("unresolved conflict must leave the baseline untouched")
+	}
+}
+
+func TestMergeTagState_ResolutionRemotePulls(t *testing.T) {
+	local := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionDislike, Weight: -25}}
+	baseline := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionLike, Weight: 90}}
+	remote := []exhentai.UserTag{{TagID: 5354, Tag: "male:gender change", Watch: true, Weight: 6}}
+
+	plan := mergeTagState(local, baseline, remote, "remote")
+
+	if len(plan.Conflicts) != 0 {
+		t.Errorf("Conflicts = %+v, want none after resolution", plan.Conflicts)
+	}
+	if len(plan.Pulls) != 1 || plan.Pulls[0].Remote == nil || plan.Pulls[0].Remote.Weight != 6 {
+		t.Fatalf("Pulls = %+v, want the source value", plan.Pulls)
+	}
+	if len(plan.Updates) != 0 {
+		t.Errorf("Updates = %+v, want none (source wins)", plan.Updates)
+	}
+}
+
+func TestMergeTagState_ResolutionLocalPushes(t *testing.T) {
+	local := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionDislike, Weight: -25}}
+	baseline := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionLike, Weight: 90}}
+	remote := []exhentai.UserTag{{TagID: 5354, Tag: "male:gender change", Watch: true, Weight: 6}}
+
+	plan := mergeTagState(local, baseline, remote, "local")
+
+	if len(plan.Conflicts) != 0 {
+		t.Errorf("Conflicts = %+v, want none after resolution", plan.Conflicts)
+	}
+	if len(plan.Updates) != 1 || plan.Updates[0].Rule.Weight != -25 {
+		t.Fatalf("Updates = %+v, want the local value", plan.Updates)
+	}
+	if len(plan.Pulls) != 0 {
+		t.Errorf("Pulls = %+v, want none (local wins)", plan.Pulls)
+	}
+}
+
+func TestMergeTagState_LocalDeleteStaysPending(t *testing.T) {
+	// Local rule deleted, source unchanged → source deletion candidate.
+	baseline := []model.TagPreference{{Tag: "male:males only", Action: model.TagActionDislike, Weight: -10}}
+	remote := []exhentai.UserTag{{TagID: 304301, Tag: "male:males only", Hide: true, Weight: -10}}
+
+	plan := mergeTagState(nil, baseline, remote, "")
+
+	if len(plan.Deletes) != 1 {
+		t.Fatalf("Deletes = %+v, want 1", plan.Deletes)
+	}
+	if plan.Deletes[0].Consented {
+		t.Error("plain local deletion must not be pre-consented")
+	}
+	if got := plan.BaselineAfter["male:males only"]; got == nil || got.Weight != -10 {
+		t.Errorf("baseline default = %+v, want source row retained", got)
+	}
+}
+
+func TestMergeTagState_SourceDeletePullsLocalRule(t *testing.T) {
+	local := []model.TagPreference{{Tag: "female:yuri", Action: model.TagActionLike, Weight: 10}}
+	baseline := []model.TagPreference{{Tag: "female:yuri", Action: model.TagActionLike, Weight: 10}}
+
+	plan := mergeTagState(local, baseline, nil, "")
+
+	if len(plan.Pulls) != 1 || plan.Pulls[0].Remote != nil || plan.Pulls[0].Existing == nil {
+		t.Fatalf("Pulls = %+v, want one local removal", plan.Pulls)
+	}
+	if plan.Pulls[0].Existing.Tag != "female:yuri" {
+		t.Errorf("removal targets %q", plan.Pulls[0].Existing.Tag)
+	}
+	if got, ok := plan.BaselineAfter["female:yuri"]; !ok || got != nil {
+		t.Errorf("baseline outcome = %v/%v, want key present with nil (row dropped)", got, ok)
+	}
+	if len(plan.Deletes) != 0 {
+		t.Errorf("Deletes = %+v, want none (source-side deletion is a pull)", plan.Deletes)
+	}
+}
+
+func TestMergeTagState_BothDeletedRetiresBaseline(t *testing.T) {
+	baseline := []model.TagPreference{{Tag: "female:yuri", Action: model.TagActionLike, Weight: 10}}
+
+	plan := mergeTagState(nil, baseline, nil, "")
+
+	if len(plan.Pulls) != 0 || len(plan.Deletes) != 0 || len(plan.Conflicts) != 0 || plan.Unchanged != 0 {
+		t.Errorf("plan = %+v, want a pure baseline cleanup", plan)
+	}
+	if got, ok := plan.BaselineAfter["female:yuri"]; !ok || got != nil {
+		t.Errorf("baseline outcome = %v/%v, want key present with nil", got, ok)
+	}
+}
+
+func TestMergeTagState_ConflictResolutionLocalConsentsDelete(t *testing.T) {
+	// Local deleted the tag while the source changed it: keeping local means
+	// deleting the changed source row, which the dialog already consented to.
+	baseline := []model.TagPreference{{Tag: "male:males only", Action: model.TagActionLike, Weight: 5}}
+	remote := []exhentai.UserTag{{TagID: 304301, Tag: "male:males only", Hide: true, Weight: -10}}
+
+	plan := mergeTagState(nil, baseline, remote, "")
+	if len(plan.Conflicts) != 1 || plan.Conflicts[0].Local != nil {
+		t.Fatalf("Conflicts = %+v, want one with nil local side", plan.Conflicts)
+	}
+
+	plan = mergeTagState(nil, baseline, remote, "local")
+	if len(plan.Deletes) != 1 || !plan.Deletes[0].Consented {
+		t.Fatalf("Deletes = %+v, want one consented delete", plan.Deletes)
+	}
+	if len(plan.Conflicts) != 0 {
+		t.Errorf("Conflicts = %+v, want none", plan.Conflicts)
+	}
+}
+
+func TestMergeTagState_CaseInsensitiveMatch(t *testing.T) {
 	local := []model.TagPreference{{Tag: "Language:Chinese", Action: model.TagActionLike, Weight: 90}}
 	remote := []exhentai.UserTag{{TagID: 1, Tag: "language:chinese", Watch: true, Weight: 90}}
 
-	plan := planTagSync(local, remote)
-	if plan.Unchanged != 1 || len(plan.Adds) != 0 || len(plan.Updates) != 0 || len(plan.Deletes) != 0 {
+	plan := mergeTagState(local, nil, remote, "")
+	if plan.Unchanged != 1 || len(plan.Adds) != 0 || len(plan.Updates) != 0 || len(plan.Pulls) != 0 {
 		t.Errorf("plan = %+v, want unchanged (case-insensitive)", plan)
+	}
+}
+
+// ==================== normalizeRemoteTag ====================
+
+func TestNormalizeRemoteTag(t *testing.T) {
+	cases := []struct {
+		name   string
+		row    exhentai.UserTag
+		action string
+		weight int
+	}{
+		{"watched", exhentai.UserTag{Tag: "a:b", Watch: true, Weight: 90}, model.TagActionLike, 90},
+		{"hidden", exhentai.UserTag{Tag: "a:b", Hide: true, Weight: -10}, model.TagActionDislike, -10},
+		{"hidden positive weight flips sign", exhentai.UserTag{Tag: "a:b", Hide: true, Weight: 500}, model.TagActionDislike, -500},
+		{"watched negative weight flips sign", exhentai.UserTag{Tag: "a:b", Watch: true, Weight: -3}, model.TagActionLike, 3},
+		{"neutral negative weight is dislike", exhentai.UserTag{Tag: "a:b", Weight: -10}, model.TagActionDislike, -10},
+		{"neutral non-negative weight is like", exhentai.UserTag{Tag: "a:b", Weight: 0}, model.TagActionLike, 0},
+		{"weight clamped to bounds", exhentai.UserTag{Tag: "a:b", Watch: true, Weight: 1500}, model.TagActionLike, 999},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := normalizeRemoteTag(tc.row)
+			if got.Action != tc.action || got.Weight != tc.weight {
+				t.Errorf("normalize = %s %+d, want %s %+d", got.Action, got.Weight, tc.action, tc.weight)
+			}
+			if got.Tag != syncKey(tc.row.Tag) {
+				t.Errorf("tag = %q, want normalized key", got.Tag)
+			}
+		})
 	}
 }
 
@@ -317,7 +578,229 @@ func TestHandleTagSettingsSync_NoClient(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusBadGateway {
-		t.Errorf("status = %d, want 502 (nil client)", w.Code)
+		t.Errorf("status = %d, want 502 (nil client); body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleTagSettingsSync_InvalidConflictResolution(t *testing.T) {
+	upstream := newSyncMockServer(t)
+	defer upstream.Close()
+
+	client := newTestDB(t)
+	r := setupSyncServer(t, upstream, client)
+
+	code, _ := doSync(t, r, `{"conflict_resolution":"sideways"}`)
+	if code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", code)
+	}
+	if upstream.mutations() != 0 {
+		t.Errorf("upstream mutations = %d, want 0", upstream.mutations())
+	}
+}
+
+func TestHandleTagSettingsSync_FirstRunImportsSource(t *testing.T) {
+	upstream := newSyncMockServer(t)
+	defer upstream.Close()
+
+	client := newTestDB(t)
+	r := setupSyncServer(t, upstream, client)
+
+	code, result := doSync(t, r, `{}`)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d", code)
+	}
+	if result.Pulled != 3 || result.Added != 0 || result.Updated != 0 || result.Deleted != 0 {
+		t.Errorf("pulled/added/updated/deleted = %d/%d/%d/%d, want 3/0/0/0",
+			result.Pulled, result.Added, result.Updated, result.Deleted)
+	}
+	if len(result.PendingDeletes) != 0 {
+		t.Errorf("pending_deletes = %v, want none (first run imports instead)", result.PendingDeletes)
+	}
+	if len(result.Conflicts) != 0 || len(result.Failed) != 0 {
+		t.Errorf("conflicts/failed = %d/%d, want 0/0", len(result.Conflicts), len(result.Failed))
+	}
+	if upstream.mutations() != 0 {
+		t.Errorf("upstream mutations = %d, want 0 (pull-only)", upstream.mutations())
+	}
+
+	rules := readRules(t, client)
+	if len(rules) != 3 {
+		t.Fatalf("local rules = %d, want 3", len(rules))
+	}
+	if r := rules["language:chinese"]; r.Action != model.TagActionLike || r.Weight != 90 {
+		t.Errorf("chinese = %+v, want like 90", r)
+	}
+	if r := rules["male:gender change"]; r.Action != model.TagActionLike || r.Weight != 6 {
+		t.Errorf("gender change = %+v, want like 6 (colour ignored)", r)
+	}
+	if r := rules["male:males only"]; r.Action != model.TagActionDislike || r.Weight != -10 {
+		t.Errorf("males only = %+v, want dislike -10", r)
+	}
+	if len(result.Tags) != 3 {
+		t.Errorf("response tags = %d, want 3", len(result.Tags))
+	}
+
+	baseline := readBaseline(t, client)
+	if len(baseline) != 3 {
+		t.Errorf("baseline rows = %d, want 3", len(baseline))
+	}
+}
+
+func TestHandleTagSettingsSync_LocalChangePushesUpdate(t *testing.T) {
+	upstream := newSyncMockServer(t)
+	defer upstream.Close()
+
+	client := newTestDB(t)
+	// Baseline mirrors the source; local flipped gender change to dislike.
+	seedBaseline(t, client, "language:chinese", model.TagActionLike, 90)
+	seedBaseline(t, client, "male:males only", model.TagActionDislike, -10)
+	seedBaseline(t, client, "male:gender change", model.TagActionLike, 6)
+	seedTagRule(t, client, "language:chinese", model.TagActionLike, 90)
+	seedTagRule(t, client, "male:males only", model.TagActionDislike, -10)
+	seedTagRule(t, client, "male:gender change", model.TagActionDislike, -25)
+
+	r := setupSyncServer(t, upstream, client)
+	code, result := doSync(t, r, `{}`)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d", code)
+	}
+	if result.Updated != 1 || result.Unchanged != 2 || result.Pulled != 0 {
+		t.Errorf("updated/unchanged/pulled = %d/%d/%d, want 1/2/0",
+			result.Updated, result.Unchanged, result.Pulled)
+	}
+	if len(result.Conflicts) != 0 || len(result.Failed) != 0 {
+		t.Errorf("conflicts/failed = %v/%v, want empty", result.Conflicts, result.Failed)
+	}
+	if len(upstream.setUserTagCalls) != 1 {
+		t.Fatalf("setusertag calls = %d, want 1", len(upstream.setUserTagCalls))
+	}
+	call := upstream.setUserTagCalls[0]
+	if call["tagid"] != float64(5354) || call["tagwatch"] != float64(0) || call["taghide"] != float64(1) {
+		t.Errorf("call = %+v, want tagid 5354 watch 0 hide 1", call)
+	}
+	if call["tagweight"] != "-25" || call["tagcolor"] != "" {
+		t.Errorf("weight/color = %v/%v, want -25/empty", call["tagweight"], call["tagcolor"])
+	}
+
+	// Successful push converges the baseline to the pushed value.
+	baseline := readBaseline(t, client)
+	if b := baseline["male:gender change"]; b.Action != model.TagActionDislike || b.Weight != -25 {
+		t.Errorf("baseline gender change = %+v, want dislike -25", b)
+	}
+}
+
+func TestHandleTagSettingsSync_ConflictReportedWithoutMutation(t *testing.T) {
+	upstream := newSyncMockServer(t)
+	defer upstream.Close()
+
+	client := newTestDB(t)
+	// Baseline (like 90) differs from both local (-25) and source (6).
+	seedBaseline(t, client, "language:chinese", model.TagActionLike, 90)
+	seedBaseline(t, client, "male:males only", model.TagActionDislike, -10)
+	seedBaseline(t, client, "male:gender change", model.TagActionLike, 90)
+	seedTagRule(t, client, "language:chinese", model.TagActionLike, 90)
+	seedTagRule(t, client, "male:males only", model.TagActionDislike, -10)
+	seedTagRule(t, client, "male:gender change", model.TagActionDislike, -25)
+
+	r := setupSyncServer(t, upstream, client)
+	code, result := doSync(t, r, `{}`)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d", code)
+	}
+	if len(result.Conflicts) != 1 {
+		t.Fatalf("conflicts = %+v, want 1", result.Conflicts)
+	}
+	c := result.Conflicts[0]
+	if c.Tag != "male:gender change" {
+		t.Errorf("conflict tag = %q", c.Tag)
+	}
+	if c.Local == nil || c.Local.Weight != -25 {
+		t.Errorf("conflict local = %+v, want dislike -25", c.Local)
+	}
+	if c.Remote == nil || c.Remote.Action != model.TagActionLike || c.Remote.Weight != 6 {
+		t.Errorf("conflict remote = %+v, want like 6", c.Remote)
+	}
+	// Non-conflicting tags still sync: the two matching rows stay unchanged.
+	if result.Updated != 0 || result.Pulled != 0 || result.Unchanged != 2 {
+		t.Errorf("updated/pulled/unchanged = %d/%d/%d, want 0/0/2",
+			result.Updated, result.Pulled, result.Unchanged)
+	}
+	if upstream.mutations() != 0 {
+		t.Errorf("upstream mutations = %d, want 0 while unresolved", upstream.mutations())
+	}
+	// Neither side moved: local rule and baseline stay put.
+	rules := readRules(t, client)
+	if rules["male:gender change"].Weight != -25 {
+		t.Errorf("local weight = %d, want -25 (untouched)", rules["male:gender change"].Weight)
+	}
+	if b := readBaseline(t, client)["male:gender change"]; b.Weight != 90 {
+		t.Errorf("baseline weight = %d, want 90 (untouched)", b.Weight)
+	}
+}
+
+func TestHandleTagSettingsSync_ResolutionRemotePullsSource(t *testing.T) {
+	upstream := newSyncMockServer(t)
+	defer upstream.Close()
+
+	client := newTestDB(t)
+	// chinese/males only are fully synced; only gender change is in conflict.
+	seedBaseline(t, client, "language:chinese", model.TagActionLike, 90)
+	seedBaseline(t, client, "male:males only", model.TagActionDislike, -10)
+	seedBaseline(t, client, "male:gender change", model.TagActionLike, 90)
+	seedTagRule(t, client, "language:chinese", model.TagActionLike, 90)
+	seedTagRule(t, client, "male:males only", model.TagActionDislike, -10)
+	seedTagRule(t, client, "male:gender change", model.TagActionDislike, -25)
+
+	r := setupSyncServer(t, upstream, client)
+	code, result := doSync(t, r, `{"conflict_resolution":"remote"}`)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d", code)
+	}
+	if len(result.Conflicts) != 0 {
+		t.Errorf("conflicts = %+v, want none", result.Conflicts)
+	}
+	if result.Pulled != 1 {
+		t.Errorf("pulled = %d, want 1", result.Pulled)
+	}
+	if upstream.mutations() != 0 {
+		t.Errorf("upstream mutations = %d, want 0 (source wins, nothing to push)", upstream.mutations())
+	}
+
+	rules := readRules(t, client)
+	if rules["male:gender change"].Action != model.TagActionLike || rules["male:gender change"].Weight != 6 {
+		t.Errorf("local rule = %+v, want like 6 (pulled)", rules["male:gender change"])
+	}
+	if b := readBaseline(t, client)["male:gender change"]; b.Weight != 6 {
+		t.Errorf("baseline = %+v, want converged to 6", b)
+	}
+}
+
+func TestHandleTagSettingsSync_ResolutionLocalPushesLocal(t *testing.T) {
+	upstream := newSyncMockServer(t)
+	defer upstream.Close()
+
+	client := newTestDB(t)
+	seedBaseline(t, client, "male:gender change", model.TagActionLike, 90)
+	seedTagRule(t, client, "male:gender change", model.TagActionDislike, -25)
+
+	r := setupSyncServer(t, upstream, client)
+	code, result := doSync(t, r, `{"conflict_resolution":"local"}`)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d", code)
+	}
+	if len(result.Conflicts) != 0 || result.Updated != 1 {
+		t.Errorf("conflicts/updated = %v/%d, want none/1", result.Conflicts, result.Updated)
+	}
+	if len(upstream.setUserTagCalls) != 1 || upstream.setUserTagCalls[0]["tagweight"] != "-25" {
+		t.Fatalf("setusertag calls = %+v, want one push of -25", upstream.setUserTagCalls)
+	}
+
+	rules := readRules(t, client)
+	if rules["male:gender change"].Weight != -25 {
+		t.Errorf("local rule = %+v, want unchanged -25", rules["male:gender change"])
+	}
+	if b := readBaseline(t, client)["male:gender change"]; b.Weight != -25 {
+		t.Errorf("baseline = %+v, want converged to -25", b)
 	}
 }
 
@@ -326,126 +809,166 @@ func TestHandleTagSettingsSync_PendingDeletesWithoutConfirm(t *testing.T) {
 	defer upstream.Close()
 
 	client := newTestDB(t)
-	// Two matching rules + one local-only add; remote also has male:males
-	// only which is local-only on the remote side → pending delete.
-	seedTagRule(t, client, "language:chinese", model.TagActionLike, 90)  // unchanged
-	seedTagRule(t, client, "artist:new person", model.TagActionLike, 10) // add
+	// Baseline knows both male:* rows (previously synced); local deleted them.
+	seedBaseline(t, client, "language:chinese", model.TagActionLike, 90)
+	seedBaseline(t, client, "male:males only", model.TagActionDislike, -10)
+	seedBaseline(t, client, "male:gender change", model.TagActionLike, 6)
+	seedTagRule(t, client, "language:chinese", model.TagActionLike, 90)
 
-	r := setupTestRouter()
-	server := &Server{Client: newMockClient(upstream.URL), DB: &database.DB{Client: client}}
-	r.POST("/api/tag-settings/sync", server.handleTagSettingsSync)
-
-	req := httptest.NewRequest("POST", "/api/tag-settings/sync", strings.NewReader("{}"))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
-	}
-
-	var result model.TagSyncResult
-	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if result.Added != 1 {
-		t.Errorf("added = %d, want 1", result.Added)
-	}
-	if result.Unchanged != 1 {
-		t.Errorf("unchanged = %d, want 1", result.Unchanged)
+	r := setupSyncServer(t, upstream, client)
+	code, result := doSync(t, r, `{}`)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d", code)
 	}
 	if len(result.PendingDeletes) != 2 {
-		// Remote-only: male:males only + male:gender change.
-		t.Errorf("pending_deletes = %v, want the 2 remote-only tags", result.PendingDeletes)
+		t.Fatalf("pending_deletes = %v, want the 2 locally-deleted tags", result.PendingDeletes)
 	}
 	if result.Deleted != 0 || len(upstream.massDeleteForms) != 0 {
 		t.Errorf("deleted = %d / mass forms = %d, want 0 without confirm", result.Deleted, len(upstream.massDeleteForms))
 	}
-	if len(upstream.addForms) != 1 || upstream.addForms[0]["tagname_new"] != "artist:new person" {
-		t.Errorf("add forms = %+v, want one add for artist:new person", upstream.addForms)
+	if result.Unchanged != 1 || result.Pulled != 0 || result.Added != 0 {
+		t.Errorf("unchanged/pulled/added = %d/%d/%d, want 1/0/0", result.Unchanged, result.Pulled, result.Added)
 	}
-	if len(upstream.setUserTagCalls) != 0 {
-		t.Errorf("setusertag calls = %d, want 0 (nothing to update)", len(upstream.setUserTagCalls))
+	// Pending deletions keep their baseline row so they stay pending.
+	if len(readBaseline(t, client)) != 3 {
+		t.Errorf("baseline rows = %d, want 3 (pending rows retained)", len(readBaseline(t, client)))
 	}
 }
 
-func TestHandleTagSettingsSync_ConfirmDeletes(t *testing.T) {
+func TestHandleTagSettingsSync_ConfirmDeletesRemovesSourceAndBaseline(t *testing.T) {
 	upstream := newSyncMockServer(t)
 	defer upstream.Close()
 
 	client := newTestDB(t)
-	// Only language:chinese locally; the two male:* remote rows are remote-only.
+	seedBaseline(t, client, "language:chinese", model.TagActionLike, 90)
+	seedBaseline(t, client, "male:males only", model.TagActionDislike, -10)
+	seedBaseline(t, client, "male:gender change", model.TagActionLike, 6)
 	seedTagRule(t, client, "language:chinese", model.TagActionLike, 90)
 
-	r := setupTestRouter()
-	server := &Server{Client: newMockClient(upstream.URL), DB: &database.DB{Client: client}}
-	r.POST("/api/tag-settings/sync", server.handleTagSettingsSync)
-
-	req := httptest.NewRequest("POST", "/api/tag-settings/sync", strings.NewReader(`{"confirm_deletes":true}`))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	r := setupSyncServer(t, upstream, client)
+	code, result := doSync(t, r, `{"confirm_deletes":true}`)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d", code)
 	}
-
-	var result model.TagSyncResult
-	json.Unmarshal(w.Body.Bytes(), &result)
 	if result.Deleted != 2 {
 		t.Errorf("deleted = %d, want 2", result.Deleted)
 	}
 	if len(result.PendingDeletes) != 0 {
 		t.Errorf("pending_deletes = %v, want empty after confirm", result.PendingDeletes)
 	}
-	if len(upstream.massDeleteForms) != 1 {
-		t.Fatalf("mass delete forms = %d, want 1", len(upstream.massDeleteForms))
+	if len(upstream.massDeleteForms) != 1 || len(upstream.massDeleteForms[0]) != 2 {
+		t.Fatalf("mass delete forms = %v, want one form with 2 ids", upstream.massDeleteForms)
 	}
-	ids := upstream.massDeleteForms[0]
-	if len(ids) != 2 {
-		t.Errorf("deleted ids = %v, want 2 ids", ids)
+	baseline := readBaseline(t, client)
+	if len(baseline) != 1 {
+		t.Errorf("baseline rows = %d, want 1 (deleted rows retired)", len(baseline))
 	}
-	if result.Unchanged != 1 {
-		t.Errorf("unchanged = %d, want 1", result.Unchanged)
+	if _, ok := baseline["language:chinese"]; !ok {
+		t.Errorf("baseline = %v, want language:chinese retained", baseline)
 	}
 }
 
-func TestHandleTagSettingsSync_UpdatesExecuted(t *testing.T) {
+func TestHandleTagSettingsSync_ResolutionLocalDeleteNeedsNoConfirm(t *testing.T) {
 	upstream := newSyncMockServer(t)
 	defer upstream.Close()
 
 	client := newTestDB(t)
-	// Dislike male:gender change (remote has it watched +6 + custom colour)
-	// → update: hide=1, weight=-25, colour cleared.
-	seedTagRule(t, client, "male:gender change", model.TagActionDislike, -25)
+	// Local deleted males only; the source changed it (baseline like 5).
+	seedBaseline(t, client, "male:males only", model.TagActionLike, 5)
+	seedTagRule(t, client, "language:chinese", model.TagActionLike, 90)
 
-	r := setupTestRouter()
-	server := &Server{Client: newMockClient(upstream.URL), DB: &database.DB{Client: client}}
-	r.POST("/api/tag-settings/sync", server.handleTagSettingsSync)
+	r := setupSyncServer(t, upstream, client)
 
-	req := httptest.NewRequest("POST", "/api/tag-settings/sync", strings.NewReader(`{}`))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	// Without a resolution it is a conflict, nothing is deleted.
+	code, result := doSync(t, r, `{}`)
+	if code != http.StatusOK || len(result.Conflicts) != 1 {
+		t.Fatalf("status/conflicts = %d/%+v, want 200 with one conflict", code, result.Conflicts)
+	}
+	if len(upstream.massDeleteForms) != 0 {
+		t.Fatalf("mass delete forms = %d, want 0 while unresolved", len(upstream.massDeleteForms))
 	}
 
-	var result model.TagSyncResult
-	json.Unmarshal(w.Body.Bytes(), &result)
-	if result.Updated != 1 {
-		t.Fatalf("updated = %d, want 1; body = %s", result.Updated, w.Body.String())
+	// Choosing local consents to the source deletion.
+	code, result = doSync(t, r, `{"conflict_resolution":"local"}`)
+	if code != http.StatusOK || len(result.Conflicts) != 0 {
+		t.Fatalf("status/conflicts = %d/%+v, want 200 resolved", code, result.Conflicts)
 	}
-	if len(upstream.setUserTagCalls) != 1 {
-		t.Fatalf("setusertag calls = %d, want 1", len(upstream.setUserTagCalls))
+	if result.Deleted != 1 {
+		t.Errorf("deleted = %d, want 1 (consented by the dialog)", result.Deleted)
 	}
-	call := upstream.setUserTagCalls[0]
-	if call["tagid"] != float64(5354) {
-		t.Errorf("tagid = %v, want 5354", call["tagid"])
+	if len(upstream.massDeleteForms) != 1 {
+		t.Errorf("mass delete forms = %d, want 1", len(upstream.massDeleteForms))
 	}
-	if call["tagwatch"] != float64(0) || call["taghide"] != float64(1) {
-		t.Errorf("tagwatch/taghide = %v/%v, want 0/1", call["tagwatch"], call["taghide"])
+	if _, ok := readBaseline(t, client)["male:males only"]; ok {
+		t.Errorf("baseline = %v, want male:males only retired", readBaseline(t, client))
 	}
-	if call["tagweight"] != "-25" {
-		t.Errorf("tagweight = %v, want -25", call["tagweight"])
+}
+
+func TestHandleTagSettingsSync_SourceDeletePullsLocalRule(t *testing.T) {
+	upstream := newSyncMockServer(t)
+	defer upstream.Close()
+
+	client := newTestDB(t)
+	// female:yuri exists locally and in the baseline but no longer on the source.
+	seedBaseline(t, client, "language:chinese", model.TagActionLike, 90)
+	seedBaseline(t, client, "female:yuri", model.TagActionLike, 10)
+	seedTagRule(t, client, "language:chinese", model.TagActionLike, 90)
+	seedTagRule(t, client, "female:yuri", model.TagActionLike, 10)
+
+	r := setupSyncServer(t, upstream, client)
+	code, result := doSync(t, r, `{}`)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d", code)
 	}
-	if call["tagcolor"] != "" {
-		t.Errorf("tagcolor = %v, want empty (clear custom colour)", call["tagcolor"])
+	// yuri removed locally + the two source-only rows imported.
+	if result.Pulled != 3 {
+		t.Errorf("pulled = %d, want 3 (1 removal + 2 imports)", result.Pulled)
+	}
+	if upstream.mutations() != 0 {
+		t.Errorf("upstream mutations = %d, want 0 (pull never writes the source)", upstream.mutations())
+	}
+	rules := readRules(t, client)
+	if _, ok := rules["female:yuri"]; ok {
+		t.Errorf("local rules = %v, want female:yuri removed", rules)
+	}
+	if len(rules) != 3 {
+		t.Errorf("local rules = %d, want 3", len(rules))
+	}
+	if _, ok := readBaseline(t, client)["female:yuri"]; ok {
+		t.Error("baseline still has female:yuri, want retired")
+	}
+}
+
+func TestHandleTagSettingsSync_SecondSyncIsNoOp(t *testing.T) {
+	upstream := newSyncMockServer(t)
+	defer upstream.Close()
+
+	client := newTestDB(t)
+	// Local and baseline already mirror the source snapshot.
+	seedTagRule(t, client, "language:chinese", model.TagActionLike, 90)
+	seedTagRule(t, client, "male:males only", model.TagActionDislike, -10)
+	seedTagRule(t, client, "male:gender change", model.TagActionLike, 6)
+	seedBaseline(t, client, "language:chinese", model.TagActionLike, 90)
+	seedBaseline(t, client, "male:males only", model.TagActionDislike, -10)
+	seedBaseline(t, client, "male:gender change", model.TagActionLike, 6)
+
+	r := setupSyncServer(t, upstream, client)
+	code, result := doSync(t, r, `{}`)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d", code)
+	}
+	if result.Added != 0 || result.Updated != 0 || result.Deleted != 0 || result.Pulled != 0 {
+		t.Errorf("added/updated/deleted/pulled = %d/%d/%d/%d, want all 0",
+			result.Added, result.Updated, result.Deleted, result.Pulled)
+	}
+	if result.Unchanged != 3 {
+		t.Errorf("unchanged = %d, want 3", result.Unchanged)
+	}
+	if upstream.mutations() != 0 {
+		t.Errorf("upstream mutations = %d, want 0", upstream.mutations())
+	}
+	if len(result.Tags) != 3 {
+		t.Errorf("response tags = %d, want 3", len(result.Tags))
 	}
 }
 
@@ -455,25 +978,22 @@ func TestHandleTagSettingsSync_PartialFailure(t *testing.T) {
 	upstream.failSetUserTag = true
 
 	client := newTestDB(t)
+	seedBaseline(t, client, "male:gender change", model.TagActionLike, 6)
 	seedTagRule(t, client, "male:gender change", model.TagActionDislike, -25)
 
-	r := setupTestRouter()
-	server := &Server{Client: newMockClient(upstream.URL), DB: &database.DB{Client: client}}
-	r.POST("/api/tag-settings/sync", server.handleTagSettingsSync)
-
-	req := httptest.NewRequest("POST", "/api/tag-settings/sync", strings.NewReader(`{}`))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	r := setupSyncServer(t, upstream, client)
+	code, result := doSync(t, r, `{}`)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
 	}
-
-	var result model.TagSyncResult
-	json.Unmarshal(w.Body.Bytes(), &result)
 	if result.Updated != 0 || len(result.Failed) != 1 {
 		t.Errorf("updated/failed = %d/%d, want 0/1", result.Updated, len(result.Failed))
 	}
 	if len(result.Failed) == 1 && result.Failed[0].Tag != "male:gender change" {
 		t.Errorf("failed tag = %q, want male:gender change", result.Failed[0].Tag)
+	}
+	// Failed push keeps the old baseline so the next sync retries it.
+	if b := readBaseline(t, client)["male:gender change"]; b.Weight != 6 {
+		t.Errorf("baseline = %+v, want untouched source weight 6", b)
 	}
 }

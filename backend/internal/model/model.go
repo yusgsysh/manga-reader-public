@@ -241,16 +241,31 @@ type TagSettingsResponse struct {
 	Tags []TagPreference `json:"tags"`
 }
 
-// TagSyncResult is the payload of POST /api/tag-settings/sync: how many
-// source rows were added/updated/deleted, what remains pending deletion
-// (remote-only rows not yet confirmed), and per-tag failures.
+// TagSyncResult is the payload of POST /api/tag-settings/sync: source rows
+// added/updated/deleted, local rows pulled from the source, what remains
+// pending deletion (locally-deleted rows not yet confirmed for the source),
+// unresolved conflicts the user must resolve, and per-tag failures. Tags is
+// the post-sync local rule list so clients can reseed after pulls.
 type TagSyncResult struct {
-	Added          int              `json:"added"`
-	Updated        int              `json:"updated"`
-	Deleted        int              `json:"deleted"`
-	Unchanged      int              `json:"unchanged"`
-	PendingDeletes []string         `json:"pending_deletes"`
-	Failed         []TagSyncFailure `json:"failed"`
+	Added          int               `json:"added"`
+	Updated        int               `json:"updated"`
+	Deleted        int               `json:"deleted"`
+	Pulled         int               `json:"pulled"`
+	Unchanged      int               `json:"unchanged"`
+	PendingDeletes []string          `json:"pending_deletes"`
+	Conflicts      []TagSyncConflict `json:"conflicts"`
+	Failed         []TagSyncFailure  `json:"failed"`
+	Tags           []TagPreference   `json:"tags"`
+}
+
+// TagSyncConflict reports a tag both sides changed since the last sync.
+// Local/Remote hold the normalized rule on each side; nil means the tag was
+// deleted on that side. The client asks the user which side to keep and
+// re-runs sync with conflict_resolution.
+type TagSyncConflict struct {
+	Tag    string         `json:"tag"`
+	Local  *TagPreference `json:"local"`
+	Remote *TagPreference `json:"remote"`
 }
 
 // TagSyncFailure reports one tag the sync could not apply on the source.

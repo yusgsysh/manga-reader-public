@@ -5,9 +5,11 @@ import {
   fetchTagSettings,
   saveTagSettings,
   syncTagSettings,
+  type SyncTagSettingsOptions,
   type TagAction,
   type TagPreference,
   type TagSettings,
+  type TagSyncConflict,
   type TagSyncResult,
 } from "../api/tagSettings";
 
@@ -108,11 +110,26 @@ export function useSaveTagPreferences() {
   });
 }
 
-/** Mutation mirroring the local list onto the source My Tags page. */
+/** Mutation running the bidirectional sync against source My Tags. */
 export function useSyncTagPreferences() {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (confirmDeletes: boolean) => syncTagSettings(confirmDeletes),
+    mutationFn: (options: SyncTagSettingsOptions) => syncTagSettings(options),
+    onSuccess: (result) => {
+      // Pulled changes mean the server-side rules changed underneath us;
+      // the response carries the merged list, so reseed the shared cache.
+      if (result.pulled > 0) {
+        queryClient.setQueryData(TAG_SETTINGS_QUERY_KEY, { tags: result.tags });
+      }
+    },
   });
 }
 
-export type { TagAction, TagPreference, TagSettings, TagSyncResult };
+export type {
+  SyncTagSettingsOptions,
+  TagAction,
+  TagPreference,
+  TagSettings,
+  TagSyncConflict,
+  TagSyncResult,
+};
