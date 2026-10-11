@@ -220,9 +220,9 @@ func SetUserTag(ctx context.Context, client *http.Client, snap *MyTagsSnapshot, 
 		TagWeight string `json:"tagweight"`
 	}
 	type response struct {
-		TagID  *int64 `json:"tagid"`
-		Error  string `json:"error"`
-		Login  bool   `json:"login"`
+		TagID *int64 `json:"tagid"`
+		Error string `json:"error"`
+		Login bool   `json:"login"`
 	}
 
 	reqBody := request{

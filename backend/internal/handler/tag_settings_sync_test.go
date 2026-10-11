@@ -83,13 +83,13 @@ func syncMyTagsFixtureWith(tagID int64, tag, weight string) string {
 // POST /api.php, recording every mutation.
 type syncMockServer struct {
 	*httptest.Server
-	setUserTagCalls  []map[string]any
-	addForms         []map[string]string
-	massDeleteForms  [][]string
-	nextAddID        int64
-	failSetUserTag   bool
-	failAddForm      bool
-	failMassDelete   bool
+	setUserTagCalls []map[string]any
+	addForms        []map[string]string
+	massDeleteForms [][]string
+	nextAddID       int64
+	failSetUserTag  bool
+	failAddForm     bool
+	failMassDelete  bool
 }
 
 func newSyncMockServer(t *testing.T) *syncMockServer {
@@ -170,9 +170,9 @@ func seedTagRule(t *testing.T, client *ent.Client, tag, action string, weight in
 
 func TestPlanTagSync_AddUpdateDeleteUnchanged(t *testing.T) {
 	local := []model.TagPreference{
-		{Tag: "language:chinese", Action: model.TagActionLike, Weight: 90},      // matches remote
-		{Tag: "male:gender change", Action: model.TagActionLike, Weight: 20},    // weight differs (+ colour to clear)
-		{Tag: "artist:new person", Action: model.TagActionDislike, Weight: -5},  // local-only add
+		{Tag: "language:chinese", Action: model.TagActionLike, Weight: 90},     // matches remote
+		{Tag: "male:gender change", Action: model.TagActionLike, Weight: 20},   // weight differs (+ colour to clear)
+		{Tag: "artist:new person", Action: model.TagActionDislike, Weight: -5}, // local-only add
 	}
 	remote := []exhentai.UserTag{
 		{TagID: 3437, Tag: "language:chinese", Watch: true, Weight: 90},
@@ -228,9 +228,9 @@ func TestHandleTagSettingsPut_WeightDefaultsAndValidation(t *testing.T) {
 	r.PUT("/api/tag-settings", server.handleTagSettingsPut)
 
 	// Omitted weight defaults from the action: like +10, dislike -10.
-	req := httptest.NewRequest("PUT", "/api/tag-settings", bytes.NewBufferString(`{"tags":[` +
-		`{"tag":"female:yuri","action":"like"},` +
-		`{"tag":"tag:netorare","action":"dislike"}` +
+	req := httptest.NewRequest("PUT", "/api/tag-settings", bytes.NewBufferString(`{"tags":[`+
+		`{"tag":"female:yuri","action":"like"},`+
+		`{"tag":"tag:netorare","action":"dislike"}`+
 		`]}`))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -251,9 +251,9 @@ func TestHandleTagSettingsPut_WeightDefaultsAndValidation(t *testing.T) {
 	}
 
 	// Explicit weights are kept, including 0.
-	req = httptest.NewRequest("PUT", "/api/tag-settings", bytes.NewBufferString(`{"tags":[` +
-		`{"tag":"female:yuri","action":"like","weight":0},` +
-		`{"tag":"tag:netorare","action":"dislike","weight":-999}` +
+	req = httptest.NewRequest("PUT", "/api/tag-settings", bytes.NewBufferString(`{"tags":[`+
+		`{"tag":"female:yuri","action":"like","weight":0},`+
+		`{"tag":"tag:netorare","action":"dislike","weight":-999}`+
 		`]}`))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -329,7 +329,7 @@ func TestHandleTagSettingsSync_PendingDeletesWithoutConfirm(t *testing.T) {
 	// Two matching rules + one local-only add; remote also has male:males
 	// only which is local-only on the remote side → pending delete.
 	seedTagRule(t, client, "language:chinese", model.TagActionLike, 90)  // unchanged
-	seedTagRule(t, client, "artist:new person", model.TagActionLike, 10)  // add
+	seedTagRule(t, client, "artist:new person", model.TagActionLike, 10) // add
 
 	r := setupTestRouter()
 	server := &Server{Client: newMockClient(upstream.URL), DB: &database.DB{Client: client}}
