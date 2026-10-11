@@ -4,42 +4,58 @@ import type { Tag } from "../types/gallery";
 import {
   fetchTagSettings,
   saveTagSettings,
+  syncTagSettings,
   type TagAction,
   type TagPreference,
   type TagSettings,
+  type TagSyncResult,
 } from "../api/tagSettings";
 
 export const TAG_SETTINGS_QUERY_KEY = ["tag-settings"] as const;
 
-/** Tailwind classes colouring a tag's text by preference (light / dark). */
-export const TAG_ACTION_TEXT_CLASS: Record<TagAction, string> = {
-  like: "text-blue-600 dark:text-blue-400",
-  dislike: "text-red-600 dark:text-red-400",
+/**
+ * Solid-background chip classes matching the source My Tags colours
+ * (#3377FF blue / #FF6666 red, #f1f1f1 text). Applied through kumo's
+ * tailwind-merge `cn`, so they override base chip backgrounds.
+ */
+export const TAG_ACTION_CHIP_CLASS: Record<TagAction, string> = {
+  like: "bg-[#3377FF] text-[#f1f1f1]",
+  dislike: "bg-[#FF6666] text-[#f1f1f1]",
 };
 
 export function tagKey(namespace: string, name: string): string {
   return namespace ? `${namespace}:${name}` : name;
 }
 
-/** Display order: liked (blue) first, disliked (red) second, neutral last. */
+/** Display order rank: liked (blue) first, disliked (red) second, neutral last. */
 const ACTION_ORDER: Record<TagAction, number> = { like: 0, dislike: 1 };
 const NEUTRAL_ORDER = 2;
 
+/** Full preference for one tag: action + sort weight (mirrors My Tags). */
+export interface TagRule {
+  action: TagAction;
+  weight: number;
+}
+
 /**
  * Stable sort placing preferred tags ahead of neutral ones (blue before red
- * before default), matching the source site's tag-list ordering. Equal-rank
- * tags keep their original relative order.
+ * before default), strongest |weight| first inside each group — the source
+ * site orders flagged tags the same way. Equal rank+weight tags keep their
+ * original relative order.
  */
 export function sortTagsByPreference<T>(
   tags: T[],
-  getAction: (tag: T) => TagAction | null,
+  getRule: (tag: T) => TagRule | null,
 ): T[] {
   return [...tags].sort((a, b) => {
-    const actionA = getAction(a);
-    const actionB = getAction(b);
-    const rankA = actionA ? ACTION_ORDER[actionA] : NEUTRAL_ORDER;
-    const rankB = actionB ? ACTION_ORDER[actionB] : NEUTRAL_ORDER;
-    return rankA - rankB;
+    const ruleA = getRule(a);
+    const ruleB = getRule(b);
+    const rankA = ruleA ? ACTION_ORDER[ruleA.action] : NEUTRAL_ORDER;
+    const rankB = ruleB ? ACTION_ORDER[ruleB.action] : NEUTRAL_ORDER;
+    if (rankA !== rankB) return rankA - rankB;
+    const weightA = ruleA ? Math.abs(ruleA.weight) : 0;
+    const weightB = ruleB ? Math.abs(ruleB.weight) : 0;
+    return weightB - weightA;
   });
 }
 
@@ -55,29 +71,29 @@ export function useTagPreferences() {
     staleTime: 5 * 60_000,
   });
 
-  const actionByKey = useMemo(() => {
-    const map = new Map<string, TagAction>();
+  const ruleByKey = useMemo(() => {
+    const map = new Map<string, TagRule>();
     for (const pref of query.data?.tags ?? []) {
-      map.set(pref.tag, pref.action);
+      map.set(pref.tag, { action: pref.action, weight: pref.weight });
     }
     return map;
   }, [query.data]);
 
-  const getTagAction = useMemo(() => {
-    return (tag: Tag | string): TagAction | null => {
+  const getTagRule = useMemo(() => {
+    return (tag: Tag | string): TagRule | null => {
       if (typeof tag === "string") {
-        return actionByKey.get(tag.toLowerCase()) ?? null;
+        return ruleByKey.get(tag.toLowerCase()) ?? null;
       }
-      return actionByKey.get(tagKey(tag.namespace, tag.name)) ?? null;
+      return ruleByKey.get(tagKey(tag.namespace, tag.name)) ?? null;
     };
-  }, [actionByKey]);
+  }, [ruleByKey]);
 
   return {
     /** Raw list as returned by the API (ordered by tag). */
     preferences: query.data?.tags ?? [],
     isLoading: query.isLoading,
     isError: query.isError,
-    getTagAction,
+    getTagRule,
   };
 }
 
@@ -92,4 +108,11 @@ export function useSaveTagPreferences() {
   });
 }
 
-export type { TagAction, TagPreference, TagSettings };
+/** Mutation mirroring the local list onto the source My Tags page. */
+export function useSyncTagPreferences() {
+  return useMutation({
+    mutationFn: (confirmDeletes: boolean) => syncTagSettings(confirmDeletes),
+  });
+}
+
+export type { TagAction, TagPreference, TagSettings, TagSyncResult };

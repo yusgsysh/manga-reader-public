@@ -17,6 +17,8 @@ const (
 	FieldTag = "tag"
 	// FieldAction holds the string denoting the action field in the database.
 	FieldAction = "action"
+	// FieldWeight holds the string denoting the weight field in the database.
+	FieldWeight = "weight"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -30,6 +32,7 @@ var Columns = []string{
 	FieldID,
 	FieldTag,
 	FieldAction,
+	FieldWeight,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -49,6 +52,8 @@ var (
 	TagValidator func(string) error
 	// ActionValidator is a validator for the "action" field. It is called by the builders before save.
 	ActionValidator func(string) error
+	// DefaultWeight holds the default value on creation for the "weight" field.
+	DefaultWeight int
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -73,6 +78,11 @@ func ByTag(opts ...sql.OrderTermOption) OrderOption {
 // ByAction orders the results by the action field.
 func ByAction(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAction, opts...).ToFunc()
+}
+
+// ByWeight orders the results by the weight field.
+func ByWeight(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWeight, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

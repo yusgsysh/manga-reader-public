@@ -210,12 +210,16 @@ func init() {
 	tagpreferenceDescAction := tagpreferenceFields[1].Descriptor()
 	// tagpreference.ActionValidator is a validator for the "action" field. It is called by the builders before save.
 	tagpreference.ActionValidator = tagpreferenceDescAction.Validators[0].(func(string) error)
+	// tagpreferenceDescWeight is the schema descriptor for weight field.
+	tagpreferenceDescWeight := tagpreferenceFields[2].Descriptor()
+	// tagpreference.DefaultWeight holds the default value on creation for the weight field.
+	tagpreference.DefaultWeight = tagpreferenceDescWeight.Default.(int)
 	// tagpreferenceDescCreatedAt is the schema descriptor for created_at field.
-	tagpreferenceDescCreatedAt := tagpreferenceFields[2].Descriptor()
+	tagpreferenceDescCreatedAt := tagpreferenceFields[3].Descriptor()
 	// tagpreference.DefaultCreatedAt holds the default value on creation for the created_at field.
 	tagpreference.DefaultCreatedAt = tagpreferenceDescCreatedAt.Default.(func() time.Time)
 	// tagpreferenceDescUpdatedAt is the schema descriptor for updated_at field.
-	tagpreferenceDescUpdatedAt := tagpreferenceFields[3].Descriptor()
+	tagpreferenceDescUpdatedAt := tagpreferenceFields[4].Descriptor()
 	// tagpreference.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	tagpreference.DefaultUpdatedAt = tagpreferenceDescUpdatedAt.Default.(func() time.Time)
 	// tagpreference.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

@@ -18,7 +18,7 @@ interface TagGroupsProps {
 // prefix.
 export function TagGroups({ tags }: TagGroupsProps) {
   const { translateNamespace } = useTagTranslation();
-  const { getTagAction } = useTagPreferences();
+  const { getTagRule } = useTagPreferences();
 
   const groups = useMemo(() => {
     const byNamespace = new Map<string, Tag[]>();
@@ -30,9 +30,9 @@ export function TagGroups({ tags }: TagGroupsProps) {
     }
     return [...byNamespace.entries()].map(([namespace, groupTags]) => [
       namespace,
-      sortTagsByPreference(groupTags, getTagAction),
+      sortTagsByPreference(groupTags, getTagRule),
     ] as const);
-  }, [tags, getTagAction]);
+  }, [tags, getTagRule]);
 
   if (groups.length === 0) return null;
 

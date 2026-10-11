@@ -56,6 +56,27 @@ func (_u *TagPreferenceUpdate) SetNillableAction(v *string) *TagPreferenceUpdate
 	return _u
 }
 
+// SetWeight sets the "weight" field.
+func (_u *TagPreferenceUpdate) SetWeight(v int) *TagPreferenceUpdate {
+	_u.mutation.ResetWeight()
+	_u.mutation.SetWeight(v)
+	return _u
+}
+
+// SetNillableWeight sets the "weight" field if the given value is not nil.
+func (_u *TagPreferenceUpdate) SetNillableWeight(v *int) *TagPreferenceUpdate {
+	if v != nil {
+		_u.SetWeight(*v)
+	}
+	return _u
+}
+
+// AddWeight adds value to the "weight" field.
+func (_u *TagPreferenceUpdate) AddWeight(v int) *TagPreferenceUpdate {
+	_u.mutation.AddWeight(v)
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *TagPreferenceUpdate) SetUpdatedAt(v time.Time) *TagPreferenceUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -136,6 +157,12 @@ func (_u *TagPreferenceUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagpreference.FieldAction, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Weight(); ok {
+		_spec.SetField(tagpreference.FieldWeight, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedWeight(); ok {
+		_spec.AddField(tagpreference.FieldWeight, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(tagpreference.FieldUpdatedAt, field.TypeTime, value)
 	}
@@ -184,6 +211,27 @@ func (_u *TagPreferenceUpdateOne) SetNillableAction(v *string) *TagPreferenceUpd
 	if v != nil {
 		_u.SetAction(*v)
 	}
+	return _u
+}
+
+// SetWeight sets the "weight" field.
+func (_u *TagPreferenceUpdateOne) SetWeight(v int) *TagPreferenceUpdateOne {
+	_u.mutation.ResetWeight()
+	_u.mutation.SetWeight(v)
+	return _u
+}
+
+// SetNillableWeight sets the "weight" field if the given value is not nil.
+func (_u *TagPreferenceUpdateOne) SetNillableWeight(v *int) *TagPreferenceUpdateOne {
+	if v != nil {
+		_u.SetWeight(*v)
+	}
+	return _u
+}
+
+// AddWeight adds value to the "weight" field.
+func (_u *TagPreferenceUpdateOne) AddWeight(v int) *TagPreferenceUpdateOne {
+	_u.mutation.AddWeight(v)
 	return _u
 }
 
@@ -296,6 +344,12 @@ func (_u *TagPreferenceUpdateOne) sqlSave(ctx context.Context) (_node *TagPrefer
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagpreference.FieldAction, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Weight(); ok {
+		_spec.SetField(tagpreference.FieldWeight, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedWeight(); ok {
+		_spec.AddField(tagpreference.FieldWeight, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(tagpreference.FieldUpdatedAt, field.TypeTime, value)

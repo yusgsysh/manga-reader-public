@@ -34,6 +34,10 @@ type Server struct {
 	devTools             bool
 	simulateUpstreamDown atomic.Bool
 
+	// tagSyncMu serializes tag-settings syncs so concurrent saves cannot
+	// interleave mutations on the same source My Tags tagset.
+	tagSyncMu sync.Mutex
+
 	prefillOnce sync.Once
 	prefillMu   sync.Mutex
 	prefillMgr  *prefillManager
@@ -95,9 +99,11 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 	r.GET("/api/recently-read", s.handleRecentlyRead)
 	r.POST("/api/reading-progress/cleanup", s.handleReadingProgressCleanup)
 
-	// Tag preferences (like/dislike colours, persisted per user).
+	// Tag preferences (like/dislike colours, persisted per user) plus the
+	// mirror-to-source sync endpoint.
 	r.GET("/api/tag-settings", s.handleTagSettingsGet)
 	r.PUT("/api/tag-settings", s.handleTagSettingsPut)
+	r.POST("/api/tag-settings/sync", s.handleTagSettingsSync)
 
 	// Image proxies (live): fetched straight from upstream, no caching.
 	r.GET("/api/image/page", s.handlePageImage)

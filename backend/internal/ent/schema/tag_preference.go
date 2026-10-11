@@ -28,6 +28,10 @@ func (TagPreference) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("tag").Unique().NotEmpty(),
 		field.String("action").NotEmpty(),
+		// Weight mirrors ExHentai My Tags tag weight: like rules are >= 0,
+		// dislike rules are <= 0. Used only for ordering (strongest first),
+		// never for filtering inside this app.
+		field.Int("weight").Default(10),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}

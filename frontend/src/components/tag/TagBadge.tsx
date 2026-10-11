@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Tag } from "../../types/gallery";
 import { useTagTranslation } from "../../hooks/useTagTranslation";
-import { useTagPreferences, TAG_ACTION_TEXT_CLASS } from "../../hooks/useTagPreferences";
+import { useTagPreferences, TAG_ACTION_CHIP_CLASS } from "../../hooks/useTagPreferences";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { Popover, Tooltip, cn } from "@cloudflare/kumo";
 import { Chip } from "../ui";
@@ -14,7 +14,7 @@ interface TagBadgeProps {
 export function TagBadge({ tag, showNamespace = true }: TagBadgeProps) {
   const { translateTag, translateNamespace, hasTranslation, getTagInfo } =
     useTagTranslation();
-  const { getTagAction } = useTagPreferences();
+  const { getTagRule } = useTagPreferences();
   const noHover = useMediaQuery("(hover: none)");
   const [open, setOpen] = useState(false);
 
@@ -24,15 +24,15 @@ export function TagBadge({ tag, showNamespace = true }: TagBadgeProps) {
     showNamespace && tag.namespace ? translateNamespace(tag.namespace) : "";
   const rawName = tag.namespace ? `${tag.namespace}:${tag.name}` : tag.name;
 
-  // Colored blue (liked) / red (disliked) like the source site; neutral tags
-  // keep the default chip styling.
-  const action = getTagAction(tag);
-  const actionClass = action ? TAG_ACTION_TEXT_CLASS[action] : null;
+  // Solid blue (liked) / red (disliked) chips matching the source My Tags
+  // colours; neutral tags keep the default chip styling.
+  const rule = getTagRule(tag);
+  const chipClass = rule ? TAG_ACTION_CHIP_CLASS[rule.action] : null;
 
   const chip = (
-    <Chip tone="neutral" className={cn("font-normal", actionClass)}>
+    <Chip tone="neutral" className={cn("font-normal", chipClass)}>
       {namespaceLabel && (
-        <span className={actionClass ? "opacity-70" : "text-kumo-inactive"}>
+        <span className={chipClass ? "opacity-70" : "text-kumo-inactive"}>
           [{namespaceLabel}]
         </span>
       )}
@@ -46,8 +46,8 @@ export function TagBadge({ tag, showNamespace = true }: TagBadgeProps) {
     <div className="max-w-xs space-y-1.5 text-left">
       <div
         className={cn(
-          "font-mono text-[11px]",
-          actionClass ?? "text-kumo-subtle",
+          "inline-block rounded px-1.5 py-0.5 font-mono text-[11px]",
+          chipClass ?? "text-kumo-subtle",
         )}
       >
         {rawName}

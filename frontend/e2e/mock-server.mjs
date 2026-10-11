@@ -310,24 +310,47 @@ const server = Bun.serve({
       return json({ down: devDown });
     }
 
-    // Mocked tag settings (like/dislike colours); full-replace PUT like the
-    // real backend.
+    // Mocked tag settings (like/dislike colours + weight); full-replace PUT
+    // like the real backend, plus a no-op sync endpoint so the page's
+    // auto-sync after save succeeds.
     if (path === "/api/tag-settings") {
       if (req.method === "PUT") {
         const body = await req.json().catch(() => ({ tags: [] }));
         tagSettings = Array.isArray(body.tags)
           ? body.tags
               .filter((t) => t && typeof t.tag === "string" && t.tag)
-              .map((t) => ({
-                tag: t.tag.toLowerCase().trim(),
-                action: t.action === "dislike" ? "dislike" : "like",
-              }))
+              .map((t) => {
+                const action = t.action === "dislike" ? "dislike" : "like";
+                const weight =
+                  typeof t.weight === "number" && Number.isFinite(t.weight)
+                    ? Math.max(-999, Math.min(999, Math.trunc(t.weight)))
+                    : action === "dislike"
+                      ? -10
+                      : 10;
+                return {
+                  tag: t.tag.toLowerCase().trim(),
+                  action,
+                  weight: action === "dislike" ? Math.min(0, weight) : Math.max(0, weight),
+                };
+              })
           : [];
       }
       const sorted = [...tagSettings].sort((a, b) =>
         a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0,
       );
       return json({ tags: sorted });
+    }
+
+    // Mocked sync-to-source: no upstream in e2e, always report a clean no-op.
+    if (path === "/api/tag-settings/sync" && req.method === "POST") {
+      return json({
+        added: 0,
+        updated: 0,
+        deleted: 0,
+        unchanged: tagSettings.length,
+        pending_deletes: [],
+        failed: [],
+      });
     }
 
     // ---- Cached (offline fallback) endpoints -----------------------------

@@ -64,6 +64,11 @@ func Action(v string) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldEQ(FieldAction, v))
 }
 
+// Weight applies equality check predicate on the "weight" field. It's identical to WeightEQ.
+func Weight(v int) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldEQ(FieldWeight, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldEQ(FieldCreatedAt, v))
@@ -202,6 +207,46 @@ func ActionEqualFold(v string) predicate.TagPreference {
 // ActionContainsFold applies the ContainsFold predicate on the "action" field.
 func ActionContainsFold(v string) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldContainsFold(FieldAction, v))
+}
+
+// WeightEQ applies the EQ predicate on the "weight" field.
+func WeightEQ(v int) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldEQ(FieldWeight, v))
+}
+
+// WeightNEQ applies the NEQ predicate on the "weight" field.
+func WeightNEQ(v int) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldNEQ(FieldWeight, v))
+}
+
+// WeightIn applies the In predicate on the "weight" field.
+func WeightIn(vs ...int) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldIn(FieldWeight, vs...))
+}
+
+// WeightNotIn applies the NotIn predicate on the "weight" field.
+func WeightNotIn(vs ...int) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldNotIn(FieldWeight, vs...))
+}
+
+// WeightGT applies the GT predicate on the "weight" field.
+func WeightGT(v int) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldGT(FieldWeight, v))
+}
+
+// WeightGTE applies the GTE predicate on the "weight" field.
+func WeightGTE(v int) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldGTE(FieldWeight, v))
+}
+
+// WeightLT applies the LT predicate on the "weight" field.
+func WeightLT(v int) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldLT(FieldWeight, v))
+}
+
+// WeightLTE applies the LTE predicate on the "weight" field.
+func WeightLTE(v int) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldLTE(FieldWeight, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

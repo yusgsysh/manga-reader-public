@@ -4,7 +4,7 @@ import { X } from "@phosphor-icons/react";
 import { useTagTranslation } from "../../hooks/useTagTranslation";
 import {
   useTagPreferences,
-  TAG_ACTION_TEXT_CLASS,
+  TAG_ACTION_CHIP_CLASS,
 } from "../../hooks/useTagPreferences";
 import { Section } from "../ui";
 import { FilterChip } from "./FilterChip";
@@ -46,7 +46,7 @@ export function TagFilterInput({
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
   const { searchTags, ready: tagDbReady } = useTagTranslation();
-  const { getTagAction } = useTagPreferences();
+  const { getTagRule } = useTagPreferences();
 
   const suggestions =
     pendingQuery.length > 0 && resultsQuery === pendingQuery
@@ -175,24 +175,28 @@ export function TagFilterInput({
       {(appliedTags.length > 0 || pendingTags.length > 0) && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {appliedTags.map((tag) => {
-            const action = getTagAction(tag);
+            const rule = getTagRule(tag);
             return (
               <FilterChip
                 key={`applied-${tag}`}
                 label={tag}
                 onRemove={() => onRemoveAppliedTag?.(tag)}
-                className={action ? TAG_ACTION_TEXT_CLASS[action] : undefined}
+                className={
+                  rule ? TAG_ACTION_CHIP_CLASS[rule.action] : undefined
+                }
               />
             );
           })}
           {pendingTags.map((tag) => {
-            const action = getTagAction(tag);
+            const rule = getTagRule(tag);
             return (
               <span
                 key={`pending-${tag}`}
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full bg-kumo-recessed px-2.5 py-1 text-xs font-medium",
-                  action ? TAG_ACTION_TEXT_CLASS[action] : "text-kumo-subtle",
+                  "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
+                  rule
+                    ? TAG_ACTION_CHIP_CLASS[rule.action]
+                    : "bg-kumo-recessed text-kumo-subtle",
                 )}
               >
                 {tag}

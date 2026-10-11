@@ -1455,7 +1455,13 @@ sum(rate(image_cache_requests_total[5m]))
 
 ### 30. Tag Settings（标签喜好）
 
-标签喜好用于在前端把标签标成蓝色（喜欢）或红色（不喜欢），语义对齐 ExHentai 的 My Tags 高亮。数据存于 `tag_preference` 表，一行一个标签（`namespace:name`），**只影响显示、不过滤列表**。
+标签喜好用于在前端把标签标成蓝色（喜欢）或红色（不喜欢），语义对齐 ExHentai 的 My Tags 高亮。数据存于 `tag_preference` 表，一行一个标签（`namespace:name`），**本应用内只影响显示与排序、不过滤列表**；同步到源站后，源站自身会按其原生语义过滤（不喜欢 = Hidden + 负权重）。
+
+每条规则带 `weight`（排序权重，对齐源站 My Tags weight）：
+
+- `like`：`weight ∈ [0, 999]`，默认 `10`
+- `dislike`：`weight ∈ [-999, 0]`，默认 `-10`
+- 符号必须与 `action` 一致（蓝正红负）；仅用于排序（`|weight|` 大者靠前），不影响本应用内的过滤
 
 #### GET `/api/tag-settings`
 
@@ -1466,8 +1472,8 @@ sum(rate(image_cache_requests_total[5m]))
 ```json
 {
   "tags": [
-    { "tag": "female:yuri", "action": "like" },
-    { "tag": "tag:netorare", "action": "dislike" }
+    { "tag": "female:yuri", "action": "like", "weight": 10 },
+    { "tag": "tag:netorare", "action": "dislike", "weight": -10 }
   ]
 }
 ```
@@ -1476,7 +1482,7 @@ sum(rate(image_cache_requests_total[5m]))
 
 #### PUT `/api/tag-settings`
 
-**全量替换**：body 为完整规则列表，服务端先归一化（trim + 转小写）、按 `tag` 去重（后出现的 `action` 覆盖先出现的），再在事务内清空旧数据并写入新列表。`tags: []` 清空全部规则。
+**全量替换**：body 为完整规则列表，服务端先归一化（trim + 转小写）、补默认权重并校验符号、按 `tag` 去重（后出现的完整规则覆盖先出现的），再在事务内清空旧数据并写入新列表。`tags: []` 清空全部规则。
 
 **Request Body:**
 
@@ -1484,14 +1490,50 @@ sum(rate(image_cache_requests_total[5m]))
 {
   "tags": [
     { "tag": "Female:Yuri ", "action": "like" },
-    { "tag": "tag:netorare", "action": "dislike" }
+    { "tag": "female:ntr", "action": "dislike", "weight": -50 },
+    { "tag": "artist:someone", "action": "like", "weight": 0 }
   ]
 }
 ```
 
+`weight` 可省略（按 `action` 默认 ±10）；显式 `0` 会被保留。
+
 **Response (200):** 与 GET 相同结构，返回归一化、去重并按 `tag` 升序排列后的最终列表。
 
-**Error Responses:** `400`（非法 JSON、`tag` 为空、`action` 非 `like`/`dislike`、超过 10000 条）、`500` 数据库错误。校验失败时不写入任何数据。
+**Error Responses:** `400`（非法 JSON、`tag` 为空、`action` 非 `like`/`dislike`、`weight` 越界或符号与 `action` 不符、超过 10000 条）、`500` 数据库错误。校验失败时不写入任何数据。
+
+#### POST `/api/tag-settings/sync`
+
+把本地规则**完整镜像**到源站 My Tags（需要后端配置了有效登录 Cookie）：
+
+- **新增**（本地有、源站没有）：表单 `usertag_action=add`
+- **更新**（双方都有但 watch/hide/weight/color 有差）：`s.exhentai.org/api.php` `setusertag`
+- **删除**（源站有、本地没有）：仅当 `confirm_deletes: true` 时执行批量删除（`usertag_action=mass`），否则只出现在 `pending_deletes` 里等客户端确认
+
+字段映射（对齐源站原生语义）：`like → tagwatch=1, taghide=0, weight≥0`；`dislike → tagwatch=0, taghide=1, weight≤0`；`tagcolor` 恒传空（让源站自己套默认蓝/红，同时会清掉源站上的自定义色）。
+
+同步串行执行、写操作间歇 150ms；单条失败不中断其余条目。
+
+**Request Body（可选）:**
+
+```json
+{ "confirm_deletes": false }
+```
+
+**Response (200):**
+
+```json
+{
+  "added": 2,
+  "updated": 1,
+  "deleted": 0,
+  "unchanged": 96,
+  "pending_deletes": ["male:males only"],
+  "failed": [{ "tag": "artist:x", "error": "api error: ..." }]
+}
+```
+
+**Error Responses:** `502`（拿不到源站 `/mytags` 页面或未配置上游客户端）、`400` 非法 JSON。并发同步在服务端串行化。
 
 ---
 

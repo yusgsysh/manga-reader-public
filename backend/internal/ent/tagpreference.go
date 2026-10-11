@@ -21,6 +21,8 @@ type TagPreference struct {
 	Tag string `json:"tag,omitempty"`
 	// Action holds the value of the "action" field.
 	Action string `json:"action,omitempty"`
+	// Weight holds the value of the "weight" field.
+	Weight int `json:"weight,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -33,7 +35,7 @@ func (*TagPreference) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case tagpreference.FieldID:
+		case tagpreference.FieldID, tagpreference.FieldWeight:
 			values[i] = new(sql.NullInt64)
 		case tagpreference.FieldTag, tagpreference.FieldAction:
 			values[i] = new(sql.NullString)
@@ -71,6 +73,12 @@ func (_m *TagPreference) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field action", values[i])
 			} else if value.Valid {
 				_m.Action = value.String
+			}
+		case tagpreference.FieldWeight:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field weight", values[i])
+			} else if value.Valid {
+				_m.Weight = int(value.Int64)
 			}
 		case tagpreference.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -125,6 +133,9 @@ func (_m *TagPreference) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("action=")
 	builder.WriteString(_m.Action)
+	builder.WriteString(", ")
+	builder.WriteString("weight=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Weight))
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

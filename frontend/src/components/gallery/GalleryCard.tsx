@@ -7,7 +7,7 @@ import { formatPosted } from "../../lib/time";
 import { useTagTranslation } from "../../hooks/useTagTranslation";
 import {
   useTagPreferences,
-  TAG_ACTION_TEXT_CLASS,
+  TAG_ACTION_CHIP_CLASS,
   sortTagsByPreference,
 } from "../../hooks/useTagPreferences";
 import { Star, Tag as TagIcon } from "@phosphor-icons/react";
@@ -70,13 +70,13 @@ function TagPopover({
   onHoverChange: (hovering: boolean) => void;
 }) {
   const { translateTag, ready } = useTagTranslation();
-  const { getTagAction } = useTagPreferences();
+  const { getTagRule } = useTagPreferences();
 
   // Blue (liked) first, red (disliked) second, neutral last — same order as
-  // the detail page tag list.
+  // the detail page tag list (strongest |weight| first inside each group).
   const sortedTags = useMemo(
-    () => sortTagsByPreference(tags, getTagAction),
-    [tags, getTagAction],
+    () => sortTagsByPreference(tags, getTagRule),
+    [tags, getTagRule],
   );
 
   return createPortal(
@@ -94,13 +94,15 @@ function TagPopover({
             : tag.namespace
               ? `${tag.namespace}:${tag.name}`
               : tag.name;
-          const action = getTagAction(tag);
+          const rule = getTagRule(tag);
           return (
             <span
               key={raw}
               className={cn(
-                "inline-block rounded-md bg-kumo-recessed px-1.5 py-0.5 text-[11px]",
-                action && TAG_ACTION_TEXT_CLASS[action],
+                "inline-block rounded-md px-1.5 py-0.5 text-[11px]",
+                rule
+                  ? TAG_ACTION_CHIP_CLASS[rule.action]
+                  : "bg-kumo-recessed",
               )}
             >
               {label}

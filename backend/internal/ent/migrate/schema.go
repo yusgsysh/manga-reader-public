@@ -146,6 +146,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "tag", Type: field.TypeString, Unique: true},
 		{Name: "action", Type: field.TypeString},
+		{Name: "weight", Type: field.TypeInt, Default: 10},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}

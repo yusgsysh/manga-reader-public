@@ -4563,6 +4563,8 @@ type TagPreferenceMutation struct {
 	id            *int
 	tag           *string
 	action        *string
+	weight        *int
+	addweight     *int
 	created_at    *time.Time
 	updated_at    *time.Time
 	clearedFields map[string]struct{}
@@ -4741,6 +4743,62 @@ func (m *TagPreferenceMutation) ResetAction() {
 	m.action = nil
 }
 
+// SetWeight sets the "weight" field.
+func (m *TagPreferenceMutation) SetWeight(i int) {
+	m.weight = &i
+	m.addweight = nil
+}
+
+// Weight returns the value of the "weight" field in the mutation.
+func (m *TagPreferenceMutation) Weight() (r int, exists bool) {
+	v := m.weight
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWeight returns the old "weight" field's value of the TagPreference entity.
+// If the TagPreference object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TagPreferenceMutation) OldWeight(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWeight is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWeight requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWeight: %w", err)
+	}
+	return oldValue.Weight, nil
+}
+
+// AddWeight adds i to the "weight" field.
+func (m *TagPreferenceMutation) AddWeight(i int) {
+	if m.addweight != nil {
+		*m.addweight += i
+	} else {
+		m.addweight = &i
+	}
+}
+
+// AddedWeight returns the value that was added to the "weight" field in this mutation.
+func (m *TagPreferenceMutation) AddedWeight() (r int, exists bool) {
+	v := m.addweight
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetWeight resets all changes to the "weight" field.
+func (m *TagPreferenceMutation) ResetWeight() {
+	m.weight = nil
+	m.addweight = nil
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *TagPreferenceMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -4847,12 +4905,15 @@ func (m *TagPreferenceMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TagPreferenceMutation) Fields() []string {
-	fields := make([]string, 0, 4)
+	fields := make([]string, 0, 5)
 	if m.tag != nil {
 		fields = append(fields, tagpreference.FieldTag)
 	}
 	if m.action != nil {
 		fields = append(fields, tagpreference.FieldAction)
+	}
+	if m.weight != nil {
+		fields = append(fields, tagpreference.FieldWeight)
 	}
 	if m.created_at != nil {
 		fields = append(fields, tagpreference.FieldCreatedAt)
@@ -4872,6 +4933,8 @@ func (m *TagPreferenceMutation) Field(name string) (ent.Value, bool) {
 		return m.Tag()
 	case tagpreference.FieldAction:
 		return m.Action()
+	case tagpreference.FieldWeight:
+		return m.Weight()
 	case tagpreference.FieldCreatedAt:
 		return m.CreatedAt()
 	case tagpreference.FieldUpdatedAt:
@@ -4889,6 +4952,8 @@ func (m *TagPreferenceMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldTag(ctx)
 	case tagpreference.FieldAction:
 		return m.OldAction(ctx)
+	case tagpreference.FieldWeight:
+		return m.OldWeight(ctx)
 	case tagpreference.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case tagpreference.FieldUpdatedAt:
@@ -4916,6 +4981,13 @@ func (m *TagPreferenceMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetAction(v)
 		return nil
+	case tagpreference.FieldWeight:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWeight(v)
+		return nil
 	case tagpreference.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -4937,13 +5009,21 @@ func (m *TagPreferenceMutation) SetField(name string, value ent.Value) error {
 // AddedFields returns all numeric fields that were incremented/decremented during
 // this mutation.
 func (m *TagPreferenceMutation) AddedFields() []string {
-	return nil
+	var fields []string
+	if m.addweight != nil {
+		fields = append(fields, tagpreference.FieldWeight)
+	}
+	return fields
 }
 
 // AddedField returns the numeric value that was incremented/decremented on a field
 // with the given name. The second boolean return value indicates that this field
 // was not set, or was not defined in the schema.
 func (m *TagPreferenceMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case tagpreference.FieldWeight:
+		return m.AddedWeight()
+	}
 	return nil, false
 }
 
@@ -4952,6 +5032,13 @@ func (m *TagPreferenceMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *TagPreferenceMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case tagpreference.FieldWeight:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWeight(v)
+		return nil
 	}
 	return fmt.Errorf("unknown TagPreference numeric field %s", name)
 }
@@ -4984,6 +5071,9 @@ func (m *TagPreferenceMutation) ResetField(name string) error {
 		return nil
 	case tagpreference.FieldAction:
 		m.ResetAction()
+		return nil
+	case tagpreference.FieldWeight:
+		m.ResetWeight()
 		return nil
 	case tagpreference.FieldCreatedAt:
 		m.ResetCreatedAt()

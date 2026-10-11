@@ -228,12 +228,33 @@ const (
 )
 
 // TagPreference is a user preference for a single tag (`namespace:name`).
+// Weight mirrors ExHentai My Tags: like rules are >= 0, dislike rules are
+// <= 0; it only orders tags (strongest first), it never filters locally.
 type TagPreference struct {
 	Tag    string `json:"tag"`
 	Action string `json:"action"`
+	Weight int    `json:"weight"`
 }
 
 // TagSettingsResponse is the payload of GET/PUT /api/tag-settings.
 type TagSettingsResponse struct {
 	Tags []TagPreference `json:"tags"`
+}
+
+// TagSyncResult is the payload of POST /api/tag-settings/sync: how many
+// source rows were added/updated/deleted, what remains pending deletion
+// (remote-only rows not yet confirmed), and per-tag failures.
+type TagSyncResult struct {
+	Added          int              `json:"added"`
+	Updated        int              `json:"updated"`
+	Deleted        int              `json:"deleted"`
+	Unchanged      int              `json:"unchanged"`
+	PendingDeletes []string         `json:"pending_deletes"`
+	Failed         []TagSyncFailure `json:"failed"`
+}
+
+// TagSyncFailure reports one tag the sync could not apply on the source.
+type TagSyncFailure struct {
+	Tag   string `json:"tag"`
+	Error string `json:"error"`
 }

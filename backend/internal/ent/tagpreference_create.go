@@ -32,6 +32,20 @@ func (_c *TagPreferenceCreate) SetAction(v string) *TagPreferenceCreate {
 	return _c
 }
 
+// SetWeight sets the "weight" field.
+func (_c *TagPreferenceCreate) SetWeight(v int) *TagPreferenceCreate {
+	_c.mutation.SetWeight(v)
+	return _c
+}
+
+// SetNillableWeight sets the "weight" field if the given value is not nil.
+func (_c *TagPreferenceCreate) SetNillableWeight(v *int) *TagPreferenceCreate {
+	if v != nil {
+		_c.SetWeight(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *TagPreferenceCreate) SetCreatedAt(v time.Time) *TagPreferenceCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -95,6 +109,10 @@ func (_c *TagPreferenceCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *TagPreferenceCreate) defaults() {
+	if _, ok := _c.mutation.Weight(); !ok {
+		v := tagpreference.DefaultWeight
+		_c.mutation.SetWeight(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := tagpreference.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -122,6 +140,9 @@ func (_c *TagPreferenceCreate) check() error {
 		if err := tagpreference.ActionValidator(v); err != nil {
 			return &ValidationError{Name: "action", err: fmt.Errorf(`ent: validator failed for field "TagPreference.action": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.Weight(); !ok {
+		return &ValidationError{Name: "weight", err: errors.New(`ent: missing required field "TagPreference.weight"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "TagPreference.created_at"`)}
@@ -162,6 +183,10 @@ func (_c *TagPreferenceCreate) createSpec() (*TagPreference, *sqlgraph.CreateSpe
 	if value, ok := _c.mutation.Action(); ok {
 		_spec.SetField(tagpreference.FieldAction, field.TypeString, value)
 		_node.Action = value
+	}
+	if value, ok := _c.mutation.Weight(); ok {
+		_spec.SetField(tagpreference.FieldWeight, field.TypeInt, value)
+		_node.Weight = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(tagpreference.FieldCreatedAt, field.TypeTime, value)
