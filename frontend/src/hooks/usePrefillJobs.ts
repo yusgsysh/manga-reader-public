@@ -9,7 +9,7 @@ import {
 import { ApiRequestError } from "../api/client";
 import { PREFILL_STALE_TIME } from "../lib/cacheConfig";
 import { hasActivePrefillJob } from "../lib/prefill";
-import { useKumoToastManager } from "@cloudflare/kumo";
+import { useToast } from "../components/ui";
 import type { PrefillStartRequest } from "../types/prefill";
 
 const PREFILL_KEY = ["prefill-jobs"] as const;
@@ -34,15 +34,14 @@ function usePrefillInvalidation() {
 
 export function useStartPrefillJob() {
   const invalidate = usePrefillInvalidation();
-  const toast = useKumoToastManager();
+  const toast = useToast();
   return useMutation({
     mutationFn: (req: PrefillStartRequest) => startPrefillJob(req),
     onSuccess: (_job, req) => {
-      toast.add({
-        title: "已添加下载任务",
-        description: `共 ${req.urls.length} 页 · 在「下载管理」查看进度`,
-        variant: "success",
-      });
+      toast.success(
+        "已添加下载任务",
+        `共 ${req.urls.length} 页 · 在「下载管理」查看进度`,
+      );
     },
     onError: (_err: unknown) => {
       // Error toast handled by component-level onError
@@ -55,21 +54,17 @@ export function useStartPrefillJob() {
 
 export function useCancelPrefillJob() {
   const invalidate = usePrefillInvalidation();
-  const toast = useKumoToastManager();
+  const toast = useToast();
   return useMutation({
     mutationFn: (id: string) => cancelPrefillJob(id),
     onSuccess: () => {
-      toast.add({ title: "任务已取消", variant: "info" });
+      toast.info("任务已取消");
     },
     onError: (err: unknown) => {
       if (err instanceof ApiRequestError && err.status === 409) {
-        toast.add({ title: "任务已结束", variant: "info" });
+        toast.info("任务已结束");
       } else {
-        toast.add({
-          title: "取消任务失败",
-          description: err instanceof Error ? err.message : String(err),
-          variant: "error",
-        });
+        toast.error("取消任务失败", err);
       }
     },
     onSettled: () => {
@@ -80,25 +75,17 @@ export function useCancelPrefillJob() {
 
 export function useDeletePrefillJob() {
   const invalidate = usePrefillInvalidation();
-  const toast = useKumoToastManager();
+  const toast = useToast();
   return useMutation({
     mutationFn: (id: string) => deletePrefillJob(id),
     onSuccess: () => {
-      toast.add({ title: "记录已删除", variant: "success" });
+      toast.success("记录已删除");
     },
     onError: (err: unknown) => {
       if (err instanceof ApiRequestError && err.status === 409) {
-        toast.add({
-          title: "任务进行中",
-          description: "请先取消任务再删除",
-          variant: "error",
-        });
+        toast.error("任务进行中", "请先取消任务再删除");
       } else {
-        toast.add({
-          title: "删除记录失败",
-          description: err instanceof Error ? err.message : String(err),
-          variant: "error",
-        });
+        toast.error("删除记录失败", err);
       }
     },
     onSettled: () => {
@@ -109,15 +96,11 @@ export function useDeletePrefillJob() {
 
 export function useCleanupPrefillJobs() {
   const invalidate = usePrefillInvalidation();
-  const toast = useKumoToastManager();
+  const toast = useToast();
   return useMutation({
     mutationFn: (days: number) => cleanupPrefillJobs(days),
     onSuccess: (resp) => {
-      toast.add({
-        title: "清理完成",
-        description: `已删除 ${resp.deleted} 条记录`,
-        variant: "success",
-      });
+      toast.success("清理完成", `已删除 ${resp.deleted} 条记录`);
     },
     onError: (_err: unknown) => {
       // Error toast handled by component-level onError

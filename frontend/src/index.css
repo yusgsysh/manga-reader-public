@@ -335,3 +335,13 @@ body {
     display: flex;
   }
 }
+
+/*
+ * Kumo's toast viewport ships at z-1, below the app chrome (z-40 sidebar,
+ * z-50 header/back-to-top, z-60 drawer) and dialog overlays. Lift it so
+ * stacked toasts — newest in front, older ones receding behind — stay
+ * visible on every page. Matches the viewport's fixed/bottom-4/z-1 combo.
+ */
+div.fixed.bottom-4.z-1 {
+  z-index: 80;
+}

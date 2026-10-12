@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, useKumoToastManager } from "@cloudflare/kumo";
+import { Button } from "@cloudflare/kumo";
 import {
   ArrowLeft,
   BookmarkSimple,
@@ -28,7 +28,7 @@ import { TagGroups } from "../components/tag";
 import { thumbnailUrl } from "../lib/image";
 import { DOWNLOAD_PAGES_STALE_TIME } from "../lib/cacheConfig";
 import { formatPosted } from "../lib/time";
-import { Chip, Section } from "../components/ui";
+import { Chip, Section, useToast } from "../components/ui";
 import { CategoryChip } from "../components/gallery/CategoryChip";
 import { GalleryTorrentsDialog } from "../components/gallery/GalleryTorrentsDialog";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -109,7 +109,7 @@ export function GalleryDetailPage() {
   const { data: progress } = useReadingProgress(id, token ?? "");
   const startPrefill = useStartPrefillJob();
   const queryClient = useQueryClient();
-  const toast = useKumoToastManager();
+  const toast = useToast();
 
   const [preparingDownload, setPreparingDownload] = useState(false);
   const [torrentsOpen, setTorrentsOpen] = useState(false);
@@ -144,22 +144,11 @@ export function GalleryDetailPage() {
     add.mutate(undefined, {
       onSuccess: (result) => {
         if (result.offline) {
-          toast.add({
-            title: "已离线加入书架",
-            description: "书籍信息来自本地缓存",
-            variant: "success",
-          });
+          toast.success("已离线加入书架", "书籍信息来自本地缓存");
         }
       },
       onError: (error) => {
-        const message =
-          error instanceof Error ? error.message : String(error);
-
-        toast.add({
-          title: "加入书架失败",
-          description: message,
-          variant: "error",
-        });
+        toast.error("加入书架失败", error);
       },
     });
   };
@@ -187,33 +176,18 @@ export function GalleryDetailPage() {
         },
         {
           onSuccess: (job) => {
-            toast.add({
-              title: "已添加下载任务",
-              description: `共 ${job.total} 页 · 在「下载管理」查看进度`,
-              variant: "success",
-            });
+            toast.success(
+              "已添加下载任务",
+              `共 ${job.total} 页 · 在「下载管理」查看进度`,
+            );
           },
           onError: (error) => {
-            const message =
-              error instanceof Error ? error.message : String(error);
-
-            toast.add({
-              title: "创建下载任务失败",
-              description: message,
-              variant: "error",
-            });
+            toast.error("创建下载任务失败", error);
           },
         },
       );
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : String(error);
-
-      toast.add({
-        title: "获取页面列表失败",
-        description: message,
-        variant: "error",
-      });
+      toast.error("获取页面列表失败", error);
     } finally {
       setPreparingDownload(false);
     }

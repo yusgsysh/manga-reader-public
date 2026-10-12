@@ -8,13 +8,7 @@ import {
   Palette,
   Sun,
 } from "@phosphor-icons/react";
-import {
-  Button,
-  Input,
-  Switch,
-  useKumoToastManager,
-  cn,
-} from "@cloudflare/kumo";
+import { Button, Input, Switch, cn } from "@cloudflare/kumo";
 import { HexColorPicker, HexColorInput } from "react-colorful";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchUpstreamDown, setUpstreamDown } from "../api/dev";
@@ -33,7 +27,7 @@ import { SETTINGS_STALE_TIME } from "../lib/cacheConfig";
 import { ACCENT_PRESETS, DEFAULT_ACCENT, isPresetAccent } from "../lib/accent";
 import { formatDateTime } from "../lib/time";
 import type { ThemeMode } from "../lib/theme";
-import { PageHeader, Section } from "../components/ui";
+import { PageHeader, Section, useToast } from "../components/ui";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
@@ -184,24 +178,20 @@ function AppearanceSection() {
 
 function TagDatabaseSection() {
   const { info, updateStatus, update } = useTagTranslation();
-  const toast = useKumoToastManager();
+  const toast = useToast();
   const updating = updateStatus === "loading";
 
   const handleUpdate = async () => {
     if (updating) return;
     try {
       const result = await update();
-      toast.add({
+      toast.show({
         title: result.changed ? "标签翻译数据库已更新" : "翻译数据库已是最新",
         description: info?.sha ? `版本 ${info.sha.slice(0, 7)}` : undefined,
         variant: result.changed ? "success" : "info",
       });
     } catch (error) {
-      toast.add({
-        title: "更新标签翻译数据库失败",
-        description: error instanceof Error ? error.message : undefined,
-        variant: "error",
-      });
+      toast.error("更新标签翻译数据库失败", error);
     }
   };
 
@@ -244,7 +234,7 @@ function TagDatabaseSection() {
 }
 
 function DevToolsSection() {
-  const toast = useKumoToastManager();
+  const toast = useToast();
   const queryClient = useQueryClient();
 
   const stateQuery = useQuery({
@@ -258,17 +248,13 @@ function DevToolsSection() {
     mutationFn: (down: boolean) => setUpstreamDown(down),
     onSuccess: (data) => {
       queryClient.setQueryData(["dev-upstream-down"], data);
-      toast.add({
+      toast.show({
         title: data.down ? "已模拟 ExHentai 不可用" : "已恢复正常",
         variant: data.down ? "info" : "success",
       });
     },
     onError: (error) => {
-      toast.add({
-        title: "切换失败",
-        description: error instanceof Error ? error.message : undefined,
-        variant: "error",
-      });
+      toast.error("切换失败", error);
     },
   });
 
@@ -313,7 +299,7 @@ function DevToolsSection() {
 }
 
 function SyncSection() {
-  const toast = useKumoToastManager();
+  const toast = useToast();
   const queryClient = useQueryClient();
 
   const configQuery = useQuery({
@@ -353,14 +339,10 @@ function SyncSection() {
       setTokenStored(cfg.token === SYNC_TOKEN_MASK);
       setToken("");
       void statusQuery.refetch();
-      toast.add({ title: "同步配置已保存", variant: "success" });
+      toast.success("同步配置已保存");
     },
     onError: (error) => {
-      toast.add({
-        title: "保存同步配置失败",
-        description: error instanceof Error ? error.message : undefined,
-        variant: "error",
-      });
+      toast.error("保存同步配置失败", error);
     },
   });
 
