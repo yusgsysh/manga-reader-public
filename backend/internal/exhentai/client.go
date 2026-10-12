@@ -14,6 +14,12 @@ import (
 
 const ExhentaiBase = "https://exhentai.org"
 
+// exhentaiCookieDomain scopes the session cookies to every *.exhentai.org
+// host. Without it the jar stores them host-only for exhentai.org, and the
+// setusertag API calls to s.exhentai.org go out unauthenticated (the server
+// rejects them with errors like "target not exist").
+const exhentaiCookieDomain = "exhentai.org"
+
 // CookieConfig stores cookie configuration.
 type CookieConfig = config.CookieConfig
 
@@ -35,14 +41,14 @@ func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 
 	u, _ := url.Parse(ExhentaiBase)
 	cookies := []*http.Cookie{
-		{Name: "ipb_member_id", Value: cfg.IpbMemberID},
-		{Name: "ipb_pass_hash", Value: cfg.IpbPassHash},
+		{Name: "ipb_member_id", Value: cfg.IpbMemberID, Domain: exhentaiCookieDomain},
+		{Name: "ipb_pass_hash", Value: cfg.IpbPassHash, Domain: exhentaiCookieDomain},
 	}
 	if cfg.Igneous != "" {
-		cookies = append(cookies, &http.Cookie{Name: "igneous", Value: cfg.Igneous})
+		cookies = append(cookies, &http.Cookie{Name: "igneous", Value: cfg.Igneous, Domain: exhentaiCookieDomain})
 	}
 	if cfg.SK != "" {
-		cookies = append(cookies, &http.Cookie{Name: "sk", Value: cfg.SK})
+		cookies = append(cookies, &http.Cookie{Name: "sk", Value: cfg.SK, Domain: exhentaiCookieDomain})
 	}
 	jar.SetCookies(u, cookies)
 

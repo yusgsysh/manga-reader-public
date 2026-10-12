@@ -95,8 +95,9 @@ func (s *Server) loadTagBaseline(ctx context.Context) ([]model.TagPreference, er
 }
 
 // ruleToUserTag maps a local rule to the source row state we want: like =
-// Watched + non-negative weight, dislike = Hidden + non-negative weight,
-// default colour (tagcolor "") so the source derives blue/red itself.
+// Watched + positive weight, dislike = Hidden + negative weight (verified
+// against the live API: hidden rows accept negative weights), default colour
+// (tagcolor "") so the source derives blue/red itself.
 func ruleToUserTag(rule model.TagPreference) exhentai.UserTag {
 	return exhentai.UserTag{
 		Tag:    rule.Tag,
