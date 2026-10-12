@@ -5,3 +5,4 @@ export { PageHeader } from "./PageHeader";
 export { PageTransition } from "./PageTransition";
 export { Section } from "./Section";
 export { Skeleton } from "./Skeleton";
+export { useToast, type ToastOptions, type ToastVariant } from "./Toast";

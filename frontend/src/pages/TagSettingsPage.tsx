@@ -1,11 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Button,
-  Dialog,
-  Input,
-  useKumoToastManager,
-  cn,
-} from "@cloudflare/kumo";
+import { Button, Dialog, Input, cn } from "@cloudflare/kumo";
 import { CircleNotch, Tag, X } from "@phosphor-icons/react";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import {
@@ -22,7 +16,7 @@ import type {
   TagSyncSide,
 } from "../api/tagSettings";
 import { useTagTranslation } from "../hooks/useTagTranslation";
-import { PageHeader, Section } from "../components/ui";
+import { PageHeader, Section, useToast } from "../components/ui";
 
 type TagSuggestion = { namespace: string; tag: string; translation: string };
 
@@ -39,9 +33,6 @@ const DEFAULT_WEIGHT: Record<TagAction, number> = { like: 10, dislike: -10 };
 /** Weight bounds mirror the source input (3 digits + sign). */
 const MIN_WEIGHT = -999;
 const MAX_WEIGHT = 999;
-
-/** Debounce before auto-sync fires after a save, coalescing rapid edits. */
-const SYNC_DEBOUNCE_MS = 1200;
 
 /** Display order: likes (strongest first), then dislikes (strongest first). */
 function sortRuleRows(rules: LocalRule[]): LocalRule[] {
@@ -305,18 +296,18 @@ function ConflictSide({ label, side }: { label: string; side: TagSyncSide }) {
 
 export function TagSettingsPage() {
   useDocumentTitle("标签设置");
-  const toast = useKumoToastManager();
+  const toast = useToast();
   const { preferences, isLoading, isError } = useTagPreferences();
   const saveMutation = useSaveTagPreferences();
   const syncMutation = useSyncTagPreferences();
 
   const [rules, setRules] = useState<LocalRule[]>([]);
   const [seeded, setSeeded] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [pendingDeletes, setPendingDeletes] = useState<string[] | null>(null);
   const [deleteDismissed, setDeleteDismissed] = useState(false);
   const [conflicts, setConflicts] = useState<TagSyncConflict[] | null>(null);
 
-  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncQueuedRef = useRef<SyncTagSettingsOptions | null>(null);
   const syncStartedRef = useRef(false);
   const stashedPendingRef = useRef<string[] | null>(null);
@@ -325,7 +316,6 @@ export function TagSettingsPage() {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
   }, []);
 
@@ -354,25 +344,30 @@ export function TagSettingsPage() {
       weight: p.weight ?? DEFAULT_WEIGHT[p.action],
     }));
 
+  // Local edits only; nothing hits the server until 保存 is pressed.
+  const updateRules = (next: LocalRule[]) => {
+    setRules(next);
+    setDirty(true);
+  };
+
   const handleSyncSuccess = (result: TagSyncResult) => {
     if (!mountedRef.current) return;
     if (result.failed.length > 0) {
       const first = result.failed[0];
-      toast.add({
-        title: "部分标签同步失败",
-        description: `${result.failed.length} 个标签未能同步到源站（${first.tag}: ${first.error}）`,
-        variant: "error",
-      });
+      toast.error(
+        "部分标签同步失败",
+        `${result.failed.length} 个标签未能同步到源站（${first.tag}: ${first.error}）`,
+      );
     }
     // Pulled source changes first: adopt them into the editable list
     // (the hook has already reseeded the shared query cache).
     if (result.pulled > 0 && result.tags.length > 0) {
       setRules(rulesFromTags(result.tags));
-      toast.add({
-        title: "已从源站拉取变更",
-        description: `${result.pulled} 个标签已按源站 My Tags 更新到本地`,
-        variant: "info",
-      });
+      setDirty(false);
+      toast.info(
+        "已从源站拉取变更",
+        `${result.pulled} 个标签已按源站 My Tags 更新到本地`,
+      );
     }
     if (result.conflicts.length > 0) {
       // Show the conflict picker; any pending deletions are re-reported by
@@ -386,20 +381,18 @@ export function TagSettingsPage() {
       if (!deleteDismissed) {
         setPendingDeletes(result.pending_deletes);
       } else {
-        toast.add({
-          title: "部分源站标签未删除",
-          description: `${result.pending_deletes.length} 个源站标签在本地已不存在，需确认后才会从源站删除`,
-          variant: "info",
-        });
+        toast.info(
+          "部分源站标签未删除",
+          `${result.pending_deletes.length} 个源站标签在本地已不存在，需确认后才会从源站删除`,
+        );
       }
     }
     const changed = result.added + result.updated + result.deleted;
     if (changed > 0) {
-      toast.add({
-        title: "已同步到源站",
-        description: `新增 ${result.added} · 更新 ${result.updated} · 删除 ${result.deleted}`,
-        variant: "success",
-      });
+      toast.success(
+        "已同步到源站",
+        `新增 ${result.added} · 更新 ${result.updated} · 删除 ${result.deleted}`,
+      );
     }
   };
 
@@ -418,11 +411,7 @@ export function TagSettingsPage() {
       onSuccess: handleSyncSuccess,
       onError: (error) => {
         if (!mountedRef.current) return;
-        toast.add({
-          title: "同步源站失败",
-          description: error instanceof Error ? error.message : undefined,
-          variant: "error",
-        });
+        toast.error("同步源站失败", error);
       },
       onSettled: () => {
         if (!mountedRef.current) return;
@@ -442,35 +431,18 @@ export function TagSettingsPage() {
     requestSync({});
   });
 
-  // Auto-sync after every successful save (debounced to coalesce rapid edits).
-  const scheduleSync = () => {
-    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-    syncTimerRef.current = setTimeout(() => {
-      syncTimerRef.current = null;
-      requestSync({});
-    }, SYNC_DEBOUNCE_MS);
-  };
-
-  const persist = (next: LocalRule[]) => {
+  // Explicit save: write the list, then sync it to source My Tags.
+  const handleSave = () => {
     saveMutation.mutate(
-      { tags: next.map((r) => ({ tag: r.tag, action: r.action, weight: r.weight })) },
+      { tags: rules.map((r) => ({ tag: r.tag, action: r.action, weight: r.weight })) },
       {
         onSuccess: (data) => {
-          setRules(
-            data.tags.map((p) => ({
-              tag: p.tag,
-              action: p.action,
-              weight: p.weight ?? DEFAULT_WEIGHT[p.action],
-            })),
-          );
-          scheduleSync();
+          setRules(rulesFromTags(data.tags));
+          setDirty(false);
+          requestSync({});
         },
         onError: (error) => {
-          toast.add({
-            title: "保存标签设置失败",
-            description: error instanceof Error ? error.message : undefined,
-            variant: "error",
-          });
+          toast.error("保存标签设置失败", error);
         },
       },
     );
@@ -479,7 +451,7 @@ export function TagSettingsPage() {
   const handleAdd = (rawTag: string) => {
     const tag = rawTag.toLowerCase();
     if (rules.some((r) => r.tag === tag)) return;
-    persist([...rules, { tag, action: "like", weight: DEFAULT_WEIGHT.like }]);
+    updateRules([...rules, { tag, action: "like", weight: DEFAULT_WEIGHT.like }]);
   };
 
   // Unchecking the active action removes the rule; checking the other action
@@ -488,12 +460,12 @@ export function TagSettingsPage() {
     const existing = rules.find((r) => r.tag === tag);
     if (!existing) return;
     if (existing.action === action) {
-      persist(rules.filter((r) => r.tag !== tag));
+      updateRules(rules.filter((r) => r.tag !== tag));
       return;
     }
     const flippedWeight =
       existing.weight === 0 ? 0 : -existing.weight;
-    persist(
+    updateRules(
       rules.map((r) =>
         r.tag === tag ? { ...r, action, weight: flippedWeight } : r,
       ),
@@ -501,11 +473,11 @@ export function TagSettingsPage() {
   };
 
   const handleWeightCommit = (tag: string, weight: number) => {
-    persist(rules.map((r) => (r.tag === tag ? { ...r, weight } : r)));
+    updateRules(rules.map((r) => (r.tag === tag ? { ...r, weight } : r)));
   };
 
   const handleRemove = (tag: string) => {
-    persist(rules.filter((r) => r.tag !== tag));
+    updateRules(rules.filter((r) => r.tag !== tag));
   };
 
   const confirmPendingDeletes = () => {
@@ -534,21 +506,20 @@ export function TagSettingsPage() {
       <PageHeader
         title="标签设置"
         icon={<Tag className="size-5" weight="fill" />}
+        actions={
+          <>
+            {dirty && (
+              <span className="text-xs text-kumo-subtle">有未保存的修改</span>
+            )}
+            <Button onClick={handleSave} disabled={!dirty || busy}>
+              {saveMutation.isPending && (
+                <CircleNotch className="mr-1 size-4 animate-spin" />
+              )}
+              保存
+            </Button>
+          </>
+        }
       />
-      <p className="mb-6 text-sm text-kumo-subtle">
-        给标签标记喜欢（蓝色）或不喜欢（红色），并设置排序权重——与源站
-        My Tags 一致：权重越强越靠前。详情页、卡片浮窗和搜索里的标签都会按
-        <span className="font-medium" style={{ color: "#3377FF" }}>
-          喜欢
-        </span>
-        →
-        <span className="font-medium" style={{ color: "#FF6666" }}>
-          不喜欢
-        </span>
-        →中性排序。本应用内只着色排序、不过滤；保存后会自动同步到源站
-        （不喜欢在源站为 Hidden + 负权重，会按源站规则过滤），打开本页也会
-        先拉取源站的变更——两边都改过的标签会弹窗询问保留哪一边。
-      </p>
 
       {isLoading ? (
         <div className="flex items-center gap-2 text-kumo-subtle">
