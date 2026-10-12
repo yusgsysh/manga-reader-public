@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -1041,13 +1042,29 @@ func (s *Server) handlePageImage(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
 
-	data, contentType, err := exhentai.FetchPageImage(ctx, s.Client, pageURL)
-	if err != nil {
+	// Stream the image instead of buffering it: failures are detected while
+	// establishing the stream (page scrape, status, probe), so every error
+	// that can still produce a JSON response happens before headers are
+	// written. A mid-body upstream failure truncates the response instead.
+	stream, err := exhentai.FetchPageImageStream(ctx, s.Client, pageURL)
+	if err != nil || stream == nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
 		return
 	}
+	defer stream.Body.Close()
 
-	c.Data(http.StatusOK, contentType, data)
+	if stream.ContentType != "" {
+		c.Header("Content-Type", stream.ContentType)
+	}
+	limit := int64(exhentai.MaxImageBytes)
+	if stream.Size > 0 {
+		c.Header("Content-Length", strconv.FormatInt(stream.Size, 10))
+		limit = stream.Size
+	}
+	c.Status(http.StatusOK)
+	if _, err := io.Copy(c.Writer, io.LimitReader(stream.Body, limit)); err != nil {
+		slog.Error("page image stream failed", "url", pageURL, "error", err)
+	}
 }
 
 func (s *Server) handleGalleryList(listURL string) gin.HandlerFunc {

@@ -36,6 +36,10 @@ services:
     environment:
       MANGA_READER_DB_PATH: /app/data/manga-reader.db
 
+      # Go 堆软上限（见 Dockerfile 注释）：接近上限时 GC 加速回收，
+      # 尖峰后 RSS 回落。镜像默认 160MiB，可用 .env 覆盖。
+      GOMEMLIMIT: ${GOMEMLIMIT:-160MiB}
+
       # HTTP Basic Auth（Gin 层，默认关闭；生产在 .env 开启）
       # 注意：.env 中的 $ 需写成 $$（compose 会做变量插值）
       MANGA_READER_BASIC_AUTH_ENABLED: ${MANGA_READER_BASIC_AUTH_ENABLED:-false}

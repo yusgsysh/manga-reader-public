@@ -201,14 +201,15 @@ func TestCachedPageThumbnail_CacheHitAvoidsUpstream(t *testing.T) {
 
 // Crops are never persisted: each request re-reads the sprite from MinIO and
 // crops it fresh, so the only object the endpoint writes is the sprite itself.
-func TestCachedPageThumbnail_CachesSpriteOnly(t *testing.T) {
+func TestCachedPageThumbnail_CachesSpriteAndCrops(t *testing.T) {
 	var requests atomic.Int32
 	srv := spriteServer(t, &requests)
 	cache := newMockImageCache()
 	server := &Server{Client: newMockClient(srv.URL), Cache: cache}
 	r := setupMockRouter(server)
 
-	// Distinct crop rects plus a repeat: one sprite download, one cache object.
+	// Distinct crop rects plus a repeat: one sprite download, one sprite
+	// object, one persisted object per distinct cell.
 	paths := []string{
 		fmt.Sprintf("%s?url=%s&x=0&y=0&w=1&h=1", cachedThumbPath, url.QueryEscape(testSpriteURL)),
 		fmt.Sprintf("%s?url=%s&x=1&y=0&w=1&h=1", cachedThumbPath, url.QueryEscape(testSpriteURL)),
@@ -223,12 +224,37 @@ func TestCachedPageThumbnail_CachesSpriteOnly(t *testing.T) {
 	if got := requests.Load(); got != 1 {
 		t.Errorf("upstream requests = %d, want 1 (sprite cached)", got)
 	}
+	var sprites, crops int
 	keys := cache.keys()
-	if len(keys) != 1 {
-		t.Fatalf("cache objects = %d (%v), want 1 (sprite only)", len(keys), keys)
+	for _, k := range keys {
+		switch {
+		case strings.HasPrefix(k, spriteCachePrefix):
+			sprites++
+		case strings.HasPrefix(k, cropCachePrefix):
+			crops++
+		default:
+			t.Errorf("unexpected cache key %q", k)
+		}
 	}
-	if !strings.HasPrefix(keys[0], spriteCachePrefix) {
-		t.Errorf("cache key = %q, want %q prefix", keys[0], spriteCachePrefix)
+	if sprites != 1 || crops != 2 {
+		t.Errorf("cache objects = %d sprite(s) + %d crop(s) (%v), want 1 + 2", sprites, crops, keys)
+	}
+
+	// The persisted crop must stand on its own: drop the sprite from the
+	// cache and repeat the first request — it has to come from the crop
+	// without re-reading (or re-downloading) the sheet.
+	for _, k := range keys {
+		if strings.HasPrefix(k, spriteCachePrefix) {
+			cache.delete(k)
+		}
+	}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("GET", paths[0], nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("repeat without sprite: status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+	if got := requests.Load(); got != 1 {
+		t.Errorf("upstream requests after sprite eviction = %d, want 1 (crop served from cache)", got)
 	}
 }
 

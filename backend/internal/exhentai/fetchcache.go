@@ -39,7 +39,11 @@ var (
 // fetchCacheMaxEntries bounds the shared document cache. Values are full
 // parsed upstream documents keyed by request URL, and query strings are
 // user-controlled, so without a cap distinct URLs would pin memory forever.
-const fetchCacheMaxEntries = 2048
+// Entries expire after fetchCacheTTL (10s), so this only needs to cover a
+// short burst of distinct URLs — a few dozen, not thousands. A parsed DOM
+// tree costs several times its source HTML, which makes an oversized cap a
+// meaningful baseline-memory cost for no benefit.
+const fetchCacheMaxEntries = 128
 
 // fetchOnce returns the cached value for key while fresh, otherwise runs fetch
 // exactly once (concurrent callers wait on the same call) and caches the result

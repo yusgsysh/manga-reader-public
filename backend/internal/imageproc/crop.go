@@ -24,33 +24,43 @@ var ErrOutOfBounds = errors.New("crop rectangle out of bounds")
 // transparent padding; pixels below this value are treated as padding.
 const alphaThreshold = 8
 
-// CropWEBP decodes a WebP image, crops it to rect and re-encodes the result as
-// a WebP image. rect is expressed in the sprite's pixel coordinates (as parsed
-// from the site's CSS background-position). rect must be fully contained in the
-// sprite bounds.
-//
-// Fully transparent padding around the cell content is trimmed so the returned
-// thumbnail tightly bounds the page image. This keeps consumers from rendering
-// the transparent letterbox as a solid (white) border.
-// maxSpritePixels caps the decoded sprite size. Compressed input is bounded
-// upstream (30 MiB) but a 16383x16383 WebP decodes to ~1 GB, so check the
-// dimensions from the header before allocating.
-const maxSpritePixels = 40_000_000
+// ProbeSprite decodes only the WebP header and validates the sprite size.
+// Callers use it to price the upcoming decode (width*height*4 bytes) before
+// allocating. Compressed input is bounded upstream (30 MiB) but a 16383x16383
+// WebP decodes to ~1 GB, so the check must happen before Decode.
+const maxSpritePixels = 16_000_000
 
-func CropWEBP(data []byte, rect image.Rectangle) ([]byte, error) {
+// ProbeSprite returns the sprite dimensions after enforcing maxSpritePixels.
+func ProbeSprite(data []byte) (image.Config, error) {
 	cfg, err := webp.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("decode sprite config: %w", err)
+		return image.Config{}, fmt.Errorf("decode sprite config: %w", err)
 	}
 	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width*cfg.Height > maxSpritePixels {
-		return nil, fmt.Errorf("sprite dimensions too large: %dx%d", cfg.Width, cfg.Height)
+		return image.Config{}, fmt.Errorf("sprite dimensions too large: %dx%d", cfg.Width, cfg.Height)
 	}
+	return cfg, nil
+}
 
+// DecodeSprite decodes a full sprite into memory. The result is read-only as
+// far as this package is concerned: concurrent CropDecoded calls may share
+// one decoded sprite. ProbeSprite's size cap applies.
+func DecodeSprite(data []byte) (image.Image, error) {
+	if _, err := ProbeSprite(data); err != nil {
+		return nil, err
+	}
 	src, err := webp.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode sprite: %w", err)
 	}
+	return src, nil
+}
 
+// CropDecoded crops rect out of an already-decoded sprite and re-encodes it
+// as WebP, applying the same bounds check and transparent-padding trim as
+// CropWEBP. Sharing one DecodeSprite across concurrent calls is what keeps a
+// burst of grid thumbnails from decoding the same sheet once per cell.
+func CropDecoded(src image.Image, rect image.Rectangle) ([]byte, error) {
 	if rect.Empty() || !rect.In(src.Bounds()) {
 		return nil, fmt.Errorf("%w: %v not in %v", ErrOutOfBounds, rect, src.Bounds())
 	}
@@ -65,6 +75,25 @@ func CropWEBP(data []byte, rect image.Rectangle) ([]byte, error) {
 		return nil, fmt.Errorf("encode thumbnail: %w", err)
 	}
 	return out.Bytes(), nil
+}
+
+// CropWEBP decodes a WebP image, crops it to rect and re-encodes the result as
+// a WebP image. rect is expressed in the sprite's pixel coordinates (as parsed
+// from the site's CSS background-position). rect must be fully contained in the
+// sprite bounds.
+//
+// Fully transparent padding around the cell content is trimmed so the returned
+// thumbnail tightly bounds the page image. This keeps consumers from rendering
+// the transparent letterbox as a solid (white) border.
+//
+// Prefer DecodeSprite + CropDecoded when cropping more than one rectangle of
+// the same sprite: that shares the decode instead of re-running it per call.
+func CropWEBP(data []byte, rect image.Rectangle) ([]byte, error) {
+	src, err := DecodeSprite(data)
+	if err != nil {
+		return nil, err
+	}
+	return CropDecoded(src, rect)
 }
 
 // toNRGBA copies the given region of src into a new opaquely-backed NRGBA image.

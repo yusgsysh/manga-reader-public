@@ -19,12 +19,14 @@ import (
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/imageproc"
+	"manga-reader/internal/membudget"
 	"manga-reader/internal/metrics"
 	"manga-reader/internal/model"
 )
 
 const (
 	spriteCachePrefix = "sprite/"
+	cropCachePrefix   = "crop/"
 	// maxPageThumbDimension bounds a single crop request so a malicious caller
 	// cannot ask the server to allocate an enormous image.
 	maxPageThumbDimension = 4096
@@ -36,12 +38,20 @@ func spriteCacheKey(spriteURL string) string {
 }
 
 // cropSingleflightKey identifies a (sprite URL, rect) crop for in-flight
-// coalescing. Crops themselves are not persisted: every request re-reads the
-// cached sprite and crops it fresh, so the key carries no cache prefix.
+// coalescing. The same digest under cropCachePrefix is the persisted crop's
+// cache key.
 func cropSingleflightKey(spriteURL string, rect image.Rectangle) string {
 	raw := fmt.Sprintf("%s|%d|%d|%d|%d", spriteURL, rect.Min.X, rect.Min.Y, rect.Dx(), rect.Dy())
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
+}
+
+// cropCacheKey addresses the persisted crop of one sprite cell. The sprite
+// URL is inside the digest, so an expired sprite URL (fresh gallery refresh)
+// misses naturally and re-crops; stale crops age out with the bucket
+// lifecycle policy, same as the sprites themselves.
+func cropCacheKey(spriteURL string, rect image.Rectangle) string {
+	return cropCachePrefix + cropSingleflightKey(spriteURL, rect)
 }
 
 // pageThumbRequest addresses a page thumbnail either directly (sprite URL +
@@ -463,6 +473,39 @@ func (s *Server) resolveGalleryPageThumbFromStream(
 	}
 }
 
+// spriteDecodeGroup shares one decode of a sprite across the concurrent crop
+// flights of *different* cells of that sprite: a cold grid load would
+// otherwise decode the same sheet once per cell, and a decoded sheet costs
+// width*height*4 bytes. The value escapes the flight, so each crop flight
+// holds its own membudget reservation for the decode until it finishes
+// cropping (conservative: N sharers are charged N times, but only one bitmap
+// ever exists).
+var spriteDecodeGroup singleflight.Group
+
+// cropSprite crops one cell of sprite. It reserves budget for the sprite
+// bytes plus the decoded bitmap for the duration of the crop, and shares the
+// decode with concurrent crops of other cells of the same sprite.
+func (s *Server) cropSprite(ctx context.Context, spriteURL string, sprite []byte, rect image.Rectangle) ([]byte, error) {
+	cfg, err := imageproc.ProbeSprite(sprite)
+	if err != nil {
+		return nil, err
+	}
+	weight := int64(len(sprite)) + int64(cfg.Width)*int64(cfg.Height)*4
+	lease, err := membudget.Acquire(ctx, weight)
+	if err != nil {
+		return nil, err
+	}
+	defer lease.Release()
+
+	v, sfErr, _ := spriteDecodeGroup.Do("decode:"+spriteURL, func() (any, error) {
+		return imageproc.DecodeSprite(sprite)
+	})
+	if sfErr != nil {
+		return nil, sfErr
+	}
+	return imageproc.CropDecoded(v.(image.Image), rect)
+}
+
 // cropLive fetches the sprite from upstream and crops it, without touching
 // MinIO. Concurrent identical requests are coalesced.
 func (s *Server) cropLive(ctx context.Context, spriteURL string, rect image.Rectangle) ([]byte, error) {
@@ -476,7 +519,7 @@ func (s *Server) cropLive(ctx context.Context, spriteURL string, rect image.Rect
 		if err != nil {
 			return nil, err
 		}
-		return imageproc.CropWEBP(sprite, rect)
+		return s.cropSprite(fetchCtx, spriteURL, sprite, rect)
 	})
 	if sfErr != nil {
 		return nil, sfErr
@@ -484,9 +527,11 @@ func (s *Server) cropLive(ctx context.Context, spriteURL string, rect image.Rect
 	return v.([]byte), nil
 }
 
-// loadOrCropThumbnail returns the crop of the cached sprite. The sprite is
-// read through the MinIO cache and cropped on every request; the crop itself
-// is never persisted. Concurrent calls for the same crop are coalesced.
+// loadOrCropThumbnail returns the crop of the cached sprite. A cell that has
+// been cropped before is served from the persisted crop without touching the
+// sprite; otherwise the sprite is read through the MinIO cache and cropped,
+// and the result is persisted. Concurrent calls for the same crop are
+// coalesced.
 func (s *Server) loadOrCropThumbnail(ctx context.Context, spriteURL string, rect image.Rectangle) ([]byte, error) {
 	key := cropSingleflightKey(spriteURL, rect)
 	v, sfErr, _ := cachedImageGroup.Do(key, func() (any, error) {
@@ -494,12 +539,38 @@ func (s *Server) loadOrCropThumbnail(ctx context.Context, spriteURL string, rect
 		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
 		defer cancel()
 
+		cropKey := cropCacheKey(spriteURL, rect)
+		if s.Cache != nil {
+			if data, _, getErr := s.Cache.Get(fetchCtx, cropKey); getErr == nil {
+				metrics.ObserveImageCache("page_crop", "hit")
+				return data, nil
+			} else if !cache.IsNotFound(getErr) {
+				// Unreadable crop: recompute rather than fail the request;
+				// the store below overwrites whatever is there.
+				slog.Warn("crop cache read failed; recomputing", "key", cropKey[:16], "error", getErr)
+			} else {
+				metrics.ObserveImageCache("page_crop", "miss")
+			}
+		}
+
 		sprite, err := s.loadOrFetchSprite(fetchCtx, spriteURL)
 		if err != nil {
 			return nil, err
 		}
 
-		return imageproc.CropWEBP(sprite, rect)
+		crop, err := s.cropSprite(fetchCtx, spriteURL, sprite, rect)
+		if err != nil {
+			return nil, err
+		}
+
+		if s.Cache != nil {
+			if putErr := s.Cache.PutWithMeta(fetchCtx, cropKey, crop, "image/webp", map[string]string{
+				"source-url": spriteURL,
+			}, cacheControlHeader); putErr != nil {
+				slog.Error("crop store failed", "key", cropKey[:16], "error", putErr)
+			}
+		}
+		return crop, nil
 	})
 	if sfErr != nil {
 		return nil, sfErr
@@ -509,22 +580,12 @@ func (s *Server) loadOrCropThumbnail(ctx context.Context, spriteURL string, rect
 
 // loadOrFetchSprite returns the sprite bytes, reading through the cache when
 // configured. The original sprite is cached separately from the crops so a
-// single download can serve every page in the sprite. Concurrent misses for
-// the same sprite are coalesced on the sprite key, so a cold cache downloads
-// each sheet once even when many crop (or index) requests arrive together.
+// single download can serve every page in the sprite. All reads — including
+// cache hits — run inside the singleflight, so concurrent crops of different
+// cells of one sprite share a single buffered copy instead of each holding
+// its own.
 func (s *Server) loadOrFetchSprite(ctx context.Context, spriteURL string) ([]byte, error) {
 	key := spriteCacheKey(spriteURL)
-
-	if s.Cache != nil {
-		if data, _, getErr := s.Cache.Get(ctx, key); getErr == nil {
-			metrics.ObserveImageCache("sprite", "hit")
-			return data, nil
-		} else if !cache.IsNotFound(getErr) {
-			return nil, getErr
-		} else {
-			metrics.ObserveImageCache("sprite", "miss")
-		}
-	}
 
 	v, sfErr, _ := cachedImageGroup.Do("sprite:"+key, func() (any, error) {
 		fetchCtx := context.WithoutCancel(ctx)

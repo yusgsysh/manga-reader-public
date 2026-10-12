@@ -250,6 +250,8 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `MANGA_READER_BASIC_AUTH_PASSWORD_FILE` | 否† | - | 单行口令文件路径（docker secret） |
 | `MANGA_READER_DEV_TOOLS` | 否 | `false` | 启用 `/api/dev/*` 调试接口（可运行时模拟 ExHentai 不可用，见 `backend/API.md` Dev Tools） |
 | `MANGA_READER_SYNC_TOKEN` | 否 | - | 同步宿主令牌；非空时启用服务端同步端点（`/api/sync/push`、`/api/sync/events`） |
+| `MANGA_READER_MEM_BUDGET` | 否 | `96MiB` | 进程内图片缓冲的字节预算（下载、精灵图解码等驻留内存的操作按大小预留，超出则排队）；可用 `MiB`/`MB` 后缀 |
+| `GOMEMLIMIT` | 否 | `160MiB`（镜像/compose 默认） | Go 堆软上限：接近时 GC 加速回收，内存尖峰后 RSS 回落；按部署内存预算调整 |
 | `HTTP_PROXY` | 否 | - | backend 出站 HTTP 代理（`http://`、`https://`、`socks5://`），仅作用于后端抓取/同步请求 |
 | `HTTPS_PROXY` | 否 | - | 同上，用于 `https://` 目标（ExHentai 等） |
 | `NO_PROXY` | 否 | - | 绕过代理的主机/网段（内网 MinIO、数据库、compose 服务名等） |
@@ -317,9 +319,9 @@ Schema 文件：
 | `/api/image/page-thumbnail` | ExHentai | ❌ | 页面缩略图裁剪（live） |
 | `/api/image-cache/page` | MinIO / ExHentai | ✅ | 阅读页图片缓存 |
 | `/api/image-cache/thumbnail` | MinIO / ExHentai | ✅ | 封面缩略图缓存（前端使用） |
-| `/api/image-cache/page-thumbnail` | MinIO / ExHentai | ✅ | 页面缩略图（精灵图缓存 + 现场裁剪，前端使用） |
+| `/api/image-cache/page-thumbnail` | MinIO / ExHentai | ✅ | 页面缩略图（精灵图缓存 + 裁剪持久化，前端使用） |
 
-缩略图缓存 Key 为 `thumbnail/<sha256(完整 URL)>`，与页面图片缓存（`images/`）相互独立。`/api/image/page-thumbnail` 与 `/api/image-cache/page-thumbnail` 支持两种寻址：`url`+`x/y/w/h`，或 `id`+`token`+`index`；精灵图缓存 Key 为 `sprite/<sha256(精灵图 URL)>`，裁剪结果不持久化，每次请求基于缓存的精灵图现场裁剪。
+缩略图缓存 Key 为 `thumbnail/<sha256(完整 URL)>`，与页面图片缓存（`images/`）相互独立。`/api/image/page-thumbnail` 与 `/api/image-cache/page-thumbnail` 支持两种寻址：`url`+`x/y/w/h`，或 `id`+`token`+`index`；精灵图缓存 Key 为 `sprite/<sha256(精灵图 URL)>`，裁剪结果持久化为 `crop/<sha256(精灵图 URL + rect)>` —— 每个格子终身只解码一次，后续请求直接命中裁剪产物（精灵图 URL 过期换新时 Key 自然失效，旧裁剪随 bucket 生命周期约 30 天过期）。冷缓存下同一精灵图不同格子的并发裁剪共享同一次解码。
 
 ### 缓存模型（无 TTL + read-through）
 
@@ -373,7 +375,7 @@ Schema 文件：
 | `exhentai_upstream_classification_total` | Counter | `endpoint, outcome, code` | 内容级判定（sad_panda / ip_banned / http_error）+ 观察到的 HTTP 状态码 |
 | `exhentai_fetchcache_requests_total` | Counter | `result` | 10 秒文档短共享：hit / miss / coalesced |
 | `exhentai_fetchcache_entries` | Gauge | — | 短共享缓存当前条目数（写入与过期删除都会更新） |
-| `image_cache_requests_total` | Counter | `kind, result` | MinIO 图片缓存查找：`kind` = page_image / thumbnail / sprite，`result` = hit / miss |
+| `image_cache_requests_total` | Counter | `kind, result` | MinIO 图片缓存查找：`kind` = page_image / thumbnail / sprite / page_crop，`result` = hit / miss |
 | `gallery_cache_requests_total` | Counter | `kind, result` | `gallery_cache` 查找：`kind` = gallery / details / pages / page_thumb，`result` = hit / miss |
 | `minio_cache_requests_total` | Counter | `op, result` | MinIO 操作：`op` = get / put / head，`result` = ok / not_found / error（**miss 不是 error**） |
 | `minio_cache_operation_duration_seconds` | Histogram | `op` | MinIO 操作延迟 |
@@ -397,7 +399,7 @@ sum(rate(image_cache_requests_total{result="hit"}[5m]))
 sum(rate(image_cache_requests_total[5m]))
 ```
 
-`gallery_cache_requests_total` 同理；追加 `by (kind)` 或 `kind=` 过滤可按缓存类型拆分。计数口径：每次缓存 `Get` 查找计一次（hit 或 miss，读取错误不计）；gallery 缓存按端点实际判定（如 details 需 `DetailsFetchedAt` 非空、pages 需 `len(Pages) > 0` 才算命中）；sprite 路径的外层预检与 singleflight 内复检各计一次。离线兜底（书架）与批量装载（最近阅读）不计入。
+`gallery_cache_requests_total` 同理；追加 `by (kind)` 或 `kind=` 过滤可按缓存类型拆分。计数口径：每次缓存查找计一次（hit 或 miss，读取错误不计）；缓存命中的图片/缩略图以流式直出（不经缓冲读取，仍计 hit）；gallery 缓存按端点实际判定（如 details 需 `DetailsFetchedAt` 非空、pages 需 `len(Pages) > 0` 才算命中）；sprite / crop 读取在 singleflight 合并后的实际读取上各计一次。离线兜底（书架）与批量装载（最近阅读）不计入。
 
 HTTP 5xx 率（`route` 可按接口拆分；`/metrics` 抓取与 `/healthz` 探活恒为 200，过滤掉可避免稀释）：
 

@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -245,6 +247,11 @@ func TestThumbnail_SourceFailure(t *testing.T) {
 type mockImageCache struct {
 	mu      sync.RWMutex
 	objects map[string]mockCacheEntry
+
+	// bufferedGets / streamGets count which read path callers used, so tests
+	// can assert cache hits go through the streaming fast path.
+	bufferedGets atomic.Int32
+	streamGets   atomic.Int32
 }
 
 func newMockImageCache() *mockImageCache {
@@ -261,6 +268,7 @@ func (m *mockImageCache) Head(_ context.Context, key string) (minio.ObjectInfo, 
 }
 
 func (m *mockImageCache) Get(_ context.Context, key string) ([]byte, string, error) {
+	m.bufferedGets.Add(1)
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	e, ok := m.objects[key]
@@ -268,6 +276,17 @@ func (m *mockImageCache) Get(_ context.Context, key string) ([]byte, string, err
 		return nil, "", minio.ErrorResponse{Code: "NoSuchKey"}
 	}
 	return e.data, e.contentType, nil
+}
+
+func (m *mockImageCache) GetStream(_ context.Context, key string) (io.ReadCloser, string, int64, error) {
+	m.streamGets.Add(1)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	e, ok := m.objects[key]
+	if !ok || !e.exists {
+		return nil, "", 0, minio.ErrorResponse{Code: "NoSuchKey"}
+	}
+	return io.NopCloser(bytes.NewReader(e.data)), e.contentType, int64(len(e.data)), nil
 }
 
 func (m *mockImageCache) Put(ctx context.Context, key string, data []byte, contentType string, cacheControl string) error {
@@ -289,6 +308,12 @@ func (m *mockImageCache) keys() []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+func (m *mockImageCache) delete(key string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.objects, key)
 }
 
 // ==================== Cached Thumbnail Handler Tests ====================

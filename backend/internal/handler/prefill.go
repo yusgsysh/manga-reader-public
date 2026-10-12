@@ -281,6 +281,12 @@ func (m *prefillManager) processPages(s *Server, ctx context.Context, run *prefi
 		pageCtx, pageCancel := context.WithTimeout(ctx, prefillPageTimeout)
 		res, err := s.loadOrFetchImage(pageCtx, key, pageURL)
 		pageCancel()
+		if err == nil {
+			// Only the cache outcome is inspected below — the bytes are
+			// never used — so return the budget reservation before taking
+			// the job lock (a blocking resize must not run under it).
+			res.release()
+		}
 		m.mu.Lock()
 		if err != nil {
 			if ctx.Err() != nil {
@@ -486,8 +492,7 @@ func (s *Server) handlePrefillStart(c *gin.Context) {
 	// body; ReadTimeout bounds time, not size.
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4<<20)
 	if err := c.ShouldBindJSON(&req); err != nil {
-		var maxErr *http.MaxBytesError
-		if errors.As(err, &maxErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
 			return
 		}
@@ -821,12 +826,15 @@ func (s *Server) handlePrefillZip(c *gin.Context) {
 		w, err := zw.CreateHeader(&zip.FileHeader{Name: entryName, Method: zip.Store})
 		if err != nil {
 			slog.Error("prefill zip entry failed", "index", i, "error", err)
+			res.release()
 			break
 		}
 		if _, err := w.Write(res.data); err != nil {
 			slog.Error("prefill zip write failed", "index", i, "error", err)
+			res.release()
 			break
 		}
+		res.release()
 		c.Writer.Flush()
 		written++
 	}

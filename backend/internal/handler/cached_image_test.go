@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -415,5 +416,123 @@ func TestValidatePageURL_DomainBoundary(t *testing.T) {
 				t.Errorf("validatePageURL(%q) error = %v, wantErr = %v", tt.url, err, tt.wantErr)
 			}
 		})
+	}
+}
+
+// ==================== Streaming Cache-Hit Tests ====================
+
+// A warm cache hit must be proxied straight from the store: no buffered Get,
+// Content-Length set up front, body byte-identical.
+func TestCachedImage_HitStreamsWithoutBuffering(t *testing.T) {
+	pageURL := "https://exhentai.org/s/51d1aa689c/4153369-29"
+	imgData := mockImageBytes()
+
+	store := newMockImageCache()
+	if err := store.Put(context.Background(), cache.CacheKey(pageURL), imgData, "image/webp", ""); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+
+	server := &Server{Client: &http.Client{}, Cache: store}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/image-cache/page?url="+url.QueryEscape(pageURL), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("Content-Type"); got != "image/webp" {
+		t.Errorf("Content-Type = %q, want image/webp", got)
+	}
+	if got := w.Header().Get("Content-Length"); got != fmt.Sprintf("%d", len(imgData)) {
+		t.Errorf("Content-Length = %q, want %d", got, len(imgData))
+	}
+	if !bytes.Equal(w.Body.Bytes(), imgData) {
+		t.Errorf("body mismatch: got %d bytes, want %d", w.Body.Len(), len(imgData))
+	}
+	if got := store.streamGets.Load(); got != 1 {
+		t.Errorf("stream Gets = %d, want 1", got)
+	}
+	if got := store.bufferedGets.Load(); got != 0 {
+		t.Errorf("buffered Gets = %d, want 0 (hit must not buffer)", got)
+	}
+}
+
+// A cache miss streams the miss attempt, then falls back to the buffered
+// fetch path (download + store + respond).
+func TestCachedImage_MissFallsBackToBufferedFetch(t *testing.T) {
+	imgData := mockImageBytes()
+	var upstream atomic.Int32
+	srv := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/s/") {
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, mockPageHTML("https://example.com/image.webp", ""))
+			return
+		}
+		upstream.Add(1)
+		w.Header().Set("Content-Type", "image/webp")
+		_, _ = w.Write(imgData)
+	})
+	defer srv.Close()
+
+	pageURL := "https://exhentai.org/s/abc123/4153369-29"
+	store := newMockImageCache()
+	server := &Server{Client: newMockClient(srv.URL), Cache: store}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/image-cache/page?url="+url.QueryEscape(pageURL), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+	if !bytes.Equal(w.Body.Bytes(), imgData) {
+		t.Errorf("body mismatch: got %d bytes, want %d", w.Body.Len(), len(imgData))
+	}
+	if got := upstream.Load(); got != 1 {
+		t.Errorf("upstream fetches = %d, want 1", got)
+	}
+	if got := store.streamGets.Load(); got != 1 {
+		t.Errorf("stream Gets = %d, want 1 (miss probe)", got)
+	}
+	if got := store.bufferedGets.Load(); got != 1 {
+		t.Errorf("buffered Gets = %d, want 1 (miss path)", got)
+	}
+	// The fetched image must now be in the store for the next hit to stream.
+	if _, _, _, err := store.GetStream(context.Background(), cache.CacheKey(pageURL)); err != nil {
+		t.Errorf("fetched image not stored: %v", err)
+	}
+}
+
+// The thumbnail cache-hit path shares the streaming helper; assert it too.
+func TestCachedThumbnail_HitStreamsWithoutBuffering(t *testing.T) {
+	thumbURL := "https://s.exhentai.org/w/00/999/15582-3owak8q3.webp"
+	imgData := mockImageBytes()
+
+	store := newMockImageCache()
+	if err := store.Put(context.Background(), ThumbnailCacheKey(thumbURL), imgData, "image/webp", ""); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+
+	server := &Server{Client: &http.Client{}, Cache: store}
+	r := setupMockRouter(server)
+
+	req := httptest.NewRequest("GET", "/api/image-cache/thumbnail?url="+url.QueryEscape(thumbURL), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
+	}
+	if !bytes.Equal(w.Body.Bytes(), imgData) {
+		t.Errorf("body mismatch: got %d bytes, want %d", w.Body.Len(), len(imgData))
+	}
+	if got := store.streamGets.Load(); got != 1 {
+		t.Errorf("stream Gets = %d, want 1", got)
+	}
+	if got := store.bufferedGets.Load(); got != 0 {
+		t.Errorf("buffered Gets = %d, want 0 (hit must not buffer)", got)
 	}
 }

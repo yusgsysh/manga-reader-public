@@ -421,6 +421,7 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 **Response:**
 
 - 成功: 原始图片数据 (`Content-Type: image/jpeg` / `image/png` / `image/webp` / `image/gif`)
+- 流式转发: 上游响应边读边推给客户端，不在内存中缓存整图（开头 512 字节探测成功后即开始转发，兼容性与 NL 重试语义不变）
 - NL 重试: 初次下载失败时自动重试最多 2 次
 - Headers: `Cache-Control: public, max-age=3600`
 
@@ -627,7 +628,7 @@ https://exhentai.org/?f_search=o%3A3d%24&advsearch=1&f_sto=on&f_spf=10&f_spt=200
 **Response:**
 
 - 成功: 原始图片数据 (`Content-Type: image/jpeg`, `image/png`, `image/webp`, `image/gif`)
-- Cache Hit: 直接从 MinIO 返回，不请求 ExHentai
+- Cache Hit: 直接从 MinIO **流式返回**（边读边转发，不整块缓冲到内存），不请求 ExHentai
 - Cache Miss: 从 ExHentai 获取，写入 MinIO，返回图片
 - 并发保护: 同一 URL 的并发 miss 只触发一次远程请求 (singleflight)
 
@@ -671,7 +672,7 @@ Cache-Control: public, max-age=31536000, immutable
 **Response:**
 
 - 成功: 原始图片数据 (`Content-Type: image/webp`, `image/jpeg`, `image/png`, `image/gif`)
-- Cache Hit: 直接从 MinIO 返回，不请求 ExHentai
+- Cache Hit: 直接从 MinIO **流式返回**（边读边转发，不整块缓冲到内存），不请求 ExHentai
 - Cache Miss: 从 ExHentai 获取，写入 MinIO，返回图片
 - 并发保护: 同一 URL 的并发 miss 只触发一次远程请求 (singleflight)
 
@@ -715,8 +716,8 @@ Cache-Control: public, max-age=31536000, immutable
 
 **行为:**
 
-- **直接裁剪**：精灵图 MinIO read-through，Key 为 `sprite/<sha256(url)>`；每次请求基于缓存的精灵图现场裁剪，裁剪结果不持久化。
-- **按索引**：几何优先取 `gallery_cache` 的 `pages[].thumbnail`；未命中时**订阅共享的 `/pages` 抓取流**（与上文 singleflight 合并同一条 walk），并发 index 请求共用一次上游抓取，walk 完成后自动把完整列表回填 `gallery_cache`。若 15 秒内 walk 尚未推进到该页，则回退为单页直抓（1~2 个文档），避免请求长时间挂起；图片本身仍走 MinIO read-through。
+- **直接裁剪**：精灵图 MinIO read-through，Key 为 `sprite/<sha256(url)>`；裁剪结果持久化为 `crop/<sha256(url + x/y/w/h)>`，命中即直出，未命中才基于缓存精灵图裁剪一次并回写。同一精灵图的并发裁剪共享同一次解码，避免重复解码大图占用内存。
+- **按索引**：几何优先取 `gallery_cache` 的 `pages[].thumbnail`；未命中时**订阅共享的 `/pages` 抓取流**（与上文 singleflight 合并同一条 walk），并发 index 请求共用一次上游抓取，walk 完成后自动把完整列表回填 `gallery_cache`。若 15 秒内 walk 尚未推进到该页，则回退为单页直抓（1~2 个文档），避免请求长时间挂起；图片本身仍走 MinIO read-through（sprite + 裁剪产物）。
 - **过期精灵图自愈（按索引）**：命中缓存的几何但 sprite 返回 404（URL 过期）时，整条按索引流程（`galleryID:token:index`）合并执行：① 整份刷新 `gallery_cache`；② 重新解析，若 sprite URL 未变（仍落在 10 秒上游文档短共享窗口内），改用单页直抓绕过短共享取新 URL，并按 index 回填；③ 重试一次。并发请求共享同一次刷新、直抓与图片下载，因此过期后首个请求即返回 200，而非 502。
 
 **Headers:**

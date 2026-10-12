@@ -67,6 +67,11 @@ USER appuser
 ENV EHENTAI_PORT=:8080
 ENV MANGA_READER_DB_PATH=/app/data/manga-reader.db
 
+# Go heap soft limit: keeps RSS near ~160MiB by making GC run harder as the
+# heap approaches the limit and return memory to the OS after spikes (image
+# buffering / sprite decoding). Overridable via compose/env at deploy time.
+ENV GOMEMLIMIT=160MiB
+
 VOLUME ["/app/data"]
 
 EXPOSE 8080

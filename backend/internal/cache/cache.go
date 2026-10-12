@@ -20,6 +20,12 @@ import (
 const (
 	ImageCachePrefix = "images/"
 	CacheKeyLength   = sha256.Size * 2
+
+	// maxObjectBytes caps a single cached object read. Writes are bounded
+	// upstream (maxImageBytes / sprite fetch), so a larger object means
+	// something foreign landed in the bucket; refuse to buffer it rather
+	// than let io.ReadAll balloon the heap.
+	maxObjectBytes = 40 << 20
 )
 
 type MinIOCache struct {
@@ -142,13 +148,44 @@ func (c *MinIOCache) Get(ctx context.Context, key string) (data []byte, contentT
 	if err != nil {
 		return nil, "", fmt.Errorf("minio stat object: %w", err)
 	}
+	if stat.Size > maxObjectBytes {
+		return nil, "", fmt.Errorf("cached object %q too large: %d bytes", key, stat.Size)
+	}
 
-	data, err = io.ReadAll(obj)
+	data, err = io.ReadAll(io.LimitReader(obj, maxObjectBytes+1))
 	if err != nil {
 		return nil, "", fmt.Errorf("minio read object: %w", err)
 	}
+	if len(data) > maxObjectBytes {
+		return nil, "", fmt.Errorf("cached object %q too large: exceeds %d bytes", key, maxObjectBytes)
+	}
 
 	return data, stat.ContentType, nil
+}
+
+// GetStream opens a cached object for reading without buffering it, so a
+// cache hit can be proxied to the client at constant memory. The caller
+// must close the returned reader. Errors match Get, including IsNotFound
+// for a missing key.
+func (c *MinIOCache) GetStream(ctx context.Context, key string) (rc io.ReadCloser, contentType string, size int64, err error) {
+	start := time.Now()
+	defer func() { observe("get", start, err) }()
+
+	obj, err := c.client.GetObject(ctx, c.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("minio get object: %w", err)
+	}
+
+	stat, err := obj.Stat()
+	if err != nil {
+		obj.Close()
+		return nil, "", 0, fmt.Errorf("minio stat object: %w", err)
+	}
+	if stat.Size > maxObjectBytes {
+		obj.Close()
+		return nil, "", 0, fmt.Errorf("cached object %q too large: %d bytes", key, stat.Size)
+	}
+	return obj, stat.ContentType, stat.Size, nil
 }
 
 func (c *MinIOCache) Put(ctx context.Context, key string, data []byte, contentType string, cacheControl string) (err error) {
