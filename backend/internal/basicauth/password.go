@@ -70,10 +70,7 @@ func md5Crypt(password, salt, prefix string) string {
 	msg = append(msg, prefix...)
 	msg = append(msg, salt...)
 	for i := len(password); i > 0; i -= 16 {
-		n := i
-		if n > 16 {
-			n = 16
-		}
+		n := min(i, 16)
 		msg = append(msg, alt[:n]...)
 	}
 	for i := len(password); i > 0; i >>= 1 {
@@ -85,7 +82,7 @@ func md5Crypt(password, salt, prefix string) string {
 	}
 	sum := md5.Sum(msg)
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		block := make([]byte, 0, len(password)*2+len(salt)+16)
 		if i&1 == 1 {
 			block = append(block, password...)

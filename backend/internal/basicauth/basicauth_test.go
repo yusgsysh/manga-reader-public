@@ -142,7 +142,7 @@ func TestRateLimitAnswers429AfterBurst(t *testing.T) {
 	)
 
 	limited := 0
-	for i := 0; i < attempts; i++ {
+	for i := range attempts {
 		w := request(r, "/api/bookshelf", "admin", "hunter2")
 		switch w.Code {
 		case http.StatusOK:
@@ -169,7 +169,7 @@ func TestRateLimitIsPerClient(t *testing.T) {
 
 	// Exhaust one client's bucket.
 	flooded := httptest.NewRecorder()
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		req := httptest.NewRequest(http.MethodGet, "/api/bookshelf", nil)
 		req.RemoteAddr = "198.51.100.7:4444"
 		req.SetBasicAuth("admin", "hunter2")

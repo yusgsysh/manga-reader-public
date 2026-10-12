@@ -95,8 +95,7 @@ func (s *Service) handlePush(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<20)
 	var req PushRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		var maxErr *http.MaxBytesError
-		if errors.As(err, &maxErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
 			return
 		}

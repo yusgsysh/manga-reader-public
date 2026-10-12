@@ -125,10 +125,7 @@ func validatePageURL(rawURL string) error {
 		return fmt.Errorf("unsupported URL: internal address not allowed")
 	}
 
-	allowed := false
-	if host == "exhentai.org" || host == "e-hentai.org" {
-		allowed = true
-	}
+	allowed := host == "exhentai.org" || host == "e-hentai.org"
 
 	if !allowed {
 		return fmt.Errorf("unsupported URL: domain not allowed")

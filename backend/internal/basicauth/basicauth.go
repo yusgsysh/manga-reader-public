@@ -104,7 +104,7 @@ func lookup(path, user string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimRight(line, "\r")
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

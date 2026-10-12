@@ -32,8 +32,7 @@ func ApplyChanges(ctx context.Context, client *ent.Client, changes []Change) (ap
 			// divergent peer) must not wedge replication: the cursor would
 			// never advance and every cycle would resend the same batch.
 			// Log it and count it as skipped; real DB failures still abort.
-			var ve *ent.ValidationError
-			if errors.As(applyErr, &ve) {
+			if _, ok := errors.AsType[*ent.ValidationError](applyErr); ok {
 				slog.Warn("skipping invalid sync change",
 					"entity", ch.Entity, "gallery_id", ch.GalleryID, "token", ch.Token, "error", applyErr)
 				skipped++

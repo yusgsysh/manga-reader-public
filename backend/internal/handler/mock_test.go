@@ -51,12 +51,12 @@ func mockSearchHTML(count int) string {
 	for i := range count {
 		gid := 1000 + i
 		token := fmt.Sprintf("tok%04d", i)
-		rows.WriteString(fmt.Sprintf(`<tr>
+		fmt.Fprintf(&rows, `<tr>
 			<td class="gl1c glcat"><div class="cn ct2">Doujinshi</div></td>
 			<td class="gl2c"><div class="glthumb"><div><img src="https://example.com/thumb%d.webp" /></div><div><div><div class="cn ct2">Doujinshi</div><div>2024-01-01</div></div><div><div class="ir" style="background-position:-32px -1px;opacity:1"></div><div>%d pages</div></div></div></div><div><div>2024-01-01</div><div class="ir" style="background-position:-32px -1px;opacity:1"></div></div></td>
 			<td class="gl3c glname"><a href="https://exhentai.org/g/%d/%s/"><div class="glink">Test Gallery %d</div><div><div class="gt" title="female:yuri">yuri</div></div></a></td>
 			<td class="gl4c glhide"><div><a href="https://exhentai.org/uploader/testuser%d">testuser%d</a></div><div>%d pages</div></td>
-		</tr>`, i, i+10, gid, token, i, i, i, i+10))
+		</tr>`, i, i+10, gid, token, i, i, i, i+10)
 	}
 
 	return fmt.Sprintf(`<!DOCTYPE html><html><head></head><body>
@@ -91,7 +91,7 @@ func mockGalleryDetailHTML(gid int, title string, pageCount int) string {
 
 	var pageLinks strings.Builder
 	for i := 1; i <= pageCount && i <= 40; i++ {
-		pageLinks.WriteString(fmt.Sprintf(`<a href="https://exhentai.org/s/abc%d/%d-%d">p%d</a>`, i, gid, i, i))
+		fmt.Fprintf(&pageLinks, `<a href="https://exhentai.org/s/abc%d/%d-%d">p%d</a>`, i, gid, i, i)
 	}
 
 	return fmt.Sprintf(`<!DOCTYPE html><html><head></head><body>
@@ -130,7 +130,7 @@ func mockPaginatedGalleryHandler(gid int, title string, total int) http.HandlerF
 		end := min(start+40, total+1)
 		var links strings.Builder
 		for i := start; i < end; i++ {
-			links.WriteString(fmt.Sprintf(`<a href="https://exhentai.org/s/abc%d/%d-%d">p%d</a>`, i, gid, i, i))
+			fmt.Fprintf(&links, `<a href="https://exhentai.org/s/abc%d/%d-%d">p%d</a>`, i, gid, i, i)
 		}
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprintf(w, `<!DOCTYPE html><html><head></head><body>
@@ -1149,12 +1149,12 @@ func mockGalleryListHTML(count int) string {
 	for i := range count {
 		gid := 3000 + i
 		token := fmt.Sprintf("gal%04d", i)
-		rows.WriteString(fmt.Sprintf(`<tr>
+		fmt.Fprintf(&rows, `<tr>
 			<td class="gl1c glcat"><div class="cn ct2">Doujinshi</div></td>
 			<td class="gl2c"><div class="glthumb"><div><img src="https://example.com/thumb%d.webp" /></div><div><div><div class="cn ct2">Doujinshi</div><div id="postedpop_%d">2024-01-01</div></div><div><div class="ir" style="background-position:-32px -1px;opacity:1"></div><div>%d pages</div></div></div></div><div><div id="posted_%d">2024-01-01</div><div class="ir" style="background-position:-32px -1px;opacity:1"></div></div></td>
 			<td class="gl3c glname"><a href="https://exhentai.org/g/%d/%s/"><div class="glink">Gallery %d</div><div><div class="gt" title="female:yuri">yuri</div></div></a></td>
 			<td class="gl4c glhide"><div><a href="https://exhentai.org/uploader/testuser%d">testuser%d</a></div><div>%d pages</div></td>
-		</tr>`, i, gid, i+10, gid, gid, token, i, i, i, i+10))
+		</tr>`, i, gid, i+10, gid, gid, token, i, i, i, i+10)
 	}
 
 	return fmt.Sprintf(`<!DOCTYPE html><html><head></head><body>

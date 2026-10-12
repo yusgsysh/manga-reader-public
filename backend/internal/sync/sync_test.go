@@ -3,7 +3,6 @@ package sync
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -537,8 +536,7 @@ func TestLocalEventsStreamsPayloads(t *testing.T) {
 	ts := httptest.NewServer(newTestRouter(svc))
 	defer ts.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/api/events/changes", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)

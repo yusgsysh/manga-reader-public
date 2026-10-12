@@ -124,10 +124,7 @@ func normalizeRemoteTag(rt exhentai.UserTag) model.TagPreference {
 			action = model.TagActionDislike
 		}
 	}
-	weight := rt.Weight
-	if weight > maxTagWeight {
-		weight = maxTagWeight
-	}
+	weight := min(rt.Weight, maxTagWeight)
 	if weight < minTagWeight {
 		weight = minTagWeight
 	}
