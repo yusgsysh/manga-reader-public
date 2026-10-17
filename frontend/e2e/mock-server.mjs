@@ -330,7 +330,7 @@ const server = Bun.serve({
                 return {
                   tag: t.tag.toLowerCase().trim(),
                   action,
-                  weight: action === "dislike" ? Math.min(0, weight) : Math.max(0, weight),
+                  weight,
                 };
               })
           : [];

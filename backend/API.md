@@ -1456,13 +1456,12 @@ sum(rate(image_cache_requests_total[5m]))
 
 ### 30. Tag Settings（标签喜好）
 
-标签喜好用于在前端把标签标成蓝色（喜欢）或红色（不喜欢），语义对齐 ExHentai 的 My Tags 高亮。数据存于 `tag_preference` 表，一行一个标签（`namespace:name`），**本应用内只影响显示与排序、不过滤列表**；同步到源站后，源站自身会按其原生语义过滤（不喜欢 = Hidden + 负权重）。
+标签喜好用于在前端把标签标成蓝色（喜欢）或红色（不喜欢），语义对齐 ExHentai 的 My Tags 高亮。数据存于 `tag_preference` 表，一行一个标签（`namespace:name`），**本应用内只影响显示与排序、不过滤列表**；同步到源站后，源站自身会按其原生语义过滤（不喜欢 = Hidden）。
 
 每条规则带 `weight`（排序权重，对齐源站 My Tags weight）：
 
-- `like`：`weight ∈ [0, 999]`，默认 `10`
-- `dislike`：`weight ∈ [-999, 0]`，默认 `-10`
-- 符号必须与 `action` 一致（蓝正红负）；仅用于排序（`|weight|` 大者靠前），不影响本应用内的过滤
+- 取值 `weight ∈ [-999, 999]`，`like` 默认 `10`、`dislike` 默认 `-10`
+- 符号与 `action` 无关（允许 `like` + 负权重、`dislike` + 正权重）；仅用于排序（`|weight|` 大者靠前），不影响本应用内的过滤
 
 #### GET `/api/tag-settings`
 
@@ -1483,7 +1482,7 @@ sum(rate(image_cache_requests_total[5m]))
 
 #### PUT `/api/tag-settings`
 
-**全量替换**：body 为完整规则列表，服务端先归一化（trim + 转小写）、补默认权重并校验符号、按 `tag` 去重（后出现的完整规则覆盖先出现的），再在事务内清空旧数据并写入新列表。`tags: []` 清空全部规则。
+**全量替换**：body 为完整规则列表，服务端先归一化（trim + 转小写）、补默认权重并校验取值范围（±999）、按 `tag` 去重（后出现的完整规则覆盖先出现的），再在事务内清空旧数据并写入新列表。`tags: []` 清空全部规则。
 
 **Request Body:**
 
@@ -1501,7 +1500,7 @@ sum(rate(image_cache_requests_total[5m]))
 
 **Response (200):** 与 GET 相同结构，返回归一化、去重并按 `tag` 升序排列后的最终列表。
 
-**Error Responses:** `400`（非法 JSON、`tag` 为空、`action` 非 `like`/`dislike`、`weight` 越界或符号与 `action` 不符、超过 10000 条）、`500` 数据库错误。校验失败时不写入任何数据。
+**Error Responses:** `400`（非法 JSON、`tag` 为空、`action` 非 `like`/`dislike`、`weight` 超出 ±999、超过 10000 条）、`500` 数据库错误。校验失败时不写入任何数据。
 
 #### POST `/api/tag-settings/sync`
 
@@ -1517,9 +1516,9 @@ sum(rate(image_cache_requests_total[5m]))
   - `conflict_resolution: "local"`（保留本地）→ 推送本地值（含删除，视为已确认，无需 `confirm_deletes`）
   - 省略 → 只报告冲突，其余非冲突标签仍正常同步
 
-首次运行（基线为空）：源站独有 → 全部导入本地；本地独有 → 推送源站；两边都有且不一致 → 冲突。源站行归一化：`Hidden → dislike`、`Watched → like`、两者皆无 → `weight<0 ? dislike : like`，weight 截断到 ±999 并按 action 修正符号，源站自定义色不参与比较。合并的拉取与基线更新在同一事务内完成；推送成功才把基线收敛到推送值（失败保留源站原值以便下次重试）。
+首次运行（基线为空）：源站独有 → 全部导入本地；本地独有 → 推送源站；两边都有且不一致 → 冲突。源站行归一化：`Hidden → dislike`、`Watched → like`、两者皆无 → `weight<0 ? dislike : like`，weight 截断到 ±999（符号原样保留，与 action 无关），源站自定义色不参与比较。合并的拉取与基线更新在同一事务内完成；推送成功才把基线收敛到推送值（失败保留源站原值以便下次重试）。
 
-字段映射（对齐源站原生语义）：`like → tagwatch=1, taghide=0, weight≥0`；`dislike → tagwatch=0, taghide=1, weight≤0`；`tagcolor` 恒传空（让源站自己套默认蓝/红，同时会清掉源站上的自定义色）。
+字段映射（对齐源站原生语义）：`like → tagwatch=1, taghide=0`；`dislike → tagwatch=0, taghide=1`；`weight` 原样传递（不做符号修正）；`tagcolor` 恒传空（让源站自己套默认蓝/红，同时会清掉源站上的自定义色）。
 
 同步串行执行、写操作间歇 150ms；单条失败不中断其余条目。
 

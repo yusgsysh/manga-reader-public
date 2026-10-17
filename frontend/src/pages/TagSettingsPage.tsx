@@ -45,14 +45,12 @@ function sortRuleRows(rules: LocalRule[]): LocalRule[] {
 }
 
 /** Parse a weight input; null means invalid (revert the field). */
-function parseWeightInput(raw: string, action: TagAction): number | null {
+function parseWeightInput(raw: string): number | null {
   const trimmed = raw.trim();
   if (trimmed === "") return null;
   const n = Number.parseInt(trimmed, 10);
   if (Number.isNaN(n) || String(n) !== trimmed) return null;
   if (n < MIN_WEIGHT || n > MAX_WEIGHT) return null;
-  if (action === "like" && n < 0) return null;
-  if (action === "dislike" && n > 0) return null;
   return n;
 }
 
@@ -197,7 +195,7 @@ function RuleRow({
   const chipClass = TAG_ACTION_CHIP_CLASS[rule.action];
 
   const commitWeight = (raw: string) => {
-    const parsed = parseWeightInput(raw, rule.action);
+    const parsed = parseWeightInput(raw);
     if (parsed === null || parsed === rule.weight) return; // revert via key remount
     onWeightCommit(rule.tag, parsed);
   };

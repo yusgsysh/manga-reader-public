@@ -95,8 +95,8 @@ func (s *Server) loadTagBaseline(ctx context.Context) ([]model.TagPreference, er
 }
 
 // ruleToUserTag maps a local rule to the source row state we want: like =
-// Watched + positive weight, dislike = Hidden + negative weight (verified
-// against the live API: hidden rows accept negative weights), default colour
+// Watched, dislike = Hidden, with the weight passed through verbatim (the
+// local model allows both signs for either action), default colour
 // (tagcolor "") so the source derives blue/red itself.
 func ruleToUserTag(rule model.TagPreference) exhentai.UserTag {
 	return exhentai.UserTag{
@@ -110,8 +110,9 @@ func ruleToUserTag(rule model.TagPreference) exhentai.UserTag {
 
 // normalizeRemoteTag maps a source row into the local rule shape: Hide →
 // dislike, Watch → like, neither → sign of the weight; the weight is clamped
-// to the local bounds and to its action's sign. The source colour is not
-// part of the local model and is ignored.
+// to the local bounds and otherwise kept verbatim (the sign is independent of
+// the action). The source colour is not part of the local model and is
+// ignored.
 func normalizeRemoteTag(rt exhentai.UserTag) model.TagPreference {
 	action := model.TagActionLike
 	switch {
@@ -127,12 +128,6 @@ func normalizeRemoteTag(rt exhentai.UserTag) model.TagPreference {
 	weight := min(rt.Weight, maxTagWeight)
 	if weight < minTagWeight {
 		weight = minTagWeight
-	}
-	if action == model.TagActionDislike && weight > 0 {
-		weight = -weight
-	}
-	if action == model.TagActionLike && weight < 0 {
-		weight = -weight
 	}
 	return model.TagPreference{Tag: syncKey(rt.Tag), Action: action, Weight: weight}
 }

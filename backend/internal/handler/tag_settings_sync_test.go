@@ -461,11 +461,12 @@ func TestNormalizeRemoteTag(t *testing.T) {
 	}{
 		{"watched", exhentai.UserTag{Tag: "a:b", Watch: true, Weight: 90}, model.TagActionLike, 90},
 		{"hidden", exhentai.UserTag{Tag: "a:b", Hide: true, Weight: -10}, model.TagActionDislike, -10},
-		{"hidden positive weight flips sign", exhentai.UserTag{Tag: "a:b", Hide: true, Weight: 500}, model.TagActionDislike, -500},
-		{"watched negative weight flips sign", exhentai.UserTag{Tag: "a:b", Watch: true, Weight: -3}, model.TagActionLike, 3},
+		{"hidden positive weight keeps sign", exhentai.UserTag{Tag: "a:b", Hide: true, Weight: 500}, model.TagActionDislike, 500},
+		{"watched negative weight keeps sign", exhentai.UserTag{Tag: "a:b", Watch: true, Weight: -3}, model.TagActionLike, -3},
 		{"neutral negative weight is dislike", exhentai.UserTag{Tag: "a:b", Weight: -10}, model.TagActionDislike, -10},
 		{"neutral non-negative weight is like", exhentai.UserTag{Tag: "a:b", Weight: 0}, model.TagActionLike, 0},
 		{"weight clamped to bounds", exhentai.UserTag{Tag: "a:b", Watch: true, Weight: 1500}, model.TagActionLike, 999},
+		{"weight clamped below lower bound", exhentai.UserTag{Tag: "a:b", Watch: true, Weight: -1500}, model.TagActionLike, -999},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -533,11 +534,33 @@ func TestHandleTagSettingsPut_WeightDefaultsAndValidation(t *testing.T) {
 		t.Errorf("explicit -999 weight = %d, want -999", byTag["tag:netorare"].Weight)
 	}
 
-	// Mixed signs and out-of-range weights are rejected.
+	// Mixed signs are accepted: the weight sign is independent of the action.
+	req = httptest.NewRequest("PUT", "/api/tag-settings", bytes.NewBufferString(`{"tags":[`+
+		`{"tag":"female:yuri","action":"like","weight":-50},`+
+		`{"tag":"tag:netorare","action":"dislike","weight":20}`+
+		`]}`))
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("mixed signs status = %d, body = %s", w.Code, w.Body.String())
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	byTag = map[string]model.TagPreference{}
+	for _, tag := range resp.Tags {
+		byTag[tag.Tag] = tag
+	}
+	if byTag["female:yuri"].Weight != -50 {
+		t.Errorf("like weight = %d, want -50", byTag["female:yuri"].Weight)
+	}
+	if byTag["tag:netorare"].Weight != 20 {
+		t.Errorf("dislike weight = %d, want 20", byTag["tag:netorare"].Weight)
+	}
+
+	// Out-of-range weights are rejected regardless of the action.
 	bad := []struct{ name, body string }{
-		{"like negative", `{"tags":[{"tag":"female:yuri","action":"like","weight":-5}]}`},
-		{"dislike positive", `{"tags":[{"tag":"tag:netorare","action":"dislike","weight":5}]}`},
 		{"like over max", `{"tags":[{"tag":"female:yuri","action":"like","weight":1000}]}`},
+		{"like under min", `{"tags":[{"tag":"female:yuri","action":"like","weight":-1000}]}`},
+		{"dislike over max", `{"tags":[{"tag":"tag:netorare","action":"dislike","weight":1000}]}`},
 		{"dislike under min", `{"tags":[{"tag":"tag:netorare","action":"dislike","weight":-1000}]}`},
 	}
 	for _, tc := range bad {

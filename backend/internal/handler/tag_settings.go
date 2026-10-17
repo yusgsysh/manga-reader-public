@@ -33,7 +33,8 @@ type tagSettingsPutEntry struct {
 }
 
 // normalizeTagRule validates one rule and returns the canonical form (tag
-// trimmed/lowercased, weight defaulted and sign-checked against the action).
+// trimmed/lowercased, weight defaulted). The weight sign is independent of the
+// action: both like and dislike accept the full [-999, 999] range.
 func normalizeTagRule(entry tagSettingsPutEntry) (model.TagPreference, error) {
 	tag := strings.ToLower(strings.TrimSpace(entry.Tag))
 	action := strings.TrimSpace(entry.Action)
@@ -51,16 +52,6 @@ func normalizeTagRule(entry tagSettingsPutEntry) (model.TagPreference, error) {
 	if weight < minTagWeight || weight > maxTagWeight {
 		return model.TagPreference{}, fmt.Errorf("weight %d out of range [%d, %d] for tag %q", weight, minTagWeight, maxTagWeight, tag)
 	}
-	// The weight sign mirrors the action, exactly like the source (blue
-	// positive / red negative); reject mixed signs so the mirror stays
-	// consistent rather than silently flipping user input.
-	if action == model.TagActionLike && weight < 0 {
-		return model.TagPreference{}, fmt.Errorf("weight %d must be >= 0 for liked tag %q", weight, tag)
-	}
-	if action == model.TagActionDislike && weight > 0 {
-		return model.TagPreference{}, fmt.Errorf("weight %d must be <= 0 for disliked tag %q", weight, tag)
-	}
-
 	return model.TagPreference{Tag: tag, Action: action, Weight: weight}, nil
 }
 
