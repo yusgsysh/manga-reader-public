@@ -1,7 +1,7 @@
 // Package metrics exposes Prometheus instrumentation for upstream ExHentai
-// traffic, the app's own HTTP surface and Go runtime/process stats. The
-// registry is package-private so tests can gather isolated snapshots;
-// production mounts Handler at /metrics behind Basic Auth.
+// traffic, the app's own HTTP surface, the image payload memory budget and Go
+// runtime/process stats. The registry is package-private so tests can gather
+// isolated snapshots; production mounts Handler at /metrics behind Basic Auth.
 package metrics
 
 import (
@@ -60,7 +60,7 @@ var (
 
 	classificationTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "exhentai_upstream_classification_total",
-		Help: "Content-level classification of upstream documents (sad panda, IP ban, HTTP status errors) with the observed HTTP status code.",
+		Help: "Content-level classification of upstream documents (sad panda, IP ban, HTTP status errors, document parse failures) with the observed HTTP status code.",
 	}, []string{"endpoint", "outcome", "code"})
 
 	fetchCacheRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -104,6 +104,27 @@ var (
 		Help:    "HTTP request latency from middleware entry to response completion, by route template.",
 		Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 	}, []string{"method", "route"})
+
+	memBudgetReserved = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "membudget_reserved_bytes",
+		Help: "Image payload bytes currently reserved from the process-wide memory budget.",
+	})
+
+	memBudgetLimit = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "membudget_limit_bytes",
+		Help: "Total size of the process-wide memory budget.",
+	})
+
+	memBudgetWaiters = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "membudget_waiters",
+		Help: "Operations currently blocked waiting for memory budget to free up.",
+	})
+
+	memBudgetAcquireWait = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "membudget_acquire_wait_seconds",
+		Help:    "Time spent waiting for a memory budget reservation, from call start to grant.",
+		Buckets: []float64{0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2.5, 5, 30},
+	}, nil)
 )
 
 func init() {
@@ -122,6 +143,10 @@ func init() {
 		minioCacheDuration,
 		httpRequestsTotal,
 		httpRequestDuration,
+		memBudgetReserved,
+		memBudgetLimit,
+		memBudgetWaiters,
+		memBudgetAcquireWait,
 	)
 	// Runtime and process stats: goroutines, GC, heap, RSS, CPU, FDs. Not
 	// resettable, so ResetForTest leaves them alone.
@@ -320,7 +345,8 @@ func SetFetchCacheEntries(n int) {
 }
 
 // ObserveImageCache records a MinIO read-through image cache lookup. kind is
-// one of "page_image", "thumbnail", "sprite"; result is "hit" or "miss".
+// one of "page_image", "thumbnail", "sprite", "page_crop"; result is "hit" or
+// "miss".
 func ObserveImageCache(kind, result string) {
 	imageCacheRequests.WithLabelValues(kind, result).Inc()
 }
@@ -329,6 +355,30 @@ func ObserveImageCache(kind, result string) {
 // "gallery", "details", "pages", "page_thumb"; result is "hit" or "miss".
 func ObserveGalleryCache(kind, result string) {
 	galleryCacheRequests.WithLabelValues(kind, result).Inc()
+}
+
+// SetMemBudgetLimit records the current total size of the image payload memory
+// budget.
+func SetMemBudgetLimit(bytes int64) {
+	memBudgetLimit.Set(float64(bytes))
+}
+
+// SetMemBudgetReserved records the image payload bytes currently reserved from
+// the memory budget.
+func SetMemBudgetReserved(bytes int64) {
+	memBudgetReserved.Set(float64(bytes))
+}
+
+// SetMemBudgetWaiters records how many operations are blocked waiting for the
+// memory budget.
+func SetMemBudgetWaiters(n int) {
+	memBudgetWaiters.Set(float64(n))
+}
+
+// ObserveMemBudgetWait records how long a caller waited for a memory budget
+// reservation.
+func ObserveMemBudgetWait(elapsed time.Duration) {
+	memBudgetAcquireWait.WithLabelValues().Observe(elapsed.Seconds())
 }
 
 // ResetForTest clears all metric values so tests start from zero. Not for
@@ -348,4 +398,8 @@ func ResetForTest() {
 	minioCacheDuration.Reset()
 	httpRequestsTotal.Reset()
 	httpRequestDuration.Reset()
+	memBudgetReserved.Set(0)
+	memBudgetLimit.Set(0)
+	memBudgetWaiters.Set(0)
+	memBudgetAcquireWait.Reset()
 }

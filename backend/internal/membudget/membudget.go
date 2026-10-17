@@ -14,8 +14,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"golang.org/x/sync/semaphore"
+
+	"manga-reader/internal/metrics"
 )
 
 // DefaultWeight is the reservation used before a payload's real size is
@@ -32,9 +36,20 @@ var (
 	stateMu sync.Mutex
 	limit   int64 = defaultLimit
 	sem           = semaphore.NewWeighted(defaultLimit)
+
+	// reserved and waiters mirror the semaphore's internal state for the
+	// metrics gauges: semaphore.Weighted does not expose current usage.
+	reserved atomic.Int64
+	waiters  atomic.Int64
 )
 
+// addReserved adjusts the reserved-bytes mirror and refreshes the gauge.
+func addReserved(delta int64) {
+	metrics.SetMemBudgetReserved(reserved.Add(delta))
+}
+
 func init() {
+	metrics.SetMemBudgetLimit(limit)
 	if v := strings.TrimSpace(os.Getenv("MANGA_READER_MEM_BUDGET")); v != "" {
 		n, err := ParseBytes(v)
 		if err != nil {
@@ -56,6 +71,7 @@ func SetLimit(n int64) {
 	defer stateMu.Unlock()
 	limit = n
 	sem = semaphore.NewWeighted(n)
+	metrics.SetMemBudgetLimit(n)
 }
 
 // Limit returns the current total budget in bytes.
@@ -125,9 +141,15 @@ func Acquire(ctx context.Context, weight int64) (*Lease, error) {
 	if weight > lim {
 		weight = lim
 	}
-	if err := s.Acquire(ctx, weight); err != nil {
+	metrics.SetMemBudgetWaiters(int(waiters.Add(1)))
+	start := time.Now()
+	err := s.Acquire(ctx, weight)
+	metrics.ObserveMemBudgetWait(time.Since(start))
+	metrics.SetMemBudgetWaiters(int(waiters.Add(-1)))
+	if err != nil {
 		return nil, err
 	}
+	addReserved(weight)
 	return &Lease{sem: s, weight: weight, ctx: ctx}, nil
 }
 
@@ -158,6 +180,7 @@ func (l *Lease) Resize(weight int64) {
 	s := l.sem
 	old := l.weight
 	l.weight = 0
+	addReserved(-old)
 	s.Release(old)
 	// Deliberately not l.ctx: a request that finished while the payload was
 	// being measured must still account for the bytes it is about to write.
@@ -165,6 +188,7 @@ func (l *Lease) Resize(weight int64) {
 		return
 	}
 	l.weight = weight
+	addReserved(weight)
 }
 
 // Release returns the reservation. It is idempotent and nil-safe.
@@ -177,6 +201,7 @@ func (l *Lease) Release() {
 	if l.weight == 0 {
 		return
 	}
+	addReserved(-l.weight)
 	l.sem.Release(l.weight)
 	l.weight = 0
 }

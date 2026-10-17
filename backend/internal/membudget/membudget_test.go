@@ -123,3 +123,49 @@ func TestAcquireCanceledContext(t *testing.T) {
 		t.Errorf("Acquire on canceled ctx error = %v, want context canceled", err)
 	}
 }
+
+// TestReservedMirrorTracksLeases: the metrics mirror must follow Acquire,
+// Resize and Release so the reserved-bytes gauge matches the semaphore instead
+// of drifting (Resize releases the old weight before taking the new one).
+func TestReservedMirrorTracksLeases(t *testing.T) {
+	withLimit(t, 1000)
+
+	start := reserved.Load()
+	l, err := Acquire(context.Background(), 300)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	if got := reserved.Load() - start; got != 300 {
+		t.Fatalf("reserved after Acquire = %d, want 300", got)
+	}
+
+	l.Resize(500)
+	if got := reserved.Load() - start; got != 500 {
+		t.Fatalf("reserved after Resize = %d, want 500", got)
+	}
+
+	l.Release()
+	if got := reserved.Load() - start; got != 0 {
+		t.Fatalf("reserved after Release = %d, want 0", got)
+	}
+}
+
+// TestWaitersMirrorReturnsToZero: a blocked Acquire that gives up on ctx
+// deadline must still decrement the waiter gauge.
+func TestWaitersMirrorReturnsToZero(t *testing.T) {
+	withLimit(t, 1000)
+
+	held, err := Acquire(context.Background(), 1000)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	defer held.Release()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	_, _ = Acquire(ctx, 100)
+
+	if got := waiters.Load(); got != 0 {
+		t.Fatalf("waiters after timed-out Acquire = %d, want 0", got)
+	}
+}

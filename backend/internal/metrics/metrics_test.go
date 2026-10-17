@@ -246,6 +246,26 @@ func TestGalleryCacheCounters(t *testing.T) {
 	}
 }
 
+func TestMemBudgetMetrics(t *testing.T) {
+	ResetForTest()
+	SetMemBudgetLimit(96 << 20)
+	SetMemBudgetReserved(8 << 20)
+	SetMemBudgetWaiters(2)
+	ObserveMemBudgetWait(3 * time.Millisecond)
+
+	text := gather(t)
+	for _, want := range []string{
+		`membudget_limit_bytes 1.00663296e+08`,
+		`membudget_reserved_bytes 8.388608e+06`,
+		`membudget_waiters 2`,
+		`membudget_acquire_wait_seconds_count 1`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("expected %q in exposition, got:\n%s", want, text)
+		}
+	}
+}
+
 func TestGinMiddlewareRecordsRequests(t *testing.T) {
 	ResetForTest()
 	gin.SetMode(gin.TestMode)

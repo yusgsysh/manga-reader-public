@@ -217,9 +217,9 @@ docker compose up -d
 - `MANGA_READER_METRICS_USERNAME/PASSWORD`：backend 开启 Basic Auth 时 `/metrics` 同样受保护，需与 `MANGA_READER_BASIC_AUTH_*` 一致；未开启时保持默认即可（凭据会被忽略）
 - `GRAFANA_ADMIN_USER/PASSWORD`：Grafana 管理员
 
-Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5xx 比例 / P95 延迟、图片与 gallery 缓存 hit rate、MinIO 操作速率与延迟、10 秒文档短共享结果（含当前条目数）、上游请求与 P95 延迟、上游在途请求与重试放大、sad_panda / IP 封禁 / HTTP 错误判定、goroutines / 内存 / FD。指标口径见「可观测性（Prometheus 指标）」。
+Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5xx 比例 / P95 延迟、图片与 gallery 缓存 hit rate、MinIO 操作速率与延迟、10 秒文档短共享结果（含当前条目数）、上游请求与 P95 延迟、上游在途请求与重试放大、sad_panda / IP 封禁 / HTTP 错误判定、内存预算（已用 / 上限 / 等待者 / 获取等待 P95）、goroutines / 内存 / FD。指标口径见「可观测性（Prometheus 指标）」。
 
-告警规则在 `deploy/observability/alerting/rules.yml`（Prometheus 自动装载，`/alerts` 查看）：抓取目标失联、应用 5xx 比例持续偏高、上游出现 sad_panda / IP 封禁、FD 接近上限、goroutines / RSS 异常增长、MinIO 操作错误率。
+告警规则在 `deploy/observability/alerting/rules.yml`（Prometheus 自动装载，`/alerts` 查看）：抓取目标失联、应用 5xx 比例持续偏高、上游出现 sad_panda / IP 封禁、FD 接近上限、goroutines / RSS 异常增长、MinIO 操作错误率、图片内存预算持续打满。
 
 ## 环境变量
 
@@ -372,7 +372,7 @@ Schema 文件：
 | `exhentai_upstream_response_bytes_total` | Counter | `endpoint` | 上游响应体**实际读取**字节数（透明 gzip 按解压后计；body 未被读取则不计） |
 | `exhentai_upstream_retries_total` | Counter | `endpoint, reason` | 上游重试放大：`reason` = thumbnail / nl_fallback |
 | `exhentai_upstream_inflight_requests` | Gauge | — | 正在进行中的上游请求数（send → 响应头） |
-| `exhentai_upstream_classification_total` | Counter | `endpoint, outcome, code` | 内容级判定（sad_panda / ip_banned / http_error）+ 观察到的 HTTP 状态码 |
+| `exhentai_upstream_classification_total` | Counter | `endpoint, outcome, code` | 内容级判定（sad_panda / ip_banned / http_error / error[文档解析失败]）+ 观察到的 HTTP 状态码 |
 | `exhentai_fetchcache_requests_total` | Counter | `result` | 10 秒文档短共享：hit / miss / coalesced |
 | `exhentai_fetchcache_entries` | Gauge | — | 短共享缓存当前条目数（写入与过期删除都会更新） |
 | `image_cache_requests_total` | Counter | `kind, result` | MinIO 图片缓存查找：`kind` = page_image / thumbnail / sprite / page_crop，`result` = hit / miss |
@@ -381,6 +381,10 @@ Schema 文件：
 | `minio_cache_operation_duration_seconds` | Histogram | `op` | MinIO 操作延迟 |
 | `http_requests_total` | Counter | `method, route, status_code` | 本应用 HTTP 请求（含 Basic Auth 401 与限流 429；handler panic 由 Recovery 转成 500 后同样计入） |
 | `http_request_duration_seconds` | Histogram | `method, route` | 本应用 HTTP 延迟（中间件入口 → 响应完成） |
+| `membudget_reserved_bytes` | Gauge | — | 当前已预留的图片负载字节数（`MANGA_READER_MEM_BUDGET` 预算内） |
+| `membudget_limit_bytes` | Gauge | — | 内存预算上限（默认 96 MiB） |
+| `membudget_waiters` | Gauge | — | 正阻塞等待预算释放的操作数（>0 说明预算打满、在排队） |
+| `membudget_acquire_wait_seconds` | Histogram | — | 等待内存预算授予的时长 |
 
 `http_*` 的 `route` 标签口径：
 

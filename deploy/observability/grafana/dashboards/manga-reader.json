@@ -348,7 +348,7 @@
     {
       "id": 16,
       "type": "timeseries",
-      "title": "短共享缓存条目数（10s fetchcache）",
+      "title": "短共享缓存条目数（10s fetchcache，上限 128）",
       "datasource": { "type": "prometheus", "uid": "prometheus-local" },
       "gridPos": { "x": 0, "y": 40, "w": 8, "h": 8 },
       "targets": [
@@ -358,7 +358,15 @@
         "defaults": {
           "unit": "short",
           "min": 0,
-          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": true }
+          "max": 128,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": true },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 102 }
+            ]
+          }
         },
         "overrides": []
       },
@@ -450,6 +458,79 @@
         "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
         "tooltip": { "mode": "multi", "sort": "desc" }
       }
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "内存预算（已用 / 上限）",
+      "datasource": { "type": "prometheus", "uid": "prometheus-local" },
+      "gridPos": { "x": 16, "y": 48, "w": 8, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "membudget_reserved_bytes", "legendFormat": "reserved", "editorMode": "code" },
+        { "refId": "B", "expr": "membudget_limit_bytes", "legendFormat": "limit", "editorMode": "code" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "内存预算等待者",
+      "datasource": { "type": "prometheus", "uid": "prometheus-local" },
+      "gridPos": { "x": 0, "y": 56, "w": 8, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "membudget_waiters", "legendFormat": "waiters", "editorMode": "code" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "showPoints": "never", "spanNulls": true },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "single", "sort": "none" }
+      }
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "内存预算获取等待 P95",
+      "datasource": { "type": "prometheus", "uid": "prometheus-local" },
+      "gridPos": { "x": 8, "y": 56, "w": 8, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(membudget_acquire_wait_seconds_bucket[5m])))", "legendFormat": "P95 wait", "editorMode": "code" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "single", "sort": "none" }
+      }
     }
   ],
   "refresh": "30s",
@@ -461,6 +542,6 @@
   "timezone": "browser",
   "title": "Manga Reader",
   "uid": "manga-reader",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

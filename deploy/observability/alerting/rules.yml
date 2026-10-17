@@ -88,6 +88,16 @@ groups:
           summary: "常驻内存超过 2 GiB"
           description: "当前 {{ $value | humanize1024 }}B，检查图片缓存与并发抓取。"
 
+      # ---- 图片负载内存预算 ----
+      - alert: MemBudgetSaturated
+        expr: membudget_waiters > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "图片内存预算持续打满"
+          description: "已连续 5 分钟有 {{ $value }} 个下载/裁剪在等待 membudget 释放，请求会排队；检查并发抓取量或调大 MANGA_READER_MEM_BUDGET。"
+
       # ---- MinIO 图片缓存 ----
       - alert: MinIOErrorRateHigh
         expr: |
