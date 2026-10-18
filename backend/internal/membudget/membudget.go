@@ -22,15 +22,43 @@ import (
 	"manga-reader/internal/metrics"
 )
 
-// DefaultWeight is the reservation used before a payload's real size is
-// known. It roughly matches the typical page image / sprite size, so the
-// estimate only needs to hold until the operation can resize.
+// DefaultWeight is the reservation used for page-image downloads before a
+// payload's real size is known. It roughly matches the typical page image
+// size, so the estimate only needs to hold until the operation can resize.
 const DefaultWeight = 8 << 20
+
+// ThumbnailWeight is the reservation used for thumbnail downloads before the
+// real size is known. Thumbnails are far smaller than page images, so pricing
+// them at DefaultWeight would reserve ~8 MiB for a few-hundred-KB object and
+// throttle thumbnail concurrency for no reason.
+const ThumbnailWeight = 512 << 10
 
 // defaultLimit is the default total budget, overridable with
 // MANGA_READER_MEM_BUDGET (bytes, or a value with a KiB/MiB/GiB — or
 // KB/MB/GB — suffix).
 const defaultLimit = 96 << 20
+
+// maxWeightFraction/maxWeightDenom cap a single reservation at 3/4 of the
+// total budget so one oversized payload cannot reserve the whole budget and
+// starve every other operation. The excess is deliberately left unaccounted:
+// the operation still allocates its full payload, it just reserves this share.
+const (
+	maxWeightFraction = 3
+	maxWeightDenom    = 4
+)
+
+// capWeight bounds weight to a fraction of limit, never below 1 byte.
+func capWeight(weight, limit int64) int64 {
+	if limit > 0 {
+		if ceiling := limit / maxWeightDenom * maxWeightFraction; weight > ceiling {
+			weight = ceiling
+		}
+	}
+	if weight < 1 {
+		weight = 1
+	}
+	return weight
+}
 
 var (
 	stateMu sync.Mutex
@@ -81,6 +109,12 @@ func Limit() int64 {
 	return limit
 }
 
+// Reserved returns the bytes currently reserved from the budget. It mirrors the
+// reserved-bytes metric and is intended for diagnostics and tests.
+func Reserved() int64 {
+	return reserved.Load()
+}
+
 func current() (*semaphore.Weighted, int64) {
 	stateMu.Lock()
 	defer stateMu.Unlock()
@@ -119,28 +153,29 @@ func ParseBytes(v string) (int64, error) {
 	return n * mult, nil
 }
 
-// Lease is a byte reservation held until Release. It is safe for use from a
-// single goroutine's scope (acquire and release happen on the request path);
-// Resize and Release are serialized internally.
+// Lease is a reference-counted byte reservation. Acquire creates it with one
+// reference; Retain adds a reference for another caller sharing the same
+// payload, and the reservation returns to the budget only when the last
+// reference is released. This lets concurrent readers of one shared buffer
+// (singleflight waiters, cells of the same sprite) be charged once instead of
+// once per reader. Resize, Retain and Release are serialized internally.
 type Lease struct {
 	mu     sync.Mutex
 	sem    *semaphore.Weighted
 	weight int64
-	ctx    context.Context
+	refs   int64
 }
 
 // Acquire reserves weight bytes of the budget, waiting until ctx is done if
-// the budget is exhausted. weight <= 0 reserves DefaultWeight; weights above
-// the total budget are clamped so a single oversized operation can still
-// run once everything else has released.
+// the budget is exhausted. weight <= 0 reserves DefaultWeight. Weights are
+// capped at a fraction of the total budget (see capWeight) so a single
+// oversized operation cannot reserve the whole budget and starve the rest.
 func Acquire(ctx context.Context, weight int64) (*Lease, error) {
 	s, lim := current()
 	if weight <= 0 {
 		weight = DefaultWeight
 	}
-	if weight > lim {
-		weight = lim
-	}
+	weight = capWeight(weight, lim)
 	metrics.SetMemBudgetWaiters(int(waiters.Add(1)))
 	start := time.Now()
 	err := s.Acquire(ctx, weight)
@@ -150,48 +185,70 @@ func Acquire(ctx context.Context, weight int64) (*Lease, error) {
 		return nil, err
 	}
 	addReserved(weight)
-	return &Lease{sem: s, weight: weight, ctx: ctx}, nil
+	return &Lease{sem: s, weight: weight, refs: 1}, nil
 }
 
-// Resize re-reserves at a new weight once the real payload size is known.
-// The old reservation is released first — otherwise two full reservations
-// held at once could deadlock the budget — so the budget undercounts this
-// lease by at most the old weight between the two calls. A resize that
-// cannot be satisfied (ctx gone) drops the reservation entirely: the caller
-// is already aborting and will Release harmlessly.
-func (l *Lease) Resize(weight int64) {
+// Retain adds a reference for another caller sharing this reservation. It is a
+// no-op on a nil or already-released lease, so a caller that lost the race
+// against the last Release behaves safely: its read window simply goes
+// unaccounted rather than reviving a reservation the budget already returned.
+func (l *Lease) Retain() {
 	if l == nil {
 		return
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.weight == 0 {
-		return // already released
+		return
+	}
+	l.refs++
+}
+
+// Resize re-reserves at a new weight once the real payload size is known.
+// Growing acquires only the difference while the old reservation is still
+// held, so the lease is never dropped below its current weight: the budget
+// undercounts this lease by at most the pending delta instead of the whole
+// reservation. A grow that ctx cannot satisfy leaves the old (smaller)
+// reservation in place and returns the error — the caller is already holding
+// the bytes, so blocking forever or dropping the reservation are both worse.
+// Shrinking returns the difference immediately.
+func (l *Lease) Resize(ctx context.Context, weight int64) error {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.weight == 0 {
+		return nil // already released
 	}
 	if weight <= 0 {
 		weight = 1
 	}
-	if _, lim := current(); weight > lim {
-		weight = lim
+	weight = capWeight(weight, Limit())
+	switch {
+	case weight > l.weight:
+		delta := weight - l.weight
+		metrics.SetMemBudgetWaiters(int(waiters.Add(1)))
+		start := time.Now()
+		err := l.sem.Acquire(ctx, delta)
+		metrics.ObserveMemBudgetWait(time.Since(start))
+		metrics.SetMemBudgetWaiters(int(waiters.Add(-1)))
+		if err != nil {
+			return err
+		}
+		addReserved(delta)
+		l.weight = weight
+	case weight < l.weight:
+		delta := l.weight - weight
+		addReserved(-delta)
+		l.sem.Release(delta)
+		l.weight = weight
 	}
-	if weight == l.weight {
-		return
-	}
-	s := l.sem
-	old := l.weight
-	l.weight = 0
-	addReserved(-old)
-	s.Release(old)
-	// Deliberately not l.ctx: a request that finished while the payload was
-	// being measured must still account for the bytes it is about to write.
-	if err := s.Acquire(context.Background(), weight); err != nil {
-		return
-	}
-	l.weight = weight
-	addReserved(weight)
+	return nil
 }
 
-// Release returns the reservation. It is idempotent and nil-safe.
+// Release drops one reference; the reservation returns to the budget when the
+// last reference is gone. It is idempotent and nil-safe.
 func (l *Lease) Release() {
 	if l == nil {
 		return
@@ -199,6 +256,10 @@ func (l *Lease) Release() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.weight == 0 {
+		return
+	}
+	l.refs--
+	if l.refs > 0 {
 		return
 	}
 	addReserved(-l.weight)

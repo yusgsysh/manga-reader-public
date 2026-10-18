@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -38,14 +39,15 @@ type imageResult struct {
 	cacheHit    bool
 	stored      bool
 
-	// lease is this caller's membudget reservation for data. The payload
-	// itself is shared with every waiter of the same singleflight, but each
-	// caller holds its own reservation until it stops using the bytes.
+	// lease is the shared membudget reservation for data. It is acquired once
+	// by the singleflight leader and released when the last caller sharing the
+	// payload is done, so N concurrent requests for one key reserve the bytes
+	// once instead of N times. Every caller's release() drops one reference.
 	lease *membudget.Lease
 }
 
-// release returns the caller's budget reservation. Idempotent, nil-safe;
-// always defer it right after a successful load.
+// release returns this caller's reference to the shared budget reservation.
+// Idempotent, nil-safe; always defer it right after a successful load.
 func (r *imageResult) release() {
 	if r != nil {
 		r.lease.Release()
@@ -128,8 +130,14 @@ func (s *Server) handleThumbnail(c *gin.Context) {
 
 	// Thumbnails are small, but the reservation keeps the concurrent sum of
 	// live thumbnail buffers inside the global budget.
-	lease, leaseErr := membudget.Acquire(ctx, membudget.DefaultWeight)
+	lease, leaseErr := membudget.Acquire(ctx, membudget.ThumbnailWeight)
 	if leaseErr != nil {
+		// A client that went away is not a budget timeout; don't report it as
+		// one (it would pollute the 5xx/budget signals).
+		if errors.Is(leaseErr, context.Canceled) {
+			c.AbortWithStatus(http.StatusServiceUnavailable)
+			return
+		}
 		c.JSON(http.StatusGatewayTimeout, gin.H{"error": fmt.Sprintf("memory budget wait canceled: %v", leaseErr)})
 		return
 	}
@@ -140,7 +148,9 @@ func (s *Server) handleThumbnail(c *gin.Context) {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download thumbnail failed: %v", err)})
 		return
 	}
-	lease.Resize(int64(len(data)))
+	if rerr := lease.Resize(ctx, int64(len(data))); rerr != nil {
+		slog.Warn("thumbnail budget resize failed", "url", rawURL, "error", rerr)
+	}
 
 	c.Header("Cache-Control", thumbnailCacheControl)
 	c.Data(http.StatusOK, contentType, data)
@@ -231,39 +241,56 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 // coalesced through the shared singleflight group, so the prefill worker, the
 // streaming ZIP endpoint and handleCachedImage never fetch the same URL twice.
 // The returned imageResult indicates whether the data came from cache (cacheHit)
-// and whether it was successfully stored (stored). The caller owns the result's
-// membudget reservation and must release() it once done with the bytes.
+// and whether it was successfully stored (stored). The caller owns one
+// reference to the result's shared membudget reservation and must release() it
+// once done with the bytes.
+//
+// The reservation is taken once, inside the flight, by the leader and shared by
+// every waiter (via Lease.Retain): a burst of concurrent requests for one image
+// is charged for the buffer once, not once per request. Only the leader proves
+// its own flag true because singleflight runs the closure on the leader's
+// goroutine; each caller has a private copy of the variable.
 func (s *Server) loadOrFetchImage(ctx context.Context, key string, decodedURL string) (*imageResult, error) {
-	lease, leaseErr := membudget.Acquire(ctx, membudget.DefaultWeight)
-	if leaseErr != nil {
-		return nil, leaseErr
-	}
+	var leader bool
 	v, sfErr, _ := cachedImageGroup.Do(key, func() (any, error) {
+		leader = true
 		// Use a context that won't be cancelled by the leader's cancellation
-		// (e.g., client disconnect) so that waiters aren't affected.
-		// The outer context still bounds the operation.
-		fetchCtx := context.WithoutCancel(ctx)
-		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
+		// (e.g., client disconnect) so that the fetch and its reservation are
+		// not torn down under the waiters. The timeout still bounds the flight.
+		flightCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 60*time.Second)
 		defer cancel()
 
-		data, contentType, getErr := s.Cache.Get(fetchCtx, key)
+		lease, leaseErr := membudget.Acquire(flightCtx, membudget.DefaultWeight)
+		if leaseErr != nil {
+			return nil, leaseErr
+		}
+
+		data, contentType, getErr := s.Cache.Get(flightCtx, key)
 		if getErr == nil {
 			metrics.ObserveImageCache("page_image", "hit")
-			return &imageResult{data: data, contentType: contentType, cacheHit: true, stored: true}, nil
+			if rerr := lease.Resize(flightCtx, int64(len(data))); rerr != nil {
+				slog.Warn("image budget resize failed", "key", key[:16], "error", rerr)
+			}
+			return &imageResult{data: data, contentType: contentType, cacheHit: true, stored: true, lease: lease}, nil
 		}
 		if !cache.IsNotFound(getErr) {
+			lease.Release()
 			return nil, getErr
 		}
 		metrics.ObserveImageCache("page_image", "miss")
 
-		data, contentType, fetchErr := exhentai.FetchPageImage(fetchCtx, s.Client, decodedURL)
+		data, contentType, fetchErr := exhentai.FetchPageImage(flightCtx, s.Client, decodedURL)
 		if fetchErr != nil {
-			s.triggerPageRefresh(fetchCtx, decodedURL, fetchErr)
+			lease.Release()
+			s.triggerPageRefresh(flightCtx, decodedURL, fetchErr)
 			return nil, fetchErr
+		}
+		if rerr := lease.Resize(flightCtx, int64(len(data))); rerr != nil {
+			slog.Warn("image budget resize failed", "key", key[:16], "error", rerr)
 		}
 
 		var stored bool
-		if putErr := s.Cache.Put(fetchCtx, key, data, contentType, cacheControlHeader); putErr != nil {
+		if putErr := s.Cache.Put(flightCtx, key, data, contentType, cacheControlHeader); putErr != nil {
 			slog.Error("cached-image store failed", "key", key[:16], "error", putErr)
 			stored = false
 		} else {
@@ -271,18 +298,19 @@ func (s *Server) loadOrFetchImage(ctx context.Context, key string, decodedURL st
 			stored = true
 		}
 
-		return &imageResult{data: data, contentType: contentType, cacheHit: false, stored: stored}, nil
+		return &imageResult{data: data, contentType: contentType, cacheHit: false, stored: stored, lease: lease}, nil
 	})
 	if sfErr != nil {
-		lease.Release()
 		return nil, sfErr
 	}
-	// The singleflight result is shared across waiters; give this caller its
-	// own view so its reservation is never written by another goroutine.
+	// The singleflight result is shared across callers; give this caller its
+	// own header so its reservation is never written by another goroutine. The
+	// leader already owns the flight's reservation; a waiter takes a reference.
 	shared := v.(*imageResult)
 	res := *shared
-	res.lease = lease
-	res.lease.Resize(int64(len(res.data)))
+	if !leader {
+		res.lease.Retain()
+	}
 	return &res, nil
 }
 
@@ -290,34 +318,45 @@ const pageFetchRetryDelay = 500 * time.Millisecond
 
 // loadOrFetchThumbnail returns the cached thumbnail for key, fetching it from
 // the upstream on a cache miss. Concurrent calls for the same key are coalesced.
-// The caller owns the result's membudget reservation and must release() it.
+// The reservation is taken once by the leader and shared by waiters, exactly as
+// in loadOrFetchImage; the caller owns one reference and must release() it.
 func (s *Server) loadOrFetchThumbnail(ctx context.Context, key string, rawURL string) (*imageResult, error) {
-	lease, leaseErr := membudget.Acquire(ctx, membudget.DefaultWeight)
-	if leaseErr != nil {
-		return nil, leaseErr
-	}
+	var leader bool
 	v, sfErr, _ := cachedImageGroup.Do(key, func() (any, error) {
-		fetchCtx := context.WithoutCancel(ctx)
-		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
+		leader = true
+		flightCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 60*time.Second)
 		defer cancel()
 
-		data, contentType, getErr := s.Cache.Get(fetchCtx, key)
+		lease, leaseErr := membudget.Acquire(flightCtx, membudget.ThumbnailWeight)
+		if leaseErr != nil {
+			return nil, leaseErr
+		}
+
+		data, contentType, getErr := s.Cache.Get(flightCtx, key)
 		if getErr == nil {
 			metrics.ObserveImageCache("thumbnail", "hit")
-			return &imageResult{data: data, contentType: contentType, cacheHit: true, stored: true}, nil
+			if rerr := lease.Resize(flightCtx, int64(len(data))); rerr != nil {
+				slog.Warn("thumbnail budget resize failed", "key", key[:16], "error", rerr)
+			}
+			return &imageResult{data: data, contentType: contentType, cacheHit: true, stored: true, lease: lease}, nil
 		}
 		if !cache.IsNotFound(getErr) {
+			lease.Release()
 			return nil, getErr
 		}
 		metrics.ObserveImageCache("thumbnail", "miss")
 
-		data, contentType, fetchErr := fetchThumbnail(fetchCtx, s.Client, rawURL)
+		data, contentType, fetchErr := fetchThumbnail(flightCtx, s.Client, rawURL)
 		if fetchErr != nil {
+			lease.Release()
 			return nil, fetchErr
+		}
+		if rerr := lease.Resize(flightCtx, int64(len(data))); rerr != nil {
+			slog.Warn("thumbnail budget resize failed", "key", key[:16], "error", rerr)
 		}
 
 		var stored bool
-		if putErr := s.Cache.PutWithMeta(fetchCtx, key, data, contentType, map[string]string{
+		if putErr := s.Cache.PutWithMeta(flightCtx, key, data, contentType, map[string]string{
 			"source-url": rawURL,
 		}, cacheControlHeader); putErr != nil {
 			slog.Error("cached-thumbnail store failed", "key", key[:16], "error", putErr)
@@ -327,16 +366,16 @@ func (s *Server) loadOrFetchThumbnail(ctx context.Context, key string, rawURL st
 			stored = true
 		}
 
-		return &imageResult{data: data, contentType: contentType, cacheHit: false, stored: stored}, nil
+		return &imageResult{data: data, contentType: contentType, cacheHit: false, stored: stored, lease: lease}, nil
 	})
 	if sfErr != nil {
-		lease.Release()
 		return nil, sfErr
 	}
 	shared := v.(*imageResult)
 	res := *shared
-	res.lease = lease
-	res.lease.Resize(int64(len(res.data)))
+	if !leader {
+		res.lease.Retain()
+	}
 	return &res, nil
 }
 

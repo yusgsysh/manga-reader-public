@@ -13,11 +13,13 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"manga-reader/internal/cache"
 	"manga-reader/internal/exhentai"
+	"manga-reader/internal/membudget"
 )
 
 // ==================== Cache Key Tests ====================
@@ -503,6 +505,85 @@ func TestCachedImage_MissFallsBackToBufferedFetch(t *testing.T) {
 	// The fetched image must now be in the store for the next hit to stream.
 	if _, _, _, err := store.GetStream(context.Background(), cache.CacheKey(pageURL)); err != nil {
 		t.Errorf("fetched image not stored: %v", err)
+	}
+}
+
+// A burst of concurrent cold requests for the same image must be charged for
+// the payload once, not once per request: the leader reserves the buffer and
+// the waiters share that reservation. Before the fix every request acquired the
+// estimate *before* joining the singleflight and released its own reservation,
+// so N requests reserved N copies of a buffer only one of them ever held.
+func TestCachedImage_ConcurrentMissSharesOneReservation(t *testing.T) {
+	if limit := membudget.Limit(); limit < 2*membudget.DefaultWeight {
+		t.Skipf("budget %d too small for this test's assumption", limit)
+	}
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var enterOnce sync.Once
+
+	pageURL := "https://exhentai.org/s/abc123/4153369-29"
+	imgData := mockImageBytes()
+
+	var upstream atomic.Int32
+	srv := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/s/") {
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, mockPageHTML("https://example.com/image.webp", ""))
+			return
+		}
+		// Block the single upstream image fetch so every request has time to
+		// join the shared flight before the reservation is sampled.
+		upstream.Add(1)
+		enterOnce.Do(func() { close(entered) })
+		<-release
+		w.Header().Set("Content-Type", "image/webp")
+		_, _ = w.Write(imgData)
+	})
+	defer srv.Close()
+
+	server := &Server{Client: newMockClient(srv.URL), Cache: newMockImageCache()}
+	r := setupMockRouter(server)
+
+	const n = 12
+	start := make(chan struct{})
+	codes := make(chan int, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() {
+			<-start
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, httptest.NewRequest("GET", "/api/image-cache/page?url="+url.QueryEscape(pageURL), nil))
+			codes <- w.Code
+		})
+	}
+	close(start)
+
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("leader never reached the upstream image fetch")
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	if got := membudget.Reserved(); got > 2*membudget.DefaultWeight {
+		t.Errorf("reserved with %d requests sharing one payload = %d bytes, want <= %d (one reservation, not %d)",
+			n, got, 2*membudget.DefaultWeight, n)
+	}
+	close(release)
+	wg.Wait()
+	close(codes)
+
+	for code := range codes {
+		if code != http.StatusOK {
+			t.Errorf("status = %d, want 200", code)
+		}
+	}
+	if got := upstream.Load(); got != 1 {
+		t.Errorf("upstream image fetches = %d, want 1", got)
+	}
+	if got := membudget.Reserved(); got != 0 {
+		t.Errorf("reserved after requests completed = %d, want 0", got)
 	}
 }
 

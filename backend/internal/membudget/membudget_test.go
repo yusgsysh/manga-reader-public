@@ -69,10 +69,16 @@ func TestAcquireBlocksWhenBudgetExhausted(t *testing.T) {
 
 func TestAcquireClampsOversizedWeight(t *testing.T) {
 	withLimit(t, 500)
+	start := reserved.Load()
 
+	// A weight above the budget is capped at 3/4 of it (see capWeight), so the
+	// reservation succeeds and leaves headroom for other operations.
 	l, err := Acquire(context.Background(), 5000)
 	if err != nil {
 		t.Fatalf("oversized Acquire: %v", err)
+	}
+	if got := reserved.Load() - start; got != 500/maxWeightDenom*maxWeightFraction {
+		t.Errorf("reserved for oversized Acquire = %d, want %d", got, 500/maxWeightDenom*maxWeightFraction)
 	}
 	l.Release()
 	l.Release() // idempotent
@@ -86,16 +92,20 @@ func TestLeaseResize(t *testing.T) {
 		t.Fatalf("Acquire: %v", err)
 	}
 
-	// Grow: real payload is bigger than the estimate.
-	l.Resize(800)
+	// Grow: real payload is bigger than the estimate (capped at 3/4 of 1000).
+	if err := l.Resize(context.Background(), 800); err != nil {
+		t.Fatalf("Resize grow: %v", err)
+	}
 	blockedCtx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	if _, err := Acquire(blockedCtx, 300); err == nil {
-		t.Fatal("expected Acquire to block while resized lease holds 800")
+		t.Fatal("expected Acquire to block while resized lease holds the budget")
 	}
 
 	// Shrink back: frees room again.
-	l.Resize(200)
+	if err := l.Resize(context.Background(), 200); err != nil {
+		t.Fatalf("Resize shrink: %v", err)
+	}
 	other, err := Acquire(context.Background(), 700)
 	if err != nil {
 		t.Fatalf("Acquire after shrink: %v", err)
@@ -104,8 +114,82 @@ func TestLeaseResize(t *testing.T) {
 
 	l.Release()
 	// Resize after release is a no-op, not a panic or a re-acquire.
-	l.Resize(900)
+	if err := l.Resize(context.Background(), 900); err != nil {
+		t.Fatalf("Resize after release: %v", err)
+	}
 	l.Release()
+}
+
+// A grow that ctx cannot satisfy must leave the old reservation in place rather
+// than dropping it, so the bytes the caller already holds stay accounted for.
+func TestResizeGrowFailureKeepsOldReservation(t *testing.T) {
+	withLimit(t, 1000)
+	start := reserved.Load()
+
+	l, err := Acquire(context.Background(), 700)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	// Fill the remaining budget so the grow has nowhere to go.
+	blocker, err := Acquire(context.Background(), 300)
+	if err != nil {
+		t.Fatalf("blocker Acquire: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	if err := l.Resize(ctx, 750); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Resize grow error = %v, want deadline exceeded", err)
+	}
+	if got := reserved.Load() - start; got != 1000 {
+		t.Errorf("reserved after failed grow = %d, want 1000 (old lease kept)", got)
+	}
+
+	l.Release()
+	if got := reserved.Load() - start; got != 300 {
+		t.Errorf("reserved after releasing grown lease = %d, want 300 (blocker only)", got)
+	}
+	blocker.Release()
+}
+
+// Retain shares one reservation across readers: the budget is returned only
+// after the last reference is released.
+func TestLeaseRetainSharesReservation(t *testing.T) {
+	withLimit(t, 1000)
+	start := reserved.Load()
+
+	l, err := Acquire(context.Background(), 700)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	l.Retain()
+
+	l.Release()
+	if got := reserved.Load() - start; got != 700 {
+		t.Fatalf("reserved after first release = %d, want 700 (shared ref held)", got)
+	}
+	l.Release()
+	if got := reserved.Load() - start; got != 0 {
+		t.Fatalf("reserved after last release = %d, want 0", got)
+	}
+}
+
+// Retaining after the last release must not revive the reservation or panic;
+// the reservation is already back with the budget.
+func TestLeaseRetainAfterRelease(t *testing.T) {
+	withLimit(t, 1000)
+	start := reserved.Load()
+
+	l, err := Acquire(context.Background(), 300)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	l.Release()
+	l.Retain()
+	l.Release()
+	if got := reserved.Load() - start; got != 0 {
+		t.Fatalf("reserved after retain/release cycle = %d, want 0", got)
+	}
 }
 
 func TestAcquireCanceledContext(t *testing.T) {
@@ -139,7 +223,9 @@ func TestReservedMirrorTracksLeases(t *testing.T) {
 		t.Fatalf("reserved after Acquire = %d, want 300", got)
 	}
 
-	l.Resize(500)
+	if err := l.Resize(context.Background(), 500); err != nil {
+		t.Fatalf("Resize: %v", err)
+	}
 	if got := reserved.Load() - start; got != 500 {
 		t.Fatalf("reserved after Resize = %d, want 500", got)
 	}
@@ -161,9 +247,11 @@ func TestWaitersMirrorReturnsToZero(t *testing.T) {
 	}
 	defer held.Release()
 
+	// 1000 is capped to the single-weight ceiling, so ask for more than what is
+	// left to force a real block.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
-	_, _ = Acquire(ctx, 100)
+	_, _ = Acquire(ctx, 500)
 
 	if got := waiters.Load(); got != 0 {
 		t.Fatalf("waiters after timed-out Acquire = %d, want 0", got)

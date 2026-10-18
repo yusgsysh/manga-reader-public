@@ -473,37 +473,55 @@ func (s *Server) resolveGalleryPageThumbFromStream(
 	}
 }
 
+// decodedSprite is a decoded sprite shared across the crop flights of the
+// different cells of one sprite sheet. Its lease covers the sprite bytes plus
+// the decoded bitmap and is reference-counted, so a cold grid load charges the
+// one bitmap (and the one sheet) once no matter how many cells are cropped at
+// once.
+type decodedSprite struct {
+	img   image.Image
+	lease *membudget.Lease
+}
+
 // spriteDecodeGroup shares one decode of a sprite across the concurrent crop
-// flights of *different* cells of that sprite: a cold grid load would
-// otherwise decode the same sheet once per cell, and a decoded sheet costs
-// width*height*4 bytes. The value escapes the flight, so each crop flight
-// holds its own membudget reservation for the decode until it finishes
-// cropping (conservative: N sharers are charged N times, but only one bitmap
-// ever exists).
+// flights of *different* cells of that sprite: a cold grid load would otherwise
+// decode the same sheet once per cell, and a decoded sheet costs width*height*4
+// bytes. The value escapes the flight, so every crop flight keeps the shared
+// reservation alive until it finishes cropping.
 var spriteDecodeGroup singleflight.Group
 
-// cropSprite crops one cell of sprite. It reserves budget for the sprite
-// bytes plus the decoded bitmap for the duration of the crop, and shares the
-// decode with concurrent crops of other cells of the same sprite.
+// cropSprite crops one cell of sprite. It reserves budget for the sprite bytes
+// plus the decoded bitmap for the duration of the crop, and shares the decode —
+// and its reservation — with concurrent crops of other cells of the same sprite.
 func (s *Server) cropSprite(ctx context.Context, spriteURL string, sprite []byte, rect image.Rectangle) ([]byte, error) {
-	cfg, err := imageproc.ProbeSprite(sprite)
-	if err != nil {
-		return nil, err
-	}
-	weight := int64(len(sprite)) + int64(cfg.Width)*int64(cfg.Height)*4
-	lease, err := membudget.Acquire(ctx, weight)
-	if err != nil {
-		return nil, err
-	}
-	defer lease.Release()
-
+	var leader bool
 	v, sfErr, _ := spriteDecodeGroup.Do("decode:"+spriteURL, func() (any, error) {
-		return imageproc.DecodeSprite(sprite)
+		leader = true
+		cfg, err := imageproc.ProbeSprite(sprite)
+		if err != nil {
+			return nil, err
+		}
+		weight := int64(len(sprite)) + int64(cfg.Width)*int64(cfg.Height)*4
+		lease, err := membudget.Acquire(ctx, weight)
+		if err != nil {
+			return nil, err
+		}
+		img, err := imageproc.DecodeSprite(sprite)
+		if err != nil {
+			lease.Release()
+			return nil, err
+		}
+		return &decodedSprite{img: img, lease: lease}, nil
 	})
 	if sfErr != nil {
 		return nil, sfErr
 	}
-	return imageproc.CropDecoded(v.(image.Image), rect)
+	shared := v.(*decodedSprite)
+	if !leader {
+		shared.lease.Retain()
+	}
+	defer shared.lease.Release()
+	return imageproc.CropDecoded(shared.img, rect)
 }
 
 // cropLive fetches the sprite from upstream and crops it, without touching
