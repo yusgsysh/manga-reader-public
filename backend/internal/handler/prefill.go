@@ -848,7 +848,9 @@ func (s *Server) handlePrefillZip(c *gin.Context) {
 		missingData := []byte(strings.Join(missing, "\n"))
 		w, err := zw.CreateHeader(&zip.FileHeader{Name: "_missing.txt", Method: zip.Store})
 		if err == nil {
-			w.Write(missingData)
+			// Best effort: the ZIP is already streaming to the client and a
+			// failed trailing entry cannot be reported back anymore.
+			w.Write(missingData) //nolint:errcheck // request already committed
 		}
 	}
 

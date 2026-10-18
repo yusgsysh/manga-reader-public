@@ -10,6 +10,37 @@ version: "2"
 run:
   timeout: 5m
 
+linters:
+  settings:
+    errcheck:
+      # These error returns are conventionally non-actionable: the value has
+      # already been consumed, the response is already on the wire, or the
+      # write is best-effort. Checking them adds noise without changing the
+      # outcome. Everything else is still checked.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (*os.File).Close
+        - (*database/sql.DB).Close
+        - (*database/sql.Rows).Close
+        - (*manga-reader/internal/database.DB).Close
+        - (*manga-reader/internal/ent.Client).Close
+        - (*manga-reader/internal/ent.Tx).Rollback
+        - (*github.com/minio/minio-go/v7.Object).Close
+        # Fire-and-forget singleflight walks: the closure logs its own error.
+        - (*golang.org/x/sync/singleflight.Group).Do
+  exclusions:
+    rules:
+      # Test scaffolding (fixture unmarshalling, seeding rows, mock response
+      # writers) has no operational error path; production code still checks
+      # every error errcheck flags.
+      - path: _test\.go
+        linters:
+          - errcheck
+
 issues:
   # Report every occurrence; never truncate.
   max-issues-per-linter: 0
