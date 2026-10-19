@@ -114,9 +114,10 @@ type listState struct {
 	total    int
 	loading  bool
 	loaded   bool
-	err      string
-	query    string
-	loadID   int
+
+	err    string
+	query  string
+	loadID int
 }
 
 // detailState is one gallery's metadata, fetched first from the cache endpoint
@@ -488,18 +489,6 @@ func (a *App) loadMore(s *listState) {
 	a.startListLoad(s)
 }
 
-// ensureMore loads the next page when fewer than two screens are left, so a
-// long list keeps filling itself as the user scrolls instead of stopping at a
-// 「加载更多」 button. The frame passes how many rows the grid showed.
-func (a *App) ensureMore(s *listState, shownRows, visibleRows int) {
-	if !a.hasMore(s) || s.loading {
-		return
-	}
-	if shownRows-visibleRows <= 2 {
-		a.loadMore(s)
-	}
-}
-
 func (a *App) hasMore(s *listState) bool {
 	if !s.loaded {
 		return false
@@ -635,11 +624,6 @@ func (a *App) listPage(c *ui.Context, path, title, subtitle string, kind listKin
 			ui.GridView(c, s.grid, len(s.items), 190, 300, func(i int) {
 				a.galleryCard(c, s.items[i])
 			}).Grow(1).Clip()
-			// Two full columns' worth of rows per screen at the default size;
-			// the estimate only decides when to prefetch, and a short list
-			// simply loads its next page early.
-			shown := (len(s.items) + 6) / 6
-			a.ensureMore(s, shown, 2)
 			a.listFooter(c, s)
 		}
 	})
