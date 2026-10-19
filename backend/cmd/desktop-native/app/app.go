@@ -137,6 +137,10 @@ type detailState struct {
 	downloadBusy bool
 	downloadErr  string
 	downloadJob  string
+
+	// torrents, loaded the first time the user asks for them.
+	torrents     torrentsState
+	showTorrents bool
 }
 
 func New(client *Client) *App {
@@ -859,6 +863,8 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 				})
 			})
 
+			ui.Divider(c)
+			a.torrentsBlock(c, s)
 			ui.Divider(c)
 			a.pageThumbGrid(c, g, s)
 		})

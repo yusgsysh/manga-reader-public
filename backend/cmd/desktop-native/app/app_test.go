@@ -112,6 +112,20 @@ func newFakeServerWithHooks(t *testing.T, onImage func(r *http.Request)) *httpte
 		}
 		fmt.Fprintln(w, `{"type":"done","total":3}`)
 	})
+	mux.HandleFunc("/api/gallery/1/tok1/torrents", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"torrents": []map[string]any{
+			{"gtid": "2250081", "name": "[Yanje] 示例 A.zip", "size": "42.13 MiB",
+				"posted": "2026-10-02 06:30", "seeds": 8, "peers": 4,
+				"downloads": 12, "uploader": "Konazumi"},
+		}})
+	})
+	mux.HandleFunc("/api/gallery/1/tok1/torrents/2250081/download", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("variant") != "redistributable" {
+			t.Errorf("variant = %q", r.URL.Query().Get("variant"))
+		}
+		w.Header().Set("Content-Type", "application/x-bittorrent")
+		_, _ = w.Write([]byte("d8:announce"))
+	})
 	mux.HandleFunc("/api/gallery-cache/1/tok1/pages", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		fmt.Fprintln(w, `{"type":"meta","total":3}`)
@@ -1338,5 +1352,81 @@ func TestListCardsShowColouredTags(t *testing.T) {
 	}
 	if ns, name := splitTag("tag:netorare"); ns != "tag" || name != "netorare" {
 		t.Fatalf("splitTag(tag:netorare) = %q %q", ns, name)
+	}
+}
+
+// TestGalleryTorrents covers the lazy torrent list and saving a .torrent.
+func TestGalleryTorrents(t *testing.T) {
+	dir := t.TempDir()
+	picked := filepath.Join(dir, "t.torrent")
+	old := pickSavePath
+	pickSavePath = func(parent *mygo.Window, dir, name string) (string, error) {
+		if name != "[Yanje] 示例 A.torrent" {
+			t.Errorf("default torrent name = %q", name)
+		}
+		return picked, nil
+	}
+	t.Cleanup(func() { pickSavePath = old })
+
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "开始阅读")
+
+	// Torrents are fetched only when asked for.
+	if a.details[1].torrents.loaded {
+		t.Fatal("torrents loaded before the user asked")
+	}
+	if err := tt.Click("查看种子"); err != nil {
+		t.Fatalf("click 查看种子: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if tt.HasText("下载种子") {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if !tt.HasText("[Yanje] 示例 A.zip") {
+		t.Fatalf("torrent row missing; texts=%q", tt.Texts())
+	}
+
+	if err := tt.Click("下载种子"); err != nil {
+		t.Fatalf("click 下载种子: %v", err)
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if a.details[1].torrents.msg != "" {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if msg := a.details[1].torrents.msg; !strings.Contains(msg, "已保存") {
+		t.Fatalf("torrent save message = %q", msg)
+	}
+	data, err := os.ReadFile(picked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "d8:announce" {
+		t.Fatalf("saved torrent = %q", data)
+	}
+}
+
+func TestTorrentFileName(t *testing.T) {
+	cases := map[string]string{
+		"a/b:c.zip": "a_b_c.torrent",
+		"":          "torrent-9.torrent",
+		"x.torrent": "x.torrent",
+	}
+	for in, want := range cases {
+		if got := torrentFileName(Torrent{GTID: "9", Name: in}); got != want {
+			t.Errorf("torrentFileName(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

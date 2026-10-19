@@ -478,6 +478,45 @@ func tagRulesFromAPI(in []apiTagRule) []TagRule {
 	return out
 }
 
+// --- Torrents ---
+
+type apiTorrent struct {
+	GTID      string `json:"gtid"`
+	Name      string `json:"name"`
+	Size      string `json:"size"`
+	Posted    string `json:"posted"`
+	Seeds     int    `json:"seeds"`
+	Peers     int    `json:"peers"`
+	Downloads int    `json:"downloads"`
+	Uploader  string `json:"uploader"`
+}
+
+// Torrents lists a gallery's torrents (scraped live, never cached).
+func (c *Client) Torrents(ctx context.Context, id int64, token string) ([]Torrent, error) {
+	var out struct {
+		Torrents []apiTorrent `json:"torrents"`
+	}
+	path := fmt.Sprintf("/api/gallery/%d/%s/torrents", id, url.PathEscape(token))
+	if err := c.do(ctx, http.MethodGet, path, nil, nil, &out); err != nil {
+		return nil, err
+	}
+	items := make([]Torrent, 0, len(out.Torrents))
+	for _, t := range out.Torrents {
+		items = append(items, Torrent{
+			GTID: t.GTID, Name: t.Name, Size: t.Size, Posted: t.Posted,
+			Seeds: t.Seeds, Peers: t.Peers, Downloads: t.Downloads, Uploader: t.Uploader,
+		})
+	}
+	return items, nil
+}
+
+// DownloadTorrent saves a gallery's .torrent file to path.
+func (c *Client) DownloadTorrent(ctx context.Context, id int64, token, gtid, path string) (int64, error) {
+	apiPath := fmt.Sprintf("/api/gallery/%d/%s/torrents/%s/download?variant=redistributable",
+		id, url.PathEscape(token), url.PathEscape(gtid))
+	return c.downloadTo(path, apiPath, 2*time.Minute)
+}
+
 // --- Prefill (offline downloads) ---
 //
 // A prefill job fetches the gallery's pages into the backend's image cache

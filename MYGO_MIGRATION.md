@@ -122,7 +122,7 @@
 - [x] `desktop.Server.ClearCache` / `CacheInfo` / `CacheMaxBytes` / `SetCacheMaxBytes`，`FSCache.Size` / `Prune`。
 - [x] **内嵌后端访问令牌**：每次启动随机生成（`crypto/rand`），`Options.AuthToken` + Gin 中间件常量时间校验；API 客户端与 `ImageStore` 携带 `X-Manga-Reader-Token`，并支持 `access_token` 查询参数兜底；缺失/错误返回 401。
 - [x] **单实例**：`internal/singleinstance` 在配置目录监听 `instance.sock`，第二个进程连接并发送 `focus` 后退出，主进程 `Window.Show()/Focus()`；崩溃遗留的 socket 会被探测并接管。
-- [x] 新增测试：设置保存往返 + 0600 权限；缓存 size/clear/prune（按最旧淘汰、超限自动清理、上限开关）；缓存上限解析与 env 覆盖；首次设置连接后端、空 cookie 拒绝；设置页缓存占用/上限/清空；保存上限与非法输入校验；令牌中间件（缺失/正确/错误/查询参数）；客户端与 ImageStore 携带令牌；单实例（主/次、聚焦回调、Close 后接管、过期 socket 接管）；搜索防抖（连续输入只发一次请求）；阅读器预加载（相邻页经缓存代理预取）；详情页缩略图网格（经缓存代理加载、点击跳到指定页）；阅读器点击左右翻页、适应模式切换、页码跳转、RTL 方向键；离线下载（创建任务、轮询到已完成、删除后不再回到列表、ZIP 导出到临时目录、默认文件名清洗）；标签规则（添加/删除/保存、权重校验、着色与排序、同步结果、列表卡片着色、任意标签拆分、快照）；setup/settings 快照。
+- [x] 新增测试：设置保存往返 + 0600 权限；缓存 size/clear/prune（按最旧淘汰、超限自动清理、上限开关）；缓存上限解析与 env 覆盖；首次设置连接后端、空 cookie 拒绝；设置页缓存占用/上限/清空；保存上限与非法输入校验；令牌中间件（缺失/正确/错误/查询参数）；客户端与 ImageStore 携带令牌；单实例（主/次、聚焦回调、Close 后接管、过期 socket 接管）；搜索防抖（连续输入只发一次请求）；阅读器预加载（相邻页经缓存代理预取）；详情页缩略图网格（经缓存代理加载、点击跳到指定页）；阅读器点击左右翻页、适应模式切换、页码跳转、RTL 方向键；离线下载（创建任务、轮询到已完成、删除后不再回到列表、ZIP 导出到临时目录、默认文件名清洗）；标签规则（添加/删除/保存、权重校验、着色与排序、同步结果、列表卡片着色、任意标签拆分、快照）；种子列表（按需加载、保存 .torrent、文件名清洗）；setup/settings 快照。
 - [x] 本地实跑：无 cookie 进入设置界面；有 cookie 自动启动内嵌服务并写入 `config.json`。
 - [x] `go test ./...`、`go test -race ./internal/cache/... ./cmd/desktop-native/...`、`go vet`、`go build ./...` 通过。
 - [x] 本地实跑：`go run ./cmd/desktop-native` 打印内嵌地址并打开窗口。
@@ -207,8 +207,8 @@
   - [ ] 标签翻译库导入/导出。
   - [ ] IndexedDB 逻辑迁移到 SQLite 或内存缓存。
   - [x] 列表卡片/搜索结果也显示前两个标签并按规则着色（`Gallery.Tags` 改为结构体，保留命名空间）。
-- [ ] 页面缩略图与 torrents
-  - [ ] 详情页 torrents 列表与下载链接。
+- [x] 页面缩略图与 torrents
+  - [x] 详情页 torrents 列表（按需加载）与 `.torrent` 下载（原生保存对话框）。
 - [ ] 数据同步 ❓
   - [ ] 若保留：内嵌 sync host + 可选 headless server。
   - [ ] 若不保留：从设置/后端清理同步入口。

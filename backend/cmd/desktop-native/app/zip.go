@@ -60,16 +60,22 @@ func (a *App) saveZip(j PrefillJob) {
 }
 
 // downloadZip streams GET /api/prefill/:id/zip into path, returning the
-// number of bytes written. The file is removed when the copy fails.
+// number of bytes written.
 func (a *App) downloadZip(jobID, path string) (int64, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	return a.client.downloadTo(path, "/api/prefill/"+jobID+"/zip", 30*time.Minute)
+}
+
+// downloadTo streams an API path into path. The file is removed when the copy
+// fails, so a cancelled download leaves no half-written file behind. It lives
+// on the Client so ZIPs and torrents share it.
+func (c *Client) downloadTo(path, apiPath string, timeout time.Duration) (int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		a.client.BaseURL()+"/api/prefill/"+jobID+"/zip", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL()+apiPath, nil)
 	if err != nil {
 		return 0, err
 	}
-	if token := a.client.authTokenValue(); token != "" {
+	if token := c.authTokenValue(); token != "" {
 		req.Header.Set("X-Manga-Reader-Token", token)
 	}
 	resp, err := (&http.Client{}).Do(req)
