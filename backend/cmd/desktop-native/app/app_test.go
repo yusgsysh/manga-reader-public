@@ -1305,3 +1305,38 @@ func TestSortedTagsAndWeightInput(t *testing.T) {
 		t.Fatalf("invalid add changed rules: %+v", a.tags.rules)
 	}
 }
+
+// TestListCardsShowColouredTags checks the home grid's chips follow the rules
+// and that a rule change recolours cards already on screen.
+func TestListCardsShowColouredTags(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+
+	// The card keeps the tag it was built with.
+	card := a.lists["/"].items[0]
+	if len(card.Tags) != 1 || card.Tags[0].Namespace != "female" || card.Tags[0].Name != "yuri" {
+		t.Fatalf("card tags = %+v", card.Tags)
+	}
+	if got := tagChipText(card.Tags[0].Namespace, card.Tags[0].Name); got != "female:yuri" {
+		t.Fatalf("chip text = %q", got)
+	}
+
+	// A new rule must be noticed on the next frame.
+	a.tags.rules = []TagRule{{Tag: "female:yuri", Action: TagLike, Weight: 10}}
+	a.tags.loaded = true
+	tt.Frame()
+	if len(a.announcedRules) != 1 || a.announcedRules[0].Tag != "female:yuri" {
+		t.Fatalf("announced rules = %+v", a.announcedRules)
+	}
+	if r := a.tagRule("female:yuri"); r == nil || r.Action != TagLike {
+		t.Fatalf("tagRule = %+v", r)
+	}
+
+	// A bare tag has no namespace and still matches its rule.
+	if ns, name := splitTag("netorare"); ns != "" || name != "netorare" {
+		t.Fatalf("splitTag(netorare) = %q %q", ns, name)
+	}
+	if ns, name := splitTag("tag:netorare"); ns != "tag" || name != "netorare" {
+		t.Fatalf("splitTag(tag:netorare) = %q %q", ns, name)
+	}
+}

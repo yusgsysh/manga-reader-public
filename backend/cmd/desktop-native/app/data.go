@@ -10,7 +10,7 @@ type Gallery struct {
 	Category string
 	Pages    int
 	Rating   float64
-	Tags     []string
+	Tags     []apiTag
 	CoverURL string
 	Reading  *ReadingProgress
 }

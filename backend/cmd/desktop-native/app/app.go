@@ -61,6 +61,9 @@ type App struct {
 	downloads Downloads
 	// tags is the tag-rule page state; rules colour and order tags anywhere.
 	tags TagSettings
+	// announcedRules is the rule list last copied into lists and details
+	// that show tag chips, so a rule change recolours them.
+	announcedRules []TagRule
 	// zipBusy is the jobs whose ZIP is being saved; zipMsg reports the last
 	// save's result on the downloads page.
 	zipBusy map[string]bool
@@ -243,6 +246,8 @@ func (a *App) isFullscreen() bool {
 func (a *App) View(c *ui.Context) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	a.syncTagRulesLocked()
 
 	if a.backend != nil && a.showSetup {
 		a.setupView(c)
@@ -515,6 +520,14 @@ func (a *App) mapItems(items []apiGalleryItem) []Gallery {
 		if pages == 0 {
 			pages = it.PageCount
 		}
+		tags := make([]apiTag, 0, len(it.Tags))
+		for _, tag := range it.Tags {
+			if tag == "" {
+				continue
+			}
+			ns, name := splitTag(tag)
+			tags = append(tags, apiTag{Namespace: ns, Name: name})
+		}
 		out = append(out, Gallery{
 			ID:       it.ID,
 			Token:    it.Token,
@@ -523,7 +536,7 @@ func (a *App) mapItems(items []apiGalleryItem) []Gallery {
 			Category: categoryLabel(it.Category),
 			Pages:    pages,
 			Rating:   it.Rating,
-			Tags:     it.Tags,
+			Tags:     tags,
 			CoverURL: a.client.ThumbnailURL(cover),
 		})
 	}
@@ -624,6 +637,18 @@ func (a *App) galleryCard(c *ui.Context, g Gallery) {
 			meta = fmt.Sprintf("%s · 读到第 %d 页", g.Category, g.Reading.CurrentPage+1)
 		}
 		ui.Text(c, meta).FontSize(11).TextColor(t.TextMuted).SingleLine()
+		if len(g.Tags) > 0 {
+			// Two chips at most: the card is small, and the colours are what
+			// matter at a glance.
+			ui.Row(c).Gap(4).Wrap().Children(func() {
+				for i, tag := range a.sortedTags(g.Tags) {
+					if i == 2 {
+						break
+					}
+					a.tagChip(c, tag.Namespace, tag.Name)
+				}
+			})
+		}
 	})
 	if cell.Clicked() {
 		a.router.Push(fmt.Sprintf("/gallery/%d/%s", g.ID, g.Token))
@@ -742,10 +767,6 @@ func (a *App) galleryFromDetail(d apiGalleryDetail) Gallery {
 	if cover == "" {
 		cover = d.Cover
 	}
-	tags := make([]string, 0, len(d.Tags))
-	for _, t := range d.Tags {
-		tags = append(tags, t.Namespace+":"+t.Name)
-	}
 	return Gallery{
 		ID:       d.ID,
 		Token:    d.Token,
@@ -754,7 +775,7 @@ func (a *App) galleryFromDetail(d apiGalleryDetail) Gallery {
 		Category: categoryLabel(d.Category),
 		Pages:    d.PageCount,
 		Rating:   d.Rating,
-		Tags:     tags,
+		Tags:     d.Tags,
 		CoverURL: a.client.ThumbnailURL(cover),
 	}
 }

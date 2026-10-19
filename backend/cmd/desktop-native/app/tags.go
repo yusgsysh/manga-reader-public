@@ -62,6 +62,9 @@ type TagSettings struct {
 
 // tagRule returns the rule of a namespace:name tag, if any.
 func (a *App) tagRule(tag string) *TagRule {
+	if tag == "" {
+		return nil
+	}
 	key := strings.ToLower(tag)
 	for i := range a.tags.rules {
 		if a.tags.rules[i].Tag == key {
@@ -260,6 +263,22 @@ func (a *App) syncTagSettings() {
 	}()
 }
 
+// splitTag splits a "namespace:name" tag; a bare tag has an empty namespace.
+func splitTag(tag string) (namespace, name string) {
+	if i := strings.IndexByte(tag, ':'); i >= 0 {
+		return tag[:i], tag[i+1:]
+	}
+	return "", tag
+}
+
+// tagChipText is the label of a tag chip, as the site writes it.
+func tagChipText(namespace, name string) string {
+	if namespace == "" {
+		return name
+	}
+	return namespace + ":" + name
+}
+
 // tagActionColor is the chip colour of a rule: ExHentai's blue and red.
 func tagActionColor(action TagAction) ui.Color {
 	if action == TagDislike {
@@ -270,7 +289,7 @@ func tagActionColor(action TagAction) ui.Color {
 
 // tagChip draws one tag, coloured and ordered by its rule.
 func (a *App) tagChip(c *ui.Context, namespace, name string) {
-	tag := namespace + ":" + name
+	tag := tagChipText(namespace, name)
 	rule := a.tagRule(tag)
 	if rule == nil {
 		ui.Badge(c, tag)
@@ -292,7 +311,7 @@ func (a *App) sortedTags(tags []apiTag) []apiTag {
 		return 2
 	}
 	weight := func(t apiTag) int {
-		if r := a.tagRule(t.Namespace + ":" + t.Name); r != nil {
+		if r := a.tagRule(tagChipText(t.Namespace, t.Name)); r != nil {
 			if r.Weight < 0 {
 				return -r.Weight
 			}
@@ -433,4 +452,38 @@ func (a *App) tagRuleRow(c *ui.Context, r TagRule) {
 			a.removeTagRule(r.Tag)
 		}
 	})
+}
+
+// syncTagRulesLocked copies the current rules into the lists and details that
+// draw tag chips when they changed, so a new rule recolours what is on screen
+// without refetching anything.
+func (a *App) syncTagRulesLocked() {
+	rules := a.tags.rules
+	if len(rules) == len(a.announcedRules) {
+		same := true
+		for i := range rules {
+			if rules[i] != a.announcedRules[i] {
+				same = false
+				break
+			}
+		}
+		if same {
+			return
+		}
+	}
+	a.announcedRules = append([]TagRule(nil), rules...)
+	apply := func(g *Gallery) {
+		if len(g.Tags) == 0 {
+			return
+		}
+		g.Tags = append([]apiTag(nil), g.Tags...)
+	}
+	for _, s := range a.lists {
+		for i := range s.items {
+			apply(&s.items[i])
+		}
+	}
+	for _, d := range a.details {
+		apply(&d.g)
+	}
 }
