@@ -118,6 +118,10 @@ cmd/desktop-native/
 - ZIP 导出：完成后点「导出 ZIP」，`mygo.Dialog.Save` 选路径（测试里用 `pickSavePath` 变量替换），然后流式 `io.Copy` 到文件，不占内存；失败时删除半成品。
 - 搜索输入用 300ms 防抖（`scheduleSearch`）：每次文本变化只保留最后一个定时器，因此连续输入只发一次请求。
 
+## CI
+
+`.github/workflows/native-desktop.yml` 在 Linux 上装 GTK3 跑 `gofmt`/`vet`/`test`/`-race`，并用矩阵交叉编译 linux/amd64、darwin/arm64、darwin/amd64、windows/amd64 的桌面包；Linux 额外产出完整二进制 artifact。
+
 ## 测试
 
 ```bash

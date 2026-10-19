@@ -223,17 +223,18 @@
 
 ### 3.4 P3：产品化与发布
 
-- [ ] 三平台构建
+- [~] 三平台构建
+  - [x] 交叉编译验证：`GOOS=windows/darwin go build ./cmd/desktop-native/...` 通过（含 `mygo` 依赖）。
   - [ ] macOS 12+（arm64/amd64），`.app` + 签名/公证。
   - [ ] Linux GTK3，`.deb`/AppImage 或 tarball。
   - [ ] Windows 10+，`.exe` + 安装包。
 - [ ] 应用图标、启动画面、关于页。
 - [ ] 自动更新（可选）。
 - [ ] 崩溃日志与用户可导出的诊断信息。
-- [ ] CI
-  - [ ] Linux 安装 GTK3 依赖并跑 `go test`。
-  - [ ] 三平台构建矩阵。
-  - [ ] `go vet`、`-race`。
+- [x] CI
+  - [x] Linux 安装 GTK3 依赖并跑 `go test` / `go vet` / `go test -race`（`.github/workflows/native-desktop.yml`）。
+  - [x] 三平台矩阵：linux/amd64、darwin/arm64、darwin/amd64、windows/amd64 交叉编译 app + desktop 内部包 + 后端包；Linux 额外产出完整二进制 artifact。
+  - [ ] 正式发布流水线（签名、公证、`.deb`/`.exe` 安装包）。
 - [ ] 性能基准
   - [ ] 1000+ 页画廊滚动帧率。
   - [ ] 常驻内存目标 < 300MB。
