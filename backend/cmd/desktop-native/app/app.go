@@ -48,6 +48,10 @@ type App struct {
 	setupErr    string
 	setupBusy   bool
 
+	// toasts are the ones asked for off the main thread, which View adds
+	// while it builds the next frame.
+	toasts []ui.Toast
+
 	// appearance is the theme choice shown on the settings page; main applies
 	// it. appearanceBusy while saving, appearanceMsg the last result.
 	appearance     string
@@ -250,6 +254,40 @@ func (a *App) adoptBackendLocked(baseURL string) {
 
 // update runs fn on the main thread with the app lock held. Background loads
 // use it so they never race the frame being built.
+// toast asks for a toast from any goroutine. View adds it while it builds
+// the next frame: ui.Context.AddToast touches state the frame owns, so
+// calling it from a load goroutine races the renderer.
+func (a *App) toast(t ui.Toast) {
+	a.mu.Lock()
+	a.toasts = append(a.toasts, t)
+	win := a.win
+	a.mu.Unlock()
+	if win != nil {
+		win.Update(func() {})
+	}
+}
+
+// toastLocked is toast for a caller holding a.mu, as update's callback does.
+func (a *App) toastLocked(t ui.Toast) {
+	a.toasts = append(a.toasts, t)
+	if a.win != nil {
+		a.win.Update(func() {})
+	}
+}
+
+// flushToasts adds the toasts asked for since the last frame. The caller
+// holds a.mu, as View does.
+func (a *App) flushToasts(c *ui.Context) {
+	if len(a.toasts) == 0 {
+		return
+	}
+	pending := a.toasts
+	a.toasts = nil
+	for _, t := range pending {
+		c.AddToast(t)
+	}
+}
+
 func (a *App) update(fn func()) {
 	run := func() {
 		a.mu.Lock()
@@ -283,6 +321,10 @@ func (a *App) View(c *ui.Context) {
 	defer a.mu.Unlock()
 
 	a.syncTagRulesLocked()
+	// Toasts asked for off the main thread (a download started in a
+	// goroutine) are shown here, where the frame, not the goroutine, adds
+	// them: mygo's toasts are only safe to touch while a view builds.
+	a.flushToasts(c)
 
 	if a.backend != nil && a.showSetup {
 		a.setupView(c)
