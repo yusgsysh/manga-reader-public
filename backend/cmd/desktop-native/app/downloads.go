@@ -132,7 +132,7 @@ func (a *App) pollDownloads(now time.Time) {
 // startDownload queues an offline copy of the gallery. The page list is
 // fetched again here: the prefill API wants the page URLs, and the reader may
 // not have visited this gallery this session.
-func (a *App) startDownload(s *detailState) {
+func (a *App) startDownload(c *ui.Context, s *detailState) {
 	if s.downloadBusy {
 		return
 	}
@@ -162,6 +162,12 @@ func (a *App) startDownload(s *detailState) {
 			s.downloadJob = job.ID
 			a.downloads.loaded = false
 			a.ensureDownloads()
+			c.AddToast(ui.Toast{
+				ID: "download-" + job.ID, Type: "success",
+				Title: "已加入下载队列",
+				Description: fmt.Sprintf("%d 页 · %s", len(urls),
+					downloadStatusLabel(job.Status)),
+			})
 		})
 	}()
 }
@@ -296,7 +302,13 @@ func (a *App) downloadRow(c *ui.Context, j PrefillJob) {
 			if title == "" {
 				title = fmt.Sprintf("画廊 %d", j.GalleryID)
 			}
-			ui.Text(c, title).FontSize(14).Bold().SingleLine().Grow(1)
+			open := ui.Box(c).Focusable().Label("打开 " + title).Grow(1)
+			open.Children(func() {
+				ui.Text(c, title).FontSize(14).Bold().SingleLine()
+			})
+			if open.Clicked() && j.GalleryID > 0 && j.Token != "" {
+				a.router.Push(fmt.Sprintf("/gallery/%d/%s", j.GalleryID, j.Token))
+			}
 			ui.Text(c, downloadStatusLabel(j.Status)).FontSize(12).TextColor(t.TextMuted)
 			if running {
 				if ui.Button(c, "取消").Clicked() {

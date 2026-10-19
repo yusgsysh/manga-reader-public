@@ -1947,3 +1947,38 @@ func TestDiagnosticsExport(t *testing.T) {
 		t.Fatalf("diagnostics leak cookies:\n%s", text)
 	}
 }
+
+// TestDownloadToastAndOpen checks the success toast after queueing a job and
+// that clicking a job's title opens the gallery.
+func TestDownloadToastAndOpen(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "开始阅读")
+	if err := tt.Click("离线下载"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if a.details[1] != nil && a.details[1].downloadJob != "" {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	// The list page opens the gallery again from the job's title.
+	a.router.Push("/downloads")
+	navSettle(tt)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("打开 示例 A"); err != nil {
+		t.Fatalf("click job title: %v", err)
+	}
+	navSettle(tt)
+	if p := a.router.Path(); p != "/gallery/1/tok1" {
+		t.Fatalf("path after job title = %q", p)
+	}
+}

@@ -1353,10 +1353,16 @@ func (a *App) emptyPage(c *ui.Context, title, subtitle, hint string) {
 	})
 }
 
+// errorBlock is the one error state for pages: a title, the backend's
+// message, and 重试. Backend down, network failure and a bad response all
+// come through here, so they look the same wherever they happen.
 func (a *App) errorBlock(c *ui.Context, msg string, retry func()) {
 	t := c.Theme()
+	if msg == "" {
+		msg = "发生未知错误"
+	}
 	ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
-		ui.Text(c, "请求失败").FontSize(18).Bold()
+		ui.Badge(c, "请求失败").Background(t.Danger).TextColor(t.Background)
 		ui.Text(c, msg).FontSize(12).TextColor(t.TextMuted).MaxWidth(560)
 		if ui.Button(c, "重试").Clicked() {
 			retry()

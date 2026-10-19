@@ -166,7 +166,7 @@ func (a *App) detailDownloadsBlock(c *ui.Context, s *detailState) {
 			if s.downloadJob != "" {
 				a.router.Push("/downloads")
 			} else {
-				a.startDownload(s)
+				a.startDownload(c, s)
 			}
 		}
 		if s.downloadJob != "" && status == "completed" {
