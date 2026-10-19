@@ -8,7 +8,10 @@ frontend/wailsjs/runtime/runtime.d.ts
 frontend/wailsjs/runtime/runtime.js
 .task/*
 backend/desktop
-backend/cmd
+# The old Wails build tree lives here locally and is not part of the repo.
+# The MyGo desktop app is the only cmd/ source we track.
+backend/cmd/*
+!backend/cmd/desktop-native/
 manga-reader-desktop.apk
 build/android/gen/main_android.gen.go
 frontend/frontend
