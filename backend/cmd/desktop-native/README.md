@@ -2,6 +2,8 @@
 
 用 [mygo](https://github.com/egoist/mygo) 的 `ui` 包重写的桌面客户端：纯 Go、原生控件、无 WebView、无前端构建步骤。
 
+> 完整的迁移进度、剩余任务和待拍板决策见仓库根目录的 [`MYGO_MIGRATION.md`](../../../MYGO_MIGRATION.md)。
+
 ## 当前进度
 
 已完成第一条可运行链路：
