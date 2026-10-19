@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"manga-reader/internal/config"
 )
 
 // Client talks to the Manga Reader HTTP API. In the desktop app it points at
@@ -25,6 +27,10 @@ type Client struct {
 	user     string
 	password string
 	http     *http.Client
+
+	// authToken is the embedded server's per-run token; empty when talking
+	// to an external backend (which may use Basic Auth instead).
+	authToken string
 
 	// imageCache routes image requests through the read-through cache proxy
 	// (/api/image-cache/*). The embedded desktop server always provides it;
@@ -72,6 +78,20 @@ func (c *Client) UseImageCache(enabled bool) {
 	c.mu.Unlock()
 }
 
+// SetAuthToken sets the embedded server's per-run token sent with every
+// request. An empty token (external backends) clears it.
+func (c *Client) SetAuthToken(token string) {
+	c.mu.Lock()
+	c.authToken = token
+	c.mu.Unlock()
+}
+
+func (c *Client) authTokenValue() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.authToken
+}
+
 // imagePath returns the cache or live image proxy path for kind.
 func (c *Client) imagePath(kind string) string {
 	c.mu.RLock()
@@ -96,6 +116,9 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	}
 	if c.user != "" {
 		req.SetBasicAuth(c.user, c.password)
+	}
+	if token := c.authTokenValue(); token != "" {
+		req.Header.Set(config.AuthHeader, token)
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")

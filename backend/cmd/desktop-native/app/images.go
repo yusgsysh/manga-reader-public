@@ -9,6 +9,8 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+
+	"manga-reader/internal/config"
 )
 
 // ImageStore downloads, decodes and caches bitmaps in the background. The
@@ -24,6 +26,7 @@ type ImageStore struct {
 	http    *http.Client
 	user    string
 	pass    string
+	token   string
 }
 
 type imageEntry struct {
@@ -56,6 +59,13 @@ func (s *ImageStore) SetWindow(w *mygo.Window) {
 func (s *ImageStore) SetAuth(user, password string) {
 	s.mu.Lock()
 	s.user, s.pass = user, password
+	s.mu.Unlock()
+}
+
+// SetAuthToken gives the image requests the embedded server's per-run token.
+func (s *ImageStore) SetAuthToken(token string) {
+	s.mu.Lock()
+	s.token = token
 	s.mu.Unlock()
 }
 
@@ -115,10 +125,13 @@ func (s *ImageStore) fetch(url string) (*ui.Bitmap, error) {
 		return nil, err
 	}
 	s.mu.Lock()
-	user, pass := s.user, s.pass
+	user, pass, token := s.user, s.pass, s.token
 	s.mu.Unlock()
 	if user != "" {
 		req.SetBasicAuth(user, pass)
+	}
+	if token != "" {
+		req.Header.Set(config.AuthHeader, token)
 	}
 	resp, err := s.http.Do(req)
 	if err != nil {

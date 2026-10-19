@@ -23,7 +23,7 @@
 |---|---|---|
 | M0 原生 UI 骨架与 PoC | ✅ 完成 | 窗口、侧边栏、路由、中文字体、虚拟化图片网格、阅读器原型 |
 | M1 只读链路接真实 API | ✅ 基本完成 | 首页/订阅/热门/搜索/书架/最近阅读/详情/阅读器 |
-| M2 单机化：进程内后端 | ✅ 完成 | `cmd/desktop-native/internal/desktop` 启动 Gin；`MANGA_READER_API` 变为可选覆盖 |
+| M2 单机化：进程内后端 | ✅ 完成 | `cmd/desktop-native/internal/desktop` 启动 Gin；`MANGA_READER_API` 变为可选覆盖；单实例 + 每次启动的随机访问令牌 |
 | M3 本地图片缓存 | ✅ 完成 | FS 缓存 + UI 默认走 `/api/image-cache/*` + 容量上限与按时间淘汰 |
 | M4 首次启动与设置 | ✅ 基本完成 | 首次设置向导 + 设置页（路径、缓存占用/上限、清空、重配 Cookies）；缺主题/语言、钥匙串 |
 | M5 阅读体验补齐 | 🚧 进行中 | 已有翻页/缩放/平移/进度；缺缩略图、预加载、双页、全屏等 |
@@ -120,7 +120,9 @@
 - [x] `Client` 的 base URL 改为并发安全可变（`SetBaseURL`），首次设置后无需重建 app；`Client.UseImageCache` 同样加锁。
 - [x] `desktop.SaveSettings`：原子写入、权限 0600。
 - [x] `desktop.Server.ClearCache` / `CacheInfo` / `CacheMaxBytes` / `SetCacheMaxBytes`，`FSCache.Size` / `Prune`。
-- [x] 新增测试：设置保存往返 + 0600 权限；缓存 size/clear/prune（按最旧淘汰、超限自动清理、上限开关）；缓存上限解析与 env 覆盖；首次设置连接后端、空 cookie 拒绝；设置页缓存占用/上限/清空；保存上限与非法输入校验；setup/settings 快照。
+- [x] **内嵌后端访问令牌**：每次启动随机生成（`crypto/rand`），`Options.AuthToken` + Gin 中间件常量时间校验；API 客户端与 `ImageStore` 携带 `X-Manga-Reader-Token`，并支持 `access_token` 查询参数兜底；缺失/错误返回 401。
+- [x] **单实例**：`internal/singleinstance` 在配置目录监听 `instance.sock`，第二个进程连接并发送 `focus` 后退出，主进程 `Window.Show()/Focus()`；崩溃遗留的 socket 会被探测并接管。
+- [x] 新增测试：设置保存往返 + 0600 权限；缓存 size/clear/prune（按最旧淘汰、超限自动清理、上限开关）；缓存上限解析与 env 覆盖；首次设置连接后端、空 cookie 拒绝；设置页缓存占用/上限/清空；保存上限与非法输入校验；令牌中间件（缺失/正确/错误/查询参数）；客户端与 ImageStore 携带令牌；单实例（主/次、聚焦回调、Close 后接管、过期 socket 接管）；setup/settings 快照。
 - [x] 本地实跑：无 cookie 进入设置界面；有 cookie 自动启动内嵌服务并写入 `config.json`。
 - [x] `go test ./...`、`go test -race ./internal/cache/... ./cmd/desktop-native/...`、`go vet`、`go build ./...` 通过。
 - [x] 本地实跑：`go run ./cmd/desktop-native` 打印内嵌地址并打开窗口。
@@ -136,7 +138,8 @@
   - [x] 监听 `127.0.0.1:0`，把随机端口返回给 UI。
   - [x] 关闭窗口时优雅关闭 `http.Server`、数据库、prefill 任务。
   - [x] `MANGA_READER_API` 保留为开发/调试覆盖；未设置时自动启动内嵌后端。
-  - [ ] 单实例保护：第二次启动聚焦已有窗口，而不是再起一个后端。
+  - [x] 单实例保护：第二次启动通过 `instance.sock` 请求已有实例聚焦窗口，而不是再起一个后端。
+  - [x] 内嵌后端每次启动生成随机访问令牌，UI 客户端与本机图片请求都携带；其他本机进程 401。
 - [x] **本地文件系统图片缓存**
   - [x] 实现 `handler.ImageCache`：`Head/Get/GetStream/Put/PutWithMeta`。
   - [x] 缓存目录默认放在用户缓存目录（XDG / `~/Library/Caches` / `%LocalAppData%`）。
@@ -264,7 +267,8 @@
 - [ ] 缓存淘汰以"按 mtime 从旧到新"为准，没有访问频次（LRU）；命中不会刷新 mtime，因此热点图片也可能被淘汰。
 - [ ] `Prune` 在每次超限时都会完整遍历缓存树；对象数量很大时开销可观（有 seeded 近似值做快速路径减轻）。
 - [x] ~~首次启动仍是 `log.Fatal`，缺少引导界面；~~ 已加首次设置向导（cookie 仍明文存 `config.json`，权限 0600）。
-- [ ] 内嵌后端监听 loopback 且无鉴权；本机其他进程可访问（后续加随机 token）。
+- [x] ~~内嵌后端监听 loopback 且无鉴权；~~ 已加每次启动的随机令牌中间件（常量时间比较，401 拒绝）。
+- [ ] 单实例用 Unix domain socket 实现；Windows 若 `net.Listen("unix", …)` 不可用会退化为不做单实例（仅记录日志）。
 - [ ] 阅读页占位图在主线程生成，首帧可能有轻微卡顿。
 - [ ] `ImageStore` 失败后 30 秒才重试，界面上没有可见错误。
 - [ ] 搜索无防抖，快速输入会发出多个请求（旧的会被 `loadID` 丢弃）。
@@ -284,6 +288,7 @@
 ## 6. v1 验收标准
 
 - [x] 单个可执行文件启动，无外部后端、无 WebView、无 Node/React 构建。（MVP：默认内嵌后端）
+- [x] 重复启动聚焦已有窗口；内嵌后端只接受携带正确令牌的本机请求。
 - [x] 首次启动可填写 ExHentai cookies，校验通过后进入首页。
 - [ ] 首页/搜索/详情/阅读器/书架/最近阅读全部可用。
 - [ ] 阅读器支持翻页、缩放、平移、进度保存、页面缩略图。
@@ -305,6 +310,6 @@
    go test -race ./internal/cache/... ./cmd/desktop-native/...
    go test -tags snapshot ./cmd/desktop-native/app
    ```
-3. 按 **3.1 P0** 的顺序推进：单实例保护/后端 token → 其余 P1。
+3. 按 **3.1 P0** 的顺序推进：其余 P1（缩略图/预加载/双页/全屏等）。
 4. 每完成一项，把本文件对应复选框改为 `[x]`，并在提交信息里引用里程碑（例如 `feat(desktop): embed API server (M2)`）。
 5. 涉及删除旧代码（3.5）前，先在 issue/对话里确认，不要直接删。

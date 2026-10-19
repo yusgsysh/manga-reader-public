@@ -17,6 +17,7 @@
 - **本地图片缓存**：用文件系统实现 `handler.ImageCache`，不再依赖 MinIO；UI 默认通过 `/api/image-cache/*` 读写本地缓存
 - **本地数据**：SQLite 与图片缓存默认放在用户配置/缓存目录
 - **首次设置**：缺少 Cookies 时显示引导界面，保存后启动后端；设置页可查看路径/缓存占用、设置缓存上限、清空缓存、重新配置 Cookies
+- **单实例 + 访问令牌**：重复启动聚焦已有窗口；内嵌后端要求每次启动的随机令牌
 - 无后端时显示错误页与「重试」，不会空白或崩溃
 
 暂未实现：页面缩略图、离线下载、标签翻译、数据同步、三平台打包。
@@ -47,6 +48,8 @@ go run ./cmd/desktop-native
 
 「设置」页会显示后端地址、配置文件、数据库、缓存目录与缓存占用，可设置缓存上限（MB，`0` 为不限）、一键清空缓存、重新配置 Cookies。缓存超过上限时，写入会触发后台清理，删除最久未使用的图片直到回落。
 
+进程内后端只监听 `127.0.0.1`，并要求一个每次启动随机生成的访问令牌（UI 客户端与图片请求都会携带），本机其他进程无法直接访问。应用是单实例的：再次启动不会另起后端，而是聚焦已有窗口（通过配置目录下的 `instance.sock` 通信）。
+
 连接外部已运行的后端（开发调试用，不显示引导）：
 
 ```bash
@@ -63,11 +66,13 @@ MANGA_READER_API=http://user:pass@127.0.0.1:8080 go run ./cmd/desktop-native
 
 ```
 cmd/desktop-native/
-├── main.go              # mygo 窗口、配置加载、内嵌后端启动
+├── main.go              # mygo 窗口、配置加载、访问令牌、单实例、内嵌后端启动
 ├── backend.go           # app.Backend 适配器：启动/重启/关闭内嵌后端
 ├── internal/desktop/
 │   ├── settings.go      # config.json 读写、默认数据库/缓存路径
-│   └── server.go        # 进程内启动现有 Gin API + 本地 FS 缓存
+│   └── server.go        # 进程内启动现有 Gin API + 本地 FS 缓存 + 令牌校验
+├── internal/singleinstance/
+│   └── singleinstance.go # 基于 Unix socket 的单实例锁与"聚焦已有窗口"
 └── app/
     ├── app.go           # 应用状态、侧边栏、路由、列表/详情页、首次设置、设置页
     ├── backend.go       # Backend 接口（由 main 实现，测试用假实现）
@@ -85,6 +90,8 @@ cmd/desktop-native/
 ### 数据流
 
 - 启动时 `internal/desktop.Start` 在随机 loopback 端口起 Gin，UI 客户端指向该地址；`MANGA_READER_API` 可覆盖为外部后端。
+- 内嵌模式生成随机令牌（`config.AuthHeader`），API 客户端与 `ImageStore` 都带上它；服务端中间件用常量时间比较校验，缺失或不匹配返回 401。
+- 单实例：第一个进程在配置目录监听 `instance.sock`，后续进程连接它并发送 `focus`，然后退出；监听进程调用 `Window.Show()/Focus()` 把窗口带到前台。
 - 列表与详情在后台 goroutine 请求，结果通过 `App.update` 主线程回写；视图永不阻塞在网络请求上。
 - 图片由 `ImageStore` 按 URL 缓存。`Get` 立即返回 `nil` 或已解码的 bitmap，首次请求在后台进行；完成后调用 `Window.Update` 请求下一帧。
 - 阅读器的页面列表走 NDJSON 流式接口，在线失败时回退到 `/api/gallery-cache/...`。
@@ -107,8 +114,7 @@ go test -tags snapshot ./cmd/desktop-native/app
 
 ## 下一步
 
-1. **单实例保护 + 内嵌后端 token**：避免重复启动、限制本机其他进程访问。
-2. **页面缩略图**：解析 `/pages` 的 sprite 坐标，在详情页做虚拟化缩略图网格。
-3. **离线缓存预取**：详情页触发 prefill，UI 显示下载进度。
-4. **标签设置 / 翻译 / 同步**：按现有后端能力逐项迁移。
-5. **打包**：macOS、Linux、Windows 三平台的 mygo 打包与签名。
+1. **页面缩略图**：解析 `/pages` 的 sprite 坐标，在详情页做虚拟化缩略图网格。
+2. **离线缓存预取**：详情页触发 prefill，UI 显示下载进度。
+3. **标签设置 / 翻译 / 同步**：按现有后端能力逐项迁移。
+4. **打包**：macOS、Linux、Windows 三平台的 mygo 打包与签名。

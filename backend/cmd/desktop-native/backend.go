@@ -17,6 +17,8 @@ type embeddedBackend struct {
 	mu       sync.Mutex
 	settings desktop.Settings
 	server   *desktop.Server
+	// token is a per-run secret required by the loopback API.
+	token string
 }
 
 var _ app.Backend = (*embeddedBackend)(nil)
@@ -26,6 +28,10 @@ func (b *embeddedBackend) Configured() bool {
 	defer b.mu.Unlock()
 	return b.server != nil
 }
+
+// AuthToken returns the per-run token; it is stable across restarts so the
+// UI client keeps working after the user changes cookies.
+func (b *embeddedBackend) AuthToken() string { return b.token }
 
 func (b *embeddedBackend) BaseURL() string {
 	b.mu.Lock()
@@ -62,6 +68,7 @@ func (b *embeddedBackend) Start(cookie string) (string, error) {
 		DBPath:        settings.DatabasePathOrDefault(),
 		CacheDir:      settings.CacheDirOrDefault(),
 		CacheMaxBytes: settings.CacheLimit(),
+		AuthToken:     b.token,
 		SyncToken:     settings.SyncToken,
 		DevTools:      settings.DevTools,
 	})

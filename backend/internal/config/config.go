@@ -294,3 +294,14 @@ func trimSpace(s string) string {
 	}
 	return s[start:end]
 }
+
+// Auth header/parameter names shared by the embedded desktop server and its
+// in-process UI client. The server binds loopback with a per-run random token
+// so another local process cannot drive the API.
+const (
+	// AuthHeader is the preferred token carrier.
+	AuthHeader = "X-Manga-Reader-Token"
+	// AuthQueryParam is a fallback for requests that cannot set headers
+	// (for example an <img> URL loaded by a native image widget).
+	AuthQueryParam = "access_token"
+)

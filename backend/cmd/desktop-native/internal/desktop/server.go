@@ -2,6 +2,7 @@ package desktop
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -31,6 +32,10 @@ type Options struct {
 	CacheDir string
 	// CacheMaxBytes bounds the image cache; 0 means unlimited.
 	CacheMaxBytes int64
+	// AuthToken, when set, is required on every request (header or
+	// access_token query). The desktop app generates one per run so another
+	// local process cannot drive the loopback API.
+	AuthToken string
 	// DevTools enables the /api/dev/* debug endpoints (off by default).
 	DevTools bool
 	// SyncToken enables the peer-facing sync endpoints; empty disables them.
@@ -162,6 +167,9 @@ func Start(ctx context.Context, opts Options) (*Server, error) {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(localSecurityHeaders())
+	if opts.AuthToken != "" {
+		r.Use(authTokenMiddleware(opts.AuthToken))
+	}
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
@@ -248,6 +256,23 @@ func localSecurityHeaders() gin.HandlerFunc {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "SAMEORIGIN")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		c.Next()
+	}
+}
+
+// authTokenMiddleware requires the per-run token on every request. It accepts
+// the X-Manga-Reader-Token header (used by the API and image clients) or the
+// access_token query parameter (a fallback for URL-only image loads).
+func authTokenMiddleware(token string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		got := c.GetHeader(config.AuthHeader)
+		if got == "" {
+			got = c.Query(config.AuthQueryParam)
+		}
+		if subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
 		c.Next()
 	}
 }

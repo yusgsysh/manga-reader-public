@@ -143,12 +143,21 @@ func (a *App) SetBackend(b Backend) {
 	if b == nil {
 		return
 	}
+	a.setAuthTokenLocked(b.AuthToken())
 	a.storage = b.Storage()
 	if b.Configured() {
 		a.adoptBackendLocked(b.BaseURL())
 		return
 	}
 	a.showSetup = true
+}
+
+// setAuthTokenLocked points the API client and image stores at the backend's
+// per-run token.
+func (a *App) setAuthTokenLocked(token string) {
+	a.client.SetAuthToken(token)
+	a.images.SetAuthToken(token)
+	a.pageImages.SetAuthToken(token)
 }
 
 // adoptBackendLocked points the API client at the backend and drops cached
@@ -849,6 +858,7 @@ func (a *App) beginSetup() {
 				return
 			}
 			a.storage = backend.Storage()
+			a.setAuthTokenLocked(backend.AuthToken())
 			a.showSetup = false
 			a.adoptBackendLocked(base)
 		})

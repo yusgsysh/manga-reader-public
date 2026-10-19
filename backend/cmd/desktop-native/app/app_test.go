@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -15,6 +16,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"manga-reader/internal/config"
 )
 
 // fakeImagePNG is a valid 300x400 image for the fake image proxy.
@@ -384,7 +387,10 @@ type fakeBackend struct {
 	cleared    int
 	cacheSize  int64
 	maxBytes   int64
+	authToken  string
 }
+
+func (f *fakeBackend) AuthToken() string { return f.authToken }
 
 func (f *fakeBackend) Configured() bool {
 	f.mu.Lock()
@@ -459,7 +465,7 @@ func (f *fakeBackend) maxBytesValue() int64 {
 
 func TestSetupConnectsBackend(t *testing.T) {
 	srv := newFakeServer(t)
-	backend := &fakeBackend{serverURL: srv.URL, cacheSize: 2048}
+	backend := &fakeBackend{serverURL: srv.URL, cacheSize: 2048, authToken: "run-token"}
 
 	a := New(NewClient(""))
 	a.SetBackend(backend)
@@ -475,9 +481,62 @@ func TestSetupConnectsBackend(t *testing.T) {
 	if got := a.client.BaseURL(); got != srv.URL {
 		t.Fatalf("client base = %q, want %q", got, srv.URL)
 	}
+	if got := a.client.authTokenValue(); got != "run-token" {
+		t.Fatalf("client auth token = %q, want run-token", got)
+	}
 	if a.showSetup {
 		t.Fatal("showSetup is still true after a successful setup")
 	}
+}
+
+func TestClientSendsAuthToken(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get(config.AuthHeader)
+		writeJSON(w, map[string]any{"page": 0, "page_size": 25, "total": 0, "results": []map[string]any{}})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL)
+	c.SetAuthToken("sekret")
+	if _, err := c.List(context.Background(), "/api/galleries", 0, nil); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if got != "sekret" {
+		t.Fatalf("token header = %q, want sekret", got)
+	}
+}
+
+func TestImageStoreSendsAuthToken(t *testing.T) {
+	var mu sync.Mutex
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		got = r.Header.Get(config.AuthHeader)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(fakeImagePNG)
+	}))
+	defer srv.Close()
+
+	store := NewImageStore(1)
+	store.SetAuthToken("sekret")
+	store.Get(srv.URL)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		seen := got
+		mu.Unlock()
+		if seen != "" {
+			if seen != "sekret" {
+				t.Fatalf("image token header = %q, want sekret", seen)
+			}
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatal("image request never reached the server")
 }
 
 func TestSetupRejectsEmptyCookie(t *testing.T) {

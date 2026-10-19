@@ -368,3 +368,66 @@ func TestStartAppliesCacheLimit(t *testing.T) {
 		t.Fatalf("CacheMaxBytes = %d, want %d", got, int64(8<<20))
 	}
 }
+
+func TestAuthTokenRequired(t *testing.T) {
+	opts := testOptions(t)
+	opts.AuthToken = "sekret"
+
+	srv, err := Start(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer srv.Close()
+
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	// Without a token every route is rejected.
+	resp, err := client.Get(srv.BaseURL() + "/healthz")
+	if err != nil {
+		t.Fatalf("GET /healthz: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("no-token status = %d, want 401", resp.StatusCode)
+	}
+
+	// Header token is accepted.
+	req, err := http.NewRequest(http.MethodGet, srv.BaseURL()+"/healthz", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set(config.AuthHeader, "sekret")
+	resp2, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("GET with header: %v", err)
+	}
+	resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("header status = %d, want 200", resp2.StatusCode)
+	}
+
+	// The access_token query is accepted as a fallback.
+	resp3, err := client.Get(srv.BaseURL() + "/healthz?" + config.AuthQueryParam + "=sekret")
+	if err != nil {
+		t.Fatalf("GET with query: %v", err)
+	}
+	resp3.Body.Close()
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("query status = %d, want 200", resp3.StatusCode)
+	}
+
+	// A wrong token is rejected.
+	req4, err := http.NewRequest(http.MethodGet, srv.BaseURL()+"/healthz", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req4.Header.Set(config.AuthHeader, "wrong")
+	resp4, err := client.Do(req4)
+	if err != nil {
+		t.Fatalf("GET with wrong token: %v", err)
+	}
+	resp4.Body.Close()
+	if resp4.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("wrong-token status = %d, want 401", resp4.StatusCode)
+	}
+}

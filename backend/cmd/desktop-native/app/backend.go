@@ -12,6 +12,9 @@ type Backend interface {
 	// Start (re)starts the backend with the given raw cookie header and
 	// returns the base URL to use.
 	Start(cookie string) (string, error)
+	// AuthToken is the per-run token the client must send. Empty when the
+	// backend needs no token (external server).
+	AuthToken() string
 	// Storage reports display paths for the settings page.
 	Storage() BackendStorage
 	// ClearCache empties the on-disk image cache.
