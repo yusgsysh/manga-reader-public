@@ -42,6 +42,9 @@ type Reader struct {
 	// pages instead of panning.
 	double     bool
 	wheelTurns bool
+	// fitHeight scales a page to the reader's height instead of using the
+	// Image fit mode, which cannot express "as tall as the area".
+	fitHeight bool
 	// downX/downY and moved tell a click from a drag, so a tap can turn the
 	// page while dragging still pans.
 	downX, downY float32
@@ -141,27 +144,43 @@ func (a *App) retryReader(r *Reader) {
 // left is unsaved.
 const progressFlushDelay = 600 * time.Millisecond
 
-// fitLabel names a fit mode on the toolbar.
-func fitLabel(f ui.Fit) string {
-	switch f {
-	case ui.Cover:
+// fitLabelFor names the current fit mode on the toolbar.
+func fitLabelFor(r *Reader) string {
+	switch {
+	case r.fitHeight:
+		return "适应高度"
+	case r.fit == ui.Cover:
 		return "适应宽度"
-	case ui.NaturalSize:
+	case r.fit == ui.NaturalSize:
 		return "原始尺寸"
 	default:
 		return "适合页面"
 	}
 }
 
-// nextFit cycles the fit modes in toolbar order.
-func nextFit(f ui.Fit) ui.Fit {
-	switch f {
-	case ui.Contain:
-		return ui.Cover
-	case ui.Cover:
-		return ui.NaturalSize
+// maxFloat is the larger of a and b.
+func maxFloat(a, b float32) float32 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// nextFit cycles the fit modes in toolbar order: whole page, fill width,
+// fill height (a flag, not a Fit), natural size, then whole page again.
+func nextFit(r *Reader) {
+	if r.fitHeight {
+		// fit still names the last Image mode; the flag takes precedence.
+		r.fit, r.fitHeight = ui.NaturalSize, false
+		return
+	}
+	switch {
+	case r.fit == ui.Contain:
+		r.fit, r.fitHeight = ui.Cover, false
+	case r.fit == ui.Cover:
+		r.fitHeight = true
 	default:
-		return ui.Contain
+		r.fit, r.fitHeight = ui.Contain, false
 	}
 }
 
@@ -304,8 +323,8 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 				r.zoomBy(-0.2)
 			}
 			// Cycle: whole page → fill width → 100% pixels → whole page.
-			if ui.Button(c, fitLabel(r.fit)).Label("切换适应模式").Disabled(!r.loaded).Clicked() {
-				r.fit = nextFit(r.fit)
+			if ui.Button(c, fitLabelFor(r)).Label("切换适应模式").Disabled(!r.loaded).Clicked() {
+				nextFit(r)
 				r.resetView()
 			}
 			if ui.Button(c, "+").Width(36).Label("放大").Disabled(!r.loaded).Clicked() {
@@ -569,6 +588,19 @@ func (a *App) readerPageImage(c *ui.Context, r *Reader, page int) {
 		TransformOrigin(0.5, 0.5).
 		Translate(r.panX, r.panY).
 		Scale(r.zoom, r.zoom)
+	if r.fitHeight && bitmap != nil {
+		// The area is the reader's content height; the toolbar and bars
+		// take about 120 DIPs, and the image keeps its aspect ratio at the
+		// scaled-up size, cropped horizontally when it overflows.
+		w, h := bitmap.Size()
+		_, winH := c.Size()
+		scale := (winH - 120) / float32(h)
+		if r.double {
+			// Two pages side by side share the width, so half the scale.
+			scale /= 2
+		}
+		img.Size(float32(w)*maxFloat(scale, 0.1), float32(h)*maxFloat(scale, 0.1))
+	}
 	if r.double {
 		img.Grow(1)
 	}
