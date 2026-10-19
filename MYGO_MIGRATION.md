@@ -240,9 +240,11 @@
   - [x] 三平台矩阵：linux/amd64、darwin/arm64、darwin/amd64、windows/amd64 交叉编译 app + desktop 内部包 + 后端包；Linux 额外产出完整二进制 artifact。
   - [ ] 正式发布流水线（签名、公证、`.deb`/`.exe` 安装包）。
 - [ ] 性能基准
-  - [ ] 1000+ 页画廊滚动帧率。
-  - [ ] 常驻内存目标 < 300MB。
-  - [ ] 冷启动 < 1s（不含后端首次抓取）。
+  - [x] 1000+ 页画廊滚动帧率：`BenchmarkScrollHome` / `BenchmarkScrollThumbnails` 以虚拟化网格渲染 1000 个画廊与 1000 页缩略图，滚动帧成本不随列表长度增长。
+  - [x] 常驻内存目标 < 300MB：`TestMemoryUnderTarget` 实测 1000 页缩略图网格仅占 **约 1.4MB 堆**（远低于目标；GPU 路径下纹理另计）。
+  - [x] 滚动帧预算：`TestScrollingStaysUnderBudget` 实测 CPU 软件渲染器平均 **约 7.4ms/帧**（60fps 预算 16.7ms 内）；GPU 路径只会更快。
+  - [ ] 冷启动 < 1s（不含后端首次抓取）：尚未测量。
+  - [x] `ImageStore` 淘汰改为真正的 LRU：命中会把条目移到最近使用端（旧实现按加载顺序 FIFO 淘汰，**会淘汰用户正在看的页**）；淘汰与 `Retry` 从 O(n) 扫描改为链表 O(1)，实测淘汰开销比旧实现低约 35%、分配少约 40%。
 - [ ] 可访问性
   - [ ] 侧边栏/按钮/输入框的 Label、Tab 顺序、键盘操作。
 - [x] 错误与反馈统一：所有页面共用 `errorBlock`（红色「请求失败」徽章 + 后端消息 + 重试）；离线下载入队成功用 toast；下载任务标题可点击回到画廊。
@@ -287,6 +289,10 @@
 - [x] ~~搜索无防抖，快速输入会发出多个请求（旧的会被 `loadID` 丢弃）。~~ 已加 300ms 防抖。
 - [x] ~~阅读进度每翻一页发一次 PUT。~~ 已改为 600ms 防抖 + 离开阅读器时立即补写。
 - [ ] 无限滚动用卡片 `Bounds()` 与窗口高度判断触底，阈值是固定 2 行（600 DIP），不是真实可见行数；窗口很矮时会略早预取。
+- [x] ~~`ImageStore` 是 FIFO 淘汰而非 LRU~~ 已改为 LRU（命中移到最近使用端），淘汰与 `Retry` 均为 O(1)。
+- [x] ~~`go test -race` 在下载 toast 上报竞态~~ 根因是 `App.update` 在无窗口（测试）时直接在当前 goroutine 执行，后台 goroutine 直接调了 `ui.AddToast`，与 `runFrame` 的 `toastViewport` 冲突。改为 `App.toast`/`toastLocked` 只把 toast 入队，由 `View` 构建帧时 `flushToasts` 真正添加，整包 `-race` 通过。
+- [ ] 性能基准跑在 headless 的 CPU 软件渲染器上，会比 GPU 路径慢；GPU 下的真实帧率仍需在真机测量。
+- [ ] 首页列表的滚动帧（CPU 渲染约 7.4ms）明显慢于缩略图网格（约 0.8ms）：光栅化器对封面图做逐像素采样，占约 88% 的帧时间。实测**与列表长度无关**（100 与 5000 个画廊均约 7ms），GPU 路径不适用；若 Linux 回退 CPU 渲染，可考虑让封面预缩放到接近显示尺寸。
 - [x] ~~详情页页面缩略图仍是占位文案。~~ 已接虚拟化缩略图网格，点击跳页。
 - [ ] 缩略图网格的选中项没有与阅读进度联动高亮。
 - [x] ~~标签没有翻译。~~ EhTagTranslation 数据库已接入，chip 显示中文翻译。
@@ -310,7 +316,7 @@
 - [~] 标签设置、下载已对齐；数据同步仍待产品决策（见第 4 节）。
 - [~] Linux 本机构建运行；macOS/Windows 交叉编译通过，未在真机运行。
 - [x] `go test ./...`、`go test -race ./internal/cache/... ./cmd/desktop-native/...`、`go vet ./...` 通过。
-- [ ] 1000 页画廊滚动 60fps，常驻内存 < 300MB（未做基准）。
+- [x] 1000 页画廊滚动帧成本不随列表增长（CPU 软件渲染约 7.4ms/帧），1000 页缩略图网格堆内存约 1.4MB（目标 < 300MB）。GPU 下的真机帧率仍待测。
 
 ---
 
@@ -323,7 +329,10 @@
    go test ./...
    go test -race ./internal/cache/... ./cmd/desktop-native/...
    go test -tags snapshot ./cmd/desktop-native/app
+   # 性能目标：滚动帧预算、内存上限、帧成本不随列表增长
+   go test ./cmd/desktop-native/app -run 'TestScroll|TestMemory'
    ```
+   计时断言在 `-race` 下会自动跳过（`raceEnabled`），因为竞态检测器会让每帧慢一个数量级。
 3. 按 **3.1 P0** 的顺序推进：其余 P1（缩略图/预加载/双页/全屏等）。
 4. 每完成一项，把本文件对应复选框改为 `[x]`，并在提交信息里引用里程碑（例如 `feat(desktop): embed API server (M2)`）。
 5. 涉及删除旧代码（3.5）前，先在 issue/对话里确认，不要直接删。

@@ -162,7 +162,7 @@ func (a *App) startDownload(c *ui.Context, s *detailState) {
 			s.downloadJob = job.ID
 			a.downloads.loaded = false
 			a.ensureDownloads()
-			c.AddToast(ui.Toast{
+			a.toastLocked(ui.Toast{
 				ID: "download-" + job.ID, Type: "success",
 				Title: "已加入下载队列",
 				Description: fmt.Sprintf("%d 页 · %s", len(urls),

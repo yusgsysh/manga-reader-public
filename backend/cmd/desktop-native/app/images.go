@@ -20,20 +20,26 @@ import (
 type ImageStore struct {
 	mu      sync.Mutex
 	entries map[string]*imageEntry
-	order   []string
-	max     int
-	win     *mygo.Window
-	http    *http.Client
-	user    string
-	pass    string
-	token   string
+	// head and tail are the least and most recently used entries of the
+	// access list. A hit moves its entry to the tail, so the head is what
+	// eviction drops: a page the reader has come back to stays.
+	head, tail *imageEntry
+	max        int
+	win        *mygo.Window
+	http       *http.Client
+	user       string
+	pass       string
+	token      string
 }
 
 type imageEntry struct {
+	url      string
 	bitmap   *ui.Bitmap
 	err      string
 	loading  bool
 	failedAt time.Time
+	prev     *imageEntry
+	next     *imageEntry
 }
 
 func NewImageStore(max int) *ImageStore {
@@ -47,6 +53,43 @@ func NewImageStore(max int) *ImageStore {
 		// of the backend bounds the download, not this client.
 		http: &http.Client{Timeout: 2 * time.Minute},
 	}
+}
+
+// touchLocked moves e to the most recently used end of the access list.
+func (s *ImageStore) touchLocked(e *imageEntry) {
+	if s.tail == e {
+		return
+	}
+	s.unlinkLocked(e)
+	e.prev, e.next = s.tail, nil
+	if s.tail != nil {
+		s.tail.next = e
+	} else {
+		s.head = e
+	}
+	s.tail = e
+}
+
+// unlinkLocked takes e out of the access list, as touchLocked moves it
+// elsewhere. Its neighbors close the gap.
+func (s *ImageStore) unlinkLocked(e *imageEntry) {
+	if e.prev != nil {
+		e.prev.next = e.next
+	} else if s.head == e {
+		s.head = e.next
+	}
+	if e.next != nil {
+		e.next.prev = e.prev
+	} else if s.tail == e {
+		s.tail = e.prev
+	}
+	e.prev, e.next = nil, nil
+}
+
+// removeLocked drops e from both the map and the access list.
+func (s *ImageStore) removeLocked(e *imageEntry) {
+	s.unlinkLocked(e)
+	delete(s.entries, e.url)
 }
 
 func (s *ImageStore) SetWindow(w *mygo.Window) {
@@ -81,15 +124,18 @@ func (s *ImageStore) Get(url string) *ui.Bitmap {
 	e := s.entries[url]
 	switch {
 	case e == nil:
-		e = &imageEntry{loading: true}
+		e = &imageEntry{url: url, loading: true}
 		s.entries[url] = e
-		s.order = append(s.order, url)
+		s.touchLocked(e)
 		go s.load(url)
 	case e.bitmap == nil && !e.loading &&
 		(e.err == "" || time.Since(e.failedAt) > 30*time.Second):
 		e.loading = true
 		e.err = ""
+		s.touchLocked(e)
 		go s.load(url)
+	default:
+		s.touchLocked(e)
 	}
 	bitmap := e.bitmap
 	s.mu.Unlock()
@@ -118,13 +164,7 @@ func (s *ImageStore) Retry(url string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if e := s.entries[url]; e != nil && !e.loading && e.err != "" {
-		delete(s.entries, url)
-		for i, key := range s.order {
-			if key == url {
-				s.order = append(s.order[:i], s.order[i+1:]...)
-				break
-			}
-		}
+		s.removeLocked(e)
 	}
 }
 
@@ -180,24 +220,16 @@ func (s *ImageStore) fetch(url string) (*ui.Bitmap, error) {
 	return ui.DecodeBitmap(data)
 }
 
-// evictLocked drops the oldest bitmaps until the cache is within its limit.
-// Entries still downloading are kept: they are the ones the latest frames
-// asked for.
+// evictLocked drops the least recently used bitmaps until the cache is
+// within its limit. Entries still downloading are kept: they are the ones
+// the latest frames asked for. A hit moves an entry to the most recently
+// used end (touchLocked), so pages the reader came back to stay.
 func (s *ImageStore) evictLocked() {
-	for len(s.entries) > s.max {
-		removed := false
-		for i, key := range s.order {
-			e := s.entries[key]
-			if e != nil && e.loading {
-				continue
-			}
-			delete(s.entries, key)
-			s.order = append(s.order[:i], s.order[i+1:]...)
-			removed = true
-			break
+	for e := s.head; e != nil && len(s.entries) > s.max; {
+		next := e.next
+		if !e.loading {
+			s.removeLocked(e)
 		}
-		if !removed {
-			return
-		}
+		e = next
 	}
 }

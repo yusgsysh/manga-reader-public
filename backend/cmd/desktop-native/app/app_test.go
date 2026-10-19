@@ -1849,6 +1849,88 @@ func TestImageStoreErrAndRetry(t *testing.T) {
 	}
 }
 
+// waitBitmap waits for the store to hand out a bitmap for url.
+func waitBitmap(t *testing.T, store *ImageStore, url string) *ui.Bitmap {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if b := store.Get(url); b != nil {
+			return b
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatalf("%s never loaded; err=%q", url, store.Err(url))
+	return nil
+}
+
+// TestImageStoreKeepsRecentlyUsed covers the access order the eviction
+// relies on: a page the reader came back to is the most recently used, so
+// filling the cache past its limit drops another page, not that one.
+func TestImageStoreKeepsRecentlyUsed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(fakeImagePNG)
+	}))
+	defer srv.Close()
+
+	store := NewImageStore(2)
+	a, b, c := srv.URL+"/a", srv.URL+"/b", srv.URL+"/c"
+	waitBitmap(t, store, a)
+	waitBitmap(t, store, b)
+	// Read a again: b is now the least recently used.
+	waitBitmap(t, store, a)
+	waitBitmap(t, store, c)
+
+	if store.entries[b] != nil {
+		t.Error("b stayed in the cache: eviction is not least recently used")
+	}
+	if store.entries[a] == nil || store.entries[c] == nil {
+		t.Error("eviction dropped the most recently used entries")
+	}
+	if len(store.entries) != 2 {
+		t.Errorf("cache holds %d entries, want 2", len(store.entries))
+	}
+	if store.head != nil && store.tail != nil && store.head.prev != nil {
+		t.Error("the access list's head has a previous entry")
+	}
+}
+
+// TestImageStoreAccessListStaysConnected walks the access list after drops,
+// so eviction can never evict through a stale pointer.
+func TestImageStoreAccessListStaysConnected(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(fakeImagePNG)
+	}))
+	defer srv.Close()
+
+	store := NewImageStore(3)
+	urls := []string{srv.URL + "/1", srv.URL + "/2", srv.URL + "/3", srv.URL + "/4", srv.URL + "/5"}
+	for _, u := range urls {
+		waitBitmap(t, store, u)
+	}
+
+	var n int
+	for e := store.head; e != nil; e = e.next {
+		if n++; n > 16 {
+			t.Fatal("the access list loops")
+		}
+	}
+	if n != len(store.entries) {
+		t.Errorf("access list holds %d entries, map holds %d", n, len(store.entries))
+	}
+
+	// Retry removes through the same list.
+	store.Retry(urls[len(urls)-1])
+	n = 0
+	for e := store.head; e != nil; e = e.next {
+		n++
+	}
+	if n != len(store.entries) {
+		t.Errorf("after Retry the access list holds %d, map holds %d", n, len(store.entries))
+	}
+}
+
 // TestSettingsAppearance covers the theme choice: the buttons persist the
 // value through the backend.
 func TestSettingsAppearance(t *testing.T) {

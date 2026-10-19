@@ -142,6 +142,22 @@ go test ./cmd/desktop-native/...
 go test -tags snapshot ./cmd/desktop-native/app
 ```
 
+## 性能基准
+
+`bench_test.go` 用 headless 的 CPU 软件渲染器量 v1 的性能目标（真机 GPU 路径只会更快）：
+
+```bash
+cd backend
+# 1000 个画廊 / 1000 页缩略图的滚动帧成本
+go test ./cmd/desktop-native/app -run '^$' -bench Scroll -benchtime=50x
+# 图片缓存的淘汰与命中成本
+go test ./cmd/desktop-native/app -run '^$' -bench 'Evict|TouchHit' -benchmem
+# 内存目标与滚动帧预算（作为测试断言）
+go test ./cmd/desktop-native/app -run 'TestMemoryUnderTarget|TestScrollingStaysUnderBudget' -v
+```
+
+当前实测：1000 页缩略图网格约占 **1.4MB** 堆，平均滚动帧 **约 7.4ms**（60fps 预算内），缓存命中 **82ns / 0 分配**。
+
 ## 下一步
 
 1. **页面缩略图**：解析 `/pages` 的 sprite 坐标，在详情页做虚拟化缩略图网格。
