@@ -59,6 +59,8 @@ type App struct {
 	lists     map[string]*listState
 	details   map[int64]*detailState
 	downloads Downloads
+	// tags is the tag-rule page state; rules colour and order tags anywhere.
+	tags TagSettings
 	// zipBusy is the jobs whose ZIP is being saved; zipMsg reports the last
 	// save's result on the downloads page.
 	zipBusy map[string]bool
@@ -200,6 +202,7 @@ func (a *App) adoptBackendLocked(baseURL string) {
 	a.lists = make(map[string]*listState)
 	a.details = make(map[int64]*detailState)
 	a.downloads = Downloads{}
+	a.tags = TagSettings{}
 	a.cacheLoaded = false
 	a.cacheBytes = 0
 	a.cacheMax = 0
@@ -334,7 +337,7 @@ func (a *App) route(c *ui.Context, r *ui.Route) {
 		a.downloadsPage(c)
 	case r.Match("/tag-settings"):
 		r.Title("标签设置")
-		a.emptyPage(c, "标签设置", "标签翻译与偏好", "接入后端后在这里管理")
+		a.tagSettingsPage(c)
 	case r.Match("/settings"):
 		r.Title("设置")
 		a.settingsPage(c)
@@ -758,6 +761,8 @@ func (a *App) galleryFromDetail(d apiGalleryDetail) Gallery {
 
 func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 	s := a.ensureDetail(id, token)
+	// Rules colour the tags, so load them with the page.
+	a.ensureTagSettings()
 	t := c.Theme()
 
 	if s.loading && !s.loaded {
@@ -812,8 +817,8 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 
 					ui.Text(c, "标签").FontSize(13).TextColor(t.TextMuted)
 					ui.Row(c).Gap(6).Wrap().Children(func() {
-						for _, tag := range s.tags {
-							ui.Badge(c, tag.Namespace+":"+tag.Name)
+						for _, tag := range a.sortedTags(s.tags) {
+							a.tagChip(c, tag.Namespace, tag.Name)
 						}
 					})
 

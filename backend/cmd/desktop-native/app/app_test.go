@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -184,6 +185,53 @@ func newFakeServerWithHooks(t *testing.T, onImage func(r *http.Request)) *httpte
 	})
 	mux.HandleFunc("/api/recently-read", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"page": 0, "page_size": 25, "total": 1, "results": shelf})
+	})
+	// Tag rules: PUT replaces the list like the backend does, so the tests
+	// see the normalised, sorted result.
+	var tagMu sync.Mutex
+	tagRules := []map[string]any{}
+	mux.HandleFunc("/api/tag-settings", func(w http.ResponseWriter, r *http.Request) {
+		tagMu.Lock()
+		defer tagMu.Unlock()
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, map[string]any{"tags": tagRules})
+		case http.MethodPut:
+			var body struct {
+				Tags []map[string]any `json:"tags"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, `{"error":"bad json"}`, http.StatusBadRequest)
+				return
+			}
+			seen := map[string]bool{}
+			tagRules = tagRules[:0]
+			for _, t := range body.Tags {
+				tag := strings.ToLower(strings.TrimSpace(t["tag"].(string)))
+				if seen[tag] {
+					continue
+				}
+				seen[tag] = true
+				tagRules = append(tagRules, map[string]any{
+					"tag": tag, "action": t["action"], "weight": t["weight"],
+				})
+			}
+			sort.Slice(tagRules, func(i, j int) bool {
+				return tagRules[i]["tag"].(string) < tagRules[j]["tag"].(string)
+			})
+			writeJSON(w, map[string]any{"tags": tagRules})
+		}
+	})
+	mux.HandleFunc("/api/tag-settings/sync", func(w http.ResponseWriter, r *http.Request) {
+		tagMu.Lock()
+		defer tagMu.Unlock()
+		writeJSON(w, map[string]any{
+			"added": 0, "updated": 0, "deleted": 0, "pulled": 2, "unchanged": 1,
+			"pending_deletes": []string{}, "conflicts": []any{}, "failed": []any{},
+			"tags": []map[string]any{
+				{"tag": "female:yuri", "action": "like", "weight": 10},
+			},
+		})
 	})
 	mux.HandleFunc("/api/bookshelf/1/tok1/status", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"in_bookshelf": false})
@@ -1115,5 +1163,145 @@ func TestZipFileName(t *testing.T) {
 		if got := zipFileName(PrefillJob{ID: "j", GalleryID: 7, Title: in}); got != want {
 			t.Errorf("zipFileName(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestTagSettingsAddAndRemove drives the tag-rule page: adding a rule saves it
+// and lists it, and 删除 takes it out again.
+func TestTagSettingsAddAndRemove(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("标签设置"); err != nil {
+		t.Fatalf("click 标签设置: %v", err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "还没有规则")
+
+	if err := tt.Click("添加标签"); err != nil {
+		t.Fatalf("click 添加标签: %v", err)
+	}
+	tt.Type("Female:Yuri")
+	if err := tt.Click("添加"); err != nil {
+		t.Fatalf("click 添加: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if len(a.tags.rules) == 1 && tt.HasText("female:yuri") {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if got := a.tags.rules; len(got) != 1 || got[0].Tag != "female:yuri" || got[0].Action != TagLike || got[0].Weight != 10 {
+		t.Fatalf("rules = %+v", got)
+	}
+	waitText(t, tt, "已保存")
+
+	if err := tt.Click("删除标签规则"); err != nil {
+		t.Fatalf("click 删除标签规则: %v", err)
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if len(a.tags.rules) == 0 {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if len(a.tags.rules) != 0 {
+		t.Fatalf("rules after delete = %+v", a.tags.rules)
+	}
+}
+
+// TestTagRuleColoursGalleryChips checks a saved rule colours and orders the
+// gallery page's tag chips.
+func TestTagRuleColoursGalleryChips(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+
+	// Seed one preferred tag and one neutral tag.
+	a.tags.rules = []TagRule{{Tag: "female:yuri", Action: TagDislike, Weight: -50}}
+	a.tags.loaded = true
+
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "female:yuri")
+
+	rule := a.tagRule("female:yuri")
+	if rule == nil || rule.Action != TagDislike {
+		t.Fatalf("tagRule(female:yuri) = %+v", rule)
+	}
+	if got := tagActionColor(TagDislike); got != ui.Hex("#FF6666") {
+		t.Fatalf("dislike colour = %v", got)
+	}
+	if got := tagActionColor(TagLike); got != ui.Hex("#3377FF") {
+		t.Fatalf("like colour = %v", got)
+	}
+}
+
+// TestTagSettingsSync covers the sync button: the fake merge reports what it
+// pulled and replaces the rules.
+func TestTagSettingsSync(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("标签设置"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "与源站同步")
+
+	if err := tt.Click("同步"); err != nil {
+		t.Fatalf("click 同步: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if a.tags.syncResult != "" {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if !strings.Contains(a.tags.syncResult, "拉取 2") {
+		t.Fatalf("sync result = %q", a.tags.syncResult)
+	}
+	if got := a.tags.rules; len(got) != 1 || got[0].Tag != "female:yuri" {
+		t.Fatalf("rules after sync = %+v", got)
+	}
+}
+
+func TestSortedTagsAndWeightInput(t *testing.T) {
+	a := New(NewClient("http://example.test"))
+	a.tags.loaded = true
+	a.tags.rules = []TagRule{
+		{Tag: "artist:x", Action: TagLike, Weight: 5},
+		{Tag: "female:yuri", Action: TagLike, Weight: 20},
+		{Tag: "male:y", Action: TagDislike, Weight: -3},
+	}
+	got := a.sortedTags([]apiTag{
+		{Namespace: "tag", Name: "netorare"},
+		{Namespace: "male", Name: "y"},
+		{Namespace: "artist", Name: "x"},
+		{Namespace: "female", Name: "yuri"},
+	})
+	want := []string{"female:yuri", "artist:x", "male:y", "tag:netorare"}
+	for i := range want {
+		if got[i].Namespace+":"+got[i].Name != want[i] {
+			t.Fatalf("sorted[%d] = %s:%s, want %s", i, got[i].Namespace, got[i].Name, want[i])
+		}
+	}
+
+	// An out-of-range weight is rejected without changing the rules.
+	a.tags.input = "female:yuri"
+	a.tags.weight = "1000"
+	a.tags.rules = nil
+	a.addTagRule()
+	if a.tags.inputErr == "" {
+		t.Fatal("weight 1000 was accepted")
+	}
+	if len(a.tags.rules) != 0 {
+		t.Fatalf("invalid add changed rules: %+v", a.tags.rules)
 	}
 }

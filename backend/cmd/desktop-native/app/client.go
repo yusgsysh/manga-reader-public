@@ -385,6 +385,99 @@ func (c *Client) Progress(ctx context.Context, id int64, token string) (apiReadi
 	return out, err
 }
 
+// --- Tag rules ---
+
+type apiTagRule struct {
+	Tag    string `json:"tag"`
+	Action string `json:"action"`
+	Weight int    `json:"weight"`
+}
+
+type apiTagSyncConflict struct {
+	Tag    string      `json:"tag"`
+	Local  *apiTagRule `json:"local"`
+	Remote *apiTagRule `json:"remote"`
+}
+
+type apiTagSyncFailure struct {
+	Tag   string `json:"tag"`
+	Error string `json:"error"`
+}
+
+type apiTagSyncResult struct {
+	Added          int                  `json:"added"`
+	Updated        int                  `json:"updated"`
+	Deleted        int                  `json:"deleted"`
+	Pulled         int                  `json:"pulled"`
+	Unchanged      int                  `json:"unchanged"`
+	PendingDeletes []string             `json:"pending_deletes"`
+	Conflicts      []apiTagSyncConflict `json:"conflicts"`
+	Failed         []apiTagSyncFailure  `json:"failed"`
+	Tags           []apiTagRule         `json:"tags"`
+}
+
+// TagSettings lists every tag rule.
+func (c *Client) TagSettings(ctx context.Context) ([]TagRule, error) {
+	var out struct {
+		Tags []apiTagRule `json:"tags"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/tag-settings", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return tagRulesFromAPI(out.Tags), nil
+}
+
+// SaveTagSettings replaces every rule with rules and returns what the backend
+// stored (normalised, defaulted and sorted).
+func (c *Client) SaveTagSettings(ctx context.Context, rules []TagRule) ([]TagRule, error) {
+	payload := struct {
+		Tags []apiTagRule `json:"tags"`
+	}{Tags: make([]apiTagRule, 0, len(rules))}
+	for _, r := range rules {
+		payload.Tags = append(payload.Tags, apiTagRule{Tag: r.Tag, Action: string(r.Action), Weight: r.Weight})
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		Tags []apiTagRule `json:"tags"`
+	}
+	if err := c.do(ctx, http.MethodPut, "/api/tag-settings", nil, bytes.NewReader(body), &out); err != nil {
+		return nil, err
+	}
+	return tagRulesFromAPI(out.Tags), nil
+}
+
+// SyncTagSettings merges the local rules with the source's My Tags, optionally
+// confirming source deletions and resolving every conflict one way.
+func (c *Client) SyncTagSettings(ctx context.Context, confirmDeletes bool, resolution string) (apiTagSyncResult, error) {
+	body, err := json.Marshal(map[string]any{
+		"confirm_deletes":     confirmDeletes,
+		"conflict_resolution": resolution,
+	})
+	if err != nil {
+		return apiTagSyncResult{}, err
+	}
+	var out apiTagSyncResult
+	if err := c.do(ctx, http.MethodPost, "/api/tag-settings/sync", nil, bytes.NewReader(body), &out); err != nil {
+		return apiTagSyncResult{}, err
+	}
+	return out, nil
+}
+
+func tagRulesFromAPI(in []apiTagRule) []TagRule {
+	out := make([]TagRule, 0, len(in))
+	for _, r := range in {
+		out = append(out, TagRule{
+			Tag:    r.Tag,
+			Action: TagAction(r.Action),
+			Weight: r.Weight,
+		})
+	}
+	return out
+}
+
 // --- Prefill (offline downloads) ---
 //
 // A prefill job fetches the gallery's pages into the backend's image cache

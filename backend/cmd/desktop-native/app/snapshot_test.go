@@ -85,3 +85,22 @@ func TestSetupAndSettingsSnapshots(t *testing.T) {
 		savePNG(t, tt, "settings")
 	}
 }
+
+// TestTagSettingsSnapshot captures the tag-rule page with a rule and the sync
+// controls.
+func TestTagSettingsSnapshot(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+
+	a.tags.loaded = true
+	a.tags.rules = []TagRule{
+		{Tag: "female:yuri", Action: TagLike, Weight: 10},
+		{Tag: "tag:netorare", Action: TagDislike, Weight: -10},
+	}
+	if err := tt.Click("标签设置"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "female:yuri")
+	savePNG(t, tt, "tags")
+}
