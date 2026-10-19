@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -170,6 +171,30 @@ func (c *FSCache) Clear() error {
 		}
 	}
 	return nil
+}
+
+// Size returns the total number of bytes stored, used by the desktop settings
+// page. Unreadable files are skipped rather than failing the whole walk.
+func (c *FSCache) Size() (int64, error) {
+	var total int64
+	err := filepath.WalkDir(c.root, func(_ string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			return nil
+		}
+		total += info.Size()
+		return nil
+	})
+	if err != nil {
+		return total, fmt.Errorf("walk fs cache: %w", err)
+	}
+	return total, nil
 }
 
 func readMeta(path string) fsCacheMeta {

@@ -16,9 +16,10 @@
 - **内嵌后端**：默认在本进程内启动现有 Gin API（`127.0.0.1` 随机端口），无需外部服务
 - **本地图片缓存**：用文件系统实现 `handler.ImageCache`，不再依赖 MinIO；UI 默认通过 `/api/image-cache/*` 读写本地缓存
 - **本地数据**：SQLite 与图片缓存默认放在用户配置/缓存目录
+- **首次设置**：缺少 Cookies 时显示引导界面，保存后启动后端；设置页可查看路径/缓存占用、清空缓存、重新配置 Cookies
 - 无后端时显示错误页与「重试」，不会空白或崩溃
 
-暂未实现：页面缩略图、离线下载、标签翻译、设置界面（首次启动引导）、数据同步、三平台打包。
+暂未实现：页面缩略图、离线下载、标签翻译、数据同步、缓存容量上限、三平台打包。
 
 ## 运行
 
@@ -29,15 +30,13 @@ cd backend
 go run ./cmd/desktop-native
 ```
 
-首次运行前，在 `~/.config/manga-reader/config.json`（Linux；macOS 为 `~/Library/Application Support/manga-reader/config.json`）写入 ExHentai cookie：
+首次启动会显示「首次设置」界面，粘贴 ExHentai 的 Cookie 请求头即可。应用会：
 
-```json
-{
-  "cookie": "ipb_member_id=...; ipb_pass_hash=...; igneous=...; sk=..."
-}
-```
+1. 把 Cookie 写入 `~/.config/manga-reader/config.json`（macOS 为 `~/Library/Application Support/manga-reader/config.json`，权限 0600）
+2. 在 `127.0.0.1` 随机端口启动内嵌后端
+3. 把 SQLite 放在用户配置目录、图片缓存放在用户缓存目录
 
-也可以用环境变量：`EHENTAI_COOKIE`（完整 cookie 串）或 `EHENTAI_COOKIE_IPB_MEMBER_ID` + `EHENTAI_COOKIE_IPB_PASS_HASH`。可选变量：
+也可以用环境变量跳过引导：`EHENTAI_COOKIE`（完整 cookie 串）或 `EHENTAI_COOKIE_IPB_MEMBER_ID` + `EHENTAI_COOKIE_IPB_PASS_HASH`。可选变量：
 
 - `MANGA_READER_DB_PATH`：SQLite 路径（默认用户配置目录）
 - `MANGA_READER_CACHE_DIR`：图片缓存目录（默认用户缓存目录）
@@ -45,7 +44,9 @@ go run ./cmd/desktop-native
 - `MANGA_READER_DEV_TOOLS=true`：启用 `/api/dev/*`
 - `MANGA_READER_IMAGE_CACHE=false`：关闭本地图片缓存代理，退回 `/api/image/*` 直连上游（连外部后端且对方没配 MinIO 时用）
 
-连接外部已运行的后端（开发调试用）：
+「设置」页会显示后端地址、配置文件、数据库、缓存目录与缓存占用，并可一键清空缓存、重新配置 Cookies。
+
+连接外部已运行的后端（开发调试用，不显示引导）：
 
 ```bash
 MANGA_READER_API=http://127.0.0.1:8080 go run ./cmd/desktop-native
@@ -62,11 +63,13 @@ MANGA_READER_API=http://user:pass@127.0.0.1:8080 go run ./cmd/desktop-native
 ```
 cmd/desktop-native/
 ├── main.go              # mygo 窗口、配置加载、内嵌后端启动
+├── backend.go           # app.Backend 适配器：启动/重启/关闭内嵌后端
 ├── internal/desktop/
 │   ├── settings.go      # config.json 读写、默认数据库/缓存路径
 │   └── server.go        # 进程内启动现有 Gin API + 本地 FS 缓存
 └── app/
-    ├── app.go           # 应用状态、侧边栏、路由、列表/详情页
+    ├── app.go           # 应用状态、侧边栏、路由、列表/详情页、首次设置、设置页
+    ├── backend.go       # Backend 接口（由 main 实现，测试用假实现）
     ├── client.go        # 后端 HTTP 客户端（列表、详情、NDJSON pages、书架、进度）
     ├── reader.go        # 阅读器状态、翻页、缩放/平移、进度上报
     ├── images.go        # 异步下载 + 解码 + LRU
@@ -103,8 +106,9 @@ go test -tags snapshot ./cmd/desktop-native/app
 
 ## 下一步
 
-1. **首次启动引导**：设置界面填写 cookies、数据库路径、缓存上限、同步开关，写入配置文件。
+1. **缓存上限与淘汰**：给 `FSCache` 加容量上限、LRU/按时间清理，接到设置页。
 2. **页面缩略图**：解析 `/pages` 的 sprite 坐标，在详情页做虚拟化缩略图网格。
 3. **离线缓存预取**：详情页触发 prefill，UI 显示下载进度。
 4. **标签设置 / 翻译 / 同步**：按现有后端能力逐项迁移。
-5. **打包**：macOS、Linux、Windows 三平台的 mygo 打包与签名。
+5. **单实例保护 + 内嵌后端 token**：避免重复启动、限制本机其他进程访问。
+6. **打包**：macOS、Linux、Windows 三平台的 mygo 打包与签名。

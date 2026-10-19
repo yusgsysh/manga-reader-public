@@ -112,6 +112,55 @@ func loadSettingsFrom(dir string) (Settings, error) {
 	return settingsFromEnv(s), nil
 }
 
+// SaveSettings writes config.json atomically. The file holds the cookie, so
+// it is created with 0600 and the whole file is replaced at once.
+func SaveSettings(s Settings) error {
+	dir, err := ConfigDir()
+	if err != nil {
+		return err
+	}
+	return saveSettingsTo(dir, s)
+}
+
+func saveSettingsTo(dir string, s Settings) error {
+	raw, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode settings: %w", err)
+	}
+	raw = append(raw, '\n')
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
+	}
+
+	path := filepath.Join(dir, configFileName)
+	tmp, err := os.CreateTemp(dir, ".config-*.json")
+	if err != nil {
+		return fmt.Errorf("create temp config: %w", err)
+	}
+	tmpName := tmp.Name()
+	cleanup := func() { _ = os.Remove(tmpName) }
+
+	if _, err := tmp.Write(raw); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return fmt.Errorf("write temp config: %w", err)
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return fmt.Errorf("chmod temp config: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return fmt.Errorf("close temp config: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		cleanup()
+		return fmt.Errorf("rename temp config: %w", err)
+	}
+	return nil
+}
+
 // settingsFromEnv overlays environment variables on top of file settings.
 func settingsFromEnv(s Settings) Settings {
 	if v := strings.TrimSpace(os.Getenv("EHENTAI_COOKIE")); v != "" {

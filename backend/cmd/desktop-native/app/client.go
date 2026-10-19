@@ -10,13 +10,17 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
-// Client talks to the Manga Reader HTTP API. The desktop app starts the same
-// Gin server in-process eventually; until then it points at a running backend,
-// configured with MANGA_READER_API (default http://127.0.0.1:8080).
+// Client talks to the Manga Reader HTTP API. In the desktop app it points at
+// the in-process server; MANGA_READER_API can point it at an external one.
+//
+// The base URL is mutable so the first-run flow can start the embedded server
+// and re-point the client at it without rebuilding the app.
 type Client struct {
+	mu       sync.RWMutex
 	baseURL  string
 	user     string
 	password string
@@ -45,15 +49,35 @@ func NewClient(rawBaseURL string) *Client {
 	}
 }
 
-func (c *Client) BaseURL() string { return c.baseURL }
+func (c *Client) BaseURL() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.baseURL
+}
+
+// SetBaseURL re-points the client at another backend. It is safe to call
+// while requests are in flight: they finish against the address they started
+// with, and later calls use the new one.
+func (c *Client) SetBaseURL(rawBaseURL string) {
+	base := strings.TrimRight(strings.TrimSpace(rawBaseURL), "/")
+	c.mu.Lock()
+	c.baseURL = base
+	c.mu.Unlock()
+}
 
 // UseImageCache enables or disables the read-through cache proxy for images.
-// Call it once at startup, before any image URL is built.
-func (c *Client) UseImageCache(enabled bool) { c.imageCache = enabled }
+func (c *Client) UseImageCache(enabled bool) {
+	c.mu.Lock()
+	c.imageCache = enabled
+	c.mu.Unlock()
+}
 
 // imagePath returns the cache or live image proxy path for kind.
 func (c *Client) imagePath(kind string) string {
-	if c.imageCache {
+	c.mu.RLock()
+	cached := c.imageCache
+	c.mu.RUnlock()
+	if cached {
 		return "/api/image-cache/" + kind
 	}
 	return "/api/image/" + kind
@@ -62,7 +86,7 @@ func (c *Client) imagePath(kind string) string {
 // do sends one request and decodes a JSON response into out when it is not
 // nil. A non-2xx response becomes an error carrying the API's message.
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body io.Reader, out any) error {
-	target := c.baseURL + path
+	target := c.BaseURL() + path
 	if len(query) > 0 {
 		target += "?" + query.Encode()
 	}
@@ -356,17 +380,17 @@ func (c *Client) ThumbnailURL(source string) string {
 	if source == "" {
 		return ""
 	}
-	return c.baseURL + c.imagePath("thumbnail") + "?url=" + url.QueryEscape(source)
+	return c.BaseURL() + c.imagePath("thumbnail") + "?url=" + url.QueryEscape(source)
 }
 
 func (c *Client) PageImageURL(source string) string {
 	if source == "" {
 		return ""
 	}
-	return c.baseURL + c.imagePath("page") + "?url=" + url.QueryEscape(source)
+	return c.BaseURL() + c.imagePath("page") + "?url=" + url.QueryEscape(source)
 }
 
 func (c *Client) PageThumbnailURL(id int64, token string, index int) string {
-	return c.baseURL + fmt.Sprintf("%s?id=%d&token=%s&index=%d",
+	return c.BaseURL() + fmt.Sprintf("%s?id=%d&token=%s&index=%d",
 		c.imagePath("page-thumbnail"), id, url.QueryEscape(token), index)
 }

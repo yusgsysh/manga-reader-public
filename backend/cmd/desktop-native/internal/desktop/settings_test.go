@@ -117,6 +117,39 @@ func TestLoadSettingsIndividualCookieEnv(t *testing.T) {
 	}
 }
 
+func TestSaveSettingsRoundTrip(t *testing.T) {
+	clearCookieEnv(t)
+	dir := t.TempDir()
+
+	want := Settings{
+		Cookie:       "ipb_member_id=9; ipb_pass_hash=abc",
+		DatabasePath: "/tmp/db.sqlite",
+		CacheDir:     "/tmp/cache",
+		SyncToken:    "tok",
+		DevTools:     true,
+	}
+	if err := saveSettingsTo(dir, want); err != nil {
+		t.Fatalf("saveSettingsTo: %v", err)
+	}
+
+	got, err := loadSettingsFrom(dir)
+	if err != nil {
+		t.Fatalf("loadSettingsFrom: %v", err)
+	}
+	if got != want {
+		t.Fatalf("round trip = %+v, want %+v", got, want)
+	}
+
+	// The file holds the cookie, so it must not be world-readable.
+	info, err := os.Stat(filepath.Join(dir, configFileName))
+	if err != nil {
+		t.Fatalf("stat config: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("config mode = %o, want 600", perm)
+	}
+}
+
 func TestSettingsPathsHaveDefaults(t *testing.T) {
 	var s Settings
 	if s.DatabasePathOrDefault() == "" {
@@ -226,5 +259,24 @@ func TestCachedThumbnailServedFromFilesystem(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != string(payload) {
 		t.Fatalf("body = %q, want %q", body, payload)
+	}
+
+	// The settings page reads the cache size and clears it.
+	root, size, err := srv.CacheInfo()
+	if err != nil {
+		t.Fatalf("CacheInfo: %v", err)
+	}
+	if root != opts.CacheDir {
+		t.Fatalf("CacheInfo root = %q, want %q", root, opts.CacheDir)
+	}
+	if size < int64(len(payload)) {
+		t.Fatalf("CacheInfo size = %d, want >= %d", size, len(payload))
+	}
+
+	if err := srv.ClearCache(); err != nil {
+		t.Fatalf("ClearCache: %v", err)
+	}
+	if _, size, err := srv.CacheInfo(); err != nil || size != 0 {
+		t.Fatalf("after ClearCache size = %d, %v; want 0, nil", size, err)
 	}
 }

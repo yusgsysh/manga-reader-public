@@ -44,6 +44,7 @@ type Server struct {
 	httpServer *http.Server
 	handlerSrv *handler.Server
 	db         *database.DB
+	fsCache    *cache.FSCache
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -54,6 +55,24 @@ type Server struct {
 
 // BaseURL returns the http://127.0.0.1:<port> address the server listens on.
 func (s *Server) BaseURL() string { return s.baseURL }
+
+// ClearCache empties the on-disk image cache. Used by the settings page.
+func (s *Server) ClearCache() error {
+	if s.fsCache == nil {
+		return nil
+	}
+	return s.fsCache.Clear()
+}
+
+// CacheInfo reports the cache root and its size in bytes, for the settings
+// page.
+func (s *Server) CacheInfo() (root string, size int64, err error) {
+	if s.fsCache == nil {
+		return "", 0, nil
+	}
+	size, err = s.fsCache.Size()
+	return s.fsCache.Root(), size, err
+}
 
 // Start boots the API on a random loopback port and returns once it is
 // accepting connections. The caller must Close it on shutdown.
@@ -146,6 +165,7 @@ func Start(ctx context.Context, opts Options) (*Server, error) {
 		httpServer: httpServer,
 		handlerSrv: handlerSrv,
 		db:         db,
+		fsCache:    fsCache,
 		cancel:     cancel,
 		done:       make(chan struct{}),
 	}

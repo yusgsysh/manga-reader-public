@@ -25,7 +25,7 @@
 | M1 只读链路接真实 API | ✅ 基本完成 | 首页/订阅/热门/搜索/书架/最近阅读/详情/阅读器 |
 | M2 单机化：进程内后端 | ✅ 完成 | `cmd/desktop-native/internal/desktop` 启动 Gin；`MANGA_READER_API` 变为可选覆盖 |
 | M3 本地图片缓存 | ✅ 基本完成 | FS 缓存 + UI 默认走 `/api/image-cache/*`；缺容量上限与淘汰 |
-| M4 首次启动与设置 | 🚧 进行中 | `config.json` 与默认路径已就绪；待做首次启动向导与设置界面 |
+| M4 首次启动与设置 | ✅ 基本完成 | 首次设置向导 + 设置页（路径、缓存占用、清空、重配 Cookies）；缺缓存上限、主题/语言、钥匙串 |
 | M5 阅读体验补齐 | 🚧 进行中 | 已有翻页/缩放/平移/进度；缺缩略图、预加载、双页、全屏等 |
 | M6 书架与进度 | ✅ 基本完成 | 列表、加入/移出、进度读取与上报 |
 | M7 离线下载 | ⬜ 未开始 | 复用现有 prefill 接口 |
@@ -114,6 +114,13 @@
 - [x] UI 图片默认走缓存代理：`Client.UseImageCache(true)`，`/api/image-cache/{thumbnail,page,page-thumbnail}`；内嵌模式自动开启，`MANGA_READER_IMAGE_CACHE` 可覆盖。
 - [x] 缺少 cookies 时给出指向 `config.json` 的明确错误。
 - [x] 新增测试：FS cache 读写 / miss / 流式 / 元数据 / 覆盖 / 路径穿越 / 清理；设置解析与优先级；内嵌服务器 `/healthz`、`/api/bookshelf`、缓存缩略图走本地文件；UI 图片 URL 走缓存端点。
+- [x] **首次设置向导**：无 cookie 时整个窗口显示引导页（TextArea + 保存并启动），成功后写入 `config.json` 并启动内嵌后端、切到首页。
+- [x] **设置页**：显示后端地址、配置文件、数据库、缓存目录与缓存占用（`FSCache.Size`），支持清空缓存（`FSCache.Clear`）与重新配置 Cookies。
+- [x] `Client` 的 base URL 改为并发安全可变（`SetBaseURL`），首次设置后无需重建 app；`Client.UseImageCache` 同样加锁。
+- [x] `desktop.SaveSettings`：原子写入、权限 0600。
+- [x] `desktop.Server.ClearCache` / `CacheInfo`，`FSCache.Size`。
+- [x] 新增测试：设置保存往返 + 0600 权限；缓存 size/clear；首次设置连接后端、空 cookie 拒绝；设置页缓存占用与清空；setup/settings 快照。
+- [x] 本地实跑：无 cookie 进入设置界面；有 cookie 自动启动内嵌服务并写入 `config.json`。
 - [x] `go test ./...`、`go test -race ./internal/cache/... ./cmd/desktop-native/...`、`go vet`、`go build ./...` 通过。
 - [x] 本地实跑：`go run ./cmd/desktop-native` 打印内嵌地址并打开窗口。
 
@@ -137,13 +144,13 @@
   - [x] UI 改用 `/api/image-cache/*` 端点（内嵌模式默认开启，`MANGA_READER_IMAGE_CACHE` 可覆盖）。
   - [ ] 缓存大小上限与清理策略（LRU/按时间）；`FSCache.Clear` 已就绪，待接到设置页。
 - [ ] **配置与首次启动**
-  - [x] 配置文件位置：`os.UserConfigDir()/manga-reader/config.json`。
+  - [x] 配置文件位置：`os.UserConfigDir()/manga-reader/config.json`（写入权限 0600）。
   - [x] 字段：ExHentai cookie、数据库路径、缓存目录、同步 token、dev tools。
   - [ ] 字段：缓存上限、主题、语言、阅读方向。
-  - [ ] 首次启动向导：填写 cookies，校验后进入首页。
-  - [ ] Cookies 安全存储：优先系统钥匙串；至少不要明文打印到日志。
-  - [ ] 设置页可修改缓存上限、清空缓存、切换主题、清空数据。
-  - [ ] 启动失败时在 UI 内展示可操作的错误，而不是 `log.Fatal` 退出。
+  - [x] 首次启动向导：填写 cookies，校验后启动内嵌后端并进入首页。
+  - [ ] Cookies 安全存储：优先系统钥匙串；目前明文存 `config.json`（0600）。
+  - [x] 设置页：显示后端地址/配置文件/数据库/缓存目录/缓存占用，支持清空缓存、重新配置 Cookies。
+  - [ ] 启动失败时在 UI 内展示可操作的错误（目前后端启动失败会回落到设置页并展示错误，但 `LoadSettings` 解析失败仍是 `log.Fatal`）。
 - [x] **数据库位置**
   - [x] 默认 SQLite 放到用户配置目录，不再依赖当前工作目录的 `data/`。
   - [x] 启动时自动建目录、执行 Ent migrate。
@@ -252,8 +259,8 @@
 
 - [x] ~~当前必须另起后端；`MANGA_READER_API` 是硬依赖。~~ 已内嵌，未设置时本进程启动。
 - [x] ~~图片走 live 端点，没有磁盘缓存。~~ 默认走 `/api/image-cache/*` 本地文件缓存。
-- [ ] `FSCache` 没有容量上限与淘汰策略；`Clear()` 已实现但未接设置页。
-- [ ] 首次启动仍是 `log.Fatal`，缺少引导界面；cookie 明文存在 `config.json`。
+- [ ] `FSCache` 没有容量上限与淘汰策略；`Clear()` 已接到设置页，但还没有自动清理。
+- [x] ~~首次启动仍是 `log.Fatal`，缺少引导界面；~~ 已加首次设置向导（cookie 仍明文存 `config.json`，权限 0600）。
 - [ ] 内嵌后端监听 loopback 且无鉴权；本机其他进程可访问（后续加随机 token）。
 - [ ] 阅读页占位图在主线程生成，首帧可能有轻微卡顿。
 - [ ] `ImageStore` 失败后 30 秒才重试，界面上没有可见错误。
@@ -262,7 +269,7 @@
 - [ ] 列表分页只有「加载更多」，没有滚动触底自动加载。
 - [ ] 详情页页面缩略图仍是占位文案。
 - [ ] 标签直接显示 `namespace:name`，没有颜色/翻译。
-- [ ] 设置页是占位：深色模式开关、缓存信息都未接真实逻辑。
+- [x] ~~设置页是占位：深色模式开关、缓存信息都未接真实逻辑。~~ 存储信息与清空缓存已接上；深色模式仍是占位（跟随系统）。
 - [ ] 下载管理/标签设置是空状态页。
 - [ ] 错误文案、加载文案全部硬编码中文。
 - [ ] 本机 `backend/cmd/desktop/go.mod` 是本地补丁，不在仓库；若删除旧 Wails 目录可移除。
@@ -274,10 +281,10 @@
 ## 6. v1 验收标准
 
 - [x] 单个可执行文件启动，无外部后端、无 WebView、无 Node/React 构建。（MVP：默认内嵌后端）
-- [ ] 首次启动可填写 ExHentai cookies，校验通过后进入首页。
+- [x] 首次启动可填写 ExHentai cookies，校验通过后进入首页。
 - [ ] 首页/搜索/详情/阅读器/书架/最近阅读全部可用。
 - [ ] 阅读器支持翻页、缩放、平移、进度保存、页面缩略图。
-- [ ] 断网时可读已缓存画廊；缓存有上限并可清理。
+- [ ] 断网时可读已缓存画廊；缓存有上限并可清理。（可清空，但无上限/淘汰，未勾选）
 - [ ] 标签设置、下载、同步（若保留）行为与现有产品一致或有明确替代。
 - [ ] macOS / Linux / Windows 均可构建运行。
 - [x] `go test ./...`、`go test -race ./internal/cache/... ./cmd/desktop-native/...`、`go vet ./...` 通过。
@@ -295,6 +302,6 @@
    go test -race ./internal/cache/... ./cmd/desktop-native/...
    go test -tags snapshot ./cmd/desktop-native/app
    ```
-3. 按 **3.1 P0** 的顺序推进：首次启动向导/设置页 → 缓存上限与淘汰 → 单实例保护/后端 token。
+3. 按 **3.1 P0** 的顺序推进：缓存上限与淘汰 → 单实例保护/后端 token → 其余 P1。
 4. 每完成一项，把本文件对应复选框改为 `[x]`，并在提交信息里引用里程碑（例如 `feat(desktop): embed API server (M2)`）。
 5. 涉及删除旧代码（3.5）前，先在 issue/对话里确认，不要直接删。

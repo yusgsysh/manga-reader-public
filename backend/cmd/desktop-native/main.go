@@ -2,11 +2,10 @@
 // no webview and no frontend build. It is the replacement for the React
 // frontend and the Wails shell.
 //
-// By default it runs the Manga Reader API in-process on a random loopback
-// port, using a per-user SQLite database and a local filesystem image cache —
-// no external server, no MinIO. Cookies come from
-// ~/.config/manga-reader/config.json (or the EHENTAI_COOKIE* environment
-// variables).
+// It runs the Manga Reader API in-process on a random loopback port, using a
+// per-user SQLite database and a local filesystem image cache — no external
+// server, no MinIO. On first run it asks for ExHentai cookies and stores them
+// in ~/.config/manga-reader/config.json.
 //
 // Set MANGA_READER_API to point the UI at an already-running backend instead
 // (useful for development):
@@ -15,7 +14,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"os"
 	"strings"
@@ -30,26 +28,32 @@ import (
 func main() {
 	baseURL := strings.TrimSpace(os.Getenv("MANGA_READER_API"))
 
-	var embedded *desktop.Server
-	if baseURL == "" {
-		srv, err := startEmbedded()
+	var a *app.App
+	var embedded *embeddedBackend
+
+	if baseURL != "" {
+		// External backend mode: the client is configured up front and the
+		// app never shows onboarding.
+		client := app.NewClient(baseURL)
+		client.UseImageCache(imageCacheFromEnv(false))
+		a = app.New(client)
+	} else {
+		settings, err := desktop.LoadSettings()
 		if err != nil {
-			log.Fatalf("启动失败: %v", err)
+			log.Fatalf("加载设置失败: %v", err)
 		}
-		embedded = srv
-		baseURL = srv.BaseURL()
+		embedded = &embeddedBackend{settings: settings}
+		if settings.CookieConfig().IsValid() {
+			if _, err := embedded.Start(settings.Cookie); err != nil {
+				log.Printf("启动内嵌后端失败: %v", err)
+			}
+		}
+		client := app.NewClient(embedded.BaseURL())
+		client.UseImageCache(true)
+		a = app.New(client)
+		a.SetBackend(embedded)
 	}
 
-	client := app.NewClient(baseURL)
-	// The embedded server always has the filesystem image cache; enable the
-	// read-through proxy for it. MANGA_READER_IMAGE_CACHE overrides, which is
-	// useful when pointing at an external backend that does have a cache.
-	client.UseImageCache(embedded != nil)
-	if v := strings.TrimSpace(os.Getenv("MANGA_READER_IMAGE_CACHE")); v != "" {
-		client.UseImageCache(v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes"))
-	}
-
-	a := app.New(client)
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "Manga Reader",
@@ -75,33 +79,11 @@ func main() {
 	}
 }
 
-// startEmbedded loads the desktop settings and boots the in-process API.
-func startEmbedded() (*desktop.Server, error) {
-	settings, err := desktop.LoadSettings()
-	if err != nil {
-		return nil, err
+// imageCacheFromEnv reads MANGA_READER_IMAGE_CACHE, falling back to def.
+func imageCacheFromEnv(def bool) bool {
+	v := strings.TrimSpace(os.Getenv("MANGA_READER_IMAGE_CACHE"))
+	if v == "" {
+		return def
 	}
-
-	cookie := settings.CookieConfig()
-	if !cookie.IsValid() {
-		if path := desktop.SettingsPath(); path != "" {
-			return nil, &missingCookieError{path: path}
-		}
-		return nil, desktop.ErrMissingCookie
-	}
-
-	return desktop.Start(context.Background(), desktop.Options{
-		Cookie:    cookie,
-		DBPath:    settings.DatabasePathOrDefault(),
-		CacheDir:  settings.CacheDirOrDefault(),
-		SyncToken: settings.SyncToken,
-		DevTools:  settings.DevTools,
-	})
-}
-
-type missingCookieError struct{ path string }
-
-func (e *missingCookieError) Error() string {
-	return "未配置 ExHentai Cookies。请在 " + e.path +
-		` 中填写 "cookie"，或设置环境变量 EHENTAI_COOKIE（例如 ipb_member_id=...; ipb_pass_hash=...）`
+	return v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
 }

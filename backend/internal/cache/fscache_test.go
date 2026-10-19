@@ -202,6 +202,32 @@ func TestFSCacheClear(t *testing.T) {
 	}
 }
 
+func TestFSCacheSize(t *testing.T) {
+	c := newTestFSCache(t)
+	ctx := context.Background()
+
+	if size, err := c.Size(); err != nil || size != 0 {
+		t.Fatalf("empty Size = %d, %v; want 0, nil", size, err)
+	}
+
+	if err := c.Put(ctx, "images/a", []byte("1234"), "text/plain", ""); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if err := c.Put(ctx, "images/b", []byte("567890"), "text/plain", ""); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	size, err := c.Size()
+	if err != nil {
+		t.Fatalf("Size: %v", err)
+	}
+	// The two data files contribute 10 bytes; sidecars add a few more, so
+	// assert a range instead of an exact value.
+	if size < 10 {
+		t.Fatalf("Size = %d, want >= 10", size)
+	}
+}
+
 func TestNewFSCacheRequiresRoot(t *testing.T) {
 	if _, err := NewFSCache(""); err == nil {
 		t.Fatal("NewFSCache(\"\") = nil error, want error")

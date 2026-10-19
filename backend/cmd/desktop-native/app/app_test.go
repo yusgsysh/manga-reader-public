@@ -373,3 +373,139 @@ func TestHomeFetchesCoversThroughCacheProxy(t *testing.T) {
 		t.Fatalf("cover requests hit live proxy %d times, want 0", live)
 	}
 }
+
+// fakeBackend is an app.Backend for tests: Start flips to configured and
+// points the UI at an already-running httptest server.
+type fakeBackend struct {
+	mu         sync.Mutex
+	serverURL  string
+	base       string
+	configured bool
+	cleared    int
+	cacheSize  int64
+}
+
+func (f *fakeBackend) Configured() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.configured
+}
+
+func (f *fakeBackend) BaseURL() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.base
+}
+
+func (f *fakeBackend) Start(cookie string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if strings.TrimSpace(cookie) == "" {
+		return "", fmt.Errorf("empty cookie")
+	}
+	f.base = f.serverURL
+	f.configured = true
+	return f.serverURL, nil
+}
+
+func (f *fakeBackend) Storage() BackendStorage {
+	return BackendStorage{
+		DBPath:     "/tmp/manga.db",
+		CacheDir:   "/tmp/manga-cache",
+		ConfigPath: "/tmp/manga/config.json",
+	}
+}
+
+func (f *fakeBackend) ClearCache() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.cleared++
+	f.cacheSize = 0
+	return nil
+}
+
+func (f *fakeBackend) CacheInfo() (string, int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return "/tmp/manga-cache", f.cacheSize, nil
+}
+
+func (f *fakeBackend) clearedCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.cleared
+}
+
+func TestSetupConnectsBackend(t *testing.T) {
+	srv := newFakeServer(t)
+	backend := &fakeBackend{serverURL: srv.URL, cacheSize: 2048}
+
+	a := New(NewClient(""))
+	a.SetBackend(backend)
+	tt := ui.NewTester(a.View, 1280, 860)
+
+	waitText(t, tt, "首次设置")
+	tt.Type("ipb_member_id=1; ipb_pass_hash=2")
+	if err := tt.Click("保存并启动"); err != nil {
+		t.Fatalf("click 保存并启动: %v", err)
+	}
+
+	waitText(t, tt, "示例 A")
+	if got := a.client.BaseURL(); got != srv.URL {
+		t.Fatalf("client base = %q, want %q", got, srv.URL)
+	}
+	if a.showSetup {
+		t.Fatal("showSetup is still true after a successful setup")
+	}
+}
+
+func TestSetupRejectsEmptyCookie(t *testing.T) {
+	backend := &fakeBackend{serverURL: "http://127.0.0.1:1"}
+	a := New(NewClient(""))
+	a.SetBackend(backend)
+	tt := ui.NewTester(a.View, 1280, 860)
+
+	waitText(t, tt, "首次设置")
+	if err := tt.Click("保存并启动"); err != nil {
+		t.Fatalf("click 保存并启动: %v", err)
+	}
+	waitText(t, tt, "请粘贴 ExHentai Cookies")
+	if backend.Configured() {
+		t.Fatal("backend was configured with an empty cookie")
+	}
+}
+
+func TestSettingsCacheInfoAndClear(t *testing.T) {
+	srv := newFakeServer(t)
+	backend := &fakeBackend{
+		serverURL: srv.URL, base: srv.URL,
+		configured: true, cacheSize: 2048,
+	}
+	a := New(NewClient(srv.URL))
+	a.SetBackend(backend)
+	tt := ui.NewTester(a.View, 1280, 860)
+
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("设置"); err != nil {
+		t.Fatalf("click 设置: %v", err)
+	}
+	navSettle(tt)
+
+	waitText(t, tt, "缓存占用")
+	waitText(t, tt, "2.0 KB")
+	if err := tt.Click("清空缓存"); err != nil {
+		t.Fatalf("click 清空缓存: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if backend.clearedCount() > 0 {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if backend.clearedCount() == 0 {
+		t.Fatal("ClearCache was not called")
+	}
+}

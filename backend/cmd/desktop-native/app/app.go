@@ -29,6 +29,24 @@ type App struct {
 	pageImages *ImageStore
 	pageCache  *PageCache
 
+	// backend is the in-process API lifecycle; nil in tests and when the app
+	// talks to an external server.
+	backend Backend
+	storage BackendStorage
+
+	// setup state: the first-run cookie screen.
+	showSetup   bool
+	setupCookie string
+	setupErr    string
+	setupBusy   bool
+
+	// cache stats shown on the settings page.
+	cacheBytes   int64
+	cacheLoading bool
+	cacheLoaded  bool
+	cacheBusy    bool
+	cacheErr     string
+
 	lists   map[string]*listState
 	details map[int64]*detailState
 
@@ -108,6 +126,37 @@ func (a *App) Attach(w *mygo.Window) {
 	a.pageImages.SetWindow(w)
 }
 
+// SetBackend installs the in-process backend lifecycle. When the backend is
+// not configured yet, the app shows the first-run cookie screen instead of
+// the normal UI.
+func (a *App) SetBackend(b Backend) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.backend = b
+	if b == nil {
+		return
+	}
+	a.storage = b.Storage()
+	if b.Configured() {
+		a.adoptBackendLocked(b.BaseURL())
+		return
+	}
+	a.showSetup = true
+}
+
+// adoptBackendLocked points the API client at the backend and drops cached
+// data that belonged to the previous address.
+func (a *App) adoptBackendLocked(baseURL string) {
+	if baseURL != "" {
+		a.client.SetBaseURL(baseURL)
+	}
+	a.lists = make(map[string]*listState)
+	a.details = make(map[int64]*detailState)
+	a.cacheLoaded = false
+	a.cacheBytes = 0
+	a.cacheErr = ""
+}
+
 // update runs fn on the main thread with the app lock held. Background loads
 // use it so they never race the frame being built.
 func (a *App) update(fn func()) {
@@ -127,6 +176,11 @@ func (a *App) update(fn func()) {
 func (a *App) View(c *ui.Context) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	if a.backend != nil && a.showSetup {
+		a.setupView(c)
+		return
+	}
 
 	t := c.Theme()
 	a.syncSelection()
@@ -724,38 +778,222 @@ func (a *App) toggleBookshelf(s *detailState) {
 	}()
 }
 
+// --- Setup ---
+
+// setupView is the first-run cookie screen. It replaces the whole window
+// until the embedded backend starts successfully.
+func (a *App) setupView(c *ui.Context) {
+	t := c.Theme()
+	ui.Row(c).Fill().Background(t.Background).Center().Children(func() {
+		ui.Column(c).Width(620).Gap(14).Children(func() {
+			ui.Text(c, "首次设置").FontSize(26).Bold()
+			ui.Text(c, "粘贴 ExHentai 的 Cookie，应用会在本机启动内置服务并保存设置。").
+				FontSize(13).TextColor(t.TextMuted)
+			ui.TextArea(c, &a.setupCookie).
+				Label("ExHentai Cookies").
+				Placeholder("ipb_member_id=...; ipb_pass_hash=...; igneous=...; sk=...").
+				Height(90).
+				AutoFocus()
+			ui.Text(c, "在浏览器登录 exhentai.org 后，从开发者工具的请求头里复制 Cookie 即可。").
+				FontSize(11).TextColor(t.TextMuted).MaxWidth(560)
+			if a.setupErr != "" {
+				ui.Text(c, a.setupErr).FontSize(12).TextColor(t.Danger).MaxWidth(560)
+			}
+			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+				if ui.PrimaryButton(c, "保存并启动").Disabled(a.setupBusy).Clicked() {
+					a.beginSetup()
+				}
+				if a.setupBusy {
+					ui.Spinner(c)
+					ui.Text(c, "正在启动内置服务…").FontSize(12).TextColor(t.TextMuted)
+				}
+			})
+		})
+	})
+}
+
+// beginSetup starts the backend with the entered cookie. It runs from the
+// view, so the app lock is already held; the backend starts in the background
+// and the result is applied under the lock.
+func (a *App) beginSetup() {
+	if a.setupBusy {
+		return
+	}
+	cookie := strings.TrimSpace(a.setupCookie)
+	if cookie == "" {
+		a.setupErr = "请粘贴 ExHentai Cookies"
+		return
+	}
+	backend := a.backend
+	if backend == nil {
+		return
+	}
+	a.setupBusy = true
+	a.setupErr = ""
+
+	go func() {
+		base, err := backend.Start(cookie)
+		a.update(func() {
+			a.setupBusy = false
+			if err != nil {
+				a.setupErr = err.Error()
+				return
+			}
+			a.storage = backend.Storage()
+			a.showSetup = false
+			a.adoptBackendLocked(base)
+		})
+	}()
+}
+
 // --- Static pages ---
 
 func (a *App) settingsPage(c *ui.Context) {
 	t := c.Theme()
-	ui.Scroll(c).Fill().Children(func() {
-		ui.Column(c).Padding(20, 24).Gap(18).MaxWidth(760).Children(func() {
-			ui.Text(c, "设置").FontSize(26).Bold()
-			ui.Text(c, "这里最终会接上现有的设置、同步与缓存选项。").FontSize(12).TextColor(t.TextMuted)
+	if a.backend != nil {
+		a.ensureCacheInfo()
+	}
 
+	ui.Scroll(c).Fill().Children(func() {
+		ui.Column(c).Padding(20, 24).Gap(14).MaxWidth(760).Children(func() {
+			ui.Text(c, "设置").FontSize(26).Bold()
+
+			if a.backend != nil {
+				ui.Text(c, "账号").FontSize(16).Bold()
+				ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+					ui.Text(c, "ExHentai Cookies").Grow(1)
+					ui.Badge(c, a.cookieStatus())
+				})
+				ui.Text(c, "更改 Cookies 会重启内置服务。").FontSize(11).TextColor(t.TextMuted)
+				ui.Row(c).Children(func() {
+					if ui.Button(c, "重新配置 Cookies").Clicked() {
+						a.setupCookie = ""
+						a.setupErr = ""
+						a.showSetup = true
+					}
+				})
+				ui.Divider(c)
+			}
+
+			ui.Text(c, "存储").FontSize(16).Bold()
+			a.settingsRow(c, "后端地址", a.client.BaseURL())
+			a.settingsRow(c, "配置文件", a.storage.ConfigPath)
+			a.settingsRow(c, "本地数据库", a.storage.DBPath)
+			a.settingsRow(c, "图片缓存目录", a.storage.CacheDir)
+			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+				ui.Text(c, "缓存占用").Grow(1)
+				switch {
+				case a.cacheErr != "":
+					ui.Badge(c, "读取失败")
+				case a.cacheLoading && !a.cacheLoaded:
+					ui.Badge(c, "统计中…")
+				default:
+					ui.Badge(c, humanBytes(a.cacheBytes))
+				}
+			})
+			if a.cacheErr != "" {
+				ui.Text(c, a.cacheErr).FontSize(11).TextColor(t.Danger)
+			}
+			if a.backend != nil {
+				ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+					if ui.Button(c, "清空缓存").Disabled(a.cacheBusy).Clicked() {
+						a.clearCache()
+					}
+					if a.cacheBusy {
+						ui.Spinner(c)
+					}
+				})
+			}
+			ui.Text(c, "清空后，已缓存的图片会在再次浏览时重新下载。").
+				FontSize(11).TextColor(t.TextMuted)
+
+			ui.Divider(c)
 			ui.Text(c, "外观").FontSize(16).Bold()
 			dark := false
 			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
 				ui.Switch(c, &dark)
-				ui.Text(c, "深色模式（占位，待接入系统主题）")
-			})
-
-			ui.Divider(c)
-			ui.Text(c, "数据").FontSize(16).Bold()
-			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-				ui.Text(c, "后端地址").Grow(1)
-				ui.Badge(c, a.client.BaseURL())
-			})
-			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-				ui.Text(c, "本地数据库").Grow(1)
-				ui.Badge(c, "SQLite")
-			})
-			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-				ui.Text(c, "图片缓存").Grow(1)
-				ui.Badge(c, "内存 LRU")
+				ui.Text(c, "深色模式（当前跟随系统）").FontSize(13)
 			})
 		})
 	})
+}
+
+func (a *App) settingsRow(c *ui.Context, label, value string) {
+	if value == "" {
+		value = "—"
+	}
+	ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+		ui.Text(c, label).Grow(1)
+		ui.Badge(c, value)
+	})
+}
+
+func (a *App) cookieStatus() string {
+	if a.backend != nil && a.backend.Configured() {
+		return "已配置"
+	}
+	return "未配置"
+}
+
+// ensureCacheInfo kicks off a background size computation once per load.
+func (a *App) ensureCacheInfo() {
+	if a.backend == nil || a.cacheLoading || a.cacheLoaded {
+		return
+	}
+	a.cacheLoading = true
+	backend := a.backend
+	go func() {
+		root, size, err := backend.CacheInfo()
+		a.update(func() {
+			a.cacheLoading = false
+			a.cacheLoaded = true
+			if err != nil {
+				a.cacheErr = err.Error()
+				return
+			}
+			a.cacheErr = ""
+			if root != "" {
+				a.storage.CacheDir = root
+			}
+			a.cacheBytes = size
+		})
+	}()
+}
+
+func (a *App) clearCache() {
+	if a.backend == nil || a.cacheBusy {
+		return
+	}
+	a.cacheBusy = true
+	a.cacheErr = ""
+	backend := a.backend
+	go func() {
+		err := backend.ClearCache()
+		a.update(func() {
+			a.cacheBusy = false
+			if err != nil {
+				a.cacheErr = err.Error()
+				return
+			}
+			a.cacheErr = ""
+			a.cacheBytes = 0
+			a.cacheLoaded = true
+		})
+	}()
+}
+
+// humanBytes formats a byte count for the settings page.
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for x := n / unit; x >= unit; x /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
 func (a *App) emptyPage(c *ui.Context, title, subtitle, hint string) {
