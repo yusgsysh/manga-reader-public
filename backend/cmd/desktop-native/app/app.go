@@ -61,6 +61,8 @@ type App struct {
 	downloads Downloads
 	// tags is the tag-rule page state; rules colour and order tags anywhere.
 	tags TagSettings
+	// translations is the EhTagTranslation database, shared by every page.
+	translations TagTranslationDB
 	// announcedRules is the rule list last copied into lists and details
 	// that show tag chips, so a rule change recolours them.
 	announcedRules []TagRule
@@ -161,6 +163,7 @@ func New(client *Client) *App {
 	a.images.SetAuth(client.user, client.password)
 	a.pageImages.SetAuth(client.user, client.password)
 	a.pageThumbs.SetAuth(client.user, client.password)
+	a.translations.hooked = func() { a.update(func() {}) }
 	return a
 }
 
@@ -184,6 +187,7 @@ func (a *App) SetBackend(b Backend) {
 	}
 	a.setAuthTokenLocked(b.AuthToken())
 	a.storage = b.Storage()
+	a.translations.path = tagTranslationCachePath(a.storage.CacheDir)
 	if b.Configured() {
 		a.adoptBackendLocked(b.BaseURL())
 		return

@@ -1430,3 +1430,105 @@ func TestTorrentFileName(t *testing.T) {
 		}
 	}
 }
+
+const sampleTagDB = `load_ehtagtranslation_db_text({"version":2,"head":{"sha":"abc"},` +
+	`"data":[{"namespace":"rows","data":{"female":{"name":"女性"}}},` +
+	`{"namespace":"female","data":{"yuri":{"name":"百合","intro":"<p>女性之间的恋爱</p>"},` +
+	`"x":{"name":"<b>X</b> 标签"}}}]});`
+
+func TestParseTagTranslationDB(t *testing.T) {
+	db, err := parseTagTranslationDB([]byte(sampleTagDB))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := db.Lookup("female", "yuri"); got != "百合" {
+		t.Fatalf("Lookup = %q", got)
+	}
+	if got := db.NamespaceName("female"); got != "女性" {
+		t.Fatalf("NamespaceName = %q", got)
+	}
+	if tr, desc := db.Describe("female", "yuri"); tr != "百合" || desc != "女性之间的恋爱" {
+		t.Fatalf("Describe = %q %q", tr, desc)
+	}
+	if got := db.Lookup("female", "x"); got != "X 标签" {
+		t.Fatalf("HTML not cleaned: %q", got)
+	}
+	if db.Count() != 2 {
+		t.Fatalf("Count = %d", db.Count())
+	}
+	if got := db.Search("百合", 5); len(got) != 1 || got[0].Tag != "yuri" || got[0].Translation != "百合" {
+		t.Fatalf("Search = %+v", got)
+	}
+	if got := db.Search("YURI", 5); len(got) != 1 {
+		t.Fatalf("case-insensitive search = %+v", got)
+	}
+	if db.Ready() {
+		t.Fatal("Ready before Load")
+	}
+	if got := db.Status(); !strings.Contains(got, "尚未加载") {
+		t.Fatalf("Status = %q", got)
+	}
+}
+
+func TestParseTagTranslationDBPlainJSON(t *testing.T) {
+	// The release also ships plain JSON; the parser accepts both.
+	plain := strings.TrimSuffix(strings.TrimPrefix(sampleTagDB, "load_ehtagtranslation_db_text("), ");")
+	db, err := parseTagTranslationDB([]byte(plain))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if db.Count() != 2 {
+		t.Fatalf("Count = %d", db.Count())
+	}
+}
+
+// TestTagTranslationColoursChips checks a translated tag renders its
+// translation in the chip.
+func TestTagTranslationColoursChips(t *testing.T) {
+	db, err := parseTagTranslationDB([]byte(sampleTagDB))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	// Copy the tables, not the lock.
+	a.translations.mu.Lock()
+	a.translations.entries = db.entries
+	a.translations.ns = db.ns
+	a.translations.names = db.names
+	a.translations.loaded = true
+	a.translations.mu.Unlock()
+
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "百合 / female:yuri")
+}
+
+// TestTagTranslationCachedLoad checks Load reads the cached file and parses it
+// without touching the network.
+func TestTagTranslationCachedLoad(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tag-translations.json")
+	if err := os.WriteFile(path, []byte(sampleTagDB), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	db := &TagTranslationDB{path: path}
+	db.Load()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if db.Ready() {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if !db.Ready() {
+		t.Fatalf("load failed: %s", db.Status())
+	}
+	if got := db.Lookup("female", "yuri"); got != "百合" {
+		t.Fatalf("Lookup = %q", got)
+	}
+	if !strings.Contains(db.Status(), "已加载 2 个标签") {
+		t.Fatalf("Status = %q", db.Status())
+	}
+}

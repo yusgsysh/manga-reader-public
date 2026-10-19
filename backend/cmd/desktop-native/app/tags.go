@@ -46,8 +46,10 @@ type TagSettings struct {
 	busy    bool
 	msg     string
 
-	// input is the text field for adding a rule.
+	// input is the text field for adding a rule; tagQuery searches the
+	// translation database.
 	input    string
+	tagQuery string
 	action   TagAction
 	weight   string
 	inputErr string
@@ -287,15 +289,20 @@ func tagActionColor(action TagAction) ui.Color {
 	return ui.Hex("#3377FF")
 }
 
-// tagChip draws one tag, coloured and ordered by its rule.
+// tagChip draws one tag, coloured and ordered by its rule, with its
+// translation when the database knows one.
 func (a *App) tagChip(c *ui.Context, namespace, name string) {
 	tag := tagChipText(namespace, name)
+	label := tag
+	if tr := a.translations.Lookup(namespace, name); tr != "" && tr != name {
+		label = tr + " / " + tag
+	}
 	rule := a.tagRule(tag)
 	if rule == nil {
-		ui.Badge(c, tag)
+		ui.Badge(c, label)
 		return
 	}
-	ui.Badge(c, tag).Background(tagActionColor(rule.Action)).TextColor(ui.Hex("#f1f1f1"))
+	ui.Badge(c, label).Background(tagActionColor(rule.Action)).TextColor(ui.Hex("#f1f1f1"))
 }
 
 // sortedTags orders a gallery's tags likes first, then dislikes, then the
@@ -334,6 +341,7 @@ func (a *App) sortedTags(tags []apiTag) []apiTag {
 func (a *App) tagSettingsPage(c *ui.Context) {
 	t := c.Theme()
 	a.ensureTagSettings()
+	a.ensureTranslations()
 	s := &a.tags
 
 	ui.Scroll(c).Fill().Children(func() {
@@ -378,6 +386,9 @@ func (a *App) tagSettingsPage(c *ui.Context) {
 			} else if s.msg != "" {
 				ui.Text(c, s.msg).FontSize(12).TextColor(t.TextMuted)
 			}
+
+			ui.Divider(c)
+			a.tagSearchPanel(c, s)
 
 			ui.Divider(c)
 			ui.Text(c, "与源站同步").FontSize(16).Bold()
@@ -485,5 +496,53 @@ func (a *App) syncTagRulesLocked() {
 	}
 	for _, d := range a.details {
 		apply(&d.g)
+	}
+}
+
+// isLoading reports whether a load or update is running.
+func (db *TagTranslationDB) isLoading() bool {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return db.loading
+}
+
+// tagSuggestionRow is one translation hit in the tag page; clicking it fills
+// the add field with namespace:name.
+func (a *App) tagSuggestionRow(c *ui.Context, s *TagSettings, sug TagSuggestion) {
+	t := c.Theme()
+	tag := sug.Namespace + ":" + sug.Tag
+	row := ui.Column(c).Gap(2).Padding(6).Radius(6).Focusable().Label("选用 " + tag)
+	row.Children(func() {
+		ui.Text(c, tag+" — "+sug.Translation).FontSize(12)
+		if sug.Description != "" {
+			ui.Text(c, sug.Description).FontSize(10).TextColor(t.TextMuted).SingleLine()
+		}
+	})
+	if row.Clicked() {
+		s.input = tag
+		s.inputErr = ""
+		s.tagQuery = ""
+	}
+}
+
+// tagSearchPanel shows the translation database's state, a query box and its
+// matches, and the update button.
+func (a *App) tagSearchPanel(c *ui.Context, s *TagSettings) {
+	t := c.Theme()
+	db := &a.translations
+	ui.Text(c, "标签翻译").FontSize(16).Bold()
+	ui.Text(c, db.Status()).FontSize(12).TextColor(t.TextMuted)
+	ui.Row(c).Gap(8).AlignItems(ui.End).Children(func() {
+		ui.TextInput(c, &s.tagQuery).Width(320).Label("搜索标签翻译").
+			Placeholder("输入中文或英文，如 百合 / yuri")
+		if ui.Button(c, "更新翻译库").Disabled(db.isLoading()).Clicked() {
+			db.Update()
+		}
+		if db.isLoading() {
+			ui.Spinner(c)
+		}
+	})
+	for _, sug := range db.Search(s.tagQuery, 8) {
+		a.tagSuggestionRow(c, s, sug)
 	}
 }

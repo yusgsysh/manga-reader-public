@@ -20,10 +20,10 @@
 - **单实例 + 访问令牌**：重复启动聚焦已有窗口；内嵌后端要求每次启动的随机令牌
 - **离线下载**：详情页一键排队，`/downloads` 显示任务状态、进度、失败页数，可取消/删除，完成后导出 ZIP
 - **种子**：详情页按需加载 torrents 列表，可保存 `.torrent` 文件
-- **标签设置**：喜欢/不喜欢 + 权重规则，列表卡片与详情页标签按规则着色排序，支持与源站 My Tags 三路合并同步
+- **标签设置**：喜欢/不喜欢 + 权重规则，列表卡片与详情页标签按规则着色排序并显示中文翻译，支持与源站 My Tags 三路合并同步
 - 无后端时显示错误页与「重试」，不会空白或崩溃
 
-暂未实现：标签翻译库、逐条冲突选择、数据同步、三平台打包。
+暂未实现：逐条冲突选择、数据同步、三平台打包。
 
 ## 运行
 
@@ -85,6 +85,7 @@ cmd/desktop-native/
     ├── zip.go           # 保存对话框 + 流式导出 prefill ZIP
     ├── tags.go          # 标签规则页、着色排序、与源站同步
     ├── torrents.go      # 种子列表、.torrent 保存
+    ├── tagtranslation.go # EhTagTranslation 数据库加载、缓存、搜索
     ├── images.go        # 异步下载 + 解码 + LRU
     ├── covers.go        # 占位封面与占位页面（图片加载完成前显示）
     ├── data.go          # UI 侧 Gallery 模型、分类中文名
@@ -110,6 +111,7 @@ cmd/desktop-native/
 - 离线下载：详情页先取页面列表，再 `POST /api/prefill` 建任务；`/downloads` 用 `c.After` 在每 1.5s 触发一次轮询，只轮询 `queued`/`running` 的任务。删除任务时先本地移除并把 ID 记入 `dropped`，避免删除前发出的列表请求把它带回来。
 - 标签规则：`Gallery.Tags` 存 `{namespace,name}`，列表接口给的 `"ns:name"` 用 `splitTag` 拆开；卡片最多显示前两个标签。`View` 每次比对 `announcedRules`，规则一变就通知已加载的列表与详情重画，无需重新请求。
 - 标签规则：`TagRule` 与后端 `tag_preference` 一一对应，保存是**全量替换**（`PUT /api/tag-settings`）；详情页 `sortedTags` + `tagChip` 按喜欢→不喜欢→其余排序并着色（#3377FF / #FF6666）。同步按钮把「确认删除」「冲突处理」两个输入框翻译成 `confirm_deletes` / `conflict_resolution` 发给后端。
+- 标签翻译：数据库取 `db.text.json`（发布里的 `db.text.js` 需要 JS inflate 运行时，原生端没法执行），解析出 `namespace:name → 中文`，缓存为 `<缓存目录上级>/tag-translations.json`，后台加载完成后请求一帧。加载失败会保留旧表。
 - 种子：进入详情页不会自动抓取（上游实时抓取较慢），点「查看种子」才加载；保存 `.torrent` 与 ZIP 共用 `Client.downloadTo`。
 - ZIP 导出：完成后点「导出 ZIP」，`mygo.Dialog.Save` 选路径（测试里用 `pickSavePath` 变量替换），然后流式 `io.Copy` 到文件，不占内存；失败时删除半成品。
 - 搜索输入用 300ms 防抖（`scheduleSearch`）：每次文本变化只保留最后一个定时器，因此连续输入只发一次请求。
@@ -121,7 +123,7 @@ cd backend
 go test ./cmd/desktop-native/...
 ```
 
-测试用 `httptest` 起一个假后端，覆盖首页加载、侧边栏导航、画廊详情、详情页缩略图跳页、阅读器翻页、点击/方向键/跳页/RTL、阅读器预加载、搜索过滤、搜索防抖、离线下载全流程（含 ZIP 导出）、标签规则（增删改、着色、同步）、种子列表与下载、阅读器返回。
+测试用 `httptest` 起一个假后端，覆盖首页加载、侧边栏导航、画廊详情、详情页缩略图跳页、阅读器翻页、点击/方向键/跳页/RTL、阅读器预加载、搜索过滤、搜索防抖、离线下载全流程（含 ZIP 导出）、标签规则（增删改、着色、同步）、标签翻译（解析/缓存/chip）、种子列表与下载、阅读器返回。
 
 要把首页/详情/阅读器/搜索渲染成 PNG（输出到 `/tmp/opencode`，便于检查布局和中文字体）：
 
