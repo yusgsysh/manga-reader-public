@@ -15,6 +15,15 @@ type Gallery struct {
 	Reading  *ReadingProgress
 }
 
+// NextPage is the page a "continue reading" button should open: the saved
+// page, or 0 when the gallery has no progress or was finished.
+func (g Gallery) NextPage() int {
+	if g.Reading == nil || g.Reading.Completed {
+		return 0
+	}
+	return g.Reading.CurrentPage
+}
+
 // ReadingProgress is the part of a gallery's reading progress the lists show.
 type ReadingProgress struct {
 	CurrentPage int

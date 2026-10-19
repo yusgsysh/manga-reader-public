@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -43,6 +44,18 @@ type Reader struct {
 	moved        bool
 
 	lastSaved int
+	// saveSeq invalidates a pending progress write when the page moves again.
+	saveSeq int
+}
+
+// flushProgressNow writes the current page immediately, for leaving the reader
+// where waiting for the debounce would lose the turn.
+func (a *App) flushProgressNow(r *Reader) {
+	if !r.loaded || r.page == r.lastSaved {
+		return
+	}
+	r.saveSeq++ // a pending write is superseded
+	a.flushProgress(r, r.page)
 }
 
 func (r *Reader) resetView() {
@@ -119,6 +132,11 @@ func (a *App) retryReader(r *Reader) {
 	a.startReaderLoad(r)
 }
 
+// progressFlushDelay is the pause before a page turn is written, so a burst
+// of turns becomes one request. It also bounds how long a page the reader
+// left is unsaved.
+const progressFlushDelay = 600 * time.Millisecond
+
 func (a *App) readerNext(r *Reader) {
 	if !r.loaded || r.page+1 >= len(r.pages) {
 		return
@@ -137,14 +155,33 @@ func (a *App) readerPrev(r *Reader) {
 	a.saveProgress(r)
 }
 
-// saveProgress records the page without blocking the frame. One request per
-// page turn, and none when the page did not change.
+// saveProgress records the page without blocking the frame. Page turns are
+// batched: the write happens after a short pause, so flipping quickly sends
+// one request for the page the reader stopped on.
 func (a *App) saveProgress(r *Reader) {
 	if !r.loaded || len(r.pages) == 0 || r.page == r.lastSaved {
 		return
 	}
-	r.lastSaved = r.page
+	r.saveSeq++
+	seq := r.saveSeq
 	id, token, page := r.id, r.token, r.page
+	time.AfterFunc(progressFlushDelay, func() {
+		a.update(func() {
+			if r.saveSeq != seq || r.id != id || r.token != token {
+				return
+			}
+			a.flushProgress(r, page)
+		})
+	})
+}
+
+// flushProgress sends the page unless it was already saved.
+func (a *App) flushProgress(r *Reader, page int) {
+	if len(r.pages) == 0 || page == r.lastSaved {
+		return
+	}
+	r.lastSaved = page
+	id, token := r.id, r.token
 	total := len(r.pages)
 	progress := float64(page+1) / float64(total)
 	completed := page == total-1

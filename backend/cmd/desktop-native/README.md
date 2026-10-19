@@ -107,7 +107,7 @@ cmd/desktop-native/
 - 阅读区的指针事件在 `HandleInput` 里区分点击与拖拽（位移 < 6px 视为点击）：未放大时点左右三分区翻页，拖动则平移；`rtl` 打开后左右方向与方向键互换。
 - 底部栏的页码输入框调用 `readerJumpTo`，页码按 1 起算并钳制到有效范围，跳转后上报进度。
 - 详情页缩略图网格用 `PageThumbnailURL(id, token, index)`（后端按精灵图坐标切图），只构建可见格；点击格子把目标页写入 `readerStart`，阅读器加载完成后跳到该页并覆盖保存进度。
-- 阅读进度在翻页时异步上报，不阻塞界面。
+- 阅读进度在翻页 600ms 后异步上报（批量），离开阅读器时立即补写；详情页按钮显示「继续阅读（第 N 页）」。
 - 离线下载：详情页先取页面列表，再 `POST /api/prefill` 建任务；`/downloads` 用 `c.After` 在每 1.5s 触发一次轮询，只轮询 `queued`/`running` 的任务。删除任务时先本地移除并把 ID 记入 `dropped`，避免删除前发出的列表请求把它带回来。
 - 标签规则：`Gallery.Tags` 存 `{namespace,name}`，列表接口给的 `"ns:name"` 用 `splitTag` 拆开；卡片最多显示前两个标签。`View` 每次比对 `announcedRules`，规则一变就通知已加载的列表与详情重画，无需重新请求。
 - 标签规则：`TagRule` 与后端 `tag_preference` 一一对应，保存是**全量替换**（`PUT /api/tag-settings`）；详情页 `sortedTags` + `tagChip` 按喜欢→不喜欢→其余排序并着色（#3377FF / #FF6666）。同步按钮把「确认删除」「冲突处理」两个输入框翻译成 `confirm_deletes` / `conflict_resolution` 发给后端。

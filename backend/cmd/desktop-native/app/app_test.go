@@ -1532,3 +1532,100 @@ func TestTagTranslationCachedLoad(t *testing.T) {
 		t.Fatalf("Status = %q", db.Status())
 	}
 }
+
+// TestReaderProgressIsBatched checks that flipping pages quickly writes one
+// progress request for the page the reader stopped on.
+func TestReaderProgressIsBatched(t *testing.T) {
+	var mu sync.Mutex
+	var puts []int
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/galleries", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"page": 0, "page_size": 25, "total": 1,
+			"results": []map[string]any{galleryItem(1, "tok1", "示例 A", "doujinshi", 3)}})
+	})
+	mux.HandleFunc("/api/gallery/1/tok1/pages", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprintln(w, `{"type":"meta","total":3}`)
+		for i := 0; i < 3; i++ {
+			fmt.Fprintf(w, `{"type":"page","index":%d,"page_url":"https://img.example/page-%d.jpg"}`+"\n", i, i)
+		}
+		fmt.Fprintln(w, `{"type":"done","total":3}`)
+	})
+	mux.HandleFunc("/api/gallery-cache/1/tok1/pages", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprintln(w, `{"type":"meta","total":3}`)
+		fmt.Fprintln(w, `{"type":"done","total":0}`)
+	})
+	mux.HandleFunc("/api/progress/1/tok1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			var body struct {
+				CurrentPage int `json:"current_page"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			mu.Lock()
+			puts = append(puts, body.CurrentPage)
+			mu.Unlock()
+			return
+		}
+		writeJSON(w, map[string]any{"current_page": 0, "progress": 0, "completed": false})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	a := New(NewClient(srv.URL))
+	tt := ui.NewTester(a.View, 1280, 860)
+	waitText(t, tt, "示例 A")
+
+	a.router.Push("/reader/1/tok1")
+	navSettle(tt)
+	waitText(t, tt, "1 / 3 页")
+
+	// Two quick turns: only the last page should be reported.
+	if err := tt.Click("下一页"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, tt, "2 / 3 页")
+	tt.Key(0, ui.KeyRight)
+	waitText(t, tt, "3 / 3 页")
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		n := len(puts)
+		mu.Unlock()
+		if n > 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	time.Sleep(progressFlushDelay + 100*time.Millisecond)
+
+	mu.Lock()
+	got := append([]int(nil), puts...)
+	mu.Unlock()
+	if len(got) != 1 || got[0] != 2 {
+		t.Fatalf("progress writes = %v, want a single write of page 2", got)
+	}
+}
+
+// TestGalleryContinueReading labels the start button with the saved page.
+func TestGalleryContinueReading(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+
+	// The fake detail has no progress; seed one through the detail state used
+	// by the bookshelf cards instead.
+	if g := (Gallery{Reading: &ReadingProgress{CurrentPage: 4}}); g.NextPage() != 4 {
+		t.Fatalf("NextPage = %d", g.NextPage())
+	}
+	if g := (Gallery{Reading: &ReadingProgress{CurrentPage: 4, Completed: true}}); g.NextPage() != 0 {
+		t.Fatalf("finished gallery NextPage = %d", g.NextPage())
+	}
+
+	// A list card with progress says so.
+	a.lists["/"].items[0].Reading = &ReadingProgress{CurrentPage: 1}
+	tt.Frame()
+	if !tt.HasText("读到第 2 页") {
+		t.Fatalf("card does not show progress; texts=%q", tt.Texts())
+	}
+}

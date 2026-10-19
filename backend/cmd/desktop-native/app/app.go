@@ -819,7 +819,11 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 					a.router.Back()
 				}
 				ui.Text(c, displayTitle(g)).FontSize(22).Bold().Grow(1)
-				if ui.PrimaryButton(c, "开始阅读").Clicked() {
+				label := "开始阅读"
+				if next := g.NextPage(); next > 0 {
+					label = fmt.Sprintf("继续阅读（第 %d 页）", next+1)
+				}
+				if ui.PrimaryButton(c, label).Clicked() {
 					a.readerStart = -1
 					a.router.Push(fmt.Sprintf("/reader/%d/%s", g.ID, g.Token))
 				}
