@@ -118,6 +118,8 @@ cmd/desktop-native/
 - ZIP 导出：完成后点「导出 ZIP」，`mygo.Dialog.Save` 选路径（测试里用 `pickSavePath` 变量替换），然后流式 `io.Copy` 到文件，不占内存；失败时删除半成品。
 - 搜索输入用 300ms 防抖（`scheduleSearch`）：每次文本变化只保留最后一个定时器，因此连续输入只发一次请求。
 
+设置页「导出诊断信息」用原生保存对话框写一个文本文件（版本、平台、路径、缓存大小、翻译库/规则/任务数量、当前页面），不含 Cookies 与图片。
+
 版本号在构建时注入：`go build -ldflags "-X main.version=1.0.0" ./cmd/desktop-native`，设置页「关于」会显示它和 `GOOS/GOARCH`。
 
 ## CI

@@ -37,6 +37,10 @@ type App struct {
 	storage BackendStorage
 	// build is the version and platform line shown under 关于.
 	build string
+	// diagBusy and diagMsg track exporting the diagnostics file.
+	diagBusy bool
+	diagMsg  string
+	diagSeq  int
 
 	// setup state: the first-run cookie screen.
 	showSetup   bool
@@ -1187,6 +1191,16 @@ func (a *App) settingsPage(c *ui.Context) {
 			a.settingsRow(c, "版本", a.build)
 			ui.Text(c, "ExHentai 第三方客户端，纯 Go 原生界面（mygo），无 WebView。").
 				FontSize(11).TextColor(t.TextMuted)
+			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+				if ui.Button(c, "导出诊断信息").Disabled(a.diagBusy).Clicked() {
+					a.exportDiagnostics()
+				}
+				ui.Text(c, "包含版本、路径、缓存大小与任务数量；不含 Cookies 或图片。").
+					FontSize(11).TextColor(t.TextMuted)
+			})
+			if a.diagMsg != "" {
+				ui.Text(c, a.diagMsg).FontSize(11).TextColor(t.TextMuted)
+			}
 		})
 	})
 }
