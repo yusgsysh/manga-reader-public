@@ -1629,3 +1629,45 @@ func TestGalleryContinueReading(t *testing.T) {
 		t.Fatalf("card does not show progress; texts=%q", tt.Texts())
 	}
 }
+
+// TestReaderDoubleAndWheel covers double-page steps and wheel turning.
+func TestReaderDoubleAndWheel(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	a.router.Push("/reader/1/tok1")
+	navSettle(tt)
+	waitText(t, tt, "1 / 3 页")
+	// The reader opens under the home page's grid for the router's
+	// transition; any frame after it lays the bottom bar out.
+	tt.Frame()
+
+	// Double mode steps two pages at a time.
+	if err := tt.Click("单页"); err != nil {
+		t.Fatalf("click 单页: %v", err)
+	}
+	if !a.reader.double {
+		t.Fatal("double mode not enabled")
+	}
+	waitText(t, tt, "双页")
+	if err := tt.Click("下一页"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, tt, "3 / 3 页")
+	if err := tt.Click("上一页"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, tt, "1 / 3 页")
+
+	// Wheel mode: a notch down turns forward instead of panning.
+	if err := tt.Click("滚轮平移"); err != nil {
+		t.Fatalf("click wheel mode: %v", err)
+	}
+	waitText(t, tt, "滚轮翻页")
+	if err := tt.Click("双页"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Scroll(640, 250, 0, 40)
+	waitText(t, tt, "2 / 3 页")
+	tt.Scroll(640, 250, 0, -40)
+	waitText(t, tt, "1 / 3 页")
+}

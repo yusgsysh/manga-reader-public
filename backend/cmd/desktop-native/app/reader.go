@@ -38,6 +38,10 @@ type Reader struct {
 	// rtl reads right to left: the right side turns forward, as Japanese
 	// manga do.
 	rtl bool
+	// double shows two pages side by side; wheelTurns makes the wheel turn
+	// pages instead of panning.
+	double     bool
+	wheelTurns bool
 	// downX/downY and moved tell a click from a drag, so a tap can turn the
 	// page while dragging still pans.
 	downX, downY float32
@@ -137,11 +141,19 @@ func (a *App) retryReader(r *Reader) {
 // left is unsaved.
 const progressFlushDelay = 600 * time.Millisecond
 
+// readerStep is how far forward a turn moves: two pages in double mode.
+func (r *Reader) readerStep() int {
+	if r.double {
+		return 2
+	}
+	return 1
+}
+
 func (a *App) readerNext(r *Reader) {
-	if !r.loaded || r.page+1 >= len(r.pages) {
+	if !r.loaded || r.page+r.readerStep() >= len(r.pages) {
 		return
 	}
-	r.page++
+	r.page += r.readerStep()
 	r.resetView()
 	a.saveProgress(r)
 }
@@ -150,7 +162,10 @@ func (a *App) readerPrev(r *Reader) {
 	if !r.loaded || r.page == 0 {
 		return
 	}
-	r.page--
+	r.page -= r.readerStep()
+	if r.page < 0 {
+		r.page = 0
+	}
 	r.resetView()
 	a.saveProgress(r)
 }
@@ -282,7 +297,7 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 			if ui.Button(c, "上一页").Disabled(!r.loaded || r.page == 0).Clicked() {
 				a.readerPrev(r)
 			}
-			if ui.PrimaryButton(c, "下一页").Disabled(!r.loaded || r.page+1 >= len(r.pages)).Clicked() {
+			if ui.PrimaryButton(c, "下一页").Disabled(!r.loaded || r.page+r.readerStep() >= len(r.pages)).Clicked() {
 				a.readerNext(r)
 			}
 			fullscreen := "全屏"
@@ -318,15 +333,39 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 			area.HandleInput(func(ev ui.InputEvent) bool {
 				switch ev.Kind {
 				case ui.InputScroll:
-					if ev.Mods&ui.Ctrl != 0 || ev.Mods&ui.Cmd != 0 {
+					mods := ev.Mods&ui.Ctrl != 0 || ev.Mods&ui.Cmd != 0
+					switch {
+					case mods:
 						if ev.DY > 0 {
 							r.zoomBy(-0.1)
 						} else {
 							r.zoomBy(0.1)
 						}
-					} else {
+					case r.wheelTurns:
+						// Wheel mode: a notch turns a page, as viewers do.
+						if ev.DY > 0 {
+							a.readerNext(r)
+						} else if ev.DY < 0 {
+							a.readerPrev(r)
+						}
+					case ev.DY > 0:
+						// Scrolled to the bottom of the zoomed-in page: turn.
+						if r.zoom > 1 {
+							r.panY -= ev.DY
+							if r.panY > 0 {
+								a.readerNext(r)
+							}
+						} else {
+							a.readerNext(r)
+						}
+					case ev.DY < 0:
+						if r.zoom > 1 {
+							r.panY -= ev.DY
+						} else {
+							a.readerPrev(r)
+						}
+					default:
 						r.panX -= ev.DX
-						r.panY -= ev.DY
 					}
 					return true
 				case ui.InputPointerDown:
@@ -360,22 +399,50 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 				if bitmap == nil {
 					bitmap = a.pageCache.Get(int(r.id), r.page)
 				}
-				ui.Image(c, bitmap).Fill().Fit(r.fit).
-					TransformOrigin(0.5, 0.5).
-					Translate(r.panX, r.panY).
-					Scale(r.zoom, r.zoom)
+				// Two pages side by side, left then right. In right-to-left
+				// mode the left page is the later one, as in Japanese manga.
+				first, second := r.page, -1
+				if r.double && r.page+1 < len(r.pages) {
+					second = r.page + 1
+				}
+				ui.Row(c).Fill().Children(func() {
+					a.readerPageImage(c, r, first)
+					if second >= 0 {
+						a.readerPageImage(c, r, second)
+					}
+				})
 			})
 
 			ui.Progress(c, float64(r.page+1)/float64(len(r.pages))).FillWidth().Height(3)
 			ui.Row(c).Padding(6, 16).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "← → 翻页 · Ctrl + 滚轮缩放 · 拖拽平移 · 0 重置 · F 全屏").
 					FontSize(11).TextColor(t.TextMuted).Grow(1)
+			})
+			ui.Row(c).Padding(2, 16, 6, 16).Gap(8).AlignItems(ui.Center).Children(func() {
 				dir := "从左到右"
 				if r.rtl {
 					dir = "从右到左"
 				}
 				if ui.Button(c, dir).Label("切换阅读方向").Clicked() {
 					r.rtl = !r.rtl
+				}
+				layout := "单页"
+				if r.double {
+					layout = "双页"
+				}
+				if ui.Button(c, layout).Label("切换单页/双页").Clicked() {
+					r.double = !r.double
+					// Keep the spread aligned to even page indices.
+					if r.double && r.page%2 == 1 {
+						r.page--
+					}
+				}
+				wheel := "滚轮平移"
+				if r.wheelTurns {
+					wheel = "滚轮翻页"
+				}
+				if ui.Button(c, wheel).Label("切换滚轮行为").Clicked() {
+					r.wheelTurns = !r.wheelTurns
 				}
 				ui.TextInput(c, &a.readerJump).Width(64).Label("跳转页码").Placeholder("页码")
 				if ui.Button(c, "跳转").Clicked() {
@@ -465,4 +532,22 @@ func clampFloat(v, lo, hi float32) float32 {
 		return hi
 	}
 	return v
+}
+
+// readerPageImage draws one page of the reader, filling half the area in
+// double mode. A missing bitmap asks for a frame once it arrives through the
+// image store; until then the page is blank rather than a stretched error.
+func (a *App) readerPageImage(c *ui.Context, r *Reader, page int) {
+	src := r.pages[page]
+	bitmap := a.pageImages.Get(a.client.PageImageURL(src))
+	if bitmap == nil {
+		bitmap = a.pageCache.Get(int(r.id), page)
+	}
+	img := ui.Image(c, bitmap).Fill().Fit(r.fit).
+		TransformOrigin(0.5, 0.5).
+		Translate(r.panX, r.panY).
+		Scale(r.zoom, r.zoom)
+	if r.double {
+		img.Grow(1)
+	}
 }
