@@ -32,7 +32,7 @@
 | M8 标签设置与翻译 | ⬜ 未开始 | IndexedDB 逻辑迁移到 SQLite/内存 |
 | M9 数据同步 | ❓ 待定 | 是否保留同步能力 |
 | M10 打包与发布 | ⬜ 未开始 | 三平台构建、图标、签名、更新 |
-| M11 清理 Web/Android/Wails | ❓ 待定 | 是否删除旧前端与部署文件 |
+| M11 清理 Web/Android/Wails | ✅ 完成 | 旧前端、Docker/部署、独立服务入口已删除 |
 
 ---
 
@@ -252,14 +252,24 @@
   - [ ] 侧边栏/按钮/输入框的 Label、Tab 顺序、键盘操作。
 - [x] 错误与反馈统一：所有页面共用 `errorBlock`（红色「请求失败」徽章 + 后端消息 + 重试）；离线下载入队成功用 toast；下载任务标题可点击回到画廊。
 
-### 3.5 清理旧实现 ❓
+### 3.5 清理旧实现 ✅
 
-- [ ] 决定是否删除/归档 `frontend/`（React）。
-- [ ] 决定是否删除 Wails 桌面端（本机 `backend/cmd/desktop`）。
-- [ ] 决定是否删除 Android APK、`build/android`、`build/`。
-- [ ] 决定是否删除 Docker/Compose、`deploy/`、MinIO、Basic Auth、CORS、Prometheus。
-  - 注意：若保留 headless server，Prometheus/Basic Auth 可能仍有价值。
-- [x] 根 `README.md` 顶部加了原生桌面版说明与运行方式（旧 Web/Android 文档保留，待 3.5 决策后清理）。
+已确认只保留原生桌面端，旧 Web / Android / Wails / 服务器部署代码全部删除（仅靠 git 历史找回，未额外建 tag 或分支；`main` 等其他分支未改动）。
+
+- [x] 删除 `frontend/`（React + Vite + Bun，156 个文件）。
+- [x] 删除 Wails 桌面端（`backend/cmd/desktop` 是本地残留，未入库；`.gitignore` 不再引用）。
+- [x] 删除 Android APK 与 `build/`（均为本地残留，未入库）。
+- [x] 删除 `Dockerfile`、`docker-compose.yml`、`.dockerignore`、`.env.example`、`deploy/`（quadlet + observability）。
+- [x] 删除 `backend/main.go` / `main_test.go`（独立 HTTP 服务入口）、`internal/web`（内嵌 React 产物）、`internal/basicauth`（已无使用者）。
+- [x] 删除 CORS 中间件（随 `main.go` 移除）。
+- [x] 删除 CI：`.github/workflows/ci.yml`、`.forgejo/workflows/{deploy,docker-build,frontend-tests}.yml`；保留两份 `native-desktop.yml`。
+- [x] 删除误提交的 70MB 构建产物 `backend/desktop-native.exe`。
+- [x] 重写根 `README.md` 为桌面应用文档（运行、功能、目录、环境变量、开发、可观测性说明）。
+- [x] 重写 `.gitignore`，去掉 `frontend/`、Wails、Android、`internal/web/dist` 相关条目。
+- [x] `internal/metrics` 保留：仍被缓存与上游客户端用于内部计数，但不再暴露 `/metrics` 端点。
+- [x] `go build ./...`、`go vet ./...`、`go test ./...` 通过。
+
+**影响**：后端现在只作为桌面端的内嵌库存在，不再有可独立部署的服务器形态，也不再提供浏览器访问。
 
 ---
 
@@ -271,7 +281,7 @@
 | 2 | 阅读器是否允许 `ui.WebView` 兜底？ | 纯原生 / 允许兜底 | 纯原生（符合“原生 UI”要求） |
 | 3 | 传输层 | 进程内 Gin localhost / 直接函数调用 | 进程内 Gin localhost（复用现有 handler，风险最低） |
 | 4 | Cookies 存储 | 系统钥匙串 / 明文配置文件 | 优先钥匙串 |
-| 5 | 旧 Web/Android 代码 | 保留一段时间 / 立即删除 | 先保留，M10 后再清理 |
+| 5 | 旧 Web/Android 代码 | 保留一段时间 / 立即删除 | ✅ 已决定：全部删除（含服务器部署形态） |
 | 6 | 标签翻译数据 | 继续用 IndexedDB / 迁移 SQLite | 迁移 SQLite |
 | 7 | 默认阅读方向 | 从左到右 / 从右到左 | 跟随画廊/用户设置 |
 

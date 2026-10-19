@@ -1,30 +1,17 @@
+# Build outputs
 backend/manga-reader
+backend/desktop-native
+backend/desktop-native.exe
+
+# Local data (the desktop app keeps its database and cache under the user
+# config/cache directories; these cover a checkout that predates that)
 backend/data/*
-backend/EHentai-go/*
-backend/cmd/desktop/build/bin/manga-reader-desktop
-frontend/wailsjs/runtime/package.json
-frontend/package.json.md5
-frontend/wailsjs/runtime/runtime.d.ts
-frontend/wailsjs/runtime/runtime.js
-.task/*
-backend/desktop
-# The old Wails build tree lives here locally and is not part of the repo.
-# The MyGo desktop app is the only cmd/ source we track.
+
+# MyGo desktop: only the native app's source is tracked under cmd/
 backend/cmd/*
 !backend/cmd/desktop-native/
-manga-reader-desktop.apk
-build/android/gen/main_android.gen.go
-frontend/frontend
-build/android/overlay.json
-
-# HTTP Basic Auth credentials — never commit
-*.htpasswd
-secrets/
 
 # Local environment files (cookies, passwords) — never commit
 .env
-
-# Frontend bundle embedded into the binary (the image build drops it here;
-# only the placeholder is tracked so `go build` works from a fresh clone)
-backend/internal/web/dist/*
-!backend/internal/web/dist/.gitkeep
+secrets/
+*.htpasswd
