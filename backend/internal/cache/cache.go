@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"time"
 
@@ -113,6 +114,11 @@ func CacheKey(url string) string {
 func IsNotFound(err error) bool {
 	if err == nil {
 		return false
+	}
+	// Filesystem-backed caches (FSCache) report a miss as fs.ErrNotExist,
+	// possibly wrapped; MinIO reports it as an ErrorResponse code.
+	if errors.Is(err, fs.ErrNotExist) {
+		return true
 	}
 	if minioErr, ok := errors.AsType[minio.ErrorResponse](err); ok {
 		return minioErr.Code == "NoSuchKey" || minioErr.Code == "NoSuchBucket" || minioErr.Code == "NotFound"

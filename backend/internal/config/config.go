@@ -224,6 +224,13 @@ func parseBoolEnv(key string, defaultVal bool) bool {
 	return b
 }
 
+// ParseCookieString parses a raw "name=value; name=value" cookie header (as
+// copied from a browser or stored in the desktop settings file) into the four
+// cookies ExHentai uses. Exported for the desktop settings loader.
+func ParseCookieString(s string) CookieConfig {
+	return parseCookieString(s)
+}
+
 func parseCookieString(s string) CookieConfig {
 	cfg := CookieConfig{}
 	for _, pair := range splitSeq(s, ";") {

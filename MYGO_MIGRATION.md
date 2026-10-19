@@ -1,6 +1,6 @@
 # MyGo 原生桌面迁移 TODO
 
-> 分支：`mygo` · 首个提交：`fad66b5 feat(desktop): add mygo native UI browsing and reader`
+> 分支：`mygo` · 关键提交：`fad66b5`（原生浏览/阅读器）、`81e3621`（迁移 TODO）、本次「内嵌后端 + 本地文件缓存」
 > 更新日期：2026-10-19
 >
 > 目标：把整个产品改为 **MyGo 原生 UI 桌面应用**（macOS / Linux / Windows），不再提供浏览器访问和 Android APK。
@@ -23,9 +23,9 @@
 |---|---|---|
 | M0 原生 UI 骨架与 PoC | ✅ 完成 | 窗口、侧边栏、路由、中文字体、虚拟化图片网格、阅读器原型 |
 | M1 只读链路接真实 API | ✅ 基本完成 | 首页/订阅/热门/搜索/书架/最近阅读/详情/阅读器 |
-| M2 单机化：进程内后端 | ⬜ 未开始 | 不再依赖外部 `MANGA_READER_API` |
-| M3 本地图片缓存 | ⬜ 未开始 | 用文件系统替换 MinIO |
-| M4 首次启动与设置 | ⬜ 未开始 | Cookies、数据库路径、缓存上限、主题 |
+| M2 单机化：进程内后端 | ✅ 完成 | `cmd/desktop-native/internal/desktop` 启动 Gin；`MANGA_READER_API` 变为可选覆盖 |
+| M3 本地图片缓存 | 🚧 进行中 | `internal/cache/fscache.go` 已实现；UI 仍走 `/api/image/*`，待切到 `/api/image-cache/*` |
+| M4 首次启动与设置 | 🚧 进行中 | `config.json` 与默认路径已就绪；待做首次启动向导与设置界面 |
 | M5 阅读体验补齐 | 🚧 进行中 | 已有翻页/缩放/平移/进度；缺缩略图、预加载、双页、全屏等 |
 | M6 书架与进度 | ✅ 基本完成 | 列表、加入/移出、进度读取与上报 |
 | M7 离线下载 | ⬜ 未开始 | 复用现有 prefill 接口 |
@@ -36,7 +36,7 @@
 
 ---
 
-## 2. 已完成（截至 `fad66b5`）
+## 2. 已完成（截至 `fad66b5` + 本次内嵌后端提交）
 
 ### 2.1 工程与依赖
 
@@ -100,35 +100,52 @@
 - [x] `snapshot_test.go`（`-tags snapshot`）输出首页/详情/阅读器/搜索 PNG。
 - [x] `cmd/desktop-native/README.md`：运行方式、代码结构、数据流、下一步。
 
+### 2.7 内嵌后端与本地缓存（本次新增）
+
+- [x] `internal/cache/fscache.go`：文件系统实现 `handler.ImageCache`（`Head/Get/GetStream/Put/PutWithMeta`）。
+- [x] 原子写入（临时文件 + rename）；sidecar JSON 保存 content-type / cache-control / user metadata。
+- [x] key 二次哈希 + 两级目录，杜绝路径穿越；写入时 sidecar 先行，读取时缺 sidecar 会 `DetectContentType` 兜底。
+- [x] `cache.IsNotFound` 识别 `fs.ErrNotExist`，文件缓存 miss 与 MinIO miss 行为一致。
+- [x] `internal/config` 导出 `ParseCookieString`，供桌面设置读取 cookie 串。
+- [x] `cmd/desktop-native/internal/desktop`：进程内启动现有 Gin API，监听 `127.0.0.1:0`。
+- [x] 复用 `exhentai` 客户端、`database.NewDB`、`handler.New`、sync service 与启动清理逻辑。
+- [x] `internal/desktop/settings.go`：`config.json` 读写、环境变量覆盖、默认数据库/缓存路径。
+- [x] `main.go`：未设置 `MANGA_READER_API` 时启动内嵌后端；退出时优雅关闭（`http.Server`、sync、prefill、DB）。
+- [x] 缺少 cookies 时给出指向 `config.json` 的明确错误。
+- [x] 新增测试：FS cache 读写 / miss / 流式 / 元数据 / 覆盖 / 路径穿越 / 清理；设置解析与优先级；内嵌服务器 `/healthz` 与 `/api/bookshelf`。
+- [x] `go test ./...`、`go test -race ./internal/cache/... ./cmd/desktop-native/...`、`go vet`、`go build ./...` 通过。
+- [x] 本地实跑：`go run ./cmd/desktop-native` 打印内嵌地址并打开窗口。
+
 ---
 
 ## 3. 未完成
 
 ### 3.1 P0：单机产品化（最优先）
 
-- [ ] **进程内启动后端**
-  - [ ] 新建 `internal/desktop`（或类似）包，封装 `exhentai.CreateHTTPClient`、`database.NewDB`、`handler.New`、Gin 路由。
-  - [ ] 监听 `127.0.0.1:0`，把随机端口返回给 UI。
-  - [ ] 关闭窗口时优雅关闭 `http.Server`、数据库、prefill 任务。
-  - [ ] `MANGA_READER_API` 保留为开发/调试覆盖；未设置时自动启动内嵌后端。
+- [x] **进程内启动后端**
+  - [x] 新建 `internal/desktop` 包，封装 `exhentai.CreateHTTPClient`、`database.NewDB`、`handler.New`、Gin 路由。
+  - [x] 监听 `127.0.0.1:0`，把随机端口返回给 UI。
+  - [x] 关闭窗口时优雅关闭 `http.Server`、数据库、prefill 任务。
+  - [x] `MANGA_READER_API` 保留为开发/调试覆盖；未设置时自动启动内嵌后端。
   - [ ] 单实例保护：第二次启动聚焦已有窗口，而不是再起一个后端。
-- [ ] **本地文件系统图片缓存**
-  - [ ] 实现 `handler.ImageCache`：`Head/Get/GetStream/Put/PutWithMeta`。
-  - [ ] 缓存目录默认放在用户缓存目录（XDG / `~/Library/Caches` / `%LocalAppData%`）。
-  - [ ] 原子写入（临时文件 + rename），处理并发同 key 写入。
-  - [ ] 内容类型与自定义元数据用 sidecar JSON 保存。
-  - [ ] UI 改用 `/api/image-cache/*` 端点，去掉对 MinIO 的依赖。
-  - [ ] 缓存大小上限与清理策略（LRU/按时间）。
+- [x] **本地文件系统图片缓存**
+  - [x] 实现 `handler.ImageCache`：`Head/Get/GetStream/Put/PutWithMeta`。
+  - [x] 缓存目录默认放在用户缓存目录（XDG / `~/Library/Caches` / `%LocalAppData%`）。
+  - [x] 原子写入（临时文件 + rename），处理并发同 key 写入。
+  - [x] 内容类型与自定义元数据用 sidecar JSON 保存。
+  - [ ] UI 改用 `/api/image-cache/*` 端点（目前仍走 `/api/image/*` live 代理）。
+  - [ ] 缓存大小上限与清理策略（LRU/按时间）；`FSCache.Clear` 已就绪，待接到设置页。
 - [ ] **配置与首次启动**
-  - [ ] 配置文件位置：`os.UserConfigDir()/manga-reader/config.json`。
-  - [ ] 字段：ExHentai cookies、数据库路径、缓存目录、缓存上限、主题、语言。
+  - [x] 配置文件位置：`os.UserConfigDir()/manga-reader/config.json`。
+  - [x] 字段：ExHentai cookie、数据库路径、缓存目录、同步 token、dev tools。
+  - [ ] 字段：缓存上限、主题、语言、阅读方向。
   - [ ] 首次启动向导：填写 cookies，校验后进入首页。
   - [ ] Cookies 安全存储：优先系统钥匙串；至少不要明文打印到日志。
-  - [ ] 设置页可修改后端地址（开发用）、缓存上限、清空缓存。
+  - [ ] 设置页可修改缓存上限、清空缓存、切换主题、清空数据。
   - [ ] 启动失败时在 UI 内展示可操作的错误，而不是 `log.Fatal` 退出。
-- [ ] **数据库位置**
-  - [ ] 默认 SQLite 放到用户数据目录，不再依赖当前工作目录的 `data/`。
-  - [ ] 启动时自动建目录、执行 Ent migrate。
+- [x] **数据库位置**
+  - [x] 默认 SQLite 放到用户配置目录，不再依赖当前工作目录的 `data/`。
+  - [x] 启动时自动建目录、执行 Ent migrate。
   - [ ] 数据库损坏/权限不足时给出明确提示。
 
 ### 3.2 P1：阅读体验
@@ -232,8 +249,11 @@
 
 ## 5. 已知问题与技术债
 
-- [ ] 当前必须另起后端；`MANGA_READER_API` 是硬依赖。
-- [ ] 图片走 live 端点，没有磁盘缓存；重复打开画廊会重复请求上游。
+- [x] ~~当前必须另起后端；`MANGA_READER_API` 是硬依赖。~~ 已内嵌，未设置时本进程启动。
+- [ ] 图片仍走 live 端点（`/api/image/*`），没走磁盘缓存；重复打开画廊会重复请求上游。**（下一步切到 `/api/image-cache/*`）**
+- [ ] `FSCache` 没有容量上限与淘汰策略；`Clear()` 已实现但未接设置页。
+- [ ] 首次启动仍是 `log.Fatal`，缺少引导界面；cookie 明文存在 `config.json`。
+- [ ] 内嵌后端监听 loopback 且无鉴权；本机其他进程可访问（后续加随机 token）。
 - [ ] 阅读页占位图在主线程生成，首帧可能有轻微卡顿。
 - [ ] `ImageStore` 失败后 30 秒才重试，界面上没有可见错误。
 - [ ] 搜索无防抖，快速输入会发出多个请求（旧的会被 `loadID` 丢弃）。
@@ -252,14 +272,14 @@
 
 ## 6. v1 验收标准
 
-- [ ] 单个可执行文件启动，无外部后端、无 WebView、无 Node/React 构建。
+- [x] 单个可执行文件启动，无外部后端、无 WebView、无 Node/React 构建。（MVP：默认内嵌后端）
 - [ ] 首次启动可填写 ExHentai cookies，校验通过后进入首页。
 - [ ] 首页/搜索/详情/阅读器/书架/最近阅读全部可用。
 - [ ] 阅读器支持翻页、缩放、平移、进度保存、页面缩略图。
 - [ ] 断网时可读已缓存画廊；缓存有上限并可清理。
 - [ ] 标签设置、下载、同步（若保留）行为与现有产品一致或有明确替代。
 - [ ] macOS / Linux / Windows 均可构建运行。
-- [ ] `go test ./...`、`go test -race ./cmd/desktop-native/...`、`go vet ./...` 通过。
+- [x] `go test ./...`、`go test -race ./internal/cache/... ./cmd/desktop-native/...`、`go vet ./...` 通过。
 - [ ] 1000 页画廊滚动 60fps，常驻内存 < 300MB。
 
 ---
@@ -270,10 +290,10 @@
 2. 跑测试：
    ```bash
    cd backend
-   go test ./cmd/desktop-native/...
-   go test -race ./cmd/desktop-native/...
+   go test ./...
+   go test -race ./internal/cache/... ./cmd/desktop-native/...
    go test -tags snapshot ./cmd/desktop-native/app
    ```
-3. 按 **3.1 P0** 的顺序推进：内嵌后端 → 本地缓存 → 配置/首次启动。
+3. 按 **3.1 P0** 的顺序推进：UI 切到 `/api/image-cache/*` → 首次启动向导/设置页 → 缓存上限与淘汰。
 4. 每完成一项，把本文件对应复选框改为 `[x]`，并在提交信息里引用里程碑（例如 `feat(desktop): embed API server (M2)`）。
 5. 涉及删除旧代码（3.5）前，先在 issue/对话里确认，不要直接删。

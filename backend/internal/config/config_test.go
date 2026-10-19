@@ -92,3 +92,20 @@ func TestLoad_UnsupportedDriver(t *testing.T) {
 		t.Fatal("expected error for unsupported driver")
 	}
 }
+
+func TestParseCookieString(t *testing.T) {
+	cfg := ParseCookieString("ipb_member_id=12; ipb_pass_hash=abc; igneous=zzz; sk=yyy; extra=ignored")
+	if cfg.IpbMemberID != "12" || cfg.IpbPassHash != "abc" {
+		t.Fatalf("id/hash = %q/%q", cfg.IpbMemberID, cfg.IpbPassHash)
+	}
+	if cfg.Igneous != "zzz" || cfg.SK != "yyy" {
+		t.Fatalf("igneous/sk = %q/%q", cfg.Igneous, cfg.SK)
+	}
+	if !cfg.IsValid() {
+		t.Fatal("IsValid() = false, want true")
+	}
+
+	if empty := ParseCookieString(""); empty.IsValid() {
+		t.Fatal("empty cookie string should not be valid")
+	}
+}
