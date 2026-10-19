@@ -236,7 +236,7 @@
 - [x] 用户可导出的诊断信息：设置页「导出诊断信息」写出文本（版本、平台、路径、缓存大小、翻译库/规则/任务数量），不含 Cookie 与图片。
 - [ ] 崩溃日志（当前只有进程 stderr）。
 - [x] CI
-  - [x] Linux 安装 GTK3 依赖并跑 `go test` / `go vet` / `go test -race`（`.github/workflows/native-desktop.yml`）。
+  - [x] Linux 安装 GTK3 依赖并跑 `go test` / `go vet` / `go test -race`（`.github/workflows/native-desktop.yml`，并在 `.forgejo/workflows/` 同步一份给自托管仓库）。
   - [x] 三平台矩阵：linux/amd64、darwin/arm64、darwin/amd64、windows/amd64 交叉编译 app + desktop 内部包 + 后端包；Linux 额外产出完整二进制 artifact。
   - [ ] 正式发布流水线（签名、公证、`.deb`/`.exe` 安装包）。
 - [ ] 性能基准
