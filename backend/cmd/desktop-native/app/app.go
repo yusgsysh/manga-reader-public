@@ -65,6 +65,10 @@ type App struct {
 	lists     map[string]*listState
 	details   map[int64]*detailState
 	downloads Downloads
+	// listForCard is the list whose grid is being built, with the window
+	// height, so a card can tell whether it is near the visible end.
+	listForCard *listState
+	cardWindowH float32
 	// tags is the tag-rule page state; rules colour and order tags anywhere.
 	tags TagSettings
 	// translations is the EhTagTranslation database, shared by every page.
@@ -110,10 +114,12 @@ type listState struct {
 
 	page     int
 	pageSize int
-	lastLen  int
-	total    int
-	loading  bool
-	loaded   bool
+	// atEnd is set while a frame builds a card in the grid's last rows.
+	atEnd   bool
+	lastLen int
+	total   int
+	loading bool
+	loaded  bool
 
 	err    string
 	query  string
@@ -408,6 +414,7 @@ func (a *App) startListLoad(s *listState) {
 	}
 	s.loading = true
 	s.err = ""
+	s.atEnd = false
 	s.loadID++
 	lid := s.loadID
 	page, kind, query := s.page, s.kind, s.query
@@ -445,6 +452,7 @@ func (a *App) reloadList(s *listState) {
 	s.lastLen = 0
 	s.loaded = false
 	s.loading = false
+	s.atEnd = false
 	s.err = ""
 	a.startListLoad(s)
 }
@@ -621,9 +629,15 @@ func (a *App) listPage(c *ui.Context, path, title, subtitle string, kind listKin
 		case s.loaded && len(s.items) == 0:
 			a.emptyPage(c, "没有结果", "换个关键词或稍后重试", "")
 		default:
+			a.listForCard = s
+			_, a.cardWindowH = c.Size()
 			ui.GridView(c, s.grid, len(s.items), 190, 300, func(i int) {
 				a.galleryCard(c, s.items[i])
 			}).Grow(1).Clip()
+			a.listForCard = nil
+			if s.atEnd {
+				a.loadMore(s)
+			}
 			a.listFooter(c, s)
 		}
 	})
@@ -657,6 +671,10 @@ func (a *App) listFooter(c *ui.Context, s *listState) {
 	}
 }
 
+// galleryCard draws one gallery. Cards are built lazily by the grid, so this
+// doubles as the "is the list near its end" probe: the scroll offset derived
+// from the cell gives the item the grid is building, and the tail marks the
+// last page it shows.
 func (a *App) galleryCard(c *ui.Context, g Gallery) {
 	t := c.Theme()
 	cover := a.images.Get(g.CoverURL)
@@ -665,6 +683,14 @@ func (a *App) galleryCard(c *ui.Context, g Gallery) {
 	}
 
 	cell := ui.Column(c).Gap(6).Focusable()
+	// A cell laid out past the bottom of the grid scrolled view is the last
+	// item the grid built: the visible range ends there, so a cell in the last
+	// few rows means the list is at its end.
+	if s := a.listForCard; s != nil && a.cardWindowH > 0 {
+		if b := cell.Bounds(); b.H > 0 && b.Y > a.cardWindowH-2*300 {
+			s.atEnd = true
+		}
+	}
 	cell.Children(func() {
 		switch {
 		case cover != nil:
@@ -739,9 +765,15 @@ func (a *App) searchPage(c *ui.Context) {
 		case s.loaded && len(s.items) == 0:
 			a.emptyPage(c, "没有结果", "换个关键词试试", "")
 		default:
+			a.listForCard = s
+			_, a.cardWindowH = c.Size()
 			ui.GridView(c, s.grid, len(s.items), 190, 300, func(i int) {
 				a.galleryCard(c, s.items[i])
 			}).Grow(1).Clip()
+			a.listForCard = nil
+			if s.atEnd {
+				a.loadMore(s)
+			}
 			a.listFooter(c, s)
 		}
 	})

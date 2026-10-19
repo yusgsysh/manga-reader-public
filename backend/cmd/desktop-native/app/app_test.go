@@ -649,6 +649,70 @@ func TestDownloadsStartAndPoll(t *testing.T) {
 	}
 }
 
+// TestListInfiniteScroll checks the next page is fetched once the grid builds
+// cards in its last rows, without a click on 加载更多.
+func TestListInfiniteScroll(t *testing.T) {
+	var mu sync.Mutex
+	pages := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/galleries", func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Query().Get("page")
+		mu.Lock()
+		pages++
+		mu.Unlock()
+		items := []map[string]any{}
+		switch p {
+		case "0":
+			for i := 1; i <= 8; i++ {
+				items = append(items, galleryItem(i, fmt.Sprintf("tok%d", i),
+					fmt.Sprintf("画廊 %d", i), "manga", 5))
+			}
+		case "1":
+			for i := 9; i <= 11; i++ {
+				items = append(items, galleryItem(i, fmt.Sprintf("tok%d", i),
+					fmt.Sprintf("画廊 %d", i), "manga", 5))
+			}
+		}
+		writeJSON(w, map[string]any{"page": 0, "page_size": 8, "total": 11, "results": items})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	a := New(NewClient(srv.URL))
+	tt := ui.NewTester(a.View, 1280, 860)
+	if err := tt.Click("首页"); err != nil {
+		t.Fatalf("click 首页: %v", err)
+	}
+	navSettle(tt)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if s := a.lists["/"]; s != nil && len(s.items) == 11 {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if got := len(a.lists["/"].items); got != 11 {
+		t.Fatalf("items = %d, want 11 without clicking 加载更多", got)
+	}
+	if !tt.HasText("共 11 个结果") {
+		t.Fatalf("summary missing; texts=%q", tt.Texts())
+	}
+
+	// A complete list asks for nothing more.
+	mu.Lock()
+	n := pages
+	mu.Unlock()
+	time.Sleep(20 * time.Millisecond)
+	tt.Frame()
+	mu.Lock()
+	defer mu.Unlock()
+	if pages != n {
+		t.Fatalf("extra page requests: %d -> %d", n, pages)
+	}
+}
+
 func TestSearchFilters(t *testing.T) {
 	a, tt := newTestApp(t)
 	if err := tt.Click("搜索"); err != nil {
