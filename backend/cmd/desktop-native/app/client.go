@@ -2,6 +2,7 @@ package app
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -382,6 +383,94 @@ func (c *Client) Progress(ctx context.Context, id int64, token string) (apiReadi
 	defer cancel()
 	err := c.do(ctx, http.MethodGet, fmt.Sprintf("/api/progress/%d/%s", id, url.PathEscape(token)), nil, nil, &out)
 	return out, err
+}
+
+// --- Prefill (offline downloads) ---
+//
+// A prefill job fetches the gallery's pages into the backend's image cache
+// one at a time, so the gallery can be read with no network. Jobs are kept by
+// the backend; the UI only starts and polls them.
+
+type PrefillProgress struct {
+	Done    int `json:"done"`
+	Cached  int `json:"cached"`
+	Fetched int `json:"fetched"`
+}
+
+type PrefillError struct {
+	Index int    `json:"index"`
+	URL   string `json:"url"`
+	Error string `json:"error"`
+}
+
+type PrefillJob struct {
+	ID          string           `json:"id"`
+	GalleryID   int64            `json:"gallery_id"`
+	Token       string           `json:"token"`
+	Title       string           `json:"title"`
+	Status      string           `json:"status"`
+	Total       int              `json:"total"`
+	Progress    *PrefillProgress `json:"progress"`
+	FailedCount int              `json:"failed_count"`
+	Errors      []PrefillError   `json:"errors"`
+	CreatedAt   string           `json:"created_at"`
+	UpdatedAt   string           `json:"updated_at"`
+	FinishedAt  *string          `json:"finished_at"`
+}
+
+// StartPrefill queues a job for urls. A gallery already queued or running
+// returns that job instead of a new one.
+func (c *Client) StartPrefill(ctx context.Context, id int64, token, title string, urls []string) (PrefillJob, error) {
+	payload, err := json.Marshal(map[string]any{
+		"gallery_id": id,
+		"token":      token,
+		"title":      title,
+		"urls":       urls,
+	})
+	if err != nil {
+		return PrefillJob{}, err
+	}
+	var out PrefillJob
+	if err := c.do(ctx, http.MethodPost, "/api/prefill", nil, bytes.NewReader(payload), &out); err != nil {
+		return PrefillJob{}, err
+	}
+	return out, nil
+}
+
+// PrefillJobs lists the most recent jobs.
+func (c *Client) PrefillJobs(ctx context.Context) ([]PrefillJob, error) {
+	var out struct {
+		Jobs []PrefillJob `json:"jobs"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/prefill", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Jobs, nil
+}
+
+// PrefillJob fetches one job, for polling its progress.
+func (c *Client) PrefillJob(ctx context.Context, jobID string) (PrefillJob, error) {
+	var out PrefillJob
+	path := "/api/prefill/" + url.PathEscape(jobID)
+	if err := c.do(ctx, http.MethodGet, path, nil, nil, &out); err != nil {
+		return PrefillJob{}, err
+	}
+	return out, nil
+}
+
+// CancelPrefill stops a queued or running job.
+func (c *Client) CancelPrefill(ctx context.Context, jobID string) (PrefillJob, error) {
+	var out PrefillJob
+	path := "/api/prefill/" + url.PathEscape(jobID) + "/cancel"
+	if err := c.do(ctx, http.MethodPost, path, nil, nil, &out); err != nil {
+		return PrefillJob{}, err
+	}
+	return out, nil
+}
+
+// DeletePrefill removes a finished job's record.
+func (c *Client) DeletePrefill(ctx context.Context, jobID string) error {
+	return c.do(ctx, http.MethodDelete, "/api/prefill/"+url.PathEscape(jobID), nil, nil, nil)
 }
 
 func (c *Client) UpdateProgress(ctx context.Context, id int64, token string, page int, progress float64, completed bool) error {

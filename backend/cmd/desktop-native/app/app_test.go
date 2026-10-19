@@ -108,6 +108,68 @@ func newFakeServerWithHooks(t *testing.T, onImage func(r *http.Request)) *httpte
 		}
 		fmt.Fprintln(w, `{"type":"done","total":3}`)
 	})
+	mux.HandleFunc("/api/gallery-cache/1/tok1/pages", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprintln(w, `{"type":"meta","total":3}`)
+		for i := 0; i < 3; i++ {
+			fmt.Fprintf(w, `{"type":"page","index":%d,"page_url":"https://img.example/page-%d.jpg"}`+"\n", i, i)
+		}
+		fmt.Fprintln(w, `{"type":"done","total":3}`)
+	})
+
+	// One prefill job: starts queued, then reports progress on each poll.
+	prefillPolls := 0
+	mux.HandleFunc("/api/prefill", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			var body struct {
+				GalleryID int64    `json:"gallery_id"`
+				Token     string   `json:"token"`
+				Title     string   `json:"title"`
+				URLs      []string `json:"urls"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			writeJSON(w, map[string]any{
+				"id": "job-1", "gallery_id": body.GalleryID, "token": body.Token,
+				"title": body.Title, "status": "queued", "total": len(body.URLs),
+			})
+		case http.MethodGet:
+			writeJSON(w, map[string]any{"jobs": []map[string]any{
+				{"id": "job-1", "gallery_id": 1, "token": "tok1", "title": "示例 A",
+					"status": "running", "total": 3,
+					"progress": map[string]any{"done": 1, "cached": 0, "fetched": 1}},
+			}})
+		}
+	})
+	mux.HandleFunc("/api/prefill/job-1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			writeJSON(w, map[string]any{"deleted": 1})
+			return
+		}
+		prefillPolls++
+		status, done := "running", 1
+		if prefillPolls > 2 {
+			status, done = "completed", 3
+		}
+		writeJSON(w, map[string]any{
+			"id": "job-1", "gallery_id": 1, "token": "tok1", "title": "示例 A",
+			"status": status, "total": 3, "failed_count": 0,
+			"progress": map[string]any{"done": done, "cached": 0, "fetched": done},
+		})
+	})
+	mux.HandleFunc("/api/prefill/job-1/cancel", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{
+			"id": "job-1", "gallery_id": 1, "token": "tok1", "title": "示例 A",
+			"status": "cancelled", "total": 3,
+		})
+	})
+	mux.HandleFunc("/api/prefill/job-1/zip", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/zip")
+		_, _ = w.Write([]byte("PK"))
+	})
+	mux.HandleFunc("/api/prefill/job-1/delete", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"deleted": 1})
+	})
 
 	shelf := []map[string]any{{
 		"id": 1, "token": "tok1", "title": "示例 A", "category": "doujinshi",
@@ -444,6 +506,82 @@ func TestReaderTapFitAndJump(t *testing.T) {
 	waitText(t, tt, "2 / 3 页")
 	tt.ClickAt(1200, 400)
 	waitText(t, tt, "1 / 3 页")
+}
+
+// TestDownloadsStartAndPoll drives the offline download flow: the detail page
+// queues a prefill job with the gallery's pages, and the download page shows
+// it running and then completed as the backend reports progress.
+func TestDownloadsStartAndPoll(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "开始阅读")
+
+	if err := tt.Click("离线下载"); err != nil {
+		t.Fatalf("click 离线下载: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if tt.HasText("查看下载") {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if !tt.HasText("查看下载") {
+		t.Fatalf("detail page does not offer 查看下载; texts=%q", tt.Texts())
+	}
+	if err := tt.Click("查看下载"); err != nil {
+		t.Fatalf("click 查看下载: %v", err)
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if a.router.Path() == "/downloads" && len(a.downloads.items) > 0 {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if p := a.router.Path(); p != "/downloads" {
+		t.Fatalf("path after 查看下载 = %q", p)
+	}
+
+	// The fake backend reports running twice, then completed. The page arms a
+	// c.After timer for the next poll, which the tester's clock drives: move
+	// it past the interval and render. Three rounds cover the two "running"
+	// answers and the last one.
+	for i := 0; i < 3; i++ {
+		tt.Advance(downloadPollInterval)
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !tt.HasText("已完成") {
+		t.Fatalf("download did not reach 已完成; texts=%q", tt.Texts())
+	}
+	if got := a.downloads.items; len(got) != 1 || got[0].ID != "job-1" {
+		t.Fatalf("downloads = %+v", got)
+	}
+
+	// A finished job can be deleted from the list.
+	if r, _ := tt.Find("删除"); r.W == 0 {
+		t.Fatalf("删除 has no layout; texts=%q", tt.Texts()[14:])
+	}
+	if err := tt.Click("删除"); err != nil {
+		t.Fatalf("click 删除: %v", err)
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if len(a.downloads.items) == 0 {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if len(a.downloads.items) != 0 {
+		t.Fatalf("job still listed after 删除: %+v", a.downloads.items)
+	}
 }
 
 func TestSearchFilters(t *testing.T) {

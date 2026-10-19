@@ -56,8 +56,9 @@ type App struct {
 	cacheMaxBusy  bool
 	cacheMaxErr   string
 
-	lists   map[string]*listState
-	details map[int64]*detailState
+	lists     map[string]*listState
+	details   map[int64]*detailState
+	downloads Downloads
 
 	searchQuery string
 	// searchApplied is the text the debounce timer has already been armed
@@ -122,6 +123,11 @@ type detailState struct {
 	// the chosen item.
 	thumbGrid *ui.GridState
 	thumbSel  int
+
+	// offline download started from this page.
+	downloadBusy bool
+	downloadErr  string
+	downloadJob  string
 }
 
 func New(client *Client) *App {
@@ -189,6 +195,7 @@ func (a *App) adoptBackendLocked(baseURL string) {
 	}
 	a.lists = make(map[string]*listState)
 	a.details = make(map[int64]*detailState)
+	a.downloads = Downloads{}
 	a.cacheLoaded = false
 	a.cacheBytes = 0
 	a.cacheMax = 0
@@ -320,7 +327,7 @@ func (a *App) route(c *ui.Context, r *ui.Route) {
 		a.listPage(c, "/recently-read", "最近阅读", "继续上次的进度", kindRecent)
 	case r.Match("/downloads"):
 		r.Title("下载管理")
-		a.emptyPage(c, "下载管理", "还没有离线下载任务", "从画廊详情页开始预填充")
+		a.downloadsPage(c)
 	case r.Match("/tag-settings"):
 		r.Title("标签设置")
 		a.emptyPage(c, "标签设置", "标签翻译与偏好", "接入后端后在这里管理")
@@ -806,7 +813,7 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 						}
 					})
 
-					ui.Row(c).Gap(8).Children(func() {
+					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 						label := "加入书架"
 						if s.inBookshelf {
 							label = "移出书架"
@@ -814,7 +821,24 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 						if ui.Button(c, label).Disabled(s.busy).Clicked() {
 							a.toggleBookshelf(s)
 						}
+						dl := "离线下载"
+						if s.downloadBusy {
+							dl = "正在创建任务…"
+						}
+						if s.downloadJob != "" {
+							dl = "查看下载"
+						}
+						if ui.Button(c, dl).Disabled(s.downloadBusy).Clicked() {
+							if s.downloadJob != "" {
+								a.router.Push("/downloads")
+							} else {
+								a.startDownload(s)
+							}
+						}
 					})
+					if s.downloadErr != "" {
+						ui.Text(c, s.downloadErr).FontSize(11).TextColor(t.TextMuted)
+					}
 					if !s.shelfKnown {
 						ui.Text(c, "书架状态暂不可用").FontSize(11).TextColor(t.TextMuted)
 					}
