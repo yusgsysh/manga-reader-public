@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -58,7 +59,11 @@ type App struct {
 	details map[int64]*detailState
 
 	searchQuery string
-	reader      Reader
+	// searchApplied is the text the debounce timer has already been armed
+	// for, and searchSeq invalidates timers superseded by newer keystrokes.
+	searchApplied string
+	searchSeq     int
+	reader        Reader
 }
 
 type listKind int
@@ -188,6 +193,20 @@ func (a *App) update(fn func()) {
 		return
 	}
 	run()
+}
+
+// toggleFullscreen flips the main window between full screen and windowed.
+// Without a window (tests) it does nothing.
+func (a *App) toggleFullscreen() {
+	if a.win == nil {
+		return
+	}
+	a.win.ToggleFullScreen()
+}
+
+// isFullscreen reports the window's full-screen state, false without a window.
+func (a *App) isFullscreen() bool {
+	return a.win != nil && a.win.IsFullScreen()
 }
 
 // View builds the whole window.
@@ -387,6 +406,30 @@ func (a *App) resetList(s *listState, query string) {
 	a.reloadList(s)
 }
 
+// searchDebounce is how long the search box waits after the last keystroke
+// before hitting the API, so typing "gallery" is one request, not seven.
+const searchDebounce = 300 * time.Millisecond
+
+// scheduleSearch arms the debounce timer when the search text changed since
+// the last time we armed it. It runs from the view (the app lock is held); the
+// timer applies the query later through a.update.
+func (a *App) scheduleSearch(s *listState) {
+	if a.searchQuery == a.searchApplied {
+		return
+	}
+	a.searchApplied = a.searchQuery
+	a.searchSeq++
+	seq := a.searchSeq
+	time.AfterFunc(searchDebounce, func() {
+		a.update(func() {
+			if a.searchSeq != seq {
+				return
+			}
+			a.resetList(s, a.searchApplied)
+		})
+	})
+}
+
 func (a *App) loadMore(s *listState) {
 	if s.loading || !a.hasMore(s) {
 		return
@@ -570,7 +613,7 @@ func displayTitle(g Gallery) string {
 func (a *App) searchPage(c *ui.Context) {
 	t := c.Theme()
 	s := a.listFor("/search", kindSearch)
-	a.resetList(s, a.searchQuery)
+	a.scheduleSearch(s)
 	a.ensureList(s)
 
 	ui.Column(c).Fill().Padding(20, 24).Gap(14).Children(func() {

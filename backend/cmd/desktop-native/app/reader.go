@@ -163,6 +163,10 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 			r.resetView()
 		}
 	}
+	// Full screen works whether or not the pages have arrived yet.
+	if c.Shortcut(0, ui.KeyF) {
+		a.toggleFullscreen()
+	}
 
 	title := r.title
 	if d := a.details[id]; d != nil && d.loaded && d.g.Title != "" {
@@ -198,6 +202,13 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 			if ui.PrimaryButton(c, "下一页").Disabled(!r.loaded || r.page+1 >= len(r.pages)).Clicked() {
 				a.readerNext(r)
 			}
+			fullscreen := "全屏"
+			if a.isFullscreen() {
+				fullscreen = "退出全屏"
+			}
+			if ui.Button(c, fullscreen).Label("切换全屏").Clicked() {
+				a.toggleFullscreen()
+			}
 		})
 
 		switch {
@@ -211,6 +222,10 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 		case !r.loaded || len(r.pages) == 0:
 			a.emptyPage(c, "没有页面", "这个画廊没有可读取的页面", "")
 		default:
+			// Start the neighbouring pages downloading before the frame is
+			// painted, so the visible page and its successors arrive together.
+			a.preloadPages(r)
+
 			area := ui.Box(c).Fill().Focusable().Clip()
 			area.HandleInput(func(ev ui.InputEvent) bool {
 				switch ev.Kind {
@@ -257,11 +272,34 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 
 			ui.Progress(c, float64(r.page+1)/float64(len(r.pages))).FillWidth().Height(3)
 			ui.Row(c).Padding(6, 16).Children(func() {
-				ui.Text(c, "← → 翻页 · Ctrl + 滚轮缩放 · 拖拽平移 · 0 重置").
+				ui.Text(c, "← → 翻页 · Ctrl + 滚轮缩放 · 拖拽平移 · 0 重置 · F 全屏").
 					FontSize(11).TextColor(t.TextMuted)
 			})
 		}
 	})
+}
+
+// readerPreloadPages is how many pages past the visible one we warm up, so
+// turning the page shows a decoded bitmap instead of a blank frame. One page
+// behind is warmed too, making a step back instant.
+const readerPreloadPages = 2
+
+// preloadPages asks the page-image store for the pages around r.page. Get is
+// cheap once a page is queued or loaded; for a page that is not, it starts the
+// download in the background. The visible page is asked for first so it is not
+// queued behind its neighbours.
+func (a *App) preloadPages(r *Reader) {
+	warm := func(i int) {
+		if i < 0 || i >= len(r.pages) {
+			return
+		}
+		a.pageImages.Get(a.client.PageImageURL(r.pages[i]))
+	}
+	warm(r.page)
+	for i := 1; i <= readerPreloadPages; i++ {
+		warm(r.page + i)
+	}
+	warm(r.page - 1)
 }
 
 func clampFloat(v, lo, hi float32) float32 {

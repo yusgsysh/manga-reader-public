@@ -57,9 +57,9 @@ func newFakeServer(t *testing.T) *httptest.Server {
 }
 
 // newFakeServerWithHooks is newFakeServer plus an optional callback invoked
-// with each image proxy request path, so tests can assert which endpoint
-// (live vs read-through cache) the UI used.
-func newFakeServerWithHooks(t *testing.T, onImage func(path string)) *httptest.Server {
+// with each image proxy request, so tests can assert which endpoint (live vs
+// read-through cache) the UI used and which page URLs it fetched.
+func newFakeServerWithHooks(t *testing.T, onImage func(r *http.Request)) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 
@@ -144,7 +144,7 @@ func newFakeServerWithHooks(t *testing.T, onImage func(path string)) *httptest.S
 
 	image := func(w http.ResponseWriter, r *http.Request) {
 		if onImage != nil {
-			onImage(r.URL.Path)
+			onImage(r)
 		}
 		if r.URL.Query().Get("url") == "" {
 			http.Error(w, `{"error":"missing url"}`, http.StatusBadRequest)
@@ -264,6 +264,64 @@ func TestGalleryToReader(t *testing.T) {
 	waitText(t, tt, "3 / 3 页")
 }
 
+// TestReaderPreloadsNearbyPages checks that opening the reader warms the
+// neighbouring pages through the image cache proxy, so page turns do not wait
+// on a fresh download.
+func TestReaderPreloadsNearbyPages(t *testing.T) {
+	var mu sync.Mutex
+	fetched := map[string]bool{}
+	srv := newFakeServerWithHooks(t, func(r *http.Request) {
+		if r.URL.Path != "/api/image-cache/page" {
+			return
+		}
+		mu.Lock()
+		fetched[r.URL.Query().Get("url")] = true
+		mu.Unlock()
+	})
+
+	client := NewClient(srv.URL)
+	client.UseImageCache(true)
+	a := New(client)
+	tt := ui.NewTester(a.View, 1280, 860)
+
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "开始阅读")
+	if err := tt.Click("开始阅读"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "1 / 3 页")
+
+	want := []string{
+		"https://img.example/page-0.jpg",
+		"https://img.example/page-1.jpg",
+		"https://img.example/page-2.jpg",
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		mu.Lock()
+		n := len(fetched)
+		mu.Unlock()
+		if n >= len(want) {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, url := range want {
+		if !fetched[url] {
+			t.Errorf("page %s was not preloaded; fetched=%v", url, fetched)
+		}
+	}
+}
+
 func TestSearchFilters(t *testing.T) {
 	a, tt := newTestApp(t)
 	if err := tt.Click("搜索"); err != nil {
@@ -337,10 +395,10 @@ func TestImageURLsUseCacheProxyWhenEnabled(t *testing.T) {
 func TestHomeFetchesCoversThroughCacheProxy(t *testing.T) {
 	var mu sync.Mutex
 	cacheHits, liveHits := 0, 0
-	srv := newFakeServerWithHooks(t, func(path string) {
+	srv := newFakeServerWithHooks(t, func(r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
-		switch path {
+		switch r.URL.Path {
 		case "/api/image-cache/thumbnail", "/api/image-cache/page":
 			cacheHits++
 		case "/api/image/thumbnail", "/api/image/page":
@@ -658,5 +716,71 @@ func TestSaveCacheLimitRejectsBadInput(t *testing.T) {
 	}
 	if backend.maxBytesValue() != 1<<20 {
 		t.Fatalf("limit changed to %d despite invalid input", backend.maxBytesValue())
+	}
+}
+
+// TestSearchDebouncesRequests proves typing several characters quickly results
+// in a single API call for the final text, plus the initial empty query.
+func TestSearchDebouncesRequests(t *testing.T) {
+	var mu sync.Mutex
+	var queries []string
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/galleries", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{
+			"page": 0, "page_size": 25, "total": 1,
+			"results": []map[string]any{galleryItem(1, "tok1", "示例 A", "doujinshi", 3)},
+		})
+	})
+	mux.HandleFunc("/api/search", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		queries = append(queries, r.URL.Query().Get("q"))
+		mu.Unlock()
+		writeJSON(w, map[string]any{"page": 0, "page_size": 25, "total": 0, "results": []map[string]any{}})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	a := New(NewClient(srv.URL))
+	tt := ui.NewTester(a.View, 1280, 860)
+
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("搜索"); err != nil {
+		t.Fatalf("click 搜索: %v", err)
+	}
+	navSettle(tt)
+
+	// Type three characters, rendering between each so the debounce sees
+	// every change and keeps rescheduling.
+	for _, ch := range []string{"a", "b", "c"} {
+		tt.Type(ch)
+		tt.Frame()
+	}
+
+	// Wait for the debounced request to land.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		mu.Lock()
+		last := ""
+		if n := len(queries); n > 0 {
+			last = queries[n-1]
+		}
+		mu.Unlock()
+		if last == "abc" {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	mu.Lock()
+	got := append([]string(nil), queries...)
+	mu.Unlock()
+
+	if len(got) != 2 {
+		t.Fatalf("search queries = %v, want [\"\" \"abc\"]", got)
+	}
+	if got[0] != "" || got[1] != "abc" {
+		t.Fatalf("search queries = %v, want [\"\" \"abc\"]", got)
 	}
 }
