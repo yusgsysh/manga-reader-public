@@ -26,7 +26,7 @@
 | M2 单机化：进程内后端 | ✅ 完成 | `cmd/desktop-native/internal/desktop` 启动 Gin；`MANGA_READER_API` 变为可选覆盖；单实例 + 每次启动的随机访问令牌 |
 | M3 本地图片缓存 | ✅ 完成 | FS 缓存 + UI 默认走 `/api/image-cache/*` + 容量上限与按时间淘汰 |
 | M4 首次启动与设置 | ✅ 基本完成 | 首次设置向导 + 设置页（路径、缓存占用/上限、清空、重配 Cookies）；缺主题/语言、钥匙串 |
-| M5 阅读体验补齐 | 🚧 进行中 | 已有翻页/缩放/平移/进度/预加载/全屏；缺缩略图、双页、适应宽度、RTL |
+| M5 阅读体验补齐 | 🚧 进行中 | 已有翻页/缩放/平移/进度/预加载/全屏/详情页缩略图网格；缺双页、适应宽度、RTL |
 | M6 书架与进度 | ✅ 基本完成 | 列表、加入/移出、进度读取与上报 |
 | M7 离线下载 | ⬜ 未开始 | 复用现有 prefill 接口 |
 | M8 标签设置与翻译 | ⬜ 未开始 | IndexedDB 逻辑迁移到 SQLite/内存 |
@@ -122,7 +122,7 @@
 - [x] `desktop.Server.ClearCache` / `CacheInfo` / `CacheMaxBytes` / `SetCacheMaxBytes`，`FSCache.Size` / `Prune`。
 - [x] **内嵌后端访问令牌**：每次启动随机生成（`crypto/rand`），`Options.AuthToken` + Gin 中间件常量时间校验；API 客户端与 `ImageStore` 携带 `X-Manga-Reader-Token`，并支持 `access_token` 查询参数兜底；缺失/错误返回 401。
 - [x] **单实例**：`internal/singleinstance` 在配置目录监听 `instance.sock`，第二个进程连接并发送 `focus` 后退出，主进程 `Window.Show()/Focus()`；崩溃遗留的 socket 会被探测并接管。
-- [x] 新增测试：设置保存往返 + 0600 权限；缓存 size/clear/prune（按最旧淘汰、超限自动清理、上限开关）；缓存上限解析与 env 覆盖；首次设置连接后端、空 cookie 拒绝；设置页缓存占用/上限/清空；保存上限与非法输入校验；令牌中间件（缺失/正确/错误/查询参数）；客户端与 ImageStore 携带令牌；单实例（主/次、聚焦回调、Close 后接管、过期 socket 接管）；搜索防抖（连续输入只发一次请求）；阅读器预加载（相邻页经缓存代理预取）；setup/settings 快照。
+- [x] 新增测试：设置保存往返 + 0600 权限；缓存 size/clear/prune（按最旧淘汰、超限自动清理、上限开关）；缓存上限解析与 env 覆盖；首次设置连接后端、空 cookie 拒绝；设置页缓存占用/上限/清空；保存上限与非法输入校验；令牌中间件（缺失/正确/错误/查询参数）；客户端与 ImageStore 携带令牌；单实例（主/次、聚焦回调、Close 后接管、过期 socket 接管）；搜索防抖（连续输入只发一次请求）；阅读器预加载（相邻页经缓存代理预取）；详情页缩略图网格（经缓存代理加载、点击跳到指定页）；setup/settings 快照。
 - [x] 本地实跑：无 cookie 进入设置界面；有 cookie 自动启动内嵌服务并写入 `config.json`。
 - [x] `go test ./...`、`go test -race ./internal/cache/... ./cmd/desktop-native/...`、`go vet`、`go build ./...` 通过。
 - [x] 本地实跑：`go run ./cmd/desktop-native` 打印内嵌地址并打开窗口。
@@ -162,10 +162,10 @@
 
 ### 3.2 P1：阅读体验
 
-- [ ] 页面缩略图网格（详情页）
-  - [ ] 解析 `/pages` 的 `thumbnail` 精灵图坐标。
-  - [ ] 调用 `/api/image-cache/page-thumbnail`（或 live 端点）。
-  - [ ] 虚拟化网格、当前页高亮、点击跳页。
+- [x] 页面缩略图网格（详情页）
+  - [x] 解析 `/pages` 的 `thumbnail` 精灵图坐标（后端按 `id`+`token`+`index` 切图）。
+  - [x] 调用 `/api/image-cache/page-thumbnail`（或 live 端点）。
+  - [x] 虚拟化网格（`GridView` 只构建可见格）、点击跳转到对应页并覆盖保存的进度。
 - [ ] 阅读器预加载
   - [x] 预取当前页 ±1/±2（`readerPreloadPages = 2`，含前一页；当前页优先入队）。
   - [ ] 翻页时取消过期预取（当前依赖 `ImageStore` 的窗口上限，不主动取消）。
@@ -274,7 +274,8 @@
 - [x] ~~搜索无防抖，快速输入会发出多个请求（旧的会被 `loadID` 丢弃）。~~ 已加 300ms 防抖。
 - [ ] 阅读进度每翻一页发一次 PUT，快速翻页会产生较多请求。
 - [ ] 列表分页只有「加载更多」，没有滚动触底自动加载（`GridView` 暂未暴露滚动位置回调）。
-- [ ] 详情页页面缩略图仍是占位文案。
+- [x] ~~详情页页面缩略图仍是占位文案。~~ 已接虚拟化缩略图网格，点击跳页。
+- [ ] 缩略图网格的选中项没有与阅读进度联动高亮。
 - [ ] 标签直接显示 `namespace:name`，没有颜色/翻译。
 - [x] ~~设置页是占位：深色模式开关、缓存信息都未接真实逻辑。~~ 存储信息与清空缓存已接上；深色模式仍是占位（跟随系统）。
 - [ ] 下载管理/标签设置是空状态页。

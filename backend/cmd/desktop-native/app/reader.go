@@ -146,6 +146,17 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 	r := &a.reader
 	t := c.Theme()
 
+	// A thumbnail click on the detail page asks for a particular page; apply
+	// it once the list is here, overriding the saved progress.
+	if r.loaded && a.readerStart >= 0 {
+		if a.readerStart < len(r.pages) {
+			r.page = a.readerStart
+			r.resetView()
+			a.saveProgress(r)
+		}
+		a.readerStart = -1
+	}
+
 	if r.loaded {
 		if c.Shortcut(0, ui.KeyRight) || c.Shortcut(0, ui.KeyDown) || c.Shortcut(0, ui.KeySpace) {
 			a.readerNext(r)

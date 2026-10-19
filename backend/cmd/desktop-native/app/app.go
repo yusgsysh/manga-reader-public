@@ -28,6 +28,7 @@ type App struct {
 	covers     *CoverCache
 	images     *ImageStore
 	pageImages *ImageStore
+	pageThumbs *ImageStore
 	pageCache  *PageCache
 
 	// backend is the in-process API lifecycle; nil in tests and when the app
@@ -64,6 +65,9 @@ type App struct {
 	searchApplied string
 	searchSeq     int
 	reader        Reader
+	// readerStart is the page the next reader open should show, set when a
+	// detail-page thumbnail is clicked; -1 means "resume saved progress".
+	readerStart int
 }
 
 type listKind int
@@ -111,23 +115,31 @@ type detailState struct {
 	inBookshelf bool
 	shelfKnown  bool
 	busy        bool
+
+	// thumbGrid scrolls the detail page's page-thumbnail grid; thumbSel is
+	// the chosen item.
+	thumbGrid *ui.GridState
+	thumbSel  int
 }
 
 func New(client *Client) *App {
 	a := &App{
-		router:     ui.NewRouter("/"),
-		selected:   "/",
-		lastList:   "/",
-		client:     client,
-		covers:     NewCoverCache(),
-		images:     NewImageStore(128),
-		pageImages: NewImageStore(6),
-		pageCache:  NewPageCache(4),
-		lists:      make(map[string]*listState),
-		details:    make(map[int64]*detailState),
+		router:      ui.NewRouter("/"),
+		selected:    "/",
+		lastList:    "/",
+		client:      client,
+		covers:      NewCoverCache(),
+		images:      NewImageStore(128),
+		pageImages:  NewImageStore(6),
+		pageThumbs:  NewImageStore(96),
+		pageCache:   NewPageCache(4),
+		lists:       make(map[string]*listState),
+		details:     make(map[int64]*detailState),
+		readerStart: -1,
 	}
 	a.images.SetAuth(client.user, client.password)
 	a.pageImages.SetAuth(client.user, client.password)
+	a.pageThumbs.SetAuth(client.user, client.password)
 	return a
 }
 
@@ -136,6 +148,7 @@ func (a *App) Attach(w *mygo.Window) {
 	a.win = w
 	a.images.SetWindow(w)
 	a.pageImages.SetWindow(w)
+	a.pageThumbs.SetWindow(w)
 }
 
 // SetBackend installs the in-process backend lifecycle. When the backend is
@@ -163,6 +176,7 @@ func (a *App) setAuthTokenLocked(token string) {
 	a.client.SetAuthToken(token)
 	a.images.SetAuthToken(token)
 	a.pageImages.SetAuthToken(token)
+	a.pageThumbs.SetAuthToken(token)
 }
 
 // adoptBackendLocked points the API client at the backend and drops cached
@@ -759,6 +773,7 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 				}
 				ui.Text(c, displayTitle(g)).FontSize(22).Bold().Grow(1)
 				if ui.PrimaryButton(c, "开始阅读").Clicked() {
+					a.readerStart = -1
 					a.router.Push(fmt.Sprintf("/reader/%d/%s", g.ID, g.Token))
 				}
 			})
@@ -797,9 +812,6 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 						if ui.Button(c, label).Disabled(s.busy).Clicked() {
 							a.toggleBookshelf(s)
 						}
-						if ui.Button(c, "页面缩略图").Clicked() {
-							c.Toast("页面缩略图网格稍后实现")
-						}
 					})
 					if !s.shelfKnown {
 						ui.Text(c, "书架状态暂不可用").FontSize(11).TextColor(t.TextMuted)
@@ -808,10 +820,53 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 			})
 
 			ui.Divider(c)
-			ui.Text(c, "页面缩略图").FontSize(16).Bold()
-			ui.Text(c, "页面缩略图会在这里按分页网格显示。").FontSize(12).TextColor(t.TextMuted)
+			a.pageThumbGrid(c, g, s)
 		})
 	})
+}
+
+// pageThumbGrid draws the detail page's page thumbnails, one per page, in a
+// virtualized grid that fetches only the cells on screen. A click opens the
+// reader at that page.
+func (a *App) pageThumbGrid(c *ui.Context, g Gallery, s *detailState) {
+	t := c.Theme()
+	ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+		ui.Text(c, "页面缩略图").FontSize(16).Bold()
+		if g.Pages > 0 {
+			ui.Textf(c, "共 %d 页 · 点击跳转", g.Pages).FontSize(12).TextColor(t.TextMuted)
+		}
+	})
+	if g.Pages <= 0 {
+		ui.Text(c, "页面数量未知，打开阅读器后可见。").FontSize(12).TextColor(t.TextMuted)
+		return
+	}
+
+	if s.thumbGrid == nil {
+		s.thumbSel = -1
+		s.thumbGrid = &ui.GridState{
+			Selected: &s.thumbSel,
+			Key:      func(i int) any { return i },
+			Label:    func(i int) string { return fmt.Sprintf("第 %d 页", i+1) },
+		}
+	}
+	ui.GridView(c, s.thumbGrid, g.Pages, 120, 190, func(i int) {
+		cell := ui.Column(c).Gap(4).Focusable().Label(fmt.Sprintf("第 %d 页", i+1))
+		cell.Children(func() {
+			ui.Image(c, a.pageThumbs.Get(a.client.PageThumbnailURL(g.ID, g.Token, i))).
+				AspectRatio(200.0 / 282.0).Fit(ui.Cover).Radius(8)
+			ui.Textf(c, "%d", i+1).FontSize(11).TextColor(t.TextMuted)
+		})
+		if cell.Clicked() {
+			a.openReaderAt(g.ID, g.Token, i)
+		}
+	}).Height(420).Clip()
+}
+
+// openReaderAt opens the reader showing page (0-based), whatever page the
+// saved progress would have resumed.
+func (a *App) openReaderAt(id int64, token string, page int) {
+	a.readerStart = page
+	a.router.Push(fmt.Sprintf("/reader/%d/%s", id, token))
 }
 
 func (a *App) toggleBookshelf(s *detailState) {

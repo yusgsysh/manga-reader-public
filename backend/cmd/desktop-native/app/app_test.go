@@ -153,10 +153,23 @@ func newFakeServerWithHooks(t *testing.T, onImage func(r *http.Request)) *httpte
 		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write(fakeImagePNG)
 	}
+	pageThumb := func(w http.ResponseWriter, r *http.Request) {
+		if onImage != nil {
+			onImage(r)
+		}
+		if r.URL.Query().Get("index") == "" {
+			http.Error(w, `{"error":"missing index"}`, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(fakeImagePNG)
+	}
 	mux.HandleFunc("/api/image/thumbnail", image)
 	mux.HandleFunc("/api/image/page", image)
 	mux.HandleFunc("/api/image-cache/thumbnail", image)
 	mux.HandleFunc("/api/image-cache/page", image)
+	mux.HandleFunc("/api/image/page-thumbnail", pageThumb)
+	mux.HandleFunc("/api/image-cache/page-thumbnail", pageThumb)
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -320,6 +333,60 @@ func TestReaderPreloadsNearbyPages(t *testing.T) {
 			t.Errorf("page %s was not preloaded; fetched=%v", url, fetched)
 		}
 	}
+}
+
+// TestDetailThumbnailGridJumpsToPage checks the detail page's thumbnail grid:
+// cells fetch through the cache proxy, and clicking one opens the reader at
+// that page instead of the saved progress.
+func TestDetailThumbnailGridJumpsToPage(t *testing.T) {
+	var mu sync.Mutex
+	thumbs := 0
+	srv := newFakeServerWithHooks(t, func(r *http.Request) {
+		if r.URL.Path == "/api/image-cache/page-thumbnail" {
+			mu.Lock()
+			thumbs++
+			mu.Unlock()
+		}
+	})
+
+	client := NewClient(srv.URL)
+	client.UseImageCache(true)
+	a := New(client)
+	tt := ui.NewTester(a.View, 1280, 860)
+
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "共 3 页 · 点击跳转")
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		mu.Lock()
+		n := thumbs
+		mu.Unlock()
+		if n >= 3 {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	mu.Lock()
+	got := thumbs
+	mu.Unlock()
+	if got < 3 {
+		t.Fatalf("page thumbnail requests = %d, want at least 3", got)
+	}
+
+	if err := tt.Click("第 2 页"); err != nil {
+		t.Fatalf("click thumbnail: %v", err)
+	}
+	navSettle(tt)
+	if p := a.router.Path(); p != "/reader/1/tok1" {
+		t.Fatalf("path after thumbnail click = %q", p)
+	}
+	waitText(t, tt, "2 / 3 页")
 }
 
 func TestSearchFilters(t *testing.T) {
