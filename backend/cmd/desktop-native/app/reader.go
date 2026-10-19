@@ -25,6 +25,15 @@ type Reader struct {
 	loaded  bool
 	err     string
 	loadID  int
+	// partial is how many pages have streamed in so far, and complete tells
+	// that the backend finished the list. A large gallery streams for tens
+	// of seconds: the reader shows the pages it has and says how many more
+	// are expected.
+	partial  int
+	complete bool
+	// started is set once a load was launched for id/token, so a frame does
+	// not launch it again after a failure.
+	started bool
 
 	zoom  float32
 	panX  float32
@@ -77,15 +86,21 @@ func (r *Reader) zoomBy(d float32) {
 
 func (a *App) ensureReader(id int64, token string) {
 	r := &a.reader
-	if r.id == id && r.token == token && (r.loading || r.loaded) {
+	// started covers the failure case: after a failed load, loading, loaded
+	// and the page list are all empty, so a frame that ran again would start
+	// the load anew forever. The reader then shows the error until Retry.
+	if r.id == id && r.token == token && (r.loading || r.loaded || r.started) {
 		return
 	}
 	r.id, r.token = id, token
+	r.started = false
 	r.page = 0
 	r.pages = nil
 	r.total = 0
 	r.loaded = false
 	r.err = ""
+	r.partial = 0
+	r.complete = false
 	r.lastSaved = -1
 	r.resetView()
 	r.title = "阅读器"
@@ -98,9 +113,34 @@ func (a *App) ensureReader(id int64, token string) {
 
 func (a *App) startReaderLoad(r *Reader) {
 	r.loading = true
+	r.started = true
 	r.err = ""
+	// partial is how many pages the view already shows. Until the backend
+	// sends the first one, the reader waits; after that it stays readable
+	// while the rest arrives.
+	r.partial = 0
+	r.complete = false
 	lid := r.loadID
 	id, token := r.id, r.token
+
+	// onPage hears each page as it is scraped, from the stream's goroutine:
+	// it copies what arrived under update, without touching ui.
+	onPage := func(index int, pageURL string, total int) {
+		a.update(func() {
+			if r.loadID != lid || index != len(r.pages) {
+				return
+			}
+			r.pages = append(r.pages, pageURL)
+			if total > 0 {
+				r.total = total
+			}
+			r.partial = len(r.pages)
+			r.loaded = true
+			// The first page makes the reader usable: drop the spinner so
+			// the toolbar and the page show while the rest streams in.
+			r.loading = false
+		})
+	}
 
 	go func() {
 		ctx := context.Background()
@@ -108,9 +148,9 @@ func (a *App) startReaderLoad(r *Reader) {
 		if p, err := a.client.Progress(ctx, id, token); err == nil {
 			progress = p
 		}
-		total, urls, err := a.client.Pages(ctx, id, token)
+		total, urls, err := a.client.PagesStreaming(ctx, id, token, onPage)
 		if err != nil {
-			total, urls, err = a.client.CachedPages(ctx, id, token)
+			total, urls, err = a.client.CachedPagesStreaming(ctx, id, token, onPage)
 		}
 		a.update(func() {
 			if r.loadID != lid {
@@ -118,11 +158,18 @@ func (a *App) startReaderLoad(r *Reader) {
 			}
 			r.loading = false
 			if err != nil {
-				r.err = err.Error()
+				// Pages already streamed stay readable; the error is only
+				// fatal when nothing arrived.
+				if len(r.pages) == 0 {
+					r.err = err.Error()
+					r.loaded = false
+				}
 				return
 			}
 			r.pages = urls
 			r.total = total
+			r.partial = len(urls)
+			r.complete = true
 			r.loaded = true
 			if progress.CurrentPage > 0 && progress.CurrentPage < len(urls) {
 				r.page = progress.CurrentPage
@@ -135,6 +182,10 @@ func (a *App) retryReader(r *Reader) {
 	r.loading = false
 	r.loaded = false
 	r.err = ""
+	r.pages = nil
+	r.total = 0
+	r.partial = 0
+	r.complete = false
 	r.loadID++
 	a.startReaderLoad(r)
 }
@@ -313,6 +364,13 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 			ui.Column(c).Gap(1).Grow(1).Children(func() {
 				ui.Text(c, title).Bold().FontSize(14).SingleLine()
 				if r.loaded {
+					// While the backend still scrapes, say how much has
+					// arrived so a big gallery does not look stuck.
+					if !r.complete && r.total > 0 && len(r.pages) < r.total {
+						ui.Textf(c, "已加载 %d / %d 页…", len(r.pages), r.total).
+							FontSize(11).TextColor(t.TextMuted)
+						return
+					}
 					ui.Textf(c, "%d / %d 页 · %d%%", r.page+1, len(r.pages), int(r.zoom*100)).
 						FontSize(11).TextColor(t.TextMuted)
 				} else {
