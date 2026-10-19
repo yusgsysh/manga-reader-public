@@ -21,6 +21,11 @@ type Client struct {
 	user     string
 	password string
 	http     *http.Client
+
+	// imageCache routes image requests through the read-through cache proxy
+	// (/api/image-cache/*). The embedded desktop server always provides it;
+	// against a bare external backend the live proxies are used instead.
+	imageCache bool
 }
 
 func NewClient(rawBaseURL string) *Client {
@@ -41,6 +46,18 @@ func NewClient(rawBaseURL string) *Client {
 }
 
 func (c *Client) BaseURL() string { return c.baseURL }
+
+// UseImageCache enables or disables the read-through cache proxy for images.
+// Call it once at startup, before any image URL is built.
+func (c *Client) UseImageCache(enabled bool) { c.imageCache = enabled }
+
+// imagePath returns the cache or live image proxy path for kind.
+func (c *Client) imagePath(kind string) string {
+	if c.imageCache {
+		return "/api/image-cache/" + kind
+	}
+	return "/api/image/" + kind
+}
 
 // do sends one request and decodes a JSON response into out when it is not
 // nil. A non-2xx response becomes an error carrying the API's message.
@@ -330,24 +347,26 @@ func (c *Client) UpdateProgress(ctx context.Context, id int64, token string, pag
 
 // --- Images ---
 //
-// The live proxies need no MinIO; the cached ones are used once the desktop
-// cache is wired in. Both take the upstream URL as a query parameter.
+// Both the live and the read-through cache proxies take the upstream URL as a
+// query parameter, so switching between them is just a path prefix. The
+// embedded desktop server always has a cache; an external backend may not
+// (its cached endpoints return 503 without MinIO).
 
 func (c *Client) ThumbnailURL(source string) string {
 	if source == "" {
 		return ""
 	}
-	return c.baseURL + "/api/image/thumbnail?url=" + url.QueryEscape(source)
+	return c.baseURL + c.imagePath("thumbnail") + "?url=" + url.QueryEscape(source)
 }
 
 func (c *Client) PageImageURL(source string) string {
 	if source == "" {
 		return ""
 	}
-	return c.baseURL + "/api/image/page?url=" + url.QueryEscape(source)
+	return c.baseURL + c.imagePath("page") + "?url=" + url.QueryEscape(source)
 }
 
 func (c *Client) PageThumbnailURL(id int64, token string, index int) string {
-	return c.baseURL + fmt.Sprintf("/api/image/page-thumbnail?id=%d&token=%s&index=%d",
-		id, url.QueryEscape(token), index)
+	return c.baseURL + fmt.Sprintf("%s?id=%d&token=%s&index=%d",
+		c.imagePath("page-thumbnail"), id, url.QueryEscape(token), index)
 }

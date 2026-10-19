@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -48,6 +49,14 @@ func galleryItem(id int, token, title, category string, pages int) map[string]an
 }
 
 func newFakeServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return newFakeServerWithHooks(t, nil)
+}
+
+// newFakeServerWithHooks is newFakeServer plus an optional callback invoked
+// with each image proxy request path, so tests can assert which endpoint
+// (live vs read-through cache) the UI used.
+func newFakeServerWithHooks(t *testing.T, onImage func(path string)) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 
@@ -131,6 +140,9 @@ func newFakeServer(t *testing.T) *httptest.Server {
 	})
 
 	image := func(w http.ResponseWriter, r *http.Request) {
+		if onImage != nil {
+			onImage(r.URL.Path)
+		}
 		if r.URL.Query().Get("url") == "" {
 			http.Error(w, `{"error":"missing url"}`, http.StatusBadRequest)
 			return
@@ -140,6 +152,8 @@ func newFakeServer(t *testing.T) *httptest.Server {
 	}
 	mux.HandleFunc("/api/image/thumbnail", image)
 	mux.HandleFunc("/api/image/page", image)
+	mux.HandleFunc("/api/image-cache/thumbnail", image)
+	mux.HandleFunc("/api/image-cache/page", image)
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -284,5 +298,78 @@ func TestBackFromReader(t *testing.T) {
 	navSettle(tt)
 	if got := a.router.Path(); got != "/gallery/1/tok1" {
 		t.Fatalf("path after reader back = %q, want /gallery/1/tok1", got)
+	}
+}
+
+func TestImageURLsDefaultToLiveProxy(t *testing.T) {
+	c := NewClient("http://127.0.0.1:8080")
+	if got := c.ThumbnailURL("https://img.example/1.jpg"); !strings.Contains(got, "/api/image/thumbnail?") {
+		t.Fatalf("ThumbnailURL = %q, want live proxy", got)
+	}
+	if got := c.PageImageURL("https://img.example/p0.jpg"); !strings.Contains(got, "/api/image/page?") {
+		t.Fatalf("PageImageURL = %q, want live proxy", got)
+	}
+	if got := c.PageThumbnailURL(1, "tok", 0); !strings.Contains(got, "/api/image/page-thumbnail?") {
+		t.Fatalf("PageThumbnailURL = %q, want live proxy", got)
+	}
+}
+
+func TestImageURLsUseCacheProxyWhenEnabled(t *testing.T) {
+	c := NewClient("http://127.0.0.1:8080")
+	c.UseImageCache(true)
+	if got := c.ThumbnailURL("https://img.example/1.jpg"); !strings.Contains(got, "/api/image-cache/thumbnail?") {
+		t.Fatalf("ThumbnailURL = %q, want cache proxy", got)
+	}
+	if got := c.PageImageURL("https://img.example/p0.jpg"); !strings.Contains(got, "/api/image-cache/page?") {
+		t.Fatalf("PageImageURL = %q, want cache proxy", got)
+	}
+	if got := c.PageThumbnailURL(1, "tok", 0); !strings.Contains(got, "/api/image-cache/page-thumbnail?") {
+		t.Fatalf("PageThumbnailURL = %q, want cache proxy", got)
+	}
+}
+
+// TestHomeFetchesCoversThroughCacheProxy is the end-to-end check: with the
+// cache proxy enabled, rendering the home grid must request covers from
+// /api/image-cache/* and never from the live /api/image/* endpoints.
+func TestHomeFetchesCoversThroughCacheProxy(t *testing.T) {
+	var mu sync.Mutex
+	cacheHits, liveHits := 0, 0
+	srv := newFakeServerWithHooks(t, func(path string) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch path {
+		case "/api/image-cache/thumbnail", "/api/image-cache/page":
+			cacheHits++
+		case "/api/image/thumbnail", "/api/image/page":
+			liveHits++
+		}
+	})
+
+	client := NewClient(srv.URL)
+	client.UseImageCache(true)
+	a := New(client)
+	tt := ui.NewTester(a.View, 1280, 860)
+
+	waitText(t, tt, "示例 A")
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		mu.Lock()
+		hit := cacheHits > 0
+		mu.Unlock()
+		if hit {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	mu.Lock()
+	cache, live := cacheHits, liveHits
+	mu.Unlock()
+	if cache == 0 {
+		t.Fatalf("no cover requests reached /api/image-cache/*")
+	}
+	if live != 0 {
+		t.Fatalf("cover requests hit live proxy %d times, want 0", live)
 	}
 }

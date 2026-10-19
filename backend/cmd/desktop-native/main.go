@@ -40,7 +40,16 @@ func main() {
 		baseURL = srv.BaseURL()
 	}
 
-	a := app.New(app.NewClient(baseURL))
+	client := app.NewClient(baseURL)
+	// The embedded server always has the filesystem image cache; enable the
+	// read-through proxy for it. MANGA_READER_IMAGE_CACHE overrides, which is
+	// useful when pointing at an external backend that does have a cache.
+	client.UseImageCache(embedded != nil)
+	if v := strings.TrimSpace(os.Getenv("MANGA_READER_IMAGE_CACHE")); v != "" {
+		client.UseImageCache(v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes"))
+	}
+
+	a := app.New(client)
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "Manga Reader",

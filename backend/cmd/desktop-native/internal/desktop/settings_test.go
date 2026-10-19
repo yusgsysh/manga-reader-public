@@ -6,12 +6,15 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"manga-reader/internal/cache"
 	"manga-reader/internal/config"
+	"manga-reader/internal/handler"
 )
 
 // clearCookieEnv makes settings tests independent of the developer's shell.
@@ -180,5 +183,48 @@ func TestStartServesHealthzAndCloses(t *testing.T) {
 	// Closing twice must not panic or error.
 	if err := srv.Close(); err != nil {
 		t.Fatalf("second Close: %v", err)
+	}
+}
+
+// TestCachedThumbnailServedFromFilesystem proves the embedded server reads
+// image bytes back out of the local filesystem cache: pre-populate the cache
+// exactly as the first fetch would, then request the cached endpoint and
+// expect the stored bytes without any upstream call.
+func TestCachedThumbnailServedFromFilesystem(t *testing.T) {
+	opts := testOptions(t)
+	ctx := context.Background()
+
+	fc, err := cache.NewFSCache(opts.CacheDir)
+	if err != nil {
+		t.Fatalf("NewFSCache: %v", err)
+	}
+	rawURL := "https://s.exhentai.org/t/abc.jpg"
+	payload := []byte("cached-thumbnail-bytes")
+	if err := fc.Put(ctx, handler.ThumbnailCacheKey(rawURL), payload, "image/png", ""); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+
+	srv, err := Start(ctx, opts)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer srv.Close()
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(srv.BaseURL() + "/api/image-cache/thumbnail?url=" + url.QueryEscape(rawURL))
+	if err != nil {
+		t.Fatalf("GET cached thumbnail: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "image/png" {
+		t.Fatalf("Content-Type = %q, want image/png", ct)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != string(payload) {
+		t.Fatalf("body = %q, want %q", body, payload)
 	}
 }

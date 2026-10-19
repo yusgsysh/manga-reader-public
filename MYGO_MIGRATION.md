@@ -24,7 +24,7 @@
 | M0 原生 UI 骨架与 PoC | ✅ 完成 | 窗口、侧边栏、路由、中文字体、虚拟化图片网格、阅读器原型 |
 | M1 只读链路接真实 API | ✅ 基本完成 | 首页/订阅/热门/搜索/书架/最近阅读/详情/阅读器 |
 | M2 单机化：进程内后端 | ✅ 完成 | `cmd/desktop-native/internal/desktop` 启动 Gin；`MANGA_READER_API` 变为可选覆盖 |
-| M3 本地图片缓存 | 🚧 进行中 | `internal/cache/fscache.go` 已实现；UI 仍走 `/api/image/*`，待切到 `/api/image-cache/*` |
+| M3 本地图片缓存 | ✅ 基本完成 | FS 缓存 + UI 默认走 `/api/image-cache/*`；缺容量上限与淘汰 |
 | M4 首次启动与设置 | 🚧 进行中 | `config.json` 与默认路径已就绪；待做首次启动向导与设置界面 |
 | M5 阅读体验补齐 | 🚧 进行中 | 已有翻页/缩放/平移/进度；缺缩略图、预加载、双页、全屏等 |
 | M6 书架与进度 | ✅ 基本完成 | 列表、加入/移出、进度读取与上报 |
@@ -111,8 +111,9 @@
 - [x] 复用 `exhentai` 客户端、`database.NewDB`、`handler.New`、sync service 与启动清理逻辑。
 - [x] `internal/desktop/settings.go`：`config.json` 读写、环境变量覆盖、默认数据库/缓存路径。
 - [x] `main.go`：未设置 `MANGA_READER_API` 时启动内嵌后端；退出时优雅关闭（`http.Server`、sync、prefill、DB）。
+- [x] UI 图片默认走缓存代理：`Client.UseImageCache(true)`，`/api/image-cache/{thumbnail,page,page-thumbnail}`；内嵌模式自动开启，`MANGA_READER_IMAGE_CACHE` 可覆盖。
 - [x] 缺少 cookies 时给出指向 `config.json` 的明确错误。
-- [x] 新增测试：FS cache 读写 / miss / 流式 / 元数据 / 覆盖 / 路径穿越 / 清理；设置解析与优先级；内嵌服务器 `/healthz` 与 `/api/bookshelf`。
+- [x] 新增测试：FS cache 读写 / miss / 流式 / 元数据 / 覆盖 / 路径穿越 / 清理；设置解析与优先级；内嵌服务器 `/healthz`、`/api/bookshelf`、缓存缩略图走本地文件；UI 图片 URL 走缓存端点。
 - [x] `go test ./...`、`go test -race ./internal/cache/... ./cmd/desktop-native/...`、`go vet`、`go build ./...` 通过。
 - [x] 本地实跑：`go run ./cmd/desktop-native` 打印内嵌地址并打开窗口。
 
@@ -133,7 +134,7 @@
   - [x] 缓存目录默认放在用户缓存目录（XDG / `~/Library/Caches` / `%LocalAppData%`）。
   - [x] 原子写入（临时文件 + rename），处理并发同 key 写入。
   - [x] 内容类型与自定义元数据用 sidecar JSON 保存。
-  - [ ] UI 改用 `/api/image-cache/*` 端点（目前仍走 `/api/image/*` live 代理）。
+  - [x] UI 改用 `/api/image-cache/*` 端点（内嵌模式默认开启，`MANGA_READER_IMAGE_CACHE` 可覆盖）。
   - [ ] 缓存大小上限与清理策略（LRU/按时间）；`FSCache.Clear` 已就绪，待接到设置页。
 - [ ] **配置与首次启动**
   - [x] 配置文件位置：`os.UserConfigDir()/manga-reader/config.json`。
@@ -250,7 +251,7 @@
 ## 5. 已知问题与技术债
 
 - [x] ~~当前必须另起后端；`MANGA_READER_API` 是硬依赖。~~ 已内嵌，未设置时本进程启动。
-- [ ] 图片仍走 live 端点（`/api/image/*`），没走磁盘缓存；重复打开画廊会重复请求上游。**（下一步切到 `/api/image-cache/*`）**
+- [x] ~~图片走 live 端点，没有磁盘缓存。~~ 默认走 `/api/image-cache/*` 本地文件缓存。
 - [ ] `FSCache` 没有容量上限与淘汰策略；`Clear()` 已实现但未接设置页。
 - [ ] 首次启动仍是 `log.Fatal`，缺少引导界面；cookie 明文存在 `config.json`。
 - [ ] 内嵌后端监听 loopback 且无鉴权；本机其他进程可访问（后续加随机 token）。
@@ -294,6 +295,6 @@
    go test -race ./internal/cache/... ./cmd/desktop-native/...
    go test -tags snapshot ./cmd/desktop-native/app
    ```
-3. 按 **3.1 P0** 的顺序推进：UI 切到 `/api/image-cache/*` → 首次启动向导/设置页 → 缓存上限与淘汰。
+3. 按 **3.1 P0** 的顺序推进：首次启动向导/设置页 → 缓存上限与淘汰 → 单实例保护/后端 token。
 4. 每完成一项，把本文件对应复选框改为 `[x]`，并在提交信息里引用里程碑（例如 `feat(desktop): embed API server (M2)`）。
 5. 涉及删除旧代码（3.5）前，先在 issue/对话里确认，不要直接删。

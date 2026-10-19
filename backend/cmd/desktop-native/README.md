@@ -14,7 +14,7 @@
 - 阅读器：真实页面列表、翻页、缩放、拖拽平移、进度保存
 - 异步图片加载：并发下载、后台解码、LRU、加载完成自动重绘
 - **内嵌后端**：默认在本进程内启动现有 Gin API（`127.0.0.1` 随机端口），无需外部服务
-- **本地图片缓存**：用文件系统实现 `handler.ImageCache`，不再依赖 MinIO
+- **本地图片缓存**：用文件系统实现 `handler.ImageCache`，不再依赖 MinIO；UI 默认通过 `/api/image-cache/*` 读写本地缓存
 - **本地数据**：SQLite 与图片缓存默认放在用户配置/缓存目录
 - 无后端时显示错误页与「重试」，不会空白或崩溃
 
@@ -43,6 +43,7 @@ go run ./cmd/desktop-native
 - `MANGA_READER_CACHE_DIR`：图片缓存目录（默认用户缓存目录）
 - `MANGA_READER_SYNC_TOKEN`：启用同步端点
 - `MANGA_READER_DEV_TOOLS=true`：启用 `/api/dev/*`
+- `MANGA_READER_IMAGE_CACHE=false`：关闭本地图片缓存代理，退回 `/api/image/*` 直连上游（连外部后端且对方没配 MinIO 时用）
 
 连接外部已运行的后端（开发调试用）：
 
