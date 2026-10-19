@@ -547,6 +547,22 @@ func TestReaderTapFitAndJump(t *testing.T) {
 	}
 	waitText(t, tt, "适应宽度")
 
+	// One more click goes to 100% pixels and back to the whole page.
+	if err := tt.Click("适应宽度"); err != nil {
+		t.Fatal(err)
+	}
+	if a.reader.fit != ui.NaturalSize {
+		t.Fatalf("fit = %v, want NaturalSize", a.reader.fit)
+	}
+	waitText(t, tt, "原始尺寸")
+	if err := tt.Click("原始尺寸"); err != nil {
+		t.Fatal(err)
+	}
+	if a.reader.fit != ui.Contain {
+		t.Fatalf("fit = %v, want Contain", a.reader.fit)
+	}
+	waitText(t, tt, "适合页面")
+
 	if err := tt.Click("跳转页码"); err != nil {
 		t.Fatalf("click page field: %v", err)
 	}

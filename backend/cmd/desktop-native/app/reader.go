@@ -141,6 +141,30 @@ func (a *App) retryReader(r *Reader) {
 // left is unsaved.
 const progressFlushDelay = 600 * time.Millisecond
 
+// fitLabel names a fit mode on the toolbar.
+func fitLabel(f ui.Fit) string {
+	switch f {
+	case ui.Cover:
+		return "适应宽度"
+	case ui.NaturalSize:
+		return "原始尺寸"
+	default:
+		return "适合页面"
+	}
+}
+
+// nextFit cycles the fit modes in toolbar order.
+func nextFit(f ui.Fit) ui.Fit {
+	switch f {
+	case ui.Contain:
+		return ui.Cover
+	case ui.Cover:
+		return ui.NaturalSize
+	default:
+		return ui.Contain
+	}
+}
+
 // readerStep is how far forward a turn moves: two pages in double mode.
 func (r *Reader) readerStep() int {
 	if r.double {
@@ -279,16 +303,9 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 			if ui.Button(c, "−").Width(36).Label("缩小").Disabled(!r.loaded).Clicked() {
 				r.zoomBy(-0.2)
 			}
-			fitLabel := "适合页面"
-			if r.fit == ui.Cover {
-				fitLabel = "适应宽度"
-			}
-			if ui.Button(c, fitLabel).Label("切换适应模式").Disabled(!r.loaded).Clicked() {
-				if r.fit == ui.Cover {
-					r.fit = ui.Contain
-				} else {
-					r.fit = ui.Cover
-				}
+			// Cycle: whole page → fill width → 100% pixels → whole page.
+			if ui.Button(c, fitLabel(r.fit)).Label("切换适应模式").Disabled(!r.loaded).Clicked() {
+				r.fit = nextFit(r.fit)
 				r.resetView()
 			}
 			if ui.Button(c, "+").Width(36).Label("放大").Disabled(!r.loaded).Clicked() {
