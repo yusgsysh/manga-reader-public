@@ -383,6 +383,7 @@ type fakeBackend struct {
 	configured bool
 	cleared    int
 	cacheSize  int64
+	maxBytes   int64
 }
 
 func (f *fakeBackend) Configured() bool {
@@ -424,16 +425,36 @@ func (f *fakeBackend) ClearCache() error {
 	return nil
 }
 
-func (f *fakeBackend) CacheInfo() (string, int64, error) {
+func (f *fakeBackend) CacheInfo() (CacheStats, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return "/tmp/manga-cache", f.cacheSize, nil
+	return CacheStats{
+		Root:     "/tmp/manga-cache",
+		Bytes:    f.cacheSize,
+		MaxBytes: f.maxBytes,
+	}, nil
+}
+
+func (f *fakeBackend) SetCacheMaxBytes(maxBytes int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if maxBytes < 0 {
+		maxBytes = 0
+	}
+	f.maxBytes = maxBytes
+	return nil
 }
 
 func (f *fakeBackend) clearedCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.cleared
+}
+
+func (f *fakeBackend) maxBytesValue() int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.maxBytes
 }
 
 func TestSetupConnectsBackend(t *testing.T) {
@@ -507,5 +528,76 @@ func TestSettingsCacheInfoAndClear(t *testing.T) {
 	}
 	if backend.clearedCount() == 0 {
 		t.Fatal("ClearCache was not called")
+	}
+}
+
+func TestSettingsShowsCacheLimit(t *testing.T) {
+	srv := newFakeServer(t)
+	backend := &fakeBackend{
+		serverURL: srv.URL, base: srv.URL,
+		configured: true, cacheSize: 2048, maxBytes: 2 << 30,
+	}
+	a := New(NewClient(srv.URL))
+	a.SetBackend(backend)
+	tt := ui.NewTester(a.View, 1280, 860)
+
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("设置"); err != nil {
+		t.Fatalf("click 设置: %v", err)
+	}
+	navSettle(tt)
+
+	// The badge reads "<used> / <limit>" and the input is prefilled in MB.
+	waitText(t, tt, "2.0 KB / 2.0 GB")
+	waitText(t, tt, "缓存上限 (MB)")
+}
+
+func TestSettingsSavesCacheLimit(t *testing.T) {
+	srv := newFakeServer(t)
+	backend := &fakeBackend{
+		serverURL: srv.URL, base: srv.URL,
+		configured: true, cacheSize: 512, maxBytes: 2 << 30,
+	}
+	a := New(NewClient(srv.URL))
+	a.SetBackend(backend)
+	tt := ui.NewTester(a.View, 1280, 860)
+
+	waitText(t, tt, "示例 A")
+
+	// White-box: drive the save without depending on headless focus handling.
+	a.mu.Lock()
+	a.cacheMaxInput = "512"
+	a.saveCacheLimit()
+	a.mu.Unlock()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if backend.maxBytesValue() == 512<<20 {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if got := backend.maxBytesValue(); got != 512<<20 {
+		t.Fatalf("maxBytes = %d, want %d", got, 512<<20)
+	}
+}
+
+func TestSaveCacheLimitRejectsBadInput(t *testing.T) {
+	backend := &fakeBackend{serverURL: "http://127.0.0.1:1", configured: true, maxBytes: 1 << 20}
+	a := New(NewClient(""))
+	a.SetBackend(backend)
+
+	a.mu.Lock()
+	a.cacheMaxInput = "abc"
+	a.saveCacheLimit()
+	errMsg := a.cacheMaxErr
+	a.mu.Unlock()
+
+	if errMsg == "" {
+		t.Fatal("expected a validation error for a non-numeric limit")
+	}
+	if backend.maxBytesValue() != 1<<20 {
+		t.Fatalf("limit changed to %d despite invalid input", backend.maxBytesValue())
 	}
 }

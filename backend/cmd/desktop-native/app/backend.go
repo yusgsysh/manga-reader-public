@@ -16,8 +16,11 @@ type Backend interface {
 	Storage() BackendStorage
 	// ClearCache empties the on-disk image cache.
 	ClearCache() error
-	// CacheInfo reports the cache root and its size in bytes.
-	CacheInfo() (root string, size int64, err error)
+	// CacheInfo reports the cache root, size and limit.
+	CacheInfo() (CacheStats, error)
+	// SetCacheMaxBytes changes the cache size limit in bytes; <= 0 disables
+	// it, and the change is persisted.
+	SetCacheMaxBytes(maxBytes int64) error
 }
 
 // BackendStorage is the set of paths the settings page shows.
@@ -25,4 +28,11 @@ type BackendStorage struct {
 	DBPath     string
 	CacheDir   string
 	ConfigPath string
+}
+
+// CacheStats is the image cache state shown on the settings page.
+type CacheStats struct {
+	Root     string
+	Bytes    int64
+	MaxBytes int64 // 0 means unlimited
 }

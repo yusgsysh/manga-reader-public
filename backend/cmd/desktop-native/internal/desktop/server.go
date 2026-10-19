@@ -29,6 +29,8 @@ type Options struct {
 	Cookie   config.CookieConfig
 	DBPath   string
 	CacheDir string
+	// CacheMaxBytes bounds the image cache; 0 means unlimited.
+	CacheMaxBytes int64
 	// DevTools enables the /api/dev/* debug endpoints (off by default).
 	DevTools bool
 	// SyncToken enables the peer-facing sync endpoints; empty disables them.
@@ -74,6 +76,23 @@ func (s *Server) CacheInfo() (root string, size int64, err error) {
 	return s.fsCache.Root(), size, err
 }
 
+// CacheMaxBytes returns the image cache size limit; 0 means unlimited.
+func (s *Server) CacheMaxBytes() int64 {
+	if s.fsCache == nil {
+		return 0
+	}
+	return s.fsCache.MaxBytes()
+}
+
+// SetCacheMaxBytes changes the image cache size limit. A value <= 0 disables
+// the limit. When the cache is already larger, it prunes in the background.
+func (s *Server) SetCacheMaxBytes(maxBytes int64) {
+	if s.fsCache == nil {
+		return
+	}
+	s.fsCache.SetMaxBytes(maxBytes)
+}
+
 // Start boots the API on a random loopback port and returns once it is
 // accepting connections. The caller must Close it on shutdown.
 func Start(ctx context.Context, opts Options) (*Server, error) {
@@ -107,11 +126,14 @@ func Start(ctx context.Context, opts Options) (*Server, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	fsCache, err := cache.NewFSCache(opts.CacheDir)
+	fsCache, err := cache.NewFSCache(opts.CacheDir, opts.CacheMaxBytes)
 	if err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("open image cache: %w", err)
 	}
+	// A previous run may have left the cache over the limit; prune it now
+	// rather than waiting for the first write.
+	fsCache.SetMaxBytes(opts.CacheMaxBytes)
 
 	syncSvc := synclib.NewService(db.Client, synclib.Options{HostToken: opts.SyncToken})
 

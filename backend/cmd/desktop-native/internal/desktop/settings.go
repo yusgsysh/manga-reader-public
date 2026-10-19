@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"manga-reader/internal/config"
@@ -23,6 +24,10 @@ const (
 	databaseName    = "manga-reader.db"
 	cacheDirName    = "images"
 	fallbackDataDir = "data"
+
+	// DefaultCacheMaxBytes bounds the image cache when the user has not set a
+	// limit. Stored/compared as bytes.
+	DefaultCacheMaxBytes int64 = 2 << 30 // 2 GiB
 )
 
 // Settings is the on-disk desktop configuration. It lives in the user config
@@ -37,11 +42,26 @@ type Settings struct {
 	CacheDir     string `json:"cache_dir,omitempty"`
 	SyncToken    string `json:"sync_token,omitempty"`
 	DevTools     bool   `json:"dev_tools,omitempty"`
+	// CacheMaxBytes bounds the image cache. nil means "use the default",
+	// 0 means unlimited, and a positive value is the limit in bytes.
+	CacheMaxBytes *int64 `json:"cache_max_bytes,omitempty"`
 }
 
 // CookieConfig parses Cookie into the structured cookie config.
 func (s Settings) CookieConfig() config.CookieConfig {
 	return config.ParseCookieString(s.Cookie)
+}
+
+// CacheLimit returns the effective image cache limit in bytes; 0 means
+// unlimited.
+func (s Settings) CacheLimit() int64 {
+	if s.CacheMaxBytes == nil {
+		return DefaultCacheMaxBytes
+	}
+	if *s.CacheMaxBytes < 0 {
+		return 0
+	}
+	return *s.CacheMaxBytes
 }
 
 // DatabasePathOrDefault returns the configured database path or the per-user
@@ -183,6 +203,11 @@ func settingsFromEnv(s Settings) Settings {
 	}
 	if v := strings.TrimSpace(os.Getenv("MANGA_READER_CACHE_DIR")); v != "" {
 		s.CacheDir = v
+	}
+	if v := strings.TrimSpace(os.Getenv("MANGA_READER_CACHE_MAX_BYTES")); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
+			s.CacheMaxBytes = &n
+		}
 	}
 	if v := strings.TrimSpace(os.Getenv("MANGA_READER_SYNC_TOKEN")); v != "" {
 		s.SyncToken = v

@@ -16,10 +16,10 @@
 - **内嵌后端**：默认在本进程内启动现有 Gin API（`127.0.0.1` 随机端口），无需外部服务
 - **本地图片缓存**：用文件系统实现 `handler.ImageCache`，不再依赖 MinIO；UI 默认通过 `/api/image-cache/*` 读写本地缓存
 - **本地数据**：SQLite 与图片缓存默认放在用户配置/缓存目录
-- **首次设置**：缺少 Cookies 时显示引导界面，保存后启动后端；设置页可查看路径/缓存占用、清空缓存、重新配置 Cookies
+- **首次设置**：缺少 Cookies 时显示引导界面，保存后启动后端；设置页可查看路径/缓存占用、设置缓存上限、清空缓存、重新配置 Cookies
 - 无后端时显示错误页与「重试」，不会空白或崩溃
 
-暂未实现：页面缩略图、离线下载、标签翻译、数据同步、缓存容量上限、三平台打包。
+暂未实现：页面缩略图、离线下载、标签翻译、数据同步、三平台打包。
 
 ## 运行
 
@@ -40,11 +40,12 @@ go run ./cmd/desktop-native
 
 - `MANGA_READER_DB_PATH`：SQLite 路径（默认用户配置目录）
 - `MANGA_READER_CACHE_DIR`：图片缓存目录（默认用户缓存目录）
+- `MANGA_READER_CACHE_MAX_BYTES`：图片缓存上限（字节，`0` 表示不限制；默认 2 GiB）
 - `MANGA_READER_SYNC_TOKEN`：启用同步端点
 - `MANGA_READER_DEV_TOOLS=true`：启用 `/api/dev/*`
 - `MANGA_READER_IMAGE_CACHE=false`：关闭本地图片缓存代理，退回 `/api/image/*` 直连上游（连外部后端且对方没配 MinIO 时用）
 
-「设置」页会显示后端地址、配置文件、数据库、缓存目录与缓存占用，并可一键清空缓存、重新配置 Cookies。
+「设置」页会显示后端地址、配置文件、数据库、缓存目录与缓存占用，可设置缓存上限（MB，`0` 为不限）、一键清空缓存、重新配置 Cookies。缓存超过上限时，写入会触发后台清理，删除最久未使用的图片直到回落。
 
 连接外部已运行的后端（开发调试用，不显示引导）：
 
@@ -79,7 +80,7 @@ cmd/desktop-native/
     └── snapshot_test.go # 把主要页面渲染到 /tmp/opencode/*.png
 ```
 
-`internal/cache/fscache.go` 在复用现有后端时提供 `handler.ImageCache` 的文件系统实现（原子写入、sidecar 元数据、`fs.ErrNotExist` 作为 miss）。
+`internal/cache/fscache.go` 在复用现有后端时提供 `handler.ImageCache` 的文件系统实现（原子写入、sidecar 元数据、`fs.ErrNotExist` 作为 miss）。可设置容量上限：写入后若超过上限，会异步按修改时间淘汰最旧的图片（数据文件与其 sidecar 一起删除），并保留 10% 余量避免频繁触发。
 
 ### 数据流
 
@@ -106,9 +107,8 @@ go test -tags snapshot ./cmd/desktop-native/app
 
 ## 下一步
 
-1. **缓存上限与淘汰**：给 `FSCache` 加容量上限、LRU/按时间清理，接到设置页。
+1. **单实例保护 + 内嵌后端 token**：避免重复启动、限制本机其他进程访问。
 2. **页面缩略图**：解析 `/pages` 的 sprite 坐标，在详情页做虚拟化缩略图网格。
 3. **离线缓存预取**：详情页触发 prefill，UI 显示下载进度。
 4. **标签设置 / 翻译 / 同步**：按现有后端能力逐项迁移。
-5. **单实例保护 + 内嵌后端 token**：避免重复启动、限制本机其他进程访问。
-6. **打包**：macOS、Linux、Windows 三平台的 mygo 打包与签名。
+5. **打包**：macOS、Linux、Windows 三平台的 mygo 打包与签名。

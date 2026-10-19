@@ -42,10 +42,17 @@ type App struct {
 
 	// cache stats shown on the settings page.
 	cacheBytes   int64
+	cacheMax     int64 // 0 means unlimited
 	cacheLoading bool
 	cacheLoaded  bool
 	cacheBusy    bool
 	cacheErr     string
+
+	// cache limit editing.
+	cacheMaxInput string
+	cacheMaxInit  bool
+	cacheMaxBusy  bool
+	cacheMaxErr   string
 
 	lists   map[string]*listState
 	details map[int64]*detailState
@@ -154,6 +161,8 @@ func (a *App) adoptBackendLocked(baseURL string) {
 	a.details = make(map[int64]*detailState)
 	a.cacheLoaded = false
 	a.cacheBytes = 0
+	a.cacheMax = 0
+	a.cacheMaxInit = false
 	a.cacheErr = ""
 }
 
@@ -888,13 +897,28 @@ func (a *App) settingsPage(c *ui.Context) {
 				case a.cacheLoading && !a.cacheLoaded:
 					ui.Badge(c, "统计中…")
 				default:
-					ui.Badge(c, humanBytes(a.cacheBytes))
+					ui.Badge(c, humanBytes(a.cacheBytes)+" / "+cacheLimitText(a.cacheMax))
 				}
 			})
 			if a.cacheErr != "" {
 				ui.Text(c, a.cacheErr).FontSize(11).TextColor(t.Danger)
 			}
 			if a.backend != nil {
+				ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+					ui.Text(c, "缓存上限 (MB)").Grow(1)
+					ui.TextInput(c, &a.cacheMaxInput).Width(160)
+					if ui.Button(c, "保存上限").Disabled(a.cacheMaxBusy).Clicked() {
+						a.saveCacheLimit()
+					}
+					if a.cacheMaxBusy {
+						ui.Spinner(c)
+					}
+				})
+				if a.cacheMaxErr != "" {
+					ui.Text(c, a.cacheMaxErr).FontSize(11).TextColor(t.Danger)
+				}
+				ui.Text(c, "填 0 表示不限制；超过上限时会自动删除最久未使用的图片。").
+					FontSize(11).TextColor(t.TextMuted)
 				ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
 					if ui.Button(c, "清空缓存").Disabled(a.cacheBusy).Clicked() {
 						a.clearCache()
@@ -943,7 +967,7 @@ func (a *App) ensureCacheInfo() {
 	a.cacheLoading = true
 	backend := a.backend
 	go func() {
-		root, size, err := backend.CacheInfo()
+		stats, err := backend.CacheInfo()
 		a.update(func() {
 			a.cacheLoading = false
 			a.cacheLoaded = true
@@ -952,10 +976,52 @@ func (a *App) ensureCacheInfo() {
 				return
 			}
 			a.cacheErr = ""
-			if root != "" {
-				a.storage.CacheDir = root
+			if stats.Root != "" {
+				a.storage.CacheDir = stats.Root
 			}
-			a.cacheBytes = size
+			a.cacheBytes = stats.Bytes
+			a.cacheMax = stats.MaxBytes
+			if !a.cacheMaxInit {
+				a.cacheMaxInput = cacheLimitInput(stats.MaxBytes)
+				a.cacheMaxInit = true
+			}
+		})
+	}()
+}
+
+// saveCacheLimit parses the MB input and persists the new limit. It runs from
+// the view, so the lock is already held.
+func (a *App) saveCacheLimit() {
+	if a.backend == nil || a.cacheMaxBusy {
+		return
+	}
+	raw := strings.TrimSpace(a.cacheMaxInput)
+	var maxBytes int64
+	if raw != "" {
+		mb, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || mb < 0 {
+			a.cacheMaxErr = "请输入不小于 0 的整数（MB）"
+			return
+		}
+		maxBytes = mb << 20
+	}
+
+	a.cacheMaxBusy = true
+	a.cacheMaxErr = ""
+	backend := a.backend
+	go func() {
+		err := backend.SetCacheMaxBytes(maxBytes)
+		a.update(func() {
+			a.cacheMaxBusy = false
+			if err != nil {
+				a.cacheMaxErr = err.Error()
+				return
+			}
+			a.cacheMaxErr = ""
+			a.cacheMax = maxBytes
+			// Recompute the size: a smaller limit prunes in the background.
+			a.cacheLoaded = false
+			a.ensureCacheInfo()
 		})
 	}()
 }
@@ -994,6 +1060,23 @@ func humanBytes(n int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+// cacheLimitText renders a byte limit for display; 0 means unlimited.
+func cacheLimitText(maxBytes int64) string {
+	if maxBytes <= 0 {
+		return "不限"
+	}
+	return humanBytes(maxBytes)
+}
+
+// cacheLimitInput renders a byte limit as whole megabytes for the settings
+// input; 0 (unlimited) renders as "0".
+func cacheLimitInput(maxBytes int64) string {
+	if maxBytes <= 0 {
+		return "0"
+	}
+	return strconv.FormatInt(maxBytes>>20, 10)
 }
 
 func (a *App) emptyPage(c *ui.Context, title, subtitle, hint string) {

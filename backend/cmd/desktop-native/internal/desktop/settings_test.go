@@ -28,6 +28,7 @@ func clearCookieEnv(t *testing.T) {
 		"EHENTAI_COOKIE_SK",
 		"MANGA_READER_DB_PATH",
 		"MANGA_READER_CACHE_DIR",
+		"MANGA_READER_CACHE_MAX_BYTES",
 		"MANGA_READER_SYNC_TOKEN",
 		"MANGA_READER_DEV_TOOLS",
 	} {
@@ -150,6 +151,65 @@ func TestSaveSettingsRoundTrip(t *testing.T) {
 	}
 }
 
+func int64Ptr(v int64) *int64 { return &v }
+
+func TestCacheLimitResolution(t *testing.T) {
+	cases := []struct {
+		name string
+		in   *int64
+		want int64
+	}{
+		{"unset uses default", nil, DefaultCacheMaxBytes},
+		{"explicit bytes", int64Ptr(1024), 1024},
+		{"zero is unlimited", int64Ptr(0), 0},
+		{"negative is unlimited", int64Ptr(-1), 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := (Settings{CacheMaxBytes: tc.in}).CacheLimit(); got != tc.want {
+				t.Fatalf("CacheLimit = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSaveSettingsCacheLimitRoundTrip(t *testing.T) {
+	clearCookieEnv(t)
+	dir := t.TempDir()
+
+	want := Settings{
+		Cookie:        "ipb_member_id=1; ipb_pass_hash=2",
+		CacheMaxBytes: int64Ptr(3 << 20),
+	}
+	if err := saveSettingsTo(dir, want); err != nil {
+		t.Fatalf("saveSettingsTo: %v", err)
+	}
+
+	got, err := loadSettingsFrom(dir)
+	if err != nil {
+		t.Fatalf("loadSettingsFrom: %v", err)
+	}
+	if got.CacheMaxBytes == nil || *got.CacheMaxBytes != 3<<20 {
+		t.Fatalf("CacheMaxBytes = %v, want 3 MiB", got.CacheMaxBytes)
+	}
+	if got.CacheLimit() != 3<<20 {
+		t.Fatalf("CacheLimit = %d, want %d", got.CacheLimit(), int64(3<<20))
+	}
+}
+
+func TestCacheLimitEnvOverride(t *testing.T) {
+	clearCookieEnv(t)
+	t.Setenv("MANGA_READER_CACHE_MAX_BYTES", "1048576")
+
+	s, err := loadSettingsFrom(t.TempDir())
+	if err != nil {
+		t.Fatalf("loadSettingsFrom: %v", err)
+	}
+	if s.CacheLimit() != 1048576 {
+		t.Fatalf("CacheLimit = %d, want 1048576", s.CacheLimit())
+	}
+}
+
 func TestSettingsPathsHaveDefaults(t *testing.T) {
 	var s Settings
 	if s.DatabasePathOrDefault() == "" {
@@ -227,7 +287,7 @@ func TestCachedThumbnailServedFromFilesystem(t *testing.T) {
 	opts := testOptions(t)
 	ctx := context.Background()
 
-	fc, err := cache.NewFSCache(opts.CacheDir)
+	fc, err := cache.NewFSCache(opts.CacheDir, 0)
 	if err != nil {
 		t.Fatalf("NewFSCache: %v", err)
 	}
@@ -278,5 +338,33 @@ func TestCachedThumbnailServedFromFilesystem(t *testing.T) {
 	}
 	if _, size, err := srv.CacheInfo(); err != nil || size != 0 {
 		t.Fatalf("after ClearCache size = %d, %v; want 0, nil", size, err)
+	}
+
+	// Cache size limit: unlimited by default, then settable.
+	if got := srv.CacheMaxBytes(); got != 0 {
+		t.Fatalf("CacheMaxBytes = %d, want 0 (unlimited)", got)
+	}
+	srv.SetCacheMaxBytes(4 << 20)
+	if got := srv.CacheMaxBytes(); got != 4<<20 {
+		t.Fatalf("CacheMaxBytes = %d, want %d", got, int64(4<<20))
+	}
+	srv.SetCacheMaxBytes(0)
+	if got := srv.CacheMaxBytes(); got != 0 {
+		t.Fatalf("CacheMaxBytes after reset = %d, want 0", got)
+	}
+}
+
+func TestStartAppliesCacheLimit(t *testing.T) {
+	opts := testOptions(t)
+	opts.CacheMaxBytes = 8 << 20
+
+	srv, err := Start(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer srv.Close()
+
+	if got := srv.CacheMaxBytes(); got != 8<<20 {
+		t.Fatalf("CacheMaxBytes = %d, want %d", got, int64(8<<20))
 	}
 }

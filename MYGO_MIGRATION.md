@@ -24,8 +24,8 @@
 | M0 原生 UI 骨架与 PoC | ✅ 完成 | 窗口、侧边栏、路由、中文字体、虚拟化图片网格、阅读器原型 |
 | M1 只读链路接真实 API | ✅ 基本完成 | 首页/订阅/热门/搜索/书架/最近阅读/详情/阅读器 |
 | M2 单机化：进程内后端 | ✅ 完成 | `cmd/desktop-native/internal/desktop` 启动 Gin；`MANGA_READER_API` 变为可选覆盖 |
-| M3 本地图片缓存 | ✅ 基本完成 | FS 缓存 + UI 默认走 `/api/image-cache/*`；缺容量上限与淘汰 |
-| M4 首次启动与设置 | ✅ 基本完成 | 首次设置向导 + 设置页（路径、缓存占用、清空、重配 Cookies）；缺缓存上限、主题/语言、钥匙串 |
+| M3 本地图片缓存 | ✅ 完成 | FS 缓存 + UI 默认走 `/api/image-cache/*` + 容量上限与按时间淘汰 |
+| M4 首次启动与设置 | ✅ 基本完成 | 首次设置向导 + 设置页（路径、缓存占用/上限、清空、重配 Cookies）；缺主题/语言、钥匙串 |
 | M5 阅读体验补齐 | 🚧 进行中 | 已有翻页/缩放/平移/进度；缺缩略图、预加载、双页、全屏等 |
 | M6 书架与进度 | ✅ 基本完成 | 列表、加入/移出、进度读取与上报 |
 | M7 离线下载 | ⬜ 未开始 | 复用现有 prefill 接口 |
@@ -115,11 +115,12 @@
 - [x] 缺少 cookies 时给出指向 `config.json` 的明确错误。
 - [x] 新增测试：FS cache 读写 / miss / 流式 / 元数据 / 覆盖 / 路径穿越 / 清理；设置解析与优先级；内嵌服务器 `/healthz`、`/api/bookshelf`、缓存缩略图走本地文件；UI 图片 URL 走缓存端点。
 - [x] **首次设置向导**：无 cookie 时整个窗口显示引导页（TextArea + 保存并启动），成功后写入 `config.json` 并启动内嵌后端、切到首页。
-- [x] **设置页**：显示后端地址、配置文件、数据库、缓存目录与缓存占用（`FSCache.Size`），支持清空缓存（`FSCache.Clear`）与重新配置 Cookies。
+- [x] **设置页**：显示后端地址、配置文件、数据库、缓存目录与缓存占用（`FSCache.Size`），可设置缓存上限（MB）、清空缓存（`FSCache.Clear`）、重新配置 Cookies。
+- [x] **缓存上限与淘汰**：`FSCache.SetMaxBytes` + `Prune`（按 mtime 淘汰数据与 sidecar，保留 10% 余量）；写入后超限异步清理；`MANGA_READER_CACHE_MAX_BYTES` 与设置页可配，默认 2 GiB。
 - [x] `Client` 的 base URL 改为并发安全可变（`SetBaseURL`），首次设置后无需重建 app；`Client.UseImageCache` 同样加锁。
 - [x] `desktop.SaveSettings`：原子写入、权限 0600。
-- [x] `desktop.Server.ClearCache` / `CacheInfo`，`FSCache.Size`。
-- [x] 新增测试：设置保存往返 + 0600 权限；缓存 size/clear；首次设置连接后端、空 cookie 拒绝；设置页缓存占用与清空；setup/settings 快照。
+- [x] `desktop.Server.ClearCache` / `CacheInfo` / `CacheMaxBytes` / `SetCacheMaxBytes`，`FSCache.Size` / `Prune`。
+- [x] 新增测试：设置保存往返 + 0600 权限；缓存 size/clear/prune（按最旧淘汰、超限自动清理、上限开关）；缓存上限解析与 env 覆盖；首次设置连接后端、空 cookie 拒绝；设置页缓存占用/上限/清空；保存上限与非法输入校验；setup/settings 快照。
 - [x] 本地实跑：无 cookie 进入设置界面；有 cookie 自动启动内嵌服务并写入 `config.json`。
 - [x] `go test ./...`、`go test -race ./internal/cache/... ./cmd/desktop-native/...`、`go vet`、`go build ./...` 通过。
 - [x] 本地实跑：`go run ./cmd/desktop-native` 打印内嵌地址并打开窗口。
@@ -142,14 +143,14 @@
   - [x] 原子写入（临时文件 + rename），处理并发同 key 写入。
   - [x] 内容类型与自定义元数据用 sidecar JSON 保存。
   - [x] UI 改用 `/api/image-cache/*` 端点（内嵌模式默认开启，`MANGA_READER_IMAGE_CACHE` 可覆盖）。
-  - [ ] 缓存大小上限与清理策略（LRU/按时间）；`FSCache.Clear` 已就绪，待接到设置页。
+  - [x] 缓存大小上限与清理策略：`FSCache` 支持 `SetMaxBytes`，`Put` 后超过上限会按修改时间异步淘汰最旧对象（数据与 sidecar 一起删除，保留 10% 余量）。默认 2 GiB，`MANGA_READER_CACHE_MAX_BYTES` 可覆盖，设置页可改（`0` 为不限）。
 - [ ] **配置与首次启动**
   - [x] 配置文件位置：`os.UserConfigDir()/manga-reader/config.json`（写入权限 0600）。
-  - [x] 字段：ExHentai cookie、数据库路径、缓存目录、同步 token、dev tools。
-  - [ ] 字段：缓存上限、主题、语言、阅读方向。
+  - [x] 字段：ExHentai cookie、数据库路径、缓存目录、同步 token、dev tools、缓存上限。
+  - [ ] 字段：主题、语言、阅读方向。
   - [x] 首次启动向导：填写 cookies，校验后启动内嵌后端并进入首页。
   - [ ] Cookies 安全存储：优先系统钥匙串；目前明文存 `config.json`（0600）。
-  - [x] 设置页：显示后端地址/配置文件/数据库/缓存目录/缓存占用，支持清空缓存、重新配置 Cookies。
+  - [x] 设置页：显示后端地址/配置文件/数据库/缓存目录/缓存占用，支持设置缓存上限、清空缓存、重新配置 Cookies。
   - [ ] 启动失败时在 UI 内展示可操作的错误（目前后端启动失败会回落到设置页并展示错误，但 `LoadSettings` 解析失败仍是 `log.Fatal`）。
 - [x] **数据库位置**
   - [x] 默认 SQLite 放到用户配置目录，不再依赖当前工作目录的 `data/`。
@@ -259,7 +260,9 @@
 
 - [x] ~~当前必须另起后端；`MANGA_READER_API` 是硬依赖。~~ 已内嵌，未设置时本进程启动。
 - [x] ~~图片走 live 端点，没有磁盘缓存。~~ 默认走 `/api/image-cache/*` 本地文件缓存。
-- [ ] `FSCache` 没有容量上限与淘汰策略；`Clear()` 已接到设置页，但还没有自动清理。
+- [x] ~~`FSCache` 没有容量上限与淘汰策略；~~ 已加容量上限与按 mtime 淘汰（写入后超限异步清理，保留 10% 余量）；`Clear()` 与上限设置均已接到设置页。
+- [ ] 缓存淘汰以"按 mtime 从旧到新"为准，没有访问频次（LRU）；命中不会刷新 mtime，因此热点图片也可能被淘汰。
+- [ ] `Prune` 在每次超限时都会完整遍历缓存树；对象数量很大时开销可观（有 seeded 近似值做快速路径减轻）。
 - [x] ~~首次启动仍是 `log.Fatal`，缺少引导界面；~~ 已加首次设置向导（cookie 仍明文存 `config.json`，权限 0600）。
 - [ ] 内嵌后端监听 loopback 且无鉴权；本机其他进程可访问（后续加随机 token）。
 - [ ] 阅读页占位图在主线程生成，首帧可能有轻微卡顿。
@@ -284,7 +287,7 @@
 - [x] 首次启动可填写 ExHentai cookies，校验通过后进入首页。
 - [ ] 首页/搜索/详情/阅读器/书架/最近阅读全部可用。
 - [ ] 阅读器支持翻页、缩放、平移、进度保存、页面缩略图。
-- [ ] 断网时可读已缓存画廊；缓存有上限并可清理。（可清空，但无上限/淘汰，未勾选）
+- [x] 断网时可读已缓存画廊；缓存有上限并可清理。（上限 + 按时间淘汰 + 清空，已勾选）
 - [ ] 标签设置、下载、同步（若保留）行为与现有产品一致或有明确替代。
 - [ ] macOS / Linux / Windows 均可构建运行。
 - [x] `go test ./...`、`go test -race ./internal/cache/... ./cmd/desktop-native/...`、`go vet ./...` 通过。
@@ -302,6 +305,6 @@
    go test -race ./internal/cache/... ./cmd/desktop-native/...
    go test -tags snapshot ./cmd/desktop-native/app
    ```
-3. 按 **3.1 P0** 的顺序推进：缓存上限与淘汰 → 单实例保护/后端 token → 其余 P1。
+3. 按 **3.1 P0** 的顺序推进：单实例保护/后端 token → 其余 P1。
 4. 每完成一项，把本文件对应复选框改为 `[x]`，并在提交信息里引用里程碑（例如 `feat(desktop): embed API server (M2)`）。
 5. 涉及删除旧代码（3.5）前，先在 issue/对话里确认，不要直接删。

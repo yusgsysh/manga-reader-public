@@ -1,18 +1,26 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newTestFSCache(t *testing.T) *FSCache {
 	t.Helper()
-	c, err := NewFSCache(t.TempDir())
+	return newTestFSCacheLimit(t, 0)
+}
+
+func newTestFSCacheLimit(t *testing.T, maxBytes int64) *FSCache {
+	t.Helper()
+	c, err := NewFSCache(t.TempDir(), maxBytes)
 	if err != nil {
 		t.Fatalf("NewFSCache: %v", err)
 	}
@@ -229,7 +237,117 @@ func TestFSCacheSize(t *testing.T) {
 }
 
 func TestNewFSCacheRequiresRoot(t *testing.T) {
-	if _, err := NewFSCache(""); err == nil {
+	if _, err := NewFSCache("", 0); err == nil {
 		t.Fatal("NewFSCache(\"\") = nil error, want error")
+	}
+}
+
+// writeObjectAt writes a 1000-byte object and backdates its files so prune
+// ordering is deterministic.
+func writeObjectAt(t *testing.T, c *FSCache, key string, modTime time.Time) {
+	t.Helper()
+	ctx := context.Background()
+	if err := c.Put(ctx, key, bytes.Repeat([]byte("x"), 1000), "text/plain", ""); err != nil {
+		t.Fatalf("Put %s: %v", key, err)
+	}
+	dataPath, metaPath := c.objectPath(key)
+	for _, p := range []string{dataPath, metaPath} {
+		if err := os.Chtimes(p, modTime, modTime); err != nil {
+			t.Fatalf("Chtimes %s: %v", p, err)
+		}
+	}
+}
+
+func TestFSCachePruneEvictsOldest(t *testing.T) {
+	// Three 1000-byte objects plus sidecars; a 1500-byte limit leaves room
+	// for one object plus part of the second, so the two oldest go.
+	c := newTestFSCacheLimit(t, 1500)
+	now := time.Now()
+	writeObjectAt(t, c, "images/old", now.Add(-2*time.Hour))
+	writeObjectAt(t, c, "images/mid", now.Add(-1*time.Hour))
+	writeObjectAt(t, c, "images/new", now)
+
+	removed, err := c.Prune()
+	if err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	if removed <= 0 {
+		t.Fatalf("Prune removed %d bytes, want > 0", removed)
+	}
+
+	size, err := c.Size()
+	if err != nil {
+		t.Fatalf("Size: %v", err)
+	}
+	if size > 1500 {
+		t.Fatalf("Size = %d, want <= 1500", size)
+	}
+
+	ctx := context.Background()
+	if _, _, err := c.Get(ctx, "images/old"); !IsNotFound(err) {
+		t.Fatalf("oldest Get err = %v, want IsNotFound", err)
+	}
+	if _, _, err := c.Get(ctx, "images/new"); err != nil {
+		t.Fatalf("newest was evicted: %v", err)
+	}
+	// The evicted object's sidecar must go with its data file.
+	dataPath, metaPath := c.objectPath("images/old")
+	if _, err := os.Stat(dataPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("old data file still present: %v", err)
+	}
+	if _, err := os.Stat(metaPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("old sidecar still present: %v", err)
+	}
+}
+
+func TestFSCachePutPrunesWhenOverLimit(t *testing.T) {
+	c := newTestFSCacheLimit(t, 3000)
+	ctx := context.Background()
+
+	for i := 0; i < 20; i++ {
+		key := fmt.Sprintf("images/%02d", i)
+		if err := c.Put(ctx, key, bytes.Repeat([]byte{byte(i)}, 1000), "text/plain", ""); err != nil {
+			t.Fatalf("Put %s: %v", key, err)
+		}
+		// Distinct mtimes so the eviction order is well defined.
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	// Pruning happens in the background; wait for it to settle.
+	deadline := time.Now().Add(5 * time.Second)
+	var size int64
+	for {
+		var err error
+		if size, err = c.Size(); err != nil {
+			t.Fatalf("Size: %v", err)
+		}
+		if size <= 3000 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if size > 3000 {
+		t.Fatalf("Size = %d, want <= 3000 after background prune", size)
+	}
+
+	// The most recently written object survives.
+	if _, _, err := c.Get(ctx, "images/19"); err != nil {
+		t.Fatalf("newest object evicted: %v", err)
+	}
+}
+
+func TestFSCacheSetMaxBytesDisablesLimit(t *testing.T) {
+	c := newTestFSCacheLimit(t, 100)
+	if c.MaxBytes() != 100 {
+		t.Fatalf("MaxBytes = %d, want 100", c.MaxBytes())
+	}
+	c.SetMaxBytes(0)
+	if c.MaxBytes() != 0 {
+		t.Fatalf("MaxBytes after disable = %d, want 0", c.MaxBytes())
+	}
+	// A negative limit is clamped to unlimited.
+	c.SetMaxBytes(-5)
+	if c.MaxBytes() != 0 {
+		t.Fatalf("MaxBytes after negative = %d, want 0", c.MaxBytes())
 	}
 }

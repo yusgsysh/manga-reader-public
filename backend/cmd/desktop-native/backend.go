@@ -58,11 +58,12 @@ func (b *embeddedBackend) Start(cookie string) (string, error) {
 	}
 
 	srv, err := desktop.Start(context.Background(), desktop.Options{
-		Cookie:    cfg,
-		DBPath:    settings.DatabasePathOrDefault(),
-		CacheDir:  settings.CacheDirOrDefault(),
-		SyncToken: settings.SyncToken,
-		DevTools:  settings.DevTools,
+		Cookie:        cfg,
+		DBPath:        settings.DatabasePathOrDefault(),
+		CacheDir:      settings.CacheDirOrDefault(),
+		CacheMaxBytes: settings.CacheLimit(),
+		SyncToken:     settings.SyncToken,
+		DevTools:      settings.DevTools,
 	})
 	if err != nil {
 		return "", err
@@ -94,14 +95,38 @@ func (b *embeddedBackend) ClearCache() error {
 	return srv.ClearCache()
 }
 
-func (b *embeddedBackend) CacheInfo() (string, int64, error) {
+func (b *embeddedBackend) CacheInfo() (app.CacheStats, error) {
 	b.mu.Lock()
 	srv := b.server
 	b.mu.Unlock()
 	if srv == nil {
-		return "", 0, nil
+		return app.CacheStats{}, nil
 	}
-	return srv.CacheInfo()
+	root, size, err := srv.CacheInfo()
+	if err != nil {
+		return app.CacheStats{}, err
+	}
+	return app.CacheStats{Root: root, Bytes: size, MaxBytes: srv.CacheMaxBytes()}, nil
+}
+
+// SetCacheMaxBytes persists the new limit and applies it to the running cache.
+func (b *embeddedBackend) SetCacheMaxBytes(maxBytes int64) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if maxBytes < 0 {
+		maxBytes = 0
+	}
+	settings := b.settings
+	settings.CacheMaxBytes = &maxBytes
+	if err := desktop.SaveSettings(settings); err != nil {
+		return fmt.Errorf("保存设置失败: %w", err)
+	}
+	b.settings = settings
+	if b.server != nil {
+		b.server.SetCacheMaxBytes(maxBytes)
+	}
+	return nil
 }
 
 // Close stops the server, if any. Called when the window loop exits.
