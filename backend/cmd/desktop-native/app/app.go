@@ -35,6 +35,8 @@ type App struct {
 	// talks to an external server.
 	backend Backend
 	storage BackendStorage
+	// build is the version and platform line shown under 关于.
+	build string
 
 	// setup state: the first-run cookie screen.
 	showSetup   bool
@@ -178,6 +180,13 @@ func New(client *Client) *App {
 	a.pageThumbs.SetAuth(client.user, client.password)
 	a.translations.hooked = func() { a.update(func() {}) }
 	return a
+}
+
+// SetBuild records the version and platform shown in settings (set by main).
+func (a *App) SetBuild(description string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.build = description
 }
 
 // Attach gives the app the window, which background loads use to redraw.
@@ -1171,6 +1180,12 @@ func (a *App) settingsPage(c *ui.Context) {
 				ui.Badge(c, "简体中文"+localeSuffix())
 			})
 			ui.Text(c, "目前只有简体中文；日期、数字与字体跟随系统区域设置。").
+				FontSize(11).TextColor(t.TextMuted)
+
+			ui.Divider(c)
+			ui.Text(c, "关于").FontSize(16).Bold()
+			a.settingsRow(c, "版本", a.build)
+			ui.Text(c, "ExHentai 第三方客户端，纯 Go 原生界面（mygo），无 WebView。").
 				FontSize(11).TextColor(t.TextMuted)
 		})
 	})

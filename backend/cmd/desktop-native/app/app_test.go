@@ -1852,3 +1852,18 @@ func TestSettingsAppearance(t *testing.T) {
 		t.Fatalf("language row missing; texts=%q", tt.Texts())
 	}
 }
+
+// TestSettingsShowsBuild checks the 关于 row shows the build string main sets.
+func TestSettingsShowsBuild(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.SetBuild("1.2.3 · linux/amd64")
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "1.2.3 · linux/amd64")
+	if !tt.HasText("无 WebView") {
+		t.Fatalf("about text missing; texts=%q", tt.Texts())
+	}
+}

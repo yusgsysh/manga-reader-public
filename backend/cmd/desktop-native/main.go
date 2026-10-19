@@ -67,6 +67,7 @@ func main() {
 		client := app.NewClient(baseURL)
 		client.UseImageCache(imageCacheFromEnv(false))
 		a = app.New(client)
+		a.SetBuild(appVersion() + " · " + platformLabel())
 	} else {
 		settings, err := desktop.LoadSettings()
 		if err != nil {
@@ -92,6 +93,7 @@ func main() {
 		client := app.NewClient(embedded.BaseURL())
 		client.UseImageCache(true)
 		a = app.New(client)
+		a.SetBuild(appVersion() + " · " + platformLabel())
 		a.SetBackend(embedded)
 	}
 
