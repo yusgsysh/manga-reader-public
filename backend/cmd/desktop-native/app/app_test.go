@@ -547,8 +547,17 @@ func TestReaderTapFitAndJump(t *testing.T) {
 	}
 	waitText(t, tt, "适应宽度")
 
-	// One more click goes to 100% pixels and back to the whole page.
+	// 适应高度, then 100% pixels, then back to the whole page.
 	if err := tt.Click("适应宽度"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.reader.fitHeight {
+		t.Fatal("fit height not enabled")
+	}
+	waitText(t, tt, "适应高度")
+	// The click on the button just relabelled it; render that frame first.
+	tt.Frame()
+	if err := tt.Click("适应高度"); err != nil {
 		t.Fatal(err)
 	}
 	if a.reader.fit != ui.NaturalSize {
