@@ -10,11 +10,14 @@ import (
 	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"manga-reader/internal/config"
@@ -1044,5 +1047,73 @@ func TestSearchDebouncesRequests(t *testing.T) {
 	}
 	if got[0] != "" || got[1] != "abc" {
 		t.Fatalf("search queries = %v, want [\"\" \"abc\"]", got)
+	}
+}
+
+// TestDownloadExportZip covers the ZIP export: the fake backend streams a
+// small archive, and the file lands where the (stubbed) save dialog points.
+func TestDownloadExportZip(t *testing.T) {
+	dir := t.TempDir()
+	picked := filepath.Join(dir, "out.zip")
+	old := pickSavePath
+	pickSavePath = func(parent *mygo.Window, dir, name string) (string, error) {
+		if !strings.HasSuffix(name, ".zip") {
+			t.Errorf("default file name = %q, want a .zip", name)
+		}
+		return picked, nil
+	}
+	t.Cleanup(func() { pickSavePath = old })
+
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+
+	if err := tt.Click("下载管理"); err != nil {
+		t.Fatalf("click 下载管理: %v", err)
+	}
+	navSettle(tt)
+	for i := 0; i < 3; i++ {
+		tt.Advance(downloadPollInterval)
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !tt.HasText("已完成") {
+		t.Fatalf("job did not complete; texts=%q", tt.Texts()[14:])
+	}
+	if err := tt.Click("导出 ZIP"); err != nil {
+		t.Fatalf("click 导出 ZIP: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if a.zipMsg != "" {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if a.zipMsg == "" {
+		t.Fatalf("export never finished")
+	}
+	if strings.Contains(a.zipMsg, "失败") {
+		t.Fatalf("export failed: %s", a.zipMsg)
+	}
+	data, err := os.ReadFile(picked)
+	if err != nil {
+		t.Fatalf("read exported file: %v", err)
+	}
+	if string(data) != "PK" {
+		t.Fatalf("exported file = %q, want the backend's PK", data)
+	}
+}
+
+func TestZipFileName(t *testing.T) {
+	cases := map[string]string{
+		"":                       "gallery-7.zip",
+		"  ":                     "gallery-7.zip",
+		"[Group] Title / Vol. 1": "[Group] Title  Vol 1.zip",
+	}
+	for in, want := range cases {
+		if got := zipFileName(PrefillJob{ID: "j", GalleryID: 7, Title: in}); got != want {
+			t.Errorf("zipFileName(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

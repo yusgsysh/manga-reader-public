@@ -272,6 +272,9 @@ func (a *App) downloadsPage(c *ui.Context) {
 		case len(a.downloads.items) == 0:
 			a.emptyPage(c, "还没有离线下载任务", "在画廊详情页点击「离线下载」", "")
 		default:
+			if a.zipMsg != "" {
+				ui.Text(c, a.zipMsg).FontSize(11).TextColor(t.TextMuted)
+			}
 			ui.Scroll(c).Grow(1).Children(func() {
 				ui.Column(c).Gap(10).Children(func() {
 					for _, j := range a.downloads.items {
@@ -299,8 +302,19 @@ func (a *App) downloadRow(c *ui.Context, j PrefillJob) {
 				if ui.Button(c, "取消").Clicked() {
 					a.cancelDownload(j.ID)
 				}
-			} else if ui.Button(c, "删除").Clicked() {
-				a.deleteDownload(j.ID)
+			} else {
+				if j.Status == "completed" {
+					label := "导出 ZIP"
+					if a.zipBusy[j.ID] {
+						label = "正在导出…"
+					}
+					if ui.Button(c, label).Disabled(a.zipBusy[j.ID]).Clicked() {
+						a.saveZip(j)
+					}
+				}
+				if ui.Button(c, "删除").Clicked() {
+					a.deleteDownload(j.ID)
+				}
 			}
 		})
 

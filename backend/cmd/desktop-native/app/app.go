@@ -59,6 +59,10 @@ type App struct {
 	lists     map[string]*listState
 	details   map[int64]*detailState
 	downloads Downloads
+	// zipBusy is the jobs whose ZIP is being saved; zipMsg reports the last
+	// save's result on the downloads page.
+	zipBusy map[string]bool
+	zipMsg  string
 
 	searchQuery string
 	// searchApplied is the text the debounce timer has already been armed
@@ -821,24 +825,8 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 						if ui.Button(c, label).Disabled(s.busy).Clicked() {
 							a.toggleBookshelf(s)
 						}
-						dl := "离线下载"
-						if s.downloadBusy {
-							dl = "正在创建任务…"
-						}
-						if s.downloadJob != "" {
-							dl = "查看下载"
-						}
-						if ui.Button(c, dl).Disabled(s.downloadBusy).Clicked() {
-							if s.downloadJob != "" {
-								a.router.Push("/downloads")
-							} else {
-								a.startDownload(s)
-							}
-						}
 					})
-					if s.downloadErr != "" {
-						ui.Text(c, s.downloadErr).FontSize(11).TextColor(t.TextMuted)
-					}
+					a.detailDownloadsBlock(c, s)
 					if !s.shelfKnown {
 						ui.Text(c, "书架状态暂不可用").FontSize(11).TextColor(t.TextMuted)
 					}
