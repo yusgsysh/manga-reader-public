@@ -838,6 +838,7 @@ type fakeBackend struct {
 	maxBytes   int64
 	authToken  string
 	appearance string
+	storage    BackendStorage
 }
 
 func (f *fakeBackend) AuthToken() string { return f.authToken }
@@ -866,6 +867,9 @@ func (f *fakeBackend) Start(cookie string) (string, error) {
 }
 
 func (f *fakeBackend) Storage() BackendStorage {
+	if f.storage.DBPath != "" {
+		return f.storage
+	}
 	return BackendStorage{
 		DBPath:     "/tmp/manga.db",
 		CacheDir:   "/tmp/manga-cache",
@@ -884,8 +888,12 @@ func (f *fakeBackend) ClearCache() error {
 func (f *fakeBackend) CacheInfo() (CacheStats, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	root := "/tmp/manga-cache"
+	if f.storage.CacheDir != "" {
+		root = f.storage.CacheDir
+	}
 	return CacheStats{
-		Root:     "/tmp/manga-cache",
+		Root:     root,
 		Bytes:    f.cacheSize,
 		MaxBytes: f.maxBytes,
 	}, nil
@@ -1865,5 +1873,77 @@ func TestSettingsShowsBuild(t *testing.T) {
 	waitText(t, tt, "1.2.3 · linux/amd64")
 	if !tt.HasText("无 WebView") {
 		t.Fatalf("about text missing; texts=%q", tt.Texts())
+	}
+}
+
+// TestDiagnosticsExport writes the diagnostics text and checks it holds the
+// settings paths but never the cookie.
+func TestDiagnosticsExport(t *testing.T) {
+	srv := newFakeServer(t)
+	dir := t.TempDir()
+	picked := filepath.Join(dir, "diag.txt")
+	old := pickSavePath
+	pickSavePath = func(parent *mygo.Window, dir, name string) (string, error) {
+		if !strings.HasSuffix(name, ".txt") {
+			t.Errorf("diagnostics name = %q", name)
+		}
+		return picked, nil
+	}
+	t.Cleanup(func() { pickSavePath = old })
+
+	backend := &fakeBackend{
+		serverURL: srv.URL, base: srv.URL, configured: true,
+		storage: BackendStorage{ConfigPath: "/cfg/config.json", DBPath: "/cfg/app.db", CacheDir: "/cache/images"},
+	}
+	a := New(NewClient(srv.URL))
+	a.SetBackend(backend)
+	a.SetBuild("1.0.0 · linux/amd64")
+	tt := ui.NewTester(a.View, 1280, 860)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "无 WebView")
+
+	// The settings page scrolls; the button is below the fold until the view
+	// is scrolled to the bottom.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if r, ok := tt.Find("导出诊断信息"); ok && r.W > 0 {
+			break
+		}
+		tt.Scroll(640, 400, 0, 2000)
+	}
+	if r, _ := tt.Find("导出诊断信息"); r.W == 0 {
+		t.Fatalf("export button never laid out")
+	}
+
+	if err := tt.Click("导出诊断信息"); err != nil {
+		t.Fatalf("click 导出诊断信息: %v", err)
+	}
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if a.diagMsg != "" {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if !strings.Contains(a.diagMsg, "已保存") {
+		t.Fatalf("export message = %q", a.diagMsg)
+	}
+	data, err := os.ReadFile(picked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, want := range []string{"1.0.0 · linux/amd64", "/cfg/app.db", "/cache/images", "标签规则"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("diagnostics missing %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(strings.ToLower(text), "cookie=") || strings.Contains(text, "ipb_") {
+		t.Fatalf("diagnostics leak cookies:\n%s", text)
 	}
 }
