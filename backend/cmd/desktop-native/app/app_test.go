@@ -773,6 +773,7 @@ type fakeBackend struct {
 	cacheSize  int64
 	maxBytes   int64
 	authToken  string
+	appearance string
 }
 
 func (f *fakeBackend) AuthToken() string { return f.authToken }
@@ -834,6 +835,22 @@ func (f *fakeBackend) SetCacheMaxBytes(maxBytes int64) error {
 	}
 	f.maxBytes = maxBytes
 	return nil
+}
+
+func (f *fakeBackend) SetAppearance(source string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if source != "light" && source != "dark" {
+		source = "system"
+	}
+	f.appearance = source
+	return nil
+}
+
+func (f *fakeBackend) Appearance() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.appearance
 }
 
 func (f *fakeBackend) clearedCount() int {
@@ -1822,4 +1839,41 @@ func TestListInfiniteScroll(t *testing.T) {
 		t.Fatalf("extra page requests: %d -> %d", n, pages)
 	}
 	mu.Unlock()
+}
+
+// TestSettingsAppearance covers the theme choice: the buttons persist the
+// value through the backend.
+func TestSettingsAppearance(t *testing.T) {
+	srv := newFakeServer(t)
+	backend := &fakeBackend{serverURL: srv.URL, base: srv.URL, configured: true, appearance: "system"}
+	a := New(NewClient(srv.URL))
+	a.SetBackend(backend)
+	tt := ui.NewTester(a.View, 1280, 860)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "✓ 跟随系统")
+
+	if err := tt.Click("深色"); err != nil {
+		t.Fatalf("click 深色: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if a.appearance == "dark" {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if got := backend.Appearance(); got != "dark" {
+		t.Fatalf("backend appearance = %q", got)
+	}
+	waitText(t, tt, "✓ 深色")
+
+	// The language section names the only UI language.
+	if !tt.HasText("简体中文") {
+		t.Fatalf("language row missing; texts=%q", tt.Texts())
+	}
 }

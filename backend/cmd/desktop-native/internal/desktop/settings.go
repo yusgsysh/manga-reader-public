@@ -45,6 +45,18 @@ type Settings struct {
 	// CacheMaxBytes bounds the image cache. nil means "use the default",
 	// 0 means unlimited, and a positive value is the limit in bytes.
 	CacheMaxBytes *int64 `json:"cache_max_bytes,omitempty"`
+	// Appearance is "system" (the default), "light" or "dark".
+	Appearance string `json:"appearance,omitempty"`
+}
+
+// AppearanceSource validates Appearance for mygo.Theme.SetSource: an unknown
+// value falls back to following the system.
+func (s Settings) AppearanceSource() string {
+	switch s.Appearance {
+	case "light", "dark":
+		return s.Appearance
+	}
+	return "system"
 }
 
 // CookieConfig parses Cookie into the structured cookie config.
@@ -214,6 +226,9 @@ func settingsFromEnv(s Settings) Settings {
 	}
 	if v := strings.TrimSpace(os.Getenv("MANGA_READER_DEV_TOOLS")); v != "" {
 		s.DevTools = strings.EqualFold(v, "true") || v == "1" || strings.EqualFold(v, "yes")
+	}
+	if v := strings.TrimSpace(os.Getenv("MANGA_READER_APPEARANCE")); v != "" {
+		s.Appearance = v
 	}
 	return s
 }

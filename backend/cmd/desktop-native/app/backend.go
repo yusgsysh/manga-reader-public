@@ -24,6 +24,11 @@ type Backend interface {
 	// SetCacheMaxBytes changes the cache size limit in bytes; <= 0 disables
 	// it, and the change is persisted.
 	SetCacheMaxBytes(maxBytes int64) error
+	// SetAppearance persists "system", "light" or "dark" and returns the
+	// value in effect.
+	SetAppearance(source string) error
+	// Appearance is the saved appearance ("", "system", "light" or "dark").
+	Appearance() string
 }
 
 // BackendStorage is the set of paths the settings page shows.

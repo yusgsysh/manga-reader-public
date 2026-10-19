@@ -77,6 +77,13 @@ func main() {
 			log.Fatalf("生成访问令牌失败: %v", err)
 		}
 		embedded = &embeddedBackend{settings: settings, token: token}
+		// Apply the saved appearance before the first window is drawn.
+		switch settings.AppearanceSource() {
+		case "dark":
+			mygo.Theme.SetSource(mygo.ThemeDark)
+		case "light":
+			mygo.Theme.SetSource(mygo.ThemeLight)
+		}
 		if settings.CookieConfig().IsValid() {
 			if _, err := embedded.Start(settings.Cookie); err != nil {
 				log.Printf("启动内嵌后端失败: %v", err)

@@ -147,3 +147,32 @@ func (b *embeddedBackend) Close() error {
 	b.server = nil
 	return err
 }
+
+// SetAppearance persists the appearance ("system", "light" or "dark"). The
+// window itself is themed by main through mygo.Theme.
+func (b *embeddedBackend) SetAppearance(source string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	switch source {
+	case "light", "dark":
+	default:
+		source = "system"
+	}
+	settings := b.settings
+	settings.Appearance = source
+	if err := desktop.SaveSettings(settings); err != nil {
+		return fmt.Errorf("保存设置失败: %w", err)
+	}
+	b.settings = settings
+	return nil
+}
+
+// Appearance returns the saved appearance; "system" when unset.
+func (b *embeddedBackend) Appearance() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.settings.Appearance == "" {
+		return "system"
+	}
+	return b.settings.Appearance
+}

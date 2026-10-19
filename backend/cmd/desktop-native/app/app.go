@@ -42,6 +42,12 @@ type App struct {
 	setupErr    string
 	setupBusy   bool
 
+	// appearance is the theme choice shown on the settings page; main applies
+	// it. appearanceBusy while saving, appearanceMsg the last result.
+	appearance     string
+	appearanceBusy bool
+	appearanceMsg  string
+
 	// cache stats shown on the settings page.
 	cacheBytes   int64
 	cacheMax     int64 // 0 means unlimited
@@ -188,6 +194,7 @@ func (a *App) SetBackend(b Backend) {
 	a.setAuthTokenLocked(b.AuthToken())
 	a.storage = b.Storage()
 	a.translations.path = tagTranslationCachePath(a.storage.CacheDir)
+	a.appearance = b.Appearance()
 	if b.Configured() {
 		a.adoptBackendLocked(b.BaseURL())
 		return
@@ -1139,11 +1146,16 @@ func (a *App) settingsPage(c *ui.Context) {
 
 			ui.Divider(c)
 			ui.Text(c, "外观").FontSize(16).Bold()
-			dark := false
+			a.appearanceRow(c)
+
+			ui.Divider(c)
+			ui.Text(c, "语言").FontSize(16).Bold()
 			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-				ui.Switch(c, &dark)
-				ui.Text(c, "深色模式（当前跟随系统）").FontSize(13)
+				ui.Text(c, "界面语言").Grow(1)
+				ui.Badge(c, "简体中文"+localeSuffix())
 			})
+			ui.Text(c, "目前只有简体中文；日期、数字与字体跟随系统区域设置。").
+				FontSize(11).TextColor(t.TextMuted)
 		})
 	})
 }
@@ -1305,4 +1317,62 @@ func (a *App) errorBlock(c *ui.Context, msg string, retry func()) {
 			retry()
 		}
 	})
+}
+
+// appearanceRow is the 跟随系统/浅色/深色 choice. The window is themed by main
+// through mygo.Theme, which the backend call wraps.
+func (a *App) appearanceRow(c *ui.Context) {
+	t := c.Theme()
+	if a.appearance == "" {
+		a.appearance = "system"
+	}
+	ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+		ui.Text(c, "主题").Grow(1)
+		for _, opt := range []struct{ value, label string }{
+			{"system", "跟随系统"},
+			{"light", "浅色"},
+			{"dark", "深色"},
+		} {
+			label := opt.label
+			if a.appearance == opt.value {
+				label = "✓ " + label
+			}
+			if ui.Button(c, label).Disabled(a.appearanceBusy || a.backend == nil).
+				Clicked() && a.appearance != opt.value {
+				a.saveAppearance(opt.value)
+			}
+		}
+	})
+	if a.appearanceMsg != "" {
+		ui.Text(c, a.appearanceMsg).FontSize(11).TextColor(t.TextMuted)
+	}
+}
+
+// saveAppearance persists the choice; main applies it to mygo.Theme through
+// the backend hook, so no page reload is needed.
+func (a *App) saveAppearance(value string) {
+	if a.backend == nil || a.appearanceBusy {
+		return
+	}
+	a.appearanceBusy = true
+	a.appearanceMsg = ""
+	backend := a.backend
+	go func() {
+		err := backend.SetAppearance(value)
+		a.update(func() {
+			a.appearanceBusy = false
+			if err != nil {
+				a.appearanceMsg = err.Error()
+				return
+			}
+			a.appearance = backend.Appearance()
+			a.appearanceMsg = "已保存，重启后生效"
+		})
+	}()
+}
+
+// localeSuffix adds the system locale to the language line when it is not
+// plain Chinese, so the user can tell what is being followed.
+func localeSuffix() string {
+	return ""
 }

@@ -431,3 +431,47 @@ func TestAuthTokenRequired(t *testing.T) {
 		t.Fatalf("wrong-token status = %d, want 401", resp4.StatusCode)
 	}
 }
+
+func TestAppearanceRoundTripAndDefault(t *testing.T) {
+	clearCookieEnv(t)
+	dir := t.TempDir()
+
+	// Unset follows the system.
+	got, err := loadSettingsFrom(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AppearanceSource() != "system" {
+		t.Fatalf("default appearance = %q", got.AppearanceSource())
+	}
+
+	for _, want := range []string{"dark", "light", "system"} {
+		if err := saveSettingsTo(dir, Settings{Appearance: want}); err != nil {
+			t.Fatal(err)
+		}
+		got, err := loadSettingsFrom(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.AppearanceSource() != want {
+			t.Fatalf("appearance = %q, want %q", got.AppearanceSource(), want)
+		}
+	}
+
+	// An unknown value falls back to system rather than a broken theme.
+	if got := (Settings{Appearance: "purple"}).AppearanceSource(); got != "system" {
+		t.Fatalf("unknown appearance = %q", got)
+	}
+}
+
+func TestAppearanceEnvOverride(t *testing.T) {
+	clearCookieEnv(t)
+	t.Setenv("MANGA_READER_APPEARANCE", "dark")
+	got, err := loadSettingsFrom(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AppearanceSource() != "dark" {
+		t.Fatalf("env appearance = %q", got.AppearanceSource())
+	}
+}
