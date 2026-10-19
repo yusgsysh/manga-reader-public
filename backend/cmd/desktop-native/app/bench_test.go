@@ -271,6 +271,36 @@ func TestScrollCostIndependentOfListLength(t *testing.T) {
 	}
 }
 
+// TestColdStartUnderBudget measures the app's start, the v1 target's last
+// number: building the first frame with no window, backend fetch aside.
+// Cover placeholders are painted up front, so this includes them.
+func TestColdStartUnderBudget(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the app")
+	}
+	if raceEnabled {
+		t.Skip("the race detector slows the start")
+	}
+	srv := bigGalleryServer(t, 25, 10)
+	defer srv.Close()
+
+	start := time.Now()
+	a := New(NewClient(srv.URL))
+	tt := ui.NewTester(a.View, 1280, 860)
+	firstFrame := time.Since(start)
+	t.Logf("first frame after %v (target: under 1s)", firstFrame.Round(time.Millisecond))
+
+	// The first frame with data, once the list arrives.
+	waitText(t, tt, "示例画廊 1")
+	loaded := time.Since(start)
+	t.Logf("list shown after %v", loaded.Round(time.Millisecond))
+
+	if firstFrame > time.Second {
+		t.Errorf("the first frame took %v, over the 1s cold-start target", firstFrame)
+	}
+	_ = tt
+}
+
 func waitTextB(b *testing.B, tt *ui.Tester, s string) {
 	b.Helper()
 	for i := 0; i < 2000; i++ {

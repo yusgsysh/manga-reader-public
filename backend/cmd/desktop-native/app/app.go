@@ -203,6 +203,7 @@ func (a *App) Attach(w *mygo.Window) {
 	a.images.SetWindow(w)
 	a.pageImages.SetWindow(w)
 	a.pageThumbs.SetWindow(w)
+	a.pageCache.SetWindow(w)
 }
 
 // SetBackend installs the in-process backend lifecycle. When the backend is
@@ -430,7 +431,7 @@ func (a *App) route(c *ui.Context, r *ui.Route) {
 	case r.Match("/reader/{id}/{token}"):
 		r.Title("阅读器")
 		id, _ := strconv.ParseInt(r.Param("id"), 10, 64)
-		a.readerPage(c, id, r.Param("token"))
+		a.readerPage(c, id, r.Param("token"), r.Query("offline") == "1")
 	default:
 		r.Title("未找到")
 		a.emptyPage(c, "未找到", "这个页面不存在", "")

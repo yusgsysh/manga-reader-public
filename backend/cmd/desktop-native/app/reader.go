@@ -34,6 +34,9 @@ type Reader struct {
 	// started is set once a load was launched for id/token, so a frame does
 	// not launch it again after a failure.
 	started bool
+	// offline reads the downloaded copy: the reader asks the cache first
+	// instead of waiting on upstream to fail.
+	offline bool
 
 	zoom  float32
 	panX  float32
@@ -84,15 +87,19 @@ func (r *Reader) zoomBy(d float32) {
 	r.zoom = clampFloat(r.zoom+d, 0.5, 6)
 }
 
-func (a *App) ensureReader(id int64, token string) {
+// ensureReader starts loading the reader's page list unless it is already
+// loading or showing this gallery. offline selects the downloaded copy, so
+// a change of mode starts the load again.
+func (a *App) ensureReader(id int64, token string, offline bool) {
 	r := &a.reader
 	// started covers the failure case: after a failed load, loading, loaded
 	// and the page list are all empty, so a frame that ran again would start
 	// the load anew forever. The reader then shows the error until Retry.
-	if r.id == id && r.token == token && (r.loading || r.loaded || r.started) {
+	if r.id == id && r.token == token && r.offline == offline &&
+		(r.loading || r.loaded || r.started) {
 		return
 	}
-	r.id, r.token = id, token
+	r.id, r.token, r.offline = id, token, offline
 	r.started = false
 	r.page = 0
 	r.pages = nil
@@ -148,9 +155,18 @@ func (a *App) startReaderLoad(r *Reader) {
 		if p, err := a.client.Progress(ctx, id, token); err == nil {
 			progress = p
 		}
-		total, urls, err := a.client.PagesStreaming(ctx, id, token, onPage)
-		if err != nil {
+		var total int
+		var urls []string
+		var err error
+		if r.offline {
+			// Offline reading asks the cached copy first and never waits on
+			// upstream, which would take a timeout to fail when disconnected.
 			total, urls, err = a.client.CachedPagesStreaming(ctx, id, token, onPage)
+		} else {
+			total, urls, err = a.client.PagesStreaming(ctx, id, token, onPage)
+			if err != nil {
+				total, urls, err = a.client.CachedPagesStreaming(ctx, id, token, onPage)
+			}
 		}
 		a.update(func() {
 			if r.loadID != lid {
@@ -299,8 +315,8 @@ func (a *App) flushProgress(r *Reader, page int) {
 	}()
 }
 
-func (a *App) readerPage(c *ui.Context, id int64, token string) {
-	a.ensureReader(id, token)
+func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
+	a.ensureReader(id, token, offline)
 	r := &a.reader
 	t := c.Theme()
 
@@ -371,8 +387,11 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 							FontSize(11).TextColor(t.TextMuted)
 						return
 					}
-					ui.Textf(c, "%d / %d 页 · %d%%", r.page+1, len(r.pages), int(r.zoom*100)).
-						FontSize(11).TextColor(t.TextMuted)
+					line := fmt.Sprintf("%d / %d 页 · %d%%", r.page+1, len(r.pages), int(r.zoom*100))
+					if r.offline {
+						line += " · 离线"
+					}
+					ui.Text(c, line).FontSize(11).TextColor(t.TextMuted)
 				} else {
 					ui.Text(c, "正在加载…").FontSize(11).TextColor(t.TextMuted)
 				}

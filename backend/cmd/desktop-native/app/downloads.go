@@ -315,7 +315,10 @@ func (a *App) downloadRow(c *ui.Context, j PrefillJob) {
 					a.cancelDownload(j.ID)
 				}
 			} else {
-				if j.Status == "completed" {
+				if j.Status == "completed" && j.GalleryID > 0 && j.Token != "" {
+					if ui.Button(c, "离线阅读").Clicked() {
+						a.router.Push(fmt.Sprintf("/reader/%d/%s?offline=1", j.GalleryID, j.Token))
+					}
 					label := "导出 ZIP"
 					if a.zipBusy[j.ID] {
 						label = "正在导出…"
