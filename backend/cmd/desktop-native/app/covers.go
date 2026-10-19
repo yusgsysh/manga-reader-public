@@ -6,6 +6,7 @@ import (
 	"math"
 	"sync"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -49,6 +50,9 @@ type PageCache struct {
 	entries map[[2]int]*ui.Bitmap
 	order   [][2]int
 	max     int
+	// pending marks the placeholders being painted in the background.
+	pending map[[2]int]bool
+	win     *mygo.Window
 }
 
 func NewPageCache(max int) *PageCache {
@@ -66,24 +70,47 @@ func (p *PageCache) Get(galleryID, page int) *ui.Bitmap {
 		p.mu.Unlock()
 		return b
 	}
+	if p.pending == nil {
+		p.pending = make(map[[2]int]bool)
+	}
+	// A 900x1300 gradient is a million sine evaluations: build it off the
+	// frame, and let this frame show its plain placeholder instead.
+	if !p.pending[key] {
+		p.pending[key] = true
+		go p.build(key)
+	}
 	p.mu.Unlock()
+	return nil
+}
 
-	// Build outside the lock: a page is a few megapixels and takes a moment.
-	b := gradientBitmap(galleryID*1000+page, 900, 1300)
+// build paints a placeholder in the background and asks for a frame.
+func (p *PageCache) build(key [2]int) {
+	b := gradientBitmap(key[0]*1000+key[1], 900, 1300)
 
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	if old, ok := p.entries[key]; ok {
-		return old
+	delete(p.pending, key)
+	if _, ok := p.entries[key]; !ok {
+		p.entries[key] = b
+		p.order = append(p.order, key)
+		for len(p.order) > p.max {
+			oldest := p.order[0]
+			p.order = p.order[1:]
+			delete(p.entries, oldest)
+		}
 	}
-	p.entries[key] = b
-	p.order = append(p.order, key)
-	for len(p.order) > p.max {
-		oldest := p.order[0]
-		p.order = p.order[1:]
-		delete(p.entries, oldest)
+	win := p.win
+	p.mu.Unlock()
+
+	if win != nil {
+		win.Update(func() {})
 	}
-	return b
+}
+
+// SetWindow lets the cache ask for a frame once a placeholder is ready.
+func (p *PageCache) SetWindow(w *mygo.Window) {
+	p.mu.Lock()
+	p.win = w
+	p.mu.Unlock()
 }
 
 // gradientBitmap paints a deterministic placeholder: a vertical gradient, a
