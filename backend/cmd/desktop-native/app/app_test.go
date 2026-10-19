@@ -1671,3 +1671,66 @@ func TestReaderDoubleAndWheel(t *testing.T) {
 	tt.Scroll(640, 250, 0, -40)
 	waitText(t, tt, "1 / 3 页")
 }
+
+// TestImageStoreErrAndRetry covers the placeholder state: a failed load is
+// reported, and Retry makes the next Get ask again.
+func TestImageStoreErrAndRetry(t *testing.T) {
+	fail := true
+	var mu sync.Mutex
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		hits++
+		shouldFail := fail
+		mu.Unlock()
+		if shouldFail {
+			http.Error(w, "nope", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(fakeImagePNG)
+	}))
+	defer srv.Close()
+
+	store := NewImageStore(4)
+	url := srv.URL + "/img"
+
+	if got := store.Get(url); got != nil {
+		t.Fatal("first Get returned a bitmap")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if store.Err(url) != "" {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if store.Err(url) == "" {
+		t.Fatal("failed load not reported")
+	}
+
+	fail = false
+	store.Retry(url)
+	if got := store.Get(url); got != nil {
+		t.Fatal("Get after Retry should start loading, not return at once")
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if store.Get(url) != nil {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if store.Get(url) == nil {
+		t.Fatal("retry did not load the image")
+	}
+	if store.Err(url) != "" {
+		t.Fatalf("Err after success = %q", store.Err(url))
+	}
+	mu.Lock()
+	n := hits
+	mu.Unlock()
+	if n < 2 {
+		t.Fatalf("server hits = %d, want at least 2", n)
+	}
+}

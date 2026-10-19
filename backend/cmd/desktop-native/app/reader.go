@@ -539,9 +539,14 @@ func clampFloat(v, lo, hi float32) float32 {
 // image store; until then the page is blank rather than a stretched error.
 func (a *App) readerPageImage(c *ui.Context, r *Reader, page int) {
 	src := r.pages[page]
-	bitmap := a.pageImages.Get(a.client.PageImageURL(src))
+	url := a.client.PageImageURL(src)
+	bitmap := a.pageImages.Get(url)
 	if bitmap == nil {
 		bitmap = a.pageCache.Get(int(r.id), page)
+	}
+	if bitmap == nil {
+		a.readerPagePlaceholder(c, r, page, url)
+		return
 	}
 	img := ui.Image(c, bitmap).Fill().Fit(r.fit).
 		TransformOrigin(0.5, 0.5).
@@ -550,4 +555,26 @@ func (a *App) readerPageImage(c *ui.Context, r *Reader, page int) {
 	if r.double {
 		img.Grow(1)
 	}
+}
+
+// readerPagePlaceholder fills a page that is still loading, or offers a retry
+// when it failed, instead of leaving the area blank with no explanation.
+func (a *App) readerPagePlaceholder(c *ui.Context, r *Reader, page int, url string) {
+	t := c.Theme()
+	col := ui.Column(c).Fill().Center().Gap(8)
+	if r.double {
+		col.Grow(1)
+	}
+	col.Children(func() {
+		if err := a.pageImages.Err(url); err != "" {
+			ui.Text(c, "第 "+strconv.Itoa(page+1)+" 页加载失败").FontSize(12).TextColor(t.Danger)
+			if ui.Button(c, "重试").Clicked() {
+				a.pageImages.Retry(url)
+			}
+			return
+		}
+		ui.Spinner(c)
+		ui.Text(c, "正在加载第 "+strconv.Itoa(page+1)+" 页…").
+			FontSize(12).TextColor(t.TextMuted)
+	})
 }

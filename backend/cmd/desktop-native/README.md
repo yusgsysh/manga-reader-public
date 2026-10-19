@@ -101,7 +101,7 @@ cmd/desktop-native/
 - 内嵌模式生成随机令牌（`config.AuthHeader`），API 客户端与 `ImageStore` 都带上它；服务端中间件用常量时间比较校验，缺失或不匹配返回 401。
 - 单实例：第一个进程在配置目录监听 `instance.sock`，后续进程连接它并发送 `focus`，然后退出；监听进程调用 `Window.Show()/Focus()` 把窗口带到前台。
 - 列表与详情在后台 goroutine 请求，结果通过 `App.update` 主线程回写；视图永不阻塞在网络请求上。
-- 图片由 `ImageStore` 按 URL 缓存。`Get` 立即返回 `nil` 或已解码的 bitmap，首次请求在后台进行；完成后调用 `Window.Update` 请求下一帧。
+- 图片由 `ImageStore` 按 URL 缓存；`Err` 暴露失败原因，`Retry` 清掉失败项，列表封面和阅读页因此能显示占位与「重试」。`Get` 立即返回 `nil` 或已解码的 bitmap，首次请求在后台进行；完成后调用 `Window.Update` 请求下一帧。
 - 阅读器的页面列表走 NDJSON 流式接口，在线失败时回退到 `/api/gallery-cache/...`。
 - 阅读器每帧预热当前页前 1 后 2 页（`readerPreloadPages`）：`ImageStore.Get` 对已入队/已加载的页面几乎无开销，对未加载的页面在后台启动下载；可见页优先入队。预加载是幂等的，后续帧重复请求同一 URL 不会重复下载。
 - 阅读区的指针事件在 `HandleInput` 里区分点击与拖拽（位移 < 6px 视为点击）：未放大时点左右三分区翻页，拖动则平移；`rtl` 打开后左右方向与方向键互换。

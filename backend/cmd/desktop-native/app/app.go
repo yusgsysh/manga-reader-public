@@ -638,7 +638,22 @@ func (a *App) galleryCard(c *ui.Context, g Gallery) {
 
 	cell := ui.Column(c).Gap(6).Focusable()
 	cell.Children(func() {
-		ui.Image(c, cover).AspectRatio(3.0 / 4.0).Fit(ui.Cover).Radius(10)
+		switch {
+		case cover != nil:
+			ui.Image(c, cover).AspectRatio(3.0 / 4.0).Fit(ui.Cover).Radius(10)
+		case a.images.Err(g.CoverURL) != "":
+			// A failed cover retries on click instead of staying blank.
+			box := ui.Box(c).AspectRatio(3.0 / 4.0).Radius(10).Center().
+				Background(t.Surface).Label("封面加载失败，点击重试")
+			box.Children(func() {
+				ui.Text(c, "封面加载失败").FontSize(11).TextColor(t.TextMuted)
+			})
+			if box.Clicked() {
+				a.images.Retry(g.CoverURL)
+			}
+		default:
+			ui.Box(c).AspectRatio(3.0 / 4.0).Radius(10).Background(t.SurfaceHover)
+		}
 		ui.Text(c, displayTitle(g)).FontSize(13).SingleLine()
 		meta := fmt.Sprintf("%s · %d 页", g.Category, g.Pages)
 		if g.Reading != nil && g.Reading.CurrentPage > 0 {

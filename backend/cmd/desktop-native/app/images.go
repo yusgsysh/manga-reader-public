@@ -96,6 +96,38 @@ func (s *ImageStore) Get(url string) *ui.Bitmap {
 	return bitmap
 }
 
+// Err returns the last failure of url, or "" while it is loading or after a
+// successful load. The view uses it to show a retry instead of a blank box.
+func (s *ImageStore) Err(url string) string {
+	if url == "" {
+		return ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e := s.entries[url]; e != nil && !e.loading {
+		return e.err
+	}
+	return ""
+}
+
+// Retry drops a failed entry so the next Get starts the download again.
+func (s *ImageStore) Retry(url string) {
+	if url == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e := s.entries[url]; e != nil && !e.loading && e.err != "" {
+		delete(s.entries, url)
+		for i, key := range s.order {
+			if key == url {
+				s.order = append(s.order[:i], s.order[i+1:]...)
+				break
+			}
+		}
+	}
+}
+
 func (s *ImageStore) load(url string) {
 	bitmap, err := s.fetch(url)
 
