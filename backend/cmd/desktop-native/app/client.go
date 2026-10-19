@@ -236,14 +236,33 @@ func (c *Client) CachedGallery(ctx context.Context, id int64, token string) (api
 // --- Page list (NDJSON stream) ---
 
 func (c *Client) Pages(ctx context.Context, id int64, token string) (int, []string, error) {
-	return c.pages(ctx, fmt.Sprintf("/api/gallery/%d/%s/pages", id, url.PathEscape(token)), 10*time.Minute)
+	return c.pages(ctx, fmt.Sprintf("/api/gallery/%d/%s/pages", id, url.PathEscape(token)), 10*time.Minute, nil)
 }
 
 func (c *Client) CachedPages(ctx context.Context, id int64, token string) (int, []string, error) {
-	return c.pages(ctx, fmt.Sprintf("/api/gallery-cache/%d/%s/pages", id, url.PathEscape(token)), 10*time.Minute)
+	return c.pages(ctx, fmt.Sprintf("/api/gallery-cache/%d/%s/pages", id, url.PathEscape(token)), 10*time.Minute, nil)
 }
 
-func (c *Client) pages(ctx context.Context, path string, timeout time.Duration) (int, []string, error) {
+// PageStreamFunc hears a page list as it arrives. url is the page's URL and
+// index its position; total is the gallery's page count when the backend
+// announced it (upstream counts it up front), else 0.
+type PageStreamFunc func(index int, pageURL string, total int)
+
+// PagesStreaming reads the page list like Pages, but hands each page to onPage
+// as the backend scrapes it. A large gallery takes tens of seconds upstream,
+// and the reader can show what has arrived instead of waiting for the last
+// page. onPage runs on the caller's goroutine, so it must not touch the UI
+// directly.
+func (c *Client) PagesStreaming(ctx context.Context, id int64, token string, onPage PageStreamFunc) (int, []string, error) {
+	return c.pages(ctx, fmt.Sprintf("/api/gallery/%d/%s/pages", id, url.PathEscape(token)), 10*time.Minute, onPage)
+}
+
+// CachedPagesStreaming is PagesStreaming against the offline copy.
+func (c *Client) CachedPagesStreaming(ctx context.Context, id int64, token string, onPage PageStreamFunc) (int, []string, error) {
+	return c.pages(ctx, fmt.Sprintf("/api/gallery-cache/%d/%s/pages", id, url.PathEscape(token)), 10*time.Minute, onPage)
+}
+
+func (c *Client) pages(ctx context.Context, path string, timeout time.Duration, onPage PageStreamFunc) (int, []string, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
@@ -252,6 +271,12 @@ func (c *Client) pages(ctx context.Context, path string, timeout time.Duration) 
 	}
 	if c.user != "" {
 		req.SetBasicAuth(c.user, c.password)
+	}
+	// The embedded server requires its per-run token on every request; a
+	// hand-built request must carry it as Client.do does, or the page list
+	// is answered 401 and the reader never loads.
+	if token := c.authTokenValue(); token != "" {
+		req.Header.Set(config.AuthHeader, token)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -291,6 +316,9 @@ func (c *Client) pages(ctx context.Context, path string, timeout time.Duration) 
 				return 0, nil, fmt.Errorf("页面流索引不连续：got %d, want %d", l.Index, len(urls))
 			}
 			urls = append(urls, l.PageURL)
+			if onPage != nil {
+				onPage(l.Index, l.PageURL, total)
+			}
 		case "done":
 			if l.Total > 0 {
 				total = l.Total
