@@ -481,6 +481,18 @@ func (a *App) loadMore(s *listState) {
 	a.startListLoad(s)
 }
 
+// ensureMore loads the next page when fewer than two screens are left, so a
+// long list keeps filling itself as the user scrolls instead of stopping at a
+// 「加载更多」 button. The frame passes how many rows the grid showed.
+func (a *App) ensureMore(s *listState, shownRows, visibleRows int) {
+	if !a.hasMore(s) || s.loading {
+		return
+	}
+	if shownRows-visibleRows <= 2 {
+		a.loadMore(s)
+	}
+}
+
 func (a *App) hasMore(s *listState) bool {
 	if !s.loaded {
 		return false
@@ -616,17 +628,42 @@ func (a *App) listPage(c *ui.Context, path, title, subtitle string, kind listKin
 			ui.GridView(c, s.grid, len(s.items), 190, 300, func(i int) {
 				a.galleryCard(c, s.items[i])
 			}).Grow(1).Clip()
-			if s.loading || a.hasMore(s) {
-				ui.Row(c).Center().Gap(8).Children(func() {
-					if s.loading {
-						ui.Spinner(c)
-					} else if ui.Button(c, "加载更多").Clicked() {
-						a.loadMore(s)
-					}
-				})
-			}
+			// Two full columns' worth of rows per screen at the default size;
+			// the estimate only decides when to prefetch, and a short list
+			// simply loads its next page early.
+			shown := (len(s.items) + 6) / 6
+			a.ensureMore(s, shown, 2)
+			a.listFooter(c, s)
 		}
 	})
+}
+
+// listFooter is the row under a list: a spinner while the next page loads,
+// a retry when it failed, or nothing once the list is complete.
+func (a *App) listFooter(c *ui.Context, s *listState) {
+	t := c.Theme()
+	switch {
+	case s.loading:
+		ui.Row(c).Center().Gap(8).Children(func() {
+			ui.Spinner(c)
+			ui.Text(c, "正在加载…").FontSize(11).TextColor(t.TextMuted)
+		})
+	case s.err != "":
+		ui.Row(c).Center().Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "加载更多失败").FontSize(11).TextColor(t.Danger)
+			if ui.Button(c, "重试").Clicked() {
+				a.startListLoad(s)
+			}
+		})
+	case a.hasMore(s):
+		// The grid asks for the next page as the user nears the end; the
+		// button stays for a deliberate click.
+		ui.Row(c).Center().Children(func() {
+			if ui.Button(c, "加载更多").Clicked() {
+				a.loadMore(s)
+			}
+		})
+	}
 }
 
 func (a *App) galleryCard(c *ui.Context, g Gallery) {
@@ -714,15 +751,7 @@ func (a *App) searchPage(c *ui.Context) {
 			ui.GridView(c, s.grid, len(s.items), 190, 300, func(i int) {
 				a.galleryCard(c, s.items[i])
 			}).Grow(1).Clip()
-			if s.loading || a.hasMore(s) {
-				ui.Row(c).Center().Gap(8).Children(func() {
-					if s.loading {
-						ui.Spinner(c)
-					} else if ui.Button(c, "加载更多").Clicked() {
-						a.loadMore(s)
-					}
-				})
-			}
+			a.listFooter(c, s)
 		}
 	})
 }
