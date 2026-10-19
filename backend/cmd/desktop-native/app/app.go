@@ -68,6 +68,8 @@ type App struct {
 	// readerStart is the page the next reader open should show, set when a
 	// detail-page thumbnail is clicked; -1 means "resume saved progress".
 	readerStart int
+	// readerJump is the page-number field under the reader.
+	readerJump string
 }
 
 type listKind int

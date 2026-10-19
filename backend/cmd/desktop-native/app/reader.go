@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -29,6 +31,16 @@ type Reader struct {
 	drag  bool
 	lastX float32
 	lastY float32
+	// fit is how the page fills the area: ui.Contain shows the whole page,
+	// ui.Cover fills the width (and crops the overflow, which pan shows).
+	fit ui.Fit
+	// rtl reads right to left: the right side turns forward, as Japanese
+	// manga do.
+	rtl bool
+	// downX/downY and moved tell a click from a drag, so a tap can turn the
+	// page while dragging still pans.
+	downX, downY float32
+	moved        bool
 
 	lastSaved int
 }
@@ -158,11 +170,25 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 	}
 
 	if r.loaded {
-		if c.Shortcut(0, ui.KeyRight) || c.Shortcut(0, ui.KeyDown) || c.Shortcut(0, ui.KeySpace) {
+		if c.Shortcut(0, ui.KeyDown) || c.Shortcut(0, ui.KeySpace) {
 			a.readerNext(r)
 		}
-		if c.Shortcut(0, ui.KeyLeft) || c.Shortcut(0, ui.KeyUp) {
+		if c.Shortcut(0, ui.KeyUp) {
 			a.readerPrev(r)
+		}
+		if c.Shortcut(0, ui.KeyRight) {
+			if r.rtl {
+				a.readerPrev(r)
+			} else {
+				a.readerNext(r)
+			}
+		}
+		if c.Shortcut(0, ui.KeyLeft) {
+			if r.rtl {
+				a.readerNext(r)
+			} else {
+				a.readerPrev(r)
+			}
 		}
 		if c.Shortcut(0, ui.KeyEqual) || c.Shortcut(ui.Shift, ui.KeyEqual) {
 			r.zoomBy(0.2)
@@ -201,7 +227,16 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 			if ui.Button(c, "−").Width(36).Label("缩小").Disabled(!r.loaded).Clicked() {
 				r.zoomBy(-0.2)
 			}
-			if ui.Button(c, "适应").Label("重置缩放").Disabled(!r.loaded).Clicked() {
+			fitLabel := "适合页面"
+			if r.fit == ui.Cover {
+				fitLabel = "适应宽度"
+			}
+			if ui.Button(c, fitLabel).Label("切换适应模式").Disabled(!r.loaded).Clicked() {
+				if r.fit == ui.Cover {
+					r.fit = ui.Contain
+				} else {
+					r.fit = ui.Cover
+				}
 				r.resetView()
 			}
 			if ui.Button(c, "+").Width(36).Label("放大").Disabled(!r.loaded).Clicked() {
@@ -237,6 +272,11 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 			// painted, so the visible page and its successors arrive together.
 			a.preloadPages(r)
 
+			// The area spans the content column, right of the 220px sidebar;
+			// a tap in its outer thirds turns the page (panning stays).
+			windowW, _ := c.Size()
+			areaW := windowW - 220
+
 			area := ui.Box(c).Fill().Focusable().Clip()
 			area.HandleInput(func(ev ui.InputEvent) bool {
 				switch ev.Kind {
@@ -255,16 +295,24 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 				case ui.InputPointerDown:
 					r.drag = true
 					r.lastX, r.lastY = ev.X, ev.Y
+					r.downX, r.downY = ev.X, ev.Y
+					r.moved = false
 					return true
 				case ui.InputPointerMove:
 					if r.drag {
 						r.panX += ev.X - r.lastX
 						r.panY += ev.Y - r.lastY
 						r.lastX, r.lastY = ev.X, ev.Y
+						if absFloat(ev.X-r.downX)+absFloat(ev.Y-r.downY) > 6 {
+							r.moved = true
+						}
 					}
 					return true
 				case ui.InputPointerUp:
 					r.drag = false
+					if !r.moved {
+						a.readerTap(r, ev.X, areaW)
+					}
 					return true
 				}
 				return false
@@ -275,16 +323,27 @@ func (a *App) readerPage(c *ui.Context, id int64, token string) {
 				if bitmap == nil {
 					bitmap = a.pageCache.Get(int(r.id), r.page)
 				}
-				ui.Image(c, bitmap).Fill().Fit(ui.Contain).
+				ui.Image(c, bitmap).Fill().Fit(r.fit).
 					TransformOrigin(0.5, 0.5).
 					Translate(r.panX, r.panY).
 					Scale(r.zoom, r.zoom)
 			})
 
 			ui.Progress(c, float64(r.page+1)/float64(len(r.pages))).FillWidth().Height(3)
-			ui.Row(c).Padding(6, 16).Children(func() {
+			ui.Row(c).Padding(6, 16).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "← → 翻页 · Ctrl + 滚轮缩放 · 拖拽平移 · 0 重置 · F 全屏").
-					FontSize(11).TextColor(t.TextMuted)
+					FontSize(11).TextColor(t.TextMuted).Grow(1)
+				dir := "从左到右"
+				if r.rtl {
+					dir = "从右到左"
+				}
+				if ui.Button(c, dir).Label("切换阅读方向").Clicked() {
+					r.rtl = !r.rtl
+				}
+				ui.TextInput(c, &a.readerJump).Width(64).Label("跳转页码").Placeholder("页码")
+				if ui.Button(c, "跳转").Clicked() {
+					a.readerJumpTo(r)
+				}
 			})
 		}
 	})
@@ -311,6 +370,54 @@ func (a *App) preloadPages(r *Reader) {
 		warm(r.page + i)
 	}
 	warm(r.page - 1)
+}
+
+// readerTap turns the page when the user taps the outer third of the reading
+// area. Zoomed or panned views ignore taps, where a click is likely meant to
+// position the page rather than turn it.
+func (a *App) readerTap(r *Reader, x, width float32) {
+	if width <= 0 || r.zoom > 1 {
+		return
+	}
+	left, right := a.readerPrev, a.readerNext
+	if r.rtl {
+		left, right = right, left
+	}
+	switch {
+	case x < width/3:
+		left(r)
+	case x > width*2/3:
+		right(r)
+	}
+}
+
+// readerJumpTo goes to the page typed in the bottom bar, clamped to the list.
+func (a *App) readerJumpTo(r *Reader) {
+	if !r.loaded || len(r.pages) == 0 {
+		return
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(a.readerJump))
+	if err != nil {
+		return
+	}
+	page := n - 1
+	if page < 0 {
+		page = 0
+	}
+	if page >= len(r.pages) {
+		page = len(r.pages) - 1
+	}
+	r.page = page
+	r.resetView()
+	a.saveProgress(r)
+	a.readerJump = ""
+}
+
+func absFloat(v float32) float32 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 func clampFloat(v, lo, hi float32) float32 {

@@ -389,6 +389,63 @@ func TestDetailThumbnailGridJumpsToPage(t *testing.T) {
 	waitText(t, tt, "2 / 3 页")
 }
 
+// TestReaderTapFitAndJump covers the reading-area tap zones, the fit toggle
+// and the page-number field.
+func TestReaderTapFitAndJump(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "开始阅读")
+	if err := tt.Click("开始阅读"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "1 / 3 页")
+
+	// The reading area starts right of the 220px sidebar and fills the rest,
+	// so x=1200 is the right third and x=300 the left third.
+	tt.ClickAt(1200, 400)
+	waitText(t, tt, "2 / 3 页")
+	tt.ClickAt(300, 400)
+	waitText(t, tt, "1 / 3 页")
+
+	if err := tt.Click("适合页面"); err != nil {
+		t.Fatalf("click fit mode: %v", err)
+	}
+	if a.reader.fit != ui.Cover {
+		t.Fatalf("fit = %v, want Cover", a.reader.fit)
+	}
+	waitText(t, tt, "适应宽度")
+
+	if err := tt.Click("跳转页码"); err != nil {
+		t.Fatalf("click page field: %v", err)
+	}
+	tt.Type("3")
+	if err := tt.Click("跳转"); err != nil {
+		t.Fatalf("click jump: %v", err)
+	}
+	waitText(t, tt, "3 / 3 页")
+	if a.readerJump != "" {
+		t.Errorf("page field not cleared: %q", a.readerJump)
+	}
+
+	// Right-to-left swaps the arrow keys and tap zones.
+	if err := tt.Click("从左到右"); err != nil {
+		t.Fatalf("click direction: %v", err)
+	}
+	if !a.reader.rtl {
+		t.Fatal("rtl not enabled")
+	}
+	waitText(t, tt, "从右到左")
+	tt.Key(0, ui.KeyRight)
+	waitText(t, tt, "2 / 3 页")
+	tt.ClickAt(1200, 400)
+	waitText(t, tt, "1 / 3 页")
+}
+
 func TestSearchFilters(t *testing.T) {
 	a, tt := newTestApp(t)
 	if err := tt.Click("搜索"); err != nil {
