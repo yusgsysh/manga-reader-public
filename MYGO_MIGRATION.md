@@ -250,7 +250,7 @@
 - [ ] 决定是否删除 Android APK、`build/android`、`build/`。
 - [ ] 决定是否删除 Docker/Compose、`deploy/`、MinIO、Basic Auth、CORS、Prometheus。
   - 注意：若保留 headless server，Prometheus/Basic Auth 可能仍有价值。
-- [ ] 更新根 `README.md`，把「Web + 桌面 + Android」改为「桌面单机」。
+- [x] 根 `README.md` 顶部加了原生桌面版说明与运行方式（旧 Web/Android 文档保留，待 3.5 决策后清理）。
 
 ---
 

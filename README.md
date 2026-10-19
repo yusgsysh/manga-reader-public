@@ -1,6 +1,14 @@
 # Manga Reader
 
-单用户、自托管的 ExHentai Web 漫画客户端。
+单用户、自托管的 ExHentai 漫画客户端。
+
+> **原生桌面版（进行中）**：`backend/cmd/desktop-native` 是用 [mygo](https://github.com/egoist/mygo) 原生 `ui` 包重写的桌面端，纯 Go、无 WebView、无 React，后端进程内启动、图片缓存写在本地文件系统。迁移进度与剩余任务见 [`MYGO_MIGRATION.md`](MYGO_MIGRATION.md)，运行方式见 [`backend/cmd/desktop-native/README.md`](backend/cmd/desktop-native/README.md)。
+>
+> ```bash
+> cd backend && go run ./cmd/desktop-native
+> ```
+>
+> 下面的 Web / Docker / Android 说明仍适用于旧版部署方式。
 
 - Backend：Go / Gin / Ent (ORM) / SQLite 或 PostgreSQL / MinIO (S3)
 - Frontend：Bun / React / Vite / TypeScript
