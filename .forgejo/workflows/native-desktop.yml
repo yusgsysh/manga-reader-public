@@ -165,6 +165,13 @@ jobs:
           cp ../README.md "$STAGE/README.md"
           cp cmd/desktop-native/README.md "$STAGE/README-desktop.md"
           cp ../MYGO_MIGRATION.md "$STAGE/MYGO_MIGRATION.md"
+          # The icon and desktop entry travel with the binary; INSTALL.md
+          # explains how to put them in place (a real .deb/AppImage is
+          # still on the todo list).
+          mkdir -p "$STAGE/linux"
+          cp cmd/desktop-native/assets/icon.png "$STAGE/linux/manga-reader.png"
+          cp cmd/desktop-native/assets/manga-reader.desktop "$STAGE/linux/manga-reader.desktop"
+          cp cmd/desktop-native/assets/INSTALL.md "$STAGE/INSTALL.md"
 
           # Pack into a file outside the staged dir, so the archive never
           # includes itself while it is being written.
@@ -174,7 +181,8 @@ jobs:
           else
             ARCHIVE="${ARCHIVE_BASE}.tar.gz"
             tar -czf "$STAGE/$ARCHIVE" -C "$STAGE" \
-              "${NAME##*/}" README.md README-desktop.md MYGO_MIGRATION.md
+              "${NAME##*/}" README.md README-desktop.md MYGO_MIGRATION.md \
+              INSTALL.md linux
           fi
           # The artifact path is relative to the workspace, where the upload
           # step looks for it.
