@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Manga Reader
+GenericName=Manga Reader
+Comment=ExHentai 漫画客户端，纯 Go 原生桌面应用
+Exec=manga-reader
+Icon=manga-reader
+Terminal=false
+Categories=Graphics;Viewer;
+Keywords=manga;comic;reader;exhentai;
+StartupWMClass=manga-reader

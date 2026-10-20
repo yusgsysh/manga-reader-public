@@ -26,6 +26,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"manga-reader/cmd/desktop-native/app"
+	"manga-reader/cmd/desktop-native/assets"
 	"manga-reader/cmd/desktop-native/internal/desktop"
 	"manga-reader/cmd/desktop-native/internal/singleinstance"
 )
@@ -124,6 +125,11 @@ func main() {
 			StateKey:  "main",
 			Content:   ui.View(a.View),
 		})
+		// The taskbar/title-bar icon (Linux, Windows). A failure leaves the
+		// platform default; a missing icon is not worth a dialog.
+		if err := win.SetIcon(assets.PNG); err != nil {
+			log.Printf("设置窗口图标失败: %v", err)
+		}
 		a.Attach(win)
 		mainWindow.Store(win)
 	})
