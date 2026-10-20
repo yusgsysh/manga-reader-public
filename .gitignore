@@ -1,17 +1,43 @@
 # Build outputs
-backend/manga-reader
-backend/desktop-native
-backend/desktop-native.exe
+#
+# `go build ./cmd/desktop-native` writes its binary into the working
+# directory: without -o that is backend/, with -o desktop-native it is
+# backend/desktop-native, and the release builds name it
+# manga-reader-linux-amd64 and the like. All of these were committed by
+# mistake once, so the patterns are anchored to backend/ where they land.
+/backend/desktop-native
+/backend/desktop-native.exe
+/backend/manga-reader
+/backend/manga-reader.exe
+/backend/manga-reader-linux-*
+/backend/manga-reader-darwin-*
+/backend/manga-reader-windows-*
+
+# Test and profile output
+*.test
+*.prof
+coverage.out
+
+# MyGo desktop: only the native app's source is tracked under cmd/. The
+# reload rule keeps that directory while ignoring anything else a stray
+# build or an old Wails checkout leaves there.
+/backend/cmd/*
+!/backend/cmd/desktop-native/
 
 # Local data (the desktop app keeps its database and cache under the user
-# config/cache directories; these cover a checkout that predates that)
-backend/data/*
-
-# MyGo desktop: only the native app's source is tracked under cmd/
-backend/cmd/*
-!backend/cmd/desktop-native/
+# config/cache directories; this covers a checkout that predates that)
+/backend/data/
 
 # Local environment files (cookies, passwords) — never commit
 .env
-secrets/
+.env.*
+!.env.example
+/secrets/
 *.htpasswd
+
+# Editors and OS files
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
