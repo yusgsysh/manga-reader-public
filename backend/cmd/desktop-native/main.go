@@ -16,6 +16,7 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -69,15 +70,21 @@ func main() {
 		a = app.New(client)
 		a.SetBuild(appVersion() + " · " + platformLabel())
 	} else {
-		settings, err := desktop.LoadSettings()
-		if err != nil {
-			log.Fatalf("加载设置失败: %v", err)
+		// A config.json that cannot be parsed must not take the window with
+		// it: the app opens and says what is wrong, and settings saved from
+		// it replace the broken file.
+		settings, settingsErr := desktop.LoadSettings()
+		if settingsErr != nil {
+			log.Printf("加载设置失败，将使用默认值: %v", settingsErr)
 		}
 		token, err := newAuthToken()
 		if err != nil {
 			log.Fatalf("生成访问令牌失败: %v", err)
 		}
 		embedded = &embeddedBackend{settings: settings, token: token}
+		if settingsErr != nil {
+			embedded.startErr = fmt.Sprintf("读取配置文件失败：%v\n下面的设置页会把当前设置写回去，覆盖这个文件。", settingsErr)
+		}
 		// Apply the saved appearance before the first window is drawn.
 		switch settings.AppearanceSource() {
 		case "dark":

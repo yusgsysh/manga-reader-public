@@ -1049,6 +1049,8 @@ type fakeBackend struct {
 	maxBytes   int64
 	authToken  string
 	appearance string
+	language   string
+	startErr   string
 	storage    BackendStorage
 }
 
@@ -1135,6 +1137,23 @@ func (f *fakeBackend) Appearance() string {
 	defer f.mu.Unlock()
 	return f.appearance
 }
+
+func (f *fakeBackend) SetLanguage(tag string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.language = tag
+	return nil
+}
+
+func (f *fakeBackend) Language() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.language
+}
+
+func (f *fakeBackend) SettingsPath() string { return f.Storage().ConfigPath }
+
+func (f *fakeBackend) StartError() string { return f.startErr }
 
 func (f *fakeBackend) clearedCount() int {
 	f.mu.Lock()
@@ -2147,11 +2166,72 @@ func TestSettingsAppearance(t *testing.T) {
 		t.Fatalf("backend appearance = %q", got)
 	}
 	waitText(t, tt, "✓ 深色")
+}
 
-	// The language section names the only UI language.
-	if !tt.HasText("简体中文") {
-		t.Fatalf("language row missing; texts=%q", tt.Texts())
+// TestSettingsLanguageAndConfigFile covers the language choice and the
+// config.json summary: the language is saved through the backend, and the
+// page lists what the file holds without printing the cookie.
+func TestSettingsLanguageAndConfigFile(t *testing.T) {
+	srv := newFakeServer(t)
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	// The fake backend does not write files, so the test writes the same
+	// shape desktop.Settings would, to see the row describe it.
+	backend := &fakeBackend{serverURL: srv.URL, base: srv.URL, configured: true,
+		appearance: "light", storage: BackendStorage{
+			DBPath:     filepath.Join(dir, "manga.db"),
+			CacheDir:   filepath.Join(dir, "images"),
+			ConfigPath: configPath,
+		}}
+	a := New(NewClient(srv.URL))
+	a.SetBackend(backend)
+	tt := ui.NewTester(a.View, 1280, 860)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
 	}
+	navSettle(tt)
+	waitText(t, tt, "尚未写入")
+
+	writeConfig := func(extra string) {
+		body := `{"cookie":"ipb_member_id=42; ipb_pass_hash=secret","appearance":"dark","language":"zh-CN","cache_max_bytes":1048576` + extra + `}`
+		if err := os.WriteFile(configPath, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeConfig("")
+	waitText(t, tt, "已写入")
+	if !tt.HasText("主题：深色") || !tt.HasText("语言：简体中文") || !tt.HasText("Cookie：已配置") {
+		t.Fatalf("config summary missing fields; texts=%q", tt.Texts())
+	}
+	if !tt.HasText("缓存上限：1.0 MB") {
+		t.Fatalf("cache limit missing; texts=%q", tt.Texts())
+	}
+	if strings.Contains(strings.Join(tt.Texts(), " "), "secret") {
+		t.Fatal("settings page printed the cookie")
+	}
+
+	// The language section sits below the window's first screen; scroll to it.
+	tt.Scroll(600, 600, 0, 600)
+	tt.Frame()
+	// Clicking the language saves it, so config.json records what the UI is
+	// shown in rather than leaving the default implicit.
+	if err := tt.Click("✓ 简体中文"); err != nil {
+		t.Fatalf("click language: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if backend.Language() == "zh-CN" {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if got := backend.Language(); got != "zh-CN" {
+		t.Fatalf("backend language = %q", got)
+	}
+	waitText(t, tt, "✓ 简体中文")
+	waitText(t, tt, "已保存")
 }
 
 // TestSettingsShowsBuild checks the 关于 row shows the build string main sets.
@@ -2274,4 +2354,66 @@ func TestDownloadToastAndOpen(t *testing.T) {
 	if p := a.router.Path(); p != "/gallery/1/tok1" {
 		t.Fatalf("path after job title = %q", p)
 	}
+}
+
+// TestSetupShowsStartError covers a backend that could not start before the
+// window opened (a config.json that does not parse): the setup screen says so
+// instead of asking for a cookie with no explanation, and the settings page
+// keeps the message while the backend is down.
+func TestSetupShowsStartError(t *testing.T) {
+	srv := newFakeServer(t)
+	backend := &fakeBackend{
+		serverURL: srv.URL,
+		startErr:  "读取配置文件失败：parse config.json: unexpected end of JSON input",
+	}
+	a := New(NewClient(""))
+	a.SetBackend(backend)
+	tt := ui.NewTester(a.View, 1280, 860)
+	waitText(t, tt, "首次设置")
+	waitText(t, tt, "读取配置文件失败")
+
+	// Saving a cookie starts the backend, which rewrites the file: the
+	// message goes away with the problem.
+	tt.Click("ExHentai Cookies")
+	tt.Type("ipb_member_id=1; ipb_pass_hash=abc")
+	if err := tt.Click("保存并启动"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if !a.showSetup {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if a.showSetup {
+		t.Fatalf("setup did not finish; texts=%q", tt.Texts())
+	}
+	waitText(t, tt, "示例 A")
+}
+
+// TestSettingsReportsBrokenConfigFile covers the config.json summary for a
+// file that does not parse: the page says so rather than showing an empty
+// summary, and a later save would replace it.
+func TestSettingsReportsBrokenConfigFile(t *testing.T) {
+	srv := newFakeServer(t)
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"cookie": "ipb_member_id=1",`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backend := &fakeBackend{serverURL: srv.URL, base: srv.URL, configured: true,
+		storage: BackendStorage{DBPath: filepath.Join(dir, "m.db"),
+			CacheDir: filepath.Join(dir, "img"), ConfigPath: configPath}}
+	a := New(NewClient(srv.URL))
+	a.SetBackend(backend)
+	tt := ui.NewTester(a.View, 1280, 860)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "配置文件不是有效的 JSON")
+	waitText(t, tt, "已写入")
 }

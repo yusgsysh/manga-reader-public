@@ -2,8 +2,13 @@ package app
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -57,6 +62,11 @@ type App struct {
 	appearance     string
 	appearanceBusy bool
 	appearanceMsg  string
+
+	// language is the interface language tag saved in config.json, and
+	// languageMsg the last result of changing it.
+	language    string
+	languageMsg string
 
 	// cache stats shown on the settings page.
 	cacheBytes   int64
@@ -228,6 +238,7 @@ func (a *App) SetBackend(b Backend) {
 	a.storage = b.Storage()
 	a.translations.path = tagTranslationCachePath(a.storage.CacheDir)
 	a.appearance = b.Appearance()
+	a.language = b.Language()
 	if b.Configured() {
 		a.adoptBackendLocked(b.BaseURL())
 		return
@@ -1120,6 +1131,11 @@ func (a *App) setupView(c *ui.Context) {
 			ui.Text(c, "首次设置").FontSize(26).Bold()
 			ui.Text(c, "粘贴 ExHentai 的 Cookie，应用会在本机启动内置服务并保存设置。").
 				FontSize(13).TextColor(t.TextMuted)
+			if a.backend != nil {
+				if msg := a.backend.StartError(); msg != "" {
+					ui.Text(c, msg).FontSize(12).TextColor(t.Danger).MaxWidth(560)
+				}
+			}
 			ui.TextArea(c, &a.setupCookie).
 				Label("ExHentai Cookies").
 				Placeholder("ipb_member_id=...; ipb_pass_hash=...; igneous=...; sk=...").
@@ -1189,6 +1205,11 @@ func (a *App) settingsPage(c *ui.Context) {
 	ui.Scroll(c).Fill().Children(func() {
 		ui.Column(c).Padding(20, 24).Gap(14).MaxWidth(760).Children(func() {
 			ui.Text(c, "设置").FontSize(26).Bold()
+			if a.backend != nil && !a.backend.Configured() {
+				if msg := a.backend.StartError(); msg != "" {
+					ui.Text(c, msg).FontSize(12).TextColor(t.Danger).MaxWidth(720)
+				}
+			}
 
 			if a.backend != nil {
 				ui.Text(c, "账号").FontSize(16).Bold()
@@ -1210,6 +1231,7 @@ func (a *App) settingsPage(c *ui.Context) {
 			ui.Text(c, "存储").FontSize(16).Bold()
 			a.settingsRow(c, "后端地址", a.client.BaseURL())
 			a.settingsRow(c, "配置文件", a.storage.ConfigPath)
+			a.configFileRow(c)
 			a.settingsRow(c, "本地数据库", a.storage.DBPath)
 			a.settingsRow(c, "图片缓存目录", a.storage.CacheDir)
 			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
@@ -1260,12 +1282,7 @@ func (a *App) settingsPage(c *ui.Context) {
 
 			ui.Divider(c)
 			ui.Text(c, "语言").FontSize(16).Bold()
-			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-				ui.Text(c, "界面语言").Grow(1)
-				ui.Badge(c, "简体中文"+localeSuffix())
-			})
-			ui.Text(c, "目前只有简体中文；日期、数字与字体跟随系统区域设置。").
-				FontSize(11).TextColor(t.TextMuted)
+			a.languageRow(c)
 
 			ui.Divider(c)
 			ui.Text(c, "关于").FontSize(16).Bold()
@@ -1305,6 +1322,8 @@ func (a *App) cookieStatus() string {
 
 // ensureCacheInfo kicks off a background size computation once per load.
 func (a *App) ensureCacheInfo() {
+	// The settings page reads sizes from disk, so it is worth asking even
+	// before the backend answered; the error then shows instead of a count.
 	if a.backend == nil || a.cacheLoading || a.cacheLoaded {
 		return
 	}
@@ -1503,8 +1522,203 @@ func (a *App) saveAppearance(value string) {
 	}()
 }
 
-// localeSuffix adds the system locale to the language line when it is not
-// plain Chinese, so the user can tell what is being followed.
-func localeSuffix() string {
-	return ""
+// languageNames names the interface languages the UI can be shown in.
+// Only Simplified Chinese is translated: offering 繁體中文 would be a button
+// that changes one word of this page and nothing else.
+var languageNames = []struct{ tag, label string }{
+	{"zh-CN", "简体中文"},
+}
+
+// languageRow is the interface language choice. The UI is translated in
+// Chinese only, so the row says so and the choice is stored with the rest of
+// config.json rather than offered as a control that does nothing.
+func (a *App) languageRow(c *ui.Context) {
+	t := c.Theme()
+	if a.language == "" {
+		a.language = "zh-CN"
+	}
+	ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+		ui.Text(c, "界面语言").Grow(1)
+		for _, opt := range languageNames {
+			chosen := a.language == opt.tag
+			label := opt.label
+			if chosen {
+				label = "✓ " + label
+			}
+			// Clicking records the choice whether or not it is the one in
+			// use, so config.json says what the UI is shown in instead of
+			// leaving the default implicit.
+			if ui.Button(c, label).Disabled(a.backend == nil).Clicked() {
+				a.saveLanguage(opt.tag)
+			}
+		}
+	})
+	ui.Text(c, "目前只有简体中文；日期、数字与字体跟随系统区域设置。选择会写入配置文件。").
+		FontSize(11).TextColor(t.TextMuted)
+	if a.languageMsg != "" {
+		ui.Text(c, a.languageMsg).FontSize(11).TextColor(t.TextMuted)
+	}
+}
+
+// saveLanguage persists the interface language tag through the backend,
+// which owns config.json.
+func (a *App) saveLanguage(tag string) {
+	if a.backend == nil {
+		return
+	}
+	backend := a.backend
+	go func() {
+		err := backend.SetLanguage(tag)
+		a.update(func() {
+			if err != nil {
+				a.languageMsg = err.Error()
+				return
+			}
+			if saved := backend.Language(); saved != "" {
+				a.language = saved
+			} else {
+				a.language = tag
+			}
+			a.languageMsg = "已保存"
+		})
+	}()
+}
+
+// configFileRow says what config.json holds: the preferences set on this page
+// live there, and the cookie is written there (as plain text, 0600) rather
+// than in some other store.
+func (a *App) configFileRow(c *ui.Context) {
+	t := c.Theme()
+	path := a.storage.ConfigPath
+	if a.backend != nil {
+		if p := a.backend.SettingsPath(); p != "" {
+			path = p
+		}
+	}
+	if path == "" {
+		ui.Text(c, "配置文件位置未知").FontSize(11).TextColor(t.Danger)
+		return
+	}
+	st, err := os.Stat(path)
+	switch {
+	case err != nil && errors.Is(err, fs.ErrNotExist):
+		ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+			ui.Text(c, "配置文件内容").Grow(1)
+			ui.Badge(c, "尚未写入")
+		})
+		ui.Text(c, "设置 Cookie 或修改偏好后会写入 "+path+"（权限 0600）。").
+			FontSize(11).TextColor(t.TextMuted)
+		return
+	case err != nil:
+		ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+			ui.Text(c, "配置文件内容").Grow(1)
+			ui.Badge(c, "无法读取")
+		})
+		ui.Text(c, err.Error()).FontSize(11).TextColor(t.Danger)
+		return
+	}
+	// What the file itself says comes first, so the badges above (which
+	// follow what the app is doing) and this line never disagree silently.
+	var raw diskSettings
+	if data, err := os.ReadFile(path); err == nil {
+		if json.Unmarshal(data, &raw) != nil {
+			ui.Text(c, "配置文件不是有效的 JSON，下次保存设置时会被覆盖。").
+				FontSize(11).TextColor(t.Danger)
+		}
+	}
+	var parts []string
+	add := func(label, value string) {
+		if value != "" {
+			parts = append(parts, label+"："+value)
+		}
+	}
+	switch {
+	case raw.Appearance != "":
+		add("主题", appearanceLabel(raw.Appearance))
+	case a.appearance != "":
+		add("主题", appearanceLabel(a.appearance))
+	}
+	switch {
+	case raw.Language != "":
+		add("语言", languageLabel(raw.Language))
+	case a.language != "":
+		add("语言", languageLabel(a.language))
+	}
+	if raw.Cookie != "" {
+		add("Cookie", cookieLabel(true))
+	}
+	if raw.CacheMaxBytes != nil {
+		add("缓存上限", cacheLimitText(*raw.CacheMaxBytes))
+	} else if a.cacheMax > 0 {
+		add("缓存上限", cacheLimitText(a.cacheMax))
+	}
+	if raw.DatabasePath != "" {
+		add("数据库", shortenPath(raw.DatabasePath))
+	}
+	if raw.CacheDir != "" {
+		add("缓存目录", shortenPath(raw.CacheDir))
+	}
+	ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+		ui.Text(c, "配置文件内容").Grow(1)
+		ui.Badge(c, "已写入")
+	})
+	if len(parts) == 0 {
+		ui.Text(c, "文件存在，但没有可显示的偏好。").FontSize(11).TextColor(t.TextMuted)
+	} else {
+		ui.Text(c, strings.Join(parts, " · ")).FontSize(11).TextColor(t.TextMuted)
+	}
+	ui.Text(c, "修改时间 "+st.ModTime().Format("2006-01-02 15:04")+"；Cookie 以明文保存（权限 0600）。").
+		FontSize(11).TextColor(t.TextMuted)
+	_ = st
+}
+
+// diskSettings is the part of config.json the settings page describes. It
+// mirrors the fields desktop.Settings writes; the page never reads the cookie
+// itself.
+type diskSettings struct {
+	Cookie        string `json:"cookie"`
+	DatabasePath  string `json:"database_path"`
+	CacheDir      string `json:"cache_dir"`
+	CacheMaxBytes *int64 `json:"cache_max_bytes"`
+	Appearance    string `json:"appearance"`
+	Language      string `json:"language"`
+}
+
+// shortenPath keeps the last two path components, enough to recognise a
+// path without repeating the storage rows above in full.
+func shortenPath(path string) string {
+	base := filepath.Base(path)
+	dir := filepath.Base(filepath.Dir(path))
+	if dir == "." || dir == string(filepath.Separator) || dir == "" {
+		return base
+	}
+	return dir + "/" + base
+}
+
+func appearanceLabel(source string) string {
+	switch source {
+	case "light":
+		return "浅色"
+	case "dark":
+		return "深色"
+	default:
+		return "跟随系统"
+	}
+}
+
+func languageLabel(tag string) string {
+	for _, opt := range languageNames {
+		if opt.tag == tag {
+			return opt.label
+		}
+	}
+	return tag
+}
+
+// cookieLabel describes the cookie without printing any of it.
+func cookieLabel(configured bool) string {
+	if configured {
+		return "已配置"
+	}
+	return "未配置"
 }

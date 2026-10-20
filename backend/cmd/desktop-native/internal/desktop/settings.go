@@ -47,6 +47,10 @@ type Settings struct {
 	CacheMaxBytes *int64 `json:"cache_max_bytes,omitempty"`
 	// Appearance is "system" (the default), "light" or "dark".
 	Appearance string `json:"appearance,omitempty"`
+	// Language is the interface language tag. Only "zh-CN" is translated;
+	// empty means the system's tag, which the UI shows as 简体中文 when the
+	// system asks for Chinese.
+	Language string `json:"language,omitempty"`
 }
 
 // AppearanceSource validates Appearance for mygo.Theme.SetSource: an unknown
@@ -57,6 +61,34 @@ func (s Settings) AppearanceSource() string {
 		return s.Appearance
 	}
 	return "system"
+}
+
+// LanguageOrDefault returns the interface language tag: the saved one, or the
+// system's, and "zh-CN" when the system asks for no language the UI has.
+func (s Settings) LanguageOrDefault() string {
+	return languageOrDefault(s.Language)
+}
+
+// languageOrDefault resolves an interface language tag to the one the UI is
+// translated in. The system's own tag is kept when it asks for Chinese, so the
+// settings page can show which variant the system wants; every other tag
+// becomes "zh-CN", since Chinese is the only translation the UI has and
+// falling back to English text it does not contain would be worse.
+func languageOrDefault(tag string) string {
+	if tag != "" {
+		return tag
+	}
+	for _, v := range []string{os.Getenv("LC_ALL"), os.Getenv("LC_MESSAGES"), os.Getenv("LANG")} {
+		lower := strings.ToLower(v)
+		if strings.Contains(lower, "zh_tw") || strings.Contains(lower, "zh-tw") ||
+			strings.Contains(lower, "zh_hk") || strings.Contains(lower, "zh-hk") {
+			return "zh-TW"
+		}
+		if strings.Contains(lower, "zh") {
+			return "zh-CN"
+		}
+	}
+	return "zh-CN"
 }
 
 // CookieConfig parses Cookie into the structured cookie config.
@@ -229,6 +261,9 @@ func settingsFromEnv(s Settings) Settings {
 	}
 	if v := strings.TrimSpace(os.Getenv("MANGA_READER_APPEARANCE")); v != "" {
 		s.Appearance = v
+	}
+	if v := strings.TrimSpace(os.Getenv("MANGA_READER_LANGUAGE")); v != "" {
+		s.Language = v
 	}
 	return s
 }

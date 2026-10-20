@@ -19,6 +19,10 @@ type embeddedBackend struct {
 	server   *desktop.Server
 	// token is a per-run secret required by the loopback API.
 	token string
+	// startErr is what went wrong before the backend could start, such as
+	// config.json not parsing. The setup screen shows it above the cookie
+	// field so the user knows why they are being asked again.
+	startErr string
 }
 
 var _ app.Backend = (*embeddedBackend)(nil)
@@ -32,6 +36,17 @@ func (b *embeddedBackend) Configured() bool {
 // AuthToken returns the per-run token; it is stable across restarts so the
 // UI client keeps working after the user changes cookies.
 func (b *embeddedBackend) AuthToken() string { return b.token }
+
+// StartError is the failure that kept the backend from starting, or "".
+func (b *embeddedBackend) StartError() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.startErr
+}
+
+// clearStartErrorLocked drops the startup failure once the user has acted on
+// it: a successful start rewrote the settings file.
+func (b *embeddedBackend) clearStartErrorLocked() { b.startErr = "" }
 
 func (b *embeddedBackend) BaseURL() string {
 	b.mu.Lock()
@@ -78,6 +93,7 @@ func (b *embeddedBackend) Start(cookie string) (string, error) {
 
 	b.settings = settings
 	b.server = srv
+	b.clearStartErrorLocked()
 	return srv.BaseURL(), nil
 }
 
@@ -176,3 +192,26 @@ func (b *embeddedBackend) Appearance() string {
 	}
 	return b.settings.Appearance
 }
+
+// SetLanguage persists the interface language tag.
+func (b *embeddedBackend) SetLanguage(tag string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	settings := b.settings
+	settings.Language = tag
+	if err := desktop.SaveSettings(settings); err != nil {
+		return fmt.Errorf("保存设置失败: %w", err)
+	}
+	b.settings = settings
+	return nil
+}
+
+// Language returns the saved interface language tag.
+func (b *embeddedBackend) Language() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.settings.Language
+}
+
+// SettingsPath is the config.json the settings above are written to.
+func (b *embeddedBackend) SettingsPath() string { return desktop.SettingsPath() }
