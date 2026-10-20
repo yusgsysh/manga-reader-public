@@ -261,11 +261,19 @@ func writeObjectAt(t *testing.T, c *FSCache, key string, modTime time.Time) {
 func TestFSCachePruneEvictsOldest(t *testing.T) {
 	// Three 1000-byte objects plus sidecars; a 1500-byte limit leaves room
 	// for one object plus part of the second, so the two oldest go.
-	c := newTestFSCacheLimit(t, 1500)
+	//
+	// The limit goes on after the writes: Put prunes in the background once
+	// the cache passes it, and that prune would evict the objects this test
+	// counts before Prune here ever runs.
+	c := newTestFSCacheLimit(t, 0)
 	now := time.Now()
 	writeObjectAt(t, c, "images/old", now.Add(-2*time.Hour))
 	writeObjectAt(t, c, "images/mid", now.Add(-1*time.Hour))
 	writeObjectAt(t, c, "images/new", now)
+
+	// The limit goes on only now, so no background prune runs during the
+	// writes.
+	c.maxBytes.Store(1500)
 
 	removed, err := c.Prune()
 	if err != nil {
