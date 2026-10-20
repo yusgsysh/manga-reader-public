@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"manga-reader/cmd/desktop-native/app/i18n"
 	"manga-reader/internal/config"
 )
 
@@ -134,19 +136,19 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("连接后端失败：%w", err)
+		return fmt.Errorf(i18n.T("Failed to connect to the backend: %v"), err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("后端返回 %d：%s", resp.StatusCode, apiError(msg))
+		return fmt.Errorf(i18n.T("Backend returned %d: %s"), resp.StatusCode, apiError(msg))
 	}
 	if out == nil {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		return nil
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("解析后端响应失败：%w", err)
+		return fmt.Errorf(i18n.T("Failed to decode the backend response: %v"), err)
 	}
 	return nil
 }
@@ -288,12 +290,12 @@ func (c *Client) pages(ctx context.Context, path string, timeout time.Duration, 
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return 0, nil, fmt.Errorf("连接后端失败：%w", err)
+		return 0, nil, fmt.Errorf(i18n.T("Failed to connect to the backend: %v"), err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return 0, nil, fmt.Errorf("后端返回 %d：%s", resp.StatusCode, apiError(msg))
+		return 0, nil, fmt.Errorf(i18n.T("Backend returned %d: %s"), resp.StatusCode, apiError(msg))
 	}
 
 	type line struct {
@@ -314,14 +316,14 @@ func (c *Client) pages(ctx context.Context, path string, timeout time.Duration, 
 	for scan.Scan() {
 		var l line
 		if err := json.Unmarshal(scan.Bytes(), &l); err != nil {
-			return 0, nil, fmt.Errorf("解析页面流失败：%w", err)
+			return 0, nil, fmt.Errorf("%s: %w", i18n.T("Failed to parse the page stream"), err)
 		}
 		switch l.Type {
 		case "meta":
 			total = l.Total
 		case "page":
 			if l.Index != len(urls) {
-				return 0, nil, fmt.Errorf("页面流索引不连续：got %d, want %d", l.Index, len(urls))
+				return 0, nil, fmt.Errorf("%s: got %d, want %d", i18n.T("Page stream index out of order"), l.Index, len(urls))
 			}
 			urls = append(urls, l.PageURL)
 			if onPage != nil {
@@ -333,14 +335,14 @@ func (c *Client) pages(ctx context.Context, path string, timeout time.Duration, 
 			}
 			done = true
 		case "error":
-			return 0, nil, fmt.Errorf("抓取页面失败：%s", l.Error)
+			return 0, nil, fmt.Errorf("%s: %s", i18n.T("Failed to fetch pages"), l.Error)
 		}
 	}
 	if err := scan.Err(); err != nil {
-		return 0, nil, fmt.Errorf("读取页面流失败：%w", err)
+		return 0, nil, fmt.Errorf("%s: %w", i18n.T("Failed to read the page stream"), err)
 	}
 	if !done {
-		return 0, nil, fmt.Errorf("页面流提前结束")
+		return 0, nil, errors.New(i18n.T("The page stream ended early"))
 	}
 	if total == 0 {
 		total = len(urls)

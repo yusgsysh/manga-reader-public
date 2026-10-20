@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"manga-reader/cmd/desktop-native/app/i18n"
 )
 
 // Diagnostics is the text the settings page can export: what the app is, where
@@ -17,17 +19,17 @@ func (a *App) Diagnostics() string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	fmt.Fprintf(&b, "Manga Reader 诊断信息\n")
-	fmt.Fprintf(&b, "生成时间：%s\n", time.Now().Format(time.RFC3339))
-	fmt.Fprintf(&b, "版本：%s\n", ourEmpty(a.build))
-	fmt.Fprintf(&b, "平台：%s/%s，Go %s\n", runtime.GOOS, runtime.GOARCH, runtime.Version())
-	fmt.Fprintf(&b, "后端地址：%s\n", ourEmpty(a.client.BaseURL()))
-	fmt.Fprintf(&b, "后端模式：%s\n", map[bool]string{true: "外部（MANGA_READER_API）", false: "内嵌"}[a.backend == nil])
-	fmt.Fprintf(&b, "配置文件：%s\n", ourEmpty(a.storage.ConfigPath))
-	fmt.Fprintf(&b, "本地数据库：%s\n", ourEmpty(a.storage.DBPath))
-	fmt.Fprintf(&b, "图片缓存目录：%s\n", ourEmpty(a.storage.CacheDir))
-	fmt.Fprintf(&b, "缓存占用：%s / %s\n", humanBytes(a.cacheBytes), cacheLimitText(a.cacheMax))
-	fmt.Fprintf(&b, "图片缓存上限：%s\n", cacheLimitText(a.cacheMax))
+	fmt.Fprintf(&b, "%s\n", i18n.T("Manga Reader diagnostics"))
+	fmt.Fprintf(&b, "%s: %s\n", i18n.T("Generated"), time.Now().Format(time.RFC3339))
+	fmt.Fprintf(&b, "%s: %s\n", i18n.T("Version"), ourEmpty(a.build))
+	fmt.Fprintf(&b, "%s: %s/%s, Go %s\n", i18n.T("Platform"), runtime.GOOS, runtime.GOARCH, runtime.Version())
+	fmt.Fprintf(&b, "%s: %s\n", i18n.T("Backend address"), ourEmpty(a.client.BaseURL()))
+	fmt.Fprintf(&b, "%s: %s\n", i18n.T("Backend mode"), backendModeLabel(a.backend == nil))
+	fmt.Fprintf(&b, "%s: %s\n", i18n.T("Config file"), ourEmpty(a.storage.ConfigPath))
+	fmt.Fprintf(&b, "%s: %s\n", i18n.T("Local database"), ourEmpty(a.storage.DBPath))
+	fmt.Fprintf(&b, "%s: %s\n", i18n.T("Image cache directory"), ourEmpty(a.storage.CacheDir))
+	fmt.Fprintf(&b, "%s: %s / %s\n", i18n.T("Cache size"), humanBytes(a.cacheBytes), cacheLimitText(a.cacheMax))
+	fmt.Fprintf(&b, "%s: %s\n", i18n.T("Image cache limit"), cacheLimitText(a.cacheMax))
 
 	// File sizes, not contents: a database path with a surprising size is
 	// often the clue in a report.
@@ -36,13 +38,13 @@ func (a *App) Diagnostics() string {
 			continue
 		}
 		if info, err := os.Stat(p); err == nil {
-			fmt.Fprintf(&b, "%s 大小：%s\n", filepath.Base(p), humanBytes(info.Size()))
+			fmt.Fprintf(&b, "%s: %s %s\n", filepath.Base(p), i18n.T("Size"), humanBytes(info.Size()))
 		}
 	}
-	fmt.Fprintf(&b, "翻译库：%s\n", a.translations.Status())
-	fmt.Fprintf(&b, "标签规则：%d 条\n", len(a.tags.rules))
-	fmt.Fprintf(&b, "离线下载任务：%d 个\n", len(a.downloads.items))
-	fmt.Fprintf(&b, "当前页面：%s\n", a.router.Path())
+	fmt.Fprintf(&b, "%s: %s\n", i18n.T("Translation library"), a.translations.Status())
+	fmt.Fprintf(&b, "%s: %d\n", i18n.T("Tag rules"), len(a.tags.rules))
+	fmt.Fprintf(&b, "%s: %d\n", i18n.T("Download jobs"), len(a.downloads.items))
+	fmt.Fprintf(&b, "%s: %s\n", i18n.T("Current page"), a.router.Path())
 	return b.String()
 }
 
@@ -96,10 +98,19 @@ func (a *App) exportDiagnostics() {
 			}
 			a.diagBusy = false
 			if err != nil {
-				a.diagMsg = "写入失败：" + err.Error()
+				a.diagMsg = i18n.T("Cannot write diagnostics") + ": " + err.Error()
 				return
 			}
-			a.diagMsg = "已保存 " + filepath.Base(path)
+			a.diagMsg = i18n.Tf("Diagnostics saved to %s", filepath.Base(path))
 		})
 	}()
+}
+
+// backendModeLabel names how the API runs for the diagnostics file: embedded
+// in this process, or an external server the user pointed at.
+func backendModeLabel(external bool) string {
+	if external {
+		return i18n.T("external (MANGA_READER_API)")
+	}
+	return i18n.T("embedded")
 }

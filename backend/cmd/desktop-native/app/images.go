@@ -11,6 +11,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
+	"manga-reader/cmd/desktop-native/app/i18n"
 	"manga-reader/internal/config"
 )
 
@@ -232,7 +233,7 @@ func (s *ImageStore) cancelOf(url string) error {
 	if e := s.entries[url]; e != nil && e.loading {
 		return nil
 	}
-	return fmt.Errorf("已放弃 %s", url)
+	return fmt.Errorf(i18n.T("Discarded %s"), url)
 }
 
 func (s *ImageStore) fetch(url string) (*ui.Bitmap, error) {
@@ -263,7 +264,7 @@ func (s *ImageStore) fetch(url string) (*ui.Bitmap, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("图片请求失败：%s", resp.Status)
+		return nil, fmt.Errorf(i18n.T("Image request failed: %s"), resp.Status)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {

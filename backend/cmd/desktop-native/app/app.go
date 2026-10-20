@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"golang.org/x/text/language"
 	"io/fs"
 	"net/url"
 	"os"
@@ -16,6 +17,8 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+
+	"manga-reader/cmd/desktop-native/app/i18n"
 )
 
 // App is the window's state. The view is a function of it, built again for
@@ -430,23 +433,23 @@ func (a *App) sidebar(c *ui.Context, t *ui.Theme) {
 	ui.Column(c).Width(220).Shrink(0).Background(t.Surface).Children(func() {
 		ui.Row(c).Padding(14, 16, 8, 16).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "Manga Reader").Bold().FontSize(15).Grow(1)
-			ui.Text(c, "原生").FontSize(10).TextColor(t.TextMuted)
+			ui.Text(c, i18n.T("Native")).FontSize(10).TextColor(t.TextMuted)
 		})
 		ui.Sidebar(c, &nav, func() {
-			ui.SidebarSection(c, "浏览", nil, func() {
-				ui.SidebarItem(c, "/", nil, "首页")
-				ui.SidebarItem(c, "/watched", nil, "订阅")
-				ui.SidebarItem(c, "/popular", nil, "热门")
-				ui.SidebarItem(c, "/search", nil, "搜索")
+			ui.SidebarSection(c, i18n.T("Browse"), nil, func() {
+				ui.SidebarItem(c, "/", nil, i18n.T("Home"))
+				ui.SidebarItem(c, "/watched", nil, i18n.T("Watched"))
+				ui.SidebarItem(c, "/popular", nil, i18n.T("Popular"))
+				ui.SidebarItem(c, "/search", nil, i18n.T("Search"))
 			})
-			ui.SidebarSection(c, "我的", nil, func() {
-				ui.SidebarItem(c, "/bookshelf", nil, "书架")
-				ui.SidebarItem(c, "/recently-read", nil, "最近阅读")
-				ui.SidebarItem(c, "/downloads", nil, "下载管理")
+			ui.SidebarSection(c, i18n.T("My"), nil, func() {
+				ui.SidebarItem(c, "/bookshelf", nil, i18n.T("Bookshelf"))
+				ui.SidebarItem(c, "/recently-read", nil, i18n.T("Recently read"))
+				ui.SidebarItem(c, "/downloads", nil, i18n.T("Downloads"))
 			})
-			ui.SidebarSection(c, "管理", nil, func() {
-				ui.SidebarItem(c, "/tag-settings", nil, "标签设置")
-				ui.SidebarItem(c, "/settings", nil, "设置")
+			ui.SidebarSection(c, i18n.T("Manage"), nil, func() {
+				ui.SidebarItem(c, "/tag-settings", nil, i18n.T("Tag settings"))
+				ui.SidebarItem(c, "/settings", nil, i18n.T("Settings"))
 			})
 		}).Grow(1).OnChange(func() {
 			a.router.Push(nav)
@@ -457,43 +460,43 @@ func (a *App) sidebar(c *ui.Context, t *ui.Theme) {
 func (a *App) route(c *ui.Context, r *ui.Route) {
 	switch {
 	case r.Match("/"):
-		r.Title("首页")
-		a.listPage(c, "/", "首页", "最新画廊", kindHome)
+		r.Title(i18n.T("Home"))
+		a.listPage(c, "/", i18n.T("Home"), i18n.T("Latest galleries"), kindHome)
 	case r.Match("/watched"):
-		r.Title("订阅")
-		a.listPage(c, "/watched", "订阅", "已关注的画廊", kindWatched)
+		r.Title(i18n.T("Watched"))
+		a.listPage(c, "/watched", i18n.T("Watched"), i18n.T("Watched galleries"), kindWatched)
 	case r.Match("/popular"):
-		r.Title("热门")
-		a.listPage(c, "/popular", "热门", "按热度排序", kindPopular)
+		r.Title(i18n.T("Popular"))
+		a.listPage(c, "/popular", i18n.T("Popular"), i18n.T("Sorted by popularity"), kindPopular)
 	case r.Match("/search"):
-		r.Title("搜索")
+		r.Title(i18n.T("Search"))
 		a.searchPage(c)
 	case r.Match("/bookshelf"):
-		r.Title("书架")
-		a.listPage(c, "/bookshelf", "书架", "收藏的画廊", kindBookshelf)
+		r.Title(i18n.T("Bookshelf"))
+		a.listPage(c, "/bookshelf", i18n.T("Bookshelf"), i18n.T("Saved galleries"), kindBookshelf)
 	case r.Match("/recently-read"):
-		r.Title("最近阅读")
-		a.listPage(c, "/recently-read", "最近阅读", "继续上次的进度", kindRecent)
+		r.Title(i18n.T("Recently read"))
+		a.listPage(c, "/recently-read", i18n.T("Recently read"), i18n.T("Pick up where you left off"), kindRecent)
 	case r.Match("/downloads"):
-		r.Title("下载管理")
+		r.Title(i18n.T("Downloads"))
 		a.downloadsPage(c)
 	case r.Match("/tag-settings"):
-		r.Title("标签设置")
+		r.Title(i18n.T("Tag settings"))
 		a.tagSettingsPage(c)
 	case r.Match("/settings"):
-		r.Title("设置")
+		r.Title(i18n.T("Settings"))
 		a.settingsPage(c)
 	case r.Match("/gallery/{id}/{token}"):
-		r.Title("画廊详情")
+		r.Title(i18n.T("Gallery"))
 		id, _ := strconv.ParseInt(r.Param("id"), 10, 64)
 		a.galleryPage(c, id, r.Param("token"))
 	case r.Match("/reader/{id}/{token}"):
-		r.Title("阅读器")
+		r.Title(i18n.T("Reader"))
 		id, _ := strconv.ParseInt(r.Param("id"), 10, 64)
 		a.readerPage(c, id, r.Param("token"), r.Query("offline") == "1")
 	default:
-		r.Title("未找到")
-		a.emptyPage(c, "未找到", "这个页面不存在", "")
+		r.Title(i18n.T("Not found"))
+		a.emptyPage(c, i18n.T("Not found"), i18n.T("This page does not exist"), "")
 	}
 }
 
@@ -644,7 +647,7 @@ func (a *App) fetchList(kind listKind, page int, query string) ([]Gallery, int, 
 		r, err := a.client.RecentlyRead(ctx, page)
 		return a.mapShelf(r.Results), r.Total, r.PageSize, err
 	default:
-		return nil, 0, 0, fmt.Errorf("未知的列表类型")
+		return nil, 0, 0, errors.New(i18n.T("Unknown list kind"))
 	}
 }
 
@@ -709,9 +712,9 @@ func (a *App) mapShelf(items []apiShelfItem) []Gallery {
 func listSummary(subtitle string, s *listState) string {
 	switch {
 	case s.total > 0:
-		return fmt.Sprintf("%s · 共 %d 个结果", subtitle, s.total)
+		return fmt.Sprintf(i18n.T("%s · %d results"), subtitle, s.total)
 	case len(s.items) > 0:
-		return fmt.Sprintf("%s · 已加载 %d 个", subtitle, len(s.items))
+		return fmt.Sprintf(i18n.T("%s · %d loaded"), subtitle, len(s.items))
 	default:
 		return subtitle
 	}
@@ -728,7 +731,7 @@ func (a *App) listPage(c *ui.Context, path, title, subtitle string, kind listKin
 				ui.Text(c, title).FontSize(26).Bold()
 				ui.Text(c, listSummary(subtitle, s)).FontSize(12).TextColor(t.TextMuted)
 			})
-			if ui.Button(c, "刷新").Clicked() {
+			if ui.Button(c, i18n.T("Refresh")).Clicked() {
 				a.reloadList(s)
 			}
 		})
@@ -737,12 +740,12 @@ func (a *App) listPage(c *ui.Context, path, title, subtitle string, kind listKin
 		case s.loading && len(s.items) == 0:
 			ui.Column(c).Fill().Center().Gap(10).Children(func() {
 				ui.Spinner(c)
-				ui.Text(c, "正在加载…").FontSize(12).TextColor(t.TextMuted)
+				ui.Text(c, i18n.T("Loading…")).FontSize(12).TextColor(t.TextMuted)
 			})
 		case s.err != "" && len(s.items) == 0:
 			a.errorBlock(c, s.err, func() { a.reloadList(s) })
 		case s.loaded && len(s.items) == 0:
-			a.emptyPage(c, "没有结果", "换个关键词或稍后重试", "")
+			a.emptyPage(c, i18n.T("No results"), i18n.T("Try another keyword or try again later"), "")
 		default:
 			a.listForCard = s
 			_, a.cardWindowH = c.Size()
@@ -766,12 +769,12 @@ func (a *App) listFooter(c *ui.Context, s *listState) {
 	case s.loading:
 		ui.Row(c).Center().Gap(8).Children(func() {
 			ui.Spinner(c)
-			ui.Text(c, "正在加载…").FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, i18n.T("Loading…")).FontSize(11).TextColor(t.TextMuted)
 		})
 	case s.err != "":
 		ui.Row(c).Center().Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "加载更多失败").FontSize(11).TextColor(t.Danger)
-			if ui.Button(c, "重试").Clicked() {
+			ui.Text(c, i18n.T("Failed to load more")).FontSize(11).TextColor(t.Danger)
+			if ui.Button(c, i18n.T("Retry")).Clicked() {
 				a.startListLoad(s)
 			}
 		})
@@ -779,7 +782,7 @@ func (a *App) listFooter(c *ui.Context, s *listState) {
 		// The grid asks for the next page as the user nears the end; the
 		// button stays for a deliberate click.
 		ui.Row(c).Center().Children(func() {
-			if ui.Button(c, "加载更多").Clicked() {
+			if ui.Button(c, i18n.T("Load more")).Clicked() {
 				a.loadMore(s)
 			}
 		})
@@ -813,9 +816,9 @@ func (a *App) galleryCard(c *ui.Context, g Gallery) {
 		case a.images.Err(g.CoverURL) != "":
 			// A failed cover retries on click instead of staying blank.
 			box := ui.Box(c).AspectRatio(3.0 / 4.0).Radius(10).Center().
-				Background(t.Surface).Label("封面加载失败，点击重试")
+				Background(t.Surface).Label(i18n.T("Cover failed to load, click to retry"))
 			box.Children(func() {
-				ui.Text(c, "封面加载失败").FontSize(11).TextColor(t.TextMuted)
+				ui.Text(c, i18n.T("Cover failed to load")).FontSize(11).TextColor(t.TextMuted)
 			})
 			if box.Clicked() {
 				a.images.Retry(g.CoverURL)
@@ -829,11 +832,11 @@ func (a *App) galleryCard(c *ui.Context, g Gallery) {
 		case g.Reading != nil && g.Reading.Completed:
 			// 读完了 stays visible: the shelf should say so, not silently
 			// look like page 1 of a fresh gallery.
-			meta = fmt.Sprintf("%s · 已读完 · %d 页", g.Category, g.Pages)
+			meta = fmt.Sprintf(i18n.T("%s · Finished · %d pages"), g.Category, g.Pages)
 		case g.Reading != nil && g.Reading.CurrentPage > 0:
-			meta = fmt.Sprintf("%s · 读到第 %d 页", g.Category, g.Reading.CurrentPage+1)
+			meta = fmt.Sprintf(i18n.T("%s · Page %d"), g.Category, g.Reading.CurrentPage+1)
 		default:
-			meta = fmt.Sprintf("%s · %d 页", g.Category, g.Pages)
+			meta = fmt.Sprintf(i18n.T("%s · %d pages"), g.Category, g.Pages)
 		}
 		ui.Text(c, meta).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		if len(g.Tags) > 0 {
@@ -861,7 +864,7 @@ func displayTitle(g Gallery) string {
 	if g.TitleJPN != "" {
 		return g.TitleJPN
 	}
-	return fmt.Sprintf("画廊 %d", g.ID)
+	return fmt.Sprintf(i18n.T("Gallery %d"), g.ID)
 }
 
 func (a *App) searchPage(c *ui.Context) {
@@ -871,21 +874,21 @@ func (a *App) searchPage(c *ui.Context) {
 	a.ensureList(s)
 
 	ui.Column(c).Fill().Padding(20, 24).Gap(14).Children(func() {
-		ui.Text(c, "搜索").FontSize(26).Bold()
-		ui.TextInput(c, &a.searchQuery).Width(480).Label("搜索框").
-			Placeholder("搜索标题、分类或标签…").AutoFocus()
-		ui.Text(c, listSummary("搜索结果", s)).FontSize(12).TextColor(t.TextMuted)
+		ui.Text(c, i18n.T("Search")).FontSize(26).Bold()
+		ui.TextInput(c, &a.searchQuery).Width(480).Label(i18n.T("Search field")).
+			Placeholder(i18n.T("Search titles, categories or tags…")).AutoFocus()
+		ui.Text(c, listSummary(i18n.T("Search results"), s)).FontSize(12).TextColor(t.TextMuted)
 
 		switch {
 		case s.loading && len(s.items) == 0:
 			ui.Column(c).Fill().Center().Gap(10).Children(func() {
 				ui.Spinner(c)
-				ui.Text(c, "正在搜索…").FontSize(12).TextColor(t.TextMuted)
+				ui.Text(c, i18n.T("Searching…")).FontSize(12).TextColor(t.TextMuted)
 			})
 		case s.err != "" && len(s.items) == 0:
 			a.errorBlock(c, s.err, func() { a.reloadList(s) })
 		case s.loaded && len(s.items) == 0:
-			a.emptyPage(c, "没有结果", "换个关键词试试", "")
+			a.emptyPage(c, i18n.T("No results"), i18n.T("Try a different keyword"), "")
 		default:
 			a.listForCard = s
 			_, a.cardWindowH = c.Size()
@@ -990,7 +993,7 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 	if s.loading && !s.loaded {
 		ui.Column(c).Fill().Center().Gap(10).Children(func() {
 			ui.Spinner(c)
-			ui.Text(c, "正在加载画廊…").FontSize(12).TextColor(t.TextMuted)
+			ui.Text(c, i18n.T("Loading gallery…")).FontSize(12).TextColor(t.TextMuted)
 		})
 		return
 	}
@@ -1008,15 +1011,15 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 	ui.Scroll(c).Fill().Children(func() {
 		ui.Column(c).Padding(20, 24).Gap(18).MaxWidth(1100).Children(func() {
 			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-				if ui.Button(c, "← 返回").Clicked() {
+				if ui.Button(c, i18n.T("← Back")).Clicked() {
 					a.router.Back()
 				}
 				ui.Text(c, displayTitle(g)).FontSize(22).Bold().Grow(1)
-				label := "开始阅读"
+				label := i18n.T("Start reading")
 				if s.readingKnown && s.reading >= g.Pages-1 && g.Pages > 0 {
-					label = "重读"
+					label = i18n.T("Read again")
 				} else if next := g.NextPage(); next > 0 {
-					label = fmt.Sprintf("继续阅读（第 %d 页）", next+1)
+					label = fmt.Sprintf(i18n.T("Continue (page %d)"), next+1)
 				}
 				if ui.PrimaryButton(c, label).Clicked() {
 					a.readerStart = -1
@@ -1030,20 +1033,20 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 					if g.TitleJPN != "" && g.TitleJPN != g.Title {
 						ui.Text(c, g.TitleJPN).FontSize(13).TextColor(t.TextMuted)
 					}
-					ui.Textf(c, "分类：%s", g.Category).FontSize(13)
-					ui.Textf(c, "页数：%d", g.Pages).FontSize(13)
-					ui.Textf(c, "评分：%.1f", g.Rating).FontSize(13)
+					ui.Textf(c, i18n.T("Category: %s"), g.Category).FontSize(13)
+					ui.Textf(c, i18n.T("Pages: %d"), g.Pages).FontSize(13)
+					ui.Textf(c, i18n.T("Rating: %.1f"), g.Rating).FontSize(13)
 					if s.uploader != "" {
-						ui.Textf(c, "上传者：%s", s.uploader).FontSize(13)
+						ui.Textf(c, i18n.T("Uploader: %s"), s.uploader).FontSize(13)
 					}
 					if s.posted != "" {
-						ui.Textf(c, "发布：%s", s.posted).FontSize(13)
+						ui.Textf(c, i18n.T("Posted: %s"), s.posted).FontSize(13)
 					}
 					if s.size != "" {
-						ui.Textf(c, "大小：%s", s.size).FontSize(13)
+						ui.Textf(c, i18n.T("Size: %s"), s.size).FontSize(13)
 					}
 
-					ui.Text(c, "标签").FontSize(13).TextColor(t.TextMuted)
+					ui.Text(c, i18n.T("Tags")).FontSize(13).TextColor(t.TextMuted)
 					ui.Row(c).Gap(6).Wrap().Children(func() {
 						for _, tag := range a.sortedTags(s.tags) {
 							a.tagChip(c, tag.Namespace, tag.Name)
@@ -1051,9 +1054,9 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 					})
 
 					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-						label := "加入书架"
+						label := i18n.T("Add to bookshelf")
 						if s.inBookshelf {
-							label = "移出书架"
+							label = i18n.T("Remove from bookshelf")
 						}
 						if ui.Button(c, label).Disabled(s.busy).Clicked() {
 							a.toggleBookshelf(s)
@@ -1061,7 +1064,7 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 					})
 					a.detailDownloadsBlock(c, s)
 					if !s.shelfKnown {
-						ui.Text(c, "书架状态暂不可用").FontSize(11).TextColor(t.TextMuted)
+						ui.Text(c, i18n.T("Bookshelf state is unavailable")).FontSize(11).TextColor(t.TextMuted)
 					}
 				})
 			})
@@ -1080,13 +1083,13 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 func (a *App) pageThumbGrid(c *ui.Context, g Gallery, s *detailState) {
 	t := c.Theme()
 	ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-		ui.Text(c, "页面缩略图").FontSize(16).Bold()
+		ui.Text(c, i18n.T("Page thumbnails")).FontSize(16).Bold()
 		if g.Pages > 0 {
-			ui.Textf(c, "共 %d 页 · 点击跳转", g.Pages).FontSize(12).TextColor(t.TextMuted)
+			ui.Textf(c, i18n.T("%d pages · click to jump"), g.Pages).FontSize(12).TextColor(t.TextMuted)
 		}
 	})
 	if g.Pages <= 0 {
-		ui.Text(c, "页面数量未知，打开阅读器后可见。").FontSize(12).TextColor(t.TextMuted)
+		ui.Text(c, i18n.T("Page count unknown; open the reader to see the pages.")).FontSize(12).TextColor(t.TextMuted)
 		return
 	}
 
@@ -1101,11 +1104,11 @@ func (a *App) pageThumbGrid(c *ui.Context, g Gallery, s *detailState) {
 		s.thumbGrid = &ui.GridState{
 			Selected: &s.thumbSel,
 			Key:      func(i int) any { return i },
-			Label:    func(i int) string { return fmt.Sprintf("第 %d 页", i+1) },
+			Label:    func(i int) string { return fmt.Sprintf(i18n.T("Page %d"), i+1) },
 		}
 	}
 	ui.GridView(c, s.thumbGrid, g.Pages, 120, 190, func(i int) {
-		cell := ui.Column(c).Gap(4).Focusable().Label(fmt.Sprintf("第 %d 页", i+1))
+		cell := ui.Column(c).Gap(4).Focusable().Label(fmt.Sprintf(i18n.T("Page %d"), i+1))
 		if i == marked {
 			cell.Radius(8).Border(2, t.Accent)
 		}
@@ -1118,9 +1121,9 @@ func (a *App) pageThumbGrid(c *ui.Context, g Gallery, s *detailState) {
 			case a.pageThumbs.Err(url) != "":
 				// A failed thumbnail offers its retry in place.
 				box := ui.Box(c).AspectRatio(200.0 / 282.0).Radius(8).Center().
-					Background(t.SurfaceHover).Label("第 " + strconv.Itoa(i+1) + " 页缩略图加载失败，点击重试")
+					Background(t.SurfaceHover).Label(i18n.Tf("Thumbnail for page %d failed to load, click to retry", i+1))
 				box.Children(func() {
-					ui.Text(c, "加载失败").FontSize(11).TextColor(t.Danger)
+					ui.Text(c, i18n.T("Failed to load")).FontSize(11).TextColor(t.Danger)
 				})
 				if box.Clicked() {
 					a.pageThumbs.Retry(url)
@@ -1177,8 +1180,8 @@ func (a *App) setupView(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Fill().Background(t.Background).Center().Children(func() {
 		ui.Column(c).Width(620).Gap(14).Children(func() {
-			ui.Text(c, "首次设置").FontSize(26).Bold()
-			ui.Text(c, "粘贴 ExHentai 的 Cookie，应用会在本机启动内置服务并保存设置。").
+			ui.Text(c, i18n.T("First run")).FontSize(26).Bold()
+			ui.Text(c, i18n.T("Paste your ExHentai cookie; the app starts the built-in service on this machine and saves the setting.")).
 				FontSize(13).TextColor(t.TextMuted)
 			if a.backend != nil {
 				if msg := a.backend.StartError(); msg != "" {
@@ -1190,18 +1193,18 @@ func (a *App) setupView(c *ui.Context) {
 				Placeholder("ipb_member_id=...; ipb_pass_hash=...; igneous=...; sk=...").
 				Height(90).
 				AutoFocus()
-			ui.Text(c, "在浏览器登录 exhentai.org 后，从开发者工具的请求头里复制 Cookie 即可。").
+			ui.Text(c, i18n.T("Sign in to exhentai.org in a browser, then copy the Cookie from the request headers in the developer tools.")).
 				FontSize(11).TextColor(t.TextMuted).MaxWidth(560)
 			if a.setupErr != "" {
 				ui.Text(c, a.setupErr).FontSize(12).TextColor(t.Danger).MaxWidth(560)
 			}
 			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-				if ui.PrimaryButton(c, "保存并启动").Disabled(a.setupBusy).Clicked() {
+				if ui.PrimaryButton(c, i18n.T("Save and start")).Disabled(a.setupBusy).Clicked() {
 					a.beginSetup()
 				}
 				if a.setupBusy {
 					ui.Spinner(c)
-					ui.Text(c, "正在启动内置服务…").FontSize(12).TextColor(t.TextMuted)
+					ui.Text(c, i18n.T("Starting the built-in service…")).FontSize(12).TextColor(t.TextMuted)
 				}
 			})
 		})
@@ -1217,7 +1220,7 @@ func (a *App) beginSetup() {
 	}
 	cookie := strings.TrimSpace(a.setupCookie)
 	if cookie == "" {
-		a.setupErr = "请粘贴 ExHentai Cookies"
+		a.setupErr = i18n.T("Please paste your ExHentai cookies")
 		return
 	}
 	backend := a.backend
@@ -1253,7 +1256,7 @@ func (a *App) settingsPage(c *ui.Context) {
 
 	ui.Scroll(c).Fill().Children(func() {
 		ui.Column(c).Padding(20, 24).Gap(14).MaxWidth(760).Children(func() {
-			ui.Text(c, "设置").FontSize(26).Bold()
+			ui.Text(c, i18n.T("Settings")).FontSize(26).Bold()
 			if a.backend != nil && !a.backend.Configured() {
 				if msg := a.backend.StartError(); msg != "" {
 					ui.Text(c, msg).FontSize(12).TextColor(t.Danger).MaxWidth(720)
@@ -1261,14 +1264,14 @@ func (a *App) settingsPage(c *ui.Context) {
 			}
 
 			if a.backend != nil {
-				ui.Text(c, "账号").FontSize(16).Bold()
+				ui.Text(c, i18n.T("Account")).FontSize(16).Bold()
 				ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
 					ui.Text(c, "ExHentai Cookies").Grow(1)
 					ui.Badge(c, a.cookieStatus())
 				})
-				ui.Text(c, "更改 Cookies 会重启内置服务。").FontSize(11).TextColor(t.TextMuted)
+				ui.Text(c, i18n.T("Changing the cookies restarts the built-in service.")).FontSize(11).TextColor(t.TextMuted)
 				ui.Row(c).Children(func() {
-					if ui.Button(c, "重新配置 Cookies").Clicked() {
+					if ui.Button(c, i18n.T("Reconfigure cookies")).Clicked() {
 						a.setupCookie = ""
 						a.setupErr = ""
 						a.showSetup = true
@@ -1277,19 +1280,19 @@ func (a *App) settingsPage(c *ui.Context) {
 				ui.Divider(c)
 			}
 
-			ui.Text(c, "存储").FontSize(16).Bold()
-			a.settingsRow(c, "后端地址", a.client.BaseURL())
-			a.settingsRow(c, "配置文件", a.storage.ConfigPath)
+			ui.Text(c, i18n.T("Storage")).FontSize(16).Bold()
+			a.settingsRow(c, i18n.T("Backend address"), a.client.BaseURL())
+			a.settingsRow(c, i18n.T("Config file"), a.storage.ConfigPath)
 			a.configFileRow(c)
-			a.settingsRow(c, "本地数据库", a.storage.DBPath)
-			a.settingsRow(c, "图片缓存目录", a.storage.CacheDir)
+			a.settingsRow(c, i18n.T("Local database"), a.storage.DBPath)
+			a.settingsRow(c, i18n.T("Image cache directory"), a.storage.CacheDir)
 			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-				ui.Text(c, "缓存占用").Grow(1)
+				ui.Text(c, i18n.T("Cache size")).Grow(1)
 				switch {
 				case a.cacheErr != "":
-					ui.Badge(c, "读取失败")
+					ui.Badge(c, i18n.T("Read failed"))
 				case a.cacheLoading && !a.cacheLoaded:
-					ui.Badge(c, "统计中…")
+					ui.Badge(c, i18n.T("Counting…"))
 				default:
 					ui.Badge(c, humanBytes(a.cacheBytes)+" / "+cacheLimitText(a.cacheMax))
 				}
@@ -1299,9 +1302,9 @@ func (a *App) settingsPage(c *ui.Context) {
 			}
 			if a.backend != nil {
 				ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-					ui.Text(c, "缓存上限 (MB)").Grow(1)
+					ui.Text(c, i18n.T("Cache limit (MB)")).Grow(1)
 					ui.TextInput(c, &a.cacheMaxInput).Width(160)
-					if ui.Button(c, "保存上限").Disabled(a.cacheMaxBusy).Clicked() {
+					if ui.Button(c, i18n.T("Save limit")).Disabled(a.cacheMaxBusy).Clicked() {
 						a.saveCacheLimit()
 					}
 					if a.cacheMaxBusy {
@@ -1311,10 +1314,10 @@ func (a *App) settingsPage(c *ui.Context) {
 				if a.cacheMaxErr != "" {
 					ui.Text(c, a.cacheMaxErr).FontSize(11).TextColor(t.Danger)
 				}
-				ui.Text(c, "填 0 表示不限制；超过上限时会自动删除最久未使用的图片。").
+				ui.Text(c, i18n.T("0 means unlimited; past the limit the least recently used images are deleted.")).
 					FontSize(11).TextColor(t.TextMuted)
 				ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-					if ui.Button(c, "清空缓存").Disabled(a.cacheBusy).Clicked() {
+					if ui.Button(c, i18n.T("Clear cache")).Disabled(a.cacheBusy).Clicked() {
 						a.clearCache()
 					}
 					if a.cacheBusy {
@@ -1322,7 +1325,7 @@ func (a *App) settingsPage(c *ui.Context) {
 					}
 				})
 			}
-			ui.Text(c, "清空后，已缓存的图片会在再次浏览时重新下载。").
+			ui.Text(c, i18n.T("Cleared images download again the next time they are shown.")).
 				FontSize(11).TextColor(t.TextMuted)
 
 			if a.backend != nil {
@@ -1331,23 +1334,23 @@ func (a *App) settingsPage(c *ui.Context) {
 			}
 
 			ui.Divider(c)
-			ui.Text(c, "外观").FontSize(16).Bold()
+			ui.Text(c, i18n.T("Appearance")).FontSize(16).Bold()
 			a.appearanceRow(c)
 
 			ui.Divider(c)
-			ui.Text(c, "语言").FontSize(16).Bold()
+			ui.Text(c, i18n.T("Language")).FontSize(16).Bold()
 			a.languageRow(c)
 
 			ui.Divider(c)
-			ui.Text(c, "关于").FontSize(16).Bold()
-			a.settingsRow(c, "版本", a.build)
-			ui.Text(c, "ExHentai 第三方客户端，纯 Go 原生界面（mygo），无 WebView。").
+			ui.Text(c, i18n.T("About")).FontSize(16).Bold()
+			a.settingsRow(c, i18n.T("Version"), a.build)
+			ui.Text(c, i18n.T("Third-party ExHentai client, native Go UI (mygo), no WebView.")).
 				FontSize(11).TextColor(t.TextMuted)
 			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-				if ui.Button(c, "导出诊断信息").Disabled(a.diagBusy).Clicked() {
+				if ui.Button(c, i18n.T("Export diagnostics")).Disabled(a.diagBusy).Clicked() {
 					a.exportDiagnostics()
 				}
-				ui.Text(c, "包含版本、路径、缓存大小与任务数量；不含 Cookies 或图片。").
+				ui.Text(c, i18n.T("Includes version, paths, cache size and job counts; no cookies or images.")).
 					FontSize(11).TextColor(t.TextMuted)
 			})
 			if a.diagMsg != "" {
@@ -1369,9 +1372,9 @@ func (a *App) settingsRow(c *ui.Context, label, value string) {
 
 func (a *App) cookieStatus() string {
 	if a.backend != nil && a.backend.Configured() {
-		return "已配置"
+		return i18n.T("Configured")
 	}
-	return "未配置"
+	return i18n.T("Not configured")
 }
 
 // ensureCacheInfo kicks off a background size computation once per load.
@@ -1417,7 +1420,7 @@ func (a *App) saveCacheLimit() {
 	if raw != "" {
 		mb, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || mb < 0 {
-			a.cacheMaxErr = "请输入不小于 0 的整数（MB）"
+			a.cacheMaxErr = i18n.T("Enter a whole number of MB, 0 or more")
 			return
 		}
 		maxBytes = mb << 20
@@ -1482,7 +1485,7 @@ func humanBytes(n int64) string {
 // cacheLimitText renders a byte limit for display; 0 means unlimited.
 func cacheLimitText(maxBytes int64) string {
 	if maxBytes <= 0 {
-		return "不限"
+		return i18n.T("Unlimited")
 	}
 	return humanBytes(maxBytes)
 }
@@ -1553,13 +1556,13 @@ const (
 func (a *App) errorBlock(c *ui.Context, msg string, retry func()) {
 	t := c.Theme()
 	if msg == "" {
-		msg = "发生未知错误"
+		msg = i18n.T("An unknown error occurred")
 	}
 	ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
 		stateIcon(c, moodError)
 		ui.Badge(c, errorBadge(msg)).Background(t.Danger).TextColor(t.Background)
 		ui.Text(c, msg).FontSize(12).TextColor(t.TextMuted).MaxWidth(560)
-		if ui.Button(c, "重试").Clicked() {
+		if ui.Button(c, i18n.T("Retry")).Clicked() {
 			retry()
 		}
 	})
@@ -1568,10 +1571,10 @@ func (a *App) errorBlock(c *ui.Context, msg string, retry func()) {
 // errorBadge says which kind of failure this is, so the same block can read
 // "无法连接" for a dead backend and "请求失败" for a bad response.
 func errorBadge(msg string) string {
-	if strings.HasPrefix(msg, "连接后端失败") {
-		return "无法连接"
+	if strings.HasPrefix(msg, i18n.T("Failed to reach the backend")) {
+		return i18n.T("Cannot connect")
 	}
-	return "请求失败"
+	return i18n.T("Request failed")
 }
 
 // appearanceRow is the 跟随系统/浅色/深色 choice. The window is themed by main
@@ -1582,11 +1585,11 @@ func (a *App) appearanceRow(c *ui.Context) {
 		a.appearance = "system"
 	}
 	ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-		ui.Text(c, "主题").Grow(1)
+		ui.Text(c, i18n.T("Theme")).Grow(1)
 		for _, opt := range []struct{ value, label string }{
-			{"system", "跟随系统"},
-			{"light", "浅色"},
-			{"dark", "深色"},
+			{"system", i18n.T("Follow system")},
+			{"light", i18n.T("Light")},
+			{"dark", i18n.T("Dark")},
 		} {
 			label := opt.label
 			if a.appearance == opt.value {
@@ -1621,16 +1624,37 @@ func (a *App) saveAppearance(value string) {
 				return
 			}
 			a.appearance = backend.Appearance()
-			a.appearanceMsg = "已保存，重启后生效"
+			a.appearanceMsg = i18n.T("Saved; takes effect after restart")
 		})
 	}()
 }
 
-// languageNames names the interface languages the UI can be shown in.
-// Only Simplified Chinese is translated: offering 繁體中文 would be a button
-// that changes one word of this page and nothing else.
-var languageNames = []struct{ tag, label string }{
-	{"zh-CN", "简体中文"},
+// languageOptions names the interface languages the UI can be shown in: the
+// mygo locale tag each applies, in the order the settings page lists them.
+// Traditional Chinese is not on the list: it would change one word of one
+// row and nothing else.
+type languageOption struct {
+	saved  string // what config.json keeps
+	locale language.Tag
+}
+
+var languageOptions = []languageOption{
+	{"zh-CN", language.Chinese},
+	{"en", language.English},
+}
+
+// languageOptionNames returns the labels of languageOptions in the language
+// the interface currently shows.
+func languageOptionNames() []string { return i18n.Default.Names() }
+
+// savedLanguageFor is the config.json tag of the language a mygo locale shows,
+// so the row's tick follows what is on screen before the file is read.
+func savedLanguageFor(t language.Tag) string {
+	base, _ := t.Base()
+	if base.String() == "en" {
+		return "en"
+	}
+	return "zh-CN"
 }
 
 // syncSettingsSection is the 数据同步 part of the settings page: enable the
@@ -1642,21 +1666,21 @@ func (a *App) syncSettingsSection(c *ui.Context) {
 	a.ensureSyncConfig()
 	s := &a.sync
 
-	ui.Text(c, "数据同步").FontSize(16).Bold()
-	ui.Text(c, "把书架、阅读进度与离线缓存在两台设备间双向同步；两边都要开启并互相填写对方的地址与令牌。").
+	ui.Text(c, i18n.T("Data sync")).FontSize(16).Bold()
+	ui.Text(c, i18n.T("Sync bookshelf, reading progress and offline cache between two devices; both sides enable it and enter each other's address and token.")).
 		FontSize(12).TextColor(t.TextMuted)
 
 	ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-		label := "未启用"
+		label := i18n.T("Not enabled")
 		if s.form.enabled {
-			label = "✓ 已启用"
+			label = i18n.T("✓ Enabled")
 		}
-		if ui.Button(c, label).Disabled(s.saveBusy).Label("切换同步开关").Clicked() {
+		if ui.Button(c, label).Disabled(s.saveBusy).Label(i18n.T("Toggle sync")).Clicked() {
 			s.form.enabled = !s.form.enabled
 		}
 		ui.Text(c, syncStatusLine(s.status)).FontSize(12).TextColor(t.TextMuted)
 		if s.status.Pending > 0 {
-			ui.Textf(c, "待推送 %d 条", s.status.Pending).FontSize(12).TextColor(t.TextMuted)
+			ui.Textf(c, i18n.T("%d changes waiting"), s.status.Pending).FontSize(12).TextColor(t.TextMuted)
 		}
 		if s.statusBusy {
 			ui.Spinner(c)
@@ -1665,14 +1689,14 @@ func (a *App) syncSettingsSection(c *ui.Context) {
 
 	ui.Row(c).Gap(8).AlignItems(ui.End).Children(func() {
 		ui.Column(c).Gap(2).Grow(1).Children(func() {
-			ui.TextInput(c, &s.form.serverURL).Label("对方地址").
+			ui.TextInput(c, &s.form.serverURL).Label(i18n.T("Peer address")).
 				Placeholder("http://192.168.1.20:8080")
 		})
 		ui.Column(c).Gap(2).Children(func() {
-			ui.TextInput(c, &s.form.token).Width(220).Label("同步令牌").
-				Placeholder("两边设置相同的令牌")
+			ui.TextInput(c, &s.form.token).Width(220).Label(i18n.T("Sync token")).
+				Placeholder(i18n.T("Use the same token on both sides"))
 		})
-		if ui.PrimaryButton(c, "保存同步设置").Disabled(s.saveBusy).Clicked() {
+		if ui.PrimaryButton(c, i18n.T("Save sync settings")).Disabled(s.saveBusy).Clicked() {
 			a.saveSyncSettings()
 		}
 		if s.saveBusy {
@@ -1680,17 +1704,17 @@ func (a *App) syncSettingsSection(c *ui.Context) {
 		}
 	})
 	if a.backend != nil {
-		label := "本机不接受同步"
+		label := i18n.T("This device does not accept sync")
 		if s.accepting {
-			label = "✓ 本机接受同步"
+			label = i18n.T("✓ This device accepts sync")
 		}
-		if ui.Button(c, label).Disabled(s.saveBusy).Label("切换本机是否接受同步").Clicked() {
+		if ui.Button(c, label).Disabled(s.saveBusy).Label(i18n.T("Toggle accepting sync on this device")).Clicked() {
 			s.accepting = !s.accepting
 		}
-		ui.Text(c, "对方要能连进来，本机也要开启并持有相同令牌。").
+		ui.Text(c, i18n.T("The other device must be able to connect: enable this too, with the same token.")).
 			FontSize(11).TextColor(t.TextMuted)
 	}
-	ui.Text(c, "令牌两边必须一致；留空清除，显示 ******** 表示保持已存令牌不变。").
+	ui.Text(c, i18n.T("Both sides must use the same token; empty clears it, and ******** keeps the stored one.")).
 		FontSize(11).TextColor(t.TextMuted)
 
 	switch {
@@ -1700,16 +1724,16 @@ func (a *App) syncSettingsSection(c *ui.Context) {
 		ui.Text(c, s.msg).FontSize(12).TextColor(t.TextMuted)
 	}
 	if s.status.LastError != "" && s.status.Enabled {
-		ui.Textf(c, "上次同步出错：%s", s.status.LastError).FontSize(12).TextColor(t.Danger)
+		ui.Textf(c, i18n.T("Last sync error: %s"), s.status.LastError).FontSize(12).TextColor(t.Danger)
 	}
 	if s.status.LastSyncAt != nil {
-		ui.Textf(c, "上次同步 %s", s.status.LastSyncAt.Local().Format("2006-01-02 15:04")).
+		ui.Textf(c, i18n.T("Last synced %s"), s.status.LastSyncAt.Local().Format("2006-01-02 15:04")).
 			FontSize(11).TextColor(t.TextMuted)
 	}
 	if !s.loaded && s.loading {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Spinner(c)
-			ui.Text(c, "正在读取同步配置…").FontSize(12).TextColor(t.TextMuted)
+			ui.Text(c, i18n.T("Reading sync configuration…")).FontSize(12).TextColor(t.TextMuted)
 		})
 	}
 }
@@ -1720,36 +1744,49 @@ func (a *App) syncSettingsSection(c *ui.Context) {
 func (a *App) languageRow(c *ui.Context) {
 	t := c.Theme()
 	if a.language == "" {
-		a.language = "zh-CN"
+		// The saved choice is config.json's; until it loads, the row marks
+		// the language actually shown so the tick never lies.
+		a.language = savedLanguageFor(i18n.Default.Language())
 	}
 	ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-		ui.Text(c, "界面语言").Grow(1)
-		for _, opt := range languageNames {
-			chosen := a.language == opt.tag
-			label := opt.label
-			if chosen {
+		ui.Text(c, i18n.T("Interface language")).Grow(1)
+		names := languageOptionNames()
+		for i, opt := range languageOptions {
+			label := names[i]
+			if opt.saved == a.language {
 				label = "✓ " + label
 			}
 			// Clicking records the choice whether or not it is the one in
 			// use, so config.json says what the UI is shown in instead of
 			// leaving the default implicit.
 			if ui.Button(c, label).Disabled(a.backend == nil).Clicked() {
-				a.saveLanguage(opt.tag)
+				a.saveLanguage(opt.saved)
 			}
 		}
 	})
-	ui.Text(c, "目前只有简体中文；日期、数字与字体跟随系统区域设置。选择会写入配置文件。").
+	ui.Text(c, i18n.T("The interface is in the chosen language; dates, numbers and fonts follow the system region. The choice is written to the config file.")).
 		FontSize(11).TextColor(t.TextMuted)
 	if a.languageMsg != "" {
 		ui.Text(c, a.languageMsg).FontSize(11).TextColor(t.TextMuted)
 	}
 }
 
-// saveLanguage persists the interface language tag through the backend,
-// which owns config.json.
+// saveLanguage persists the interface language and shows it at once: the
+// localizer switches the strings, and mygo re-draws every window when the
+// app's locale changes.
 func (a *App) saveLanguage(tag string) {
 	if a.backend == nil {
 		return
+	}
+	locale := language.Chinese
+	if tag == "en" {
+		locale = language.English
+	}
+	i18n.SetLanguage(locale)
+	// mygo's own texts (menus, dialogs) follow the app's locale too; a tag
+	// it cannot match falls back to the system's language.
+	if a.win != nil {
+		mygo.App.SetLocale(locale.String())
 	}
 	backend := a.backend
 	go func() {
@@ -1764,7 +1801,7 @@ func (a *App) saveLanguage(tag string) {
 			} else {
 				a.language = tag
 			}
-			a.languageMsg = "已保存"
+			a.languageMsg = i18n.T("Saved")
 		})
 	}()
 }
@@ -1781,23 +1818,23 @@ func (a *App) configFileRow(c *ui.Context) {
 		}
 	}
 	if path == "" {
-		ui.Text(c, "配置文件位置未知").FontSize(11).TextColor(t.Danger)
+		ui.Text(c, i18n.T("Config file location unknown")).FontSize(11).TextColor(t.Danger)
 		return
 	}
 	st, err := os.Stat(path)
 	switch {
 	case err != nil && errors.Is(err, fs.ErrNotExist):
 		ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-			ui.Text(c, "配置文件内容").Grow(1)
-			ui.Badge(c, "尚未写入")
+			ui.Text(c, i18n.T("Config file contents")).Grow(1)
+			ui.Badge(c, i18n.T("Not written yet"))
 		})
-		ui.Text(c, "设置 Cookie 或修改偏好后会写入 "+path+"（权限 0600）。").
+		ui.Text(c, i18n.T("Setting cookies or changing preferences writes ")+path+i18n.T(" (mode 0600).")).
 			FontSize(11).TextColor(t.TextMuted)
 		return
 	case err != nil:
 		ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-			ui.Text(c, "配置文件内容").Grow(1)
-			ui.Badge(c, "无法读取")
+			ui.Text(c, i18n.T("Config file contents")).Grow(1)
+			ui.Badge(c, i18n.T("Cannot read"))
 		})
 		ui.Text(c, err.Error()).FontSize(11).TextColor(t.Danger)
 		return
@@ -1807,7 +1844,7 @@ func (a *App) configFileRow(c *ui.Context) {
 	var raw diskSettings
 	if data, err := os.ReadFile(path); err == nil {
 		if json.Unmarshal(data, &raw) != nil {
-			ui.Text(c, "配置文件不是有效的 JSON，下次保存设置时会被覆盖。").
+			ui.Text(c, i18n.T("The config file is not valid JSON; saving settings will overwrite it.")).
 				FontSize(11).TextColor(t.Danger)
 		}
 	}
@@ -1819,40 +1856,40 @@ func (a *App) configFileRow(c *ui.Context) {
 	}
 	switch {
 	case raw.Appearance != "":
-		add("主题", appearanceLabel(raw.Appearance))
+		add(i18n.T("Theme"), appearanceLabel(raw.Appearance))
 	case a.appearance != "":
-		add("主题", appearanceLabel(a.appearance))
+		add(i18n.T("Theme"), appearanceLabel(a.appearance))
 	}
 	switch {
 	case raw.Language != "":
-		add("语言", languageLabel(raw.Language))
+		add(i18n.T("Language"), languageLabel(raw.Language))
 	case a.language != "":
-		add("语言", languageLabel(a.language))
+		add(i18n.T("Language"), languageLabel(a.language))
 	}
 	if raw.Cookie != "" {
 		add("Cookie", cookieLabel(true))
 	}
 	if raw.CacheMaxBytes != nil {
-		add("缓存上限", cacheLimitText(*raw.CacheMaxBytes))
+		add(i18n.T("Cache limit"), cacheLimitText(*raw.CacheMaxBytes))
 	} else if a.cacheMax > 0 {
-		add("缓存上限", cacheLimitText(a.cacheMax))
+		add(i18n.T("Cache limit"), cacheLimitText(a.cacheMax))
 	}
 	if raw.DatabasePath != "" {
-		add("数据库", shortenPath(raw.DatabasePath))
+		add(i18n.T("Database"), shortenPath(raw.DatabasePath))
 	}
 	if raw.CacheDir != "" {
-		add("缓存目录", shortenPath(raw.CacheDir))
+		add(i18n.T("Cache directory"), shortenPath(raw.CacheDir))
 	}
 	ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-		ui.Text(c, "配置文件内容").Grow(1)
-		ui.Badge(c, "已写入")
+		ui.Text(c, i18n.T("Config file contents")).Grow(1)
+		ui.Badge(c, i18n.T("Written"))
 	})
 	if len(parts) == 0 {
-		ui.Text(c, "文件存在，但没有可显示的偏好。").FontSize(11).TextColor(t.TextMuted)
+		ui.Text(c, i18n.T("The file exists but holds no preferences to show.")).FontSize(11).TextColor(t.TextMuted)
 	} else {
 		ui.Text(c, strings.Join(parts, " · ")).FontSize(11).TextColor(t.TextMuted)
 	}
-	ui.Text(c, "修改时间 "+st.ModTime().Format("2006-01-02 15:04")+"；Cookie 以明文保存（权限 0600）。").
+	ui.Text(c, i18n.T("Last written ")+st.ModTime().Format("2006-01-02 15:04")+i18n.T("; the cookie is stored in plain text (mode 0600).")).
 		FontSize(11).TextColor(t.TextMuted)
 	_ = st
 }
@@ -1883,18 +1920,19 @@ func shortenPath(path string) string {
 func appearanceLabel(source string) string {
 	switch source {
 	case "light":
-		return "浅色"
+		return i18n.T("Light")
 	case "dark":
-		return "深色"
+		return i18n.T("Dark")
 	default:
-		return "跟随系统"
+		return i18n.T("Follow system")
 	}
 }
 
 func languageLabel(tag string) string {
-	for _, opt := range languageNames {
-		if opt.tag == tag {
-			return opt.label
+	names := languageOptionNames()
+	for i, opt := range languageOptions {
+		if opt.saved == tag {
+			return names[i]
 		}
 	}
 	return tag
@@ -1903,9 +1941,9 @@ func languageLabel(tag string) string {
 // cookieLabel describes the cookie without printing any of it.
 func cookieLabel(configured bool) string {
 	if configured {
-		return "已配置"
+		return i18n.T("Configured")
 	}
-	return "未配置"
+	return i18n.T("Not configured")
 }
 
 // requestFrame asks the window for one more frame, for state changed outside
@@ -2012,7 +2050,7 @@ func (a *App) saveSyncSettings() {
 			s.form.enabled = cfg.Enabled
 			s.form.serverURL = cfg.ServerURL
 			s.form.token = cfg.Token
-			s.msg = "已保存，同步引擎已按新配置重启"
+			s.msg = i18n.T("Saved; the sync engine restarted with the new settings")
 			// The engine restarts with the new config; refresh its state.
 			s.statusLoaded = false
 			a.ensureSyncConfig()
@@ -2028,12 +2066,12 @@ const SyncTokenMask = "********"
 func syncStatusLine(st SyncStatus) string {
 	switch {
 	case !st.Enabled:
-		return "未启用"
+		return i18n.T("Not enabled")
 	case !st.Configured:
-		return "缺少服务器地址或令牌"
+		return i18n.T("Missing server address or token")
 	case st.SSEConnected:
-		return "已连接"
+		return i18n.T("Connected")
 	default:
-		return "未连接"
+		return i18n.T("Disconnected")
 	}
 }

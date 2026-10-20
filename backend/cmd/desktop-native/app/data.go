@@ -1,5 +1,9 @@
 package app
 
+import (
+	"manga-reader/cmd/desktop-native/app/i18n"
+)
+
 // Gallery is one gallery as the native UI shows it: the fields of the list and
 // detail API responses that the browsing and reading pages use.
 type Gallery struct {
@@ -35,27 +39,27 @@ type ReadingProgress struct {
 func categoryLabel(code string) string {
 	switch code {
 	case "doujinshi":
-		return "同人志"
+		return i18n.T("Doujinshi")
 	case "manga":
-		return "漫画"
+		return i18n.T("Manga")
 	case "artistcg":
-		return "画师 CG"
+		return i18n.T("Artist CG")
 	case "gamecg":
-		return "游戏 CG"
+		return i18n.T("Game CG")
 	case "western":
-		return "欧美"
+		return i18n.T("Western")
 	case "image-set":
-		return "图集"
+		return i18n.T("Image set")
 	case "cosplay":
-		return "Cosplay"
+		return i18n.T("Cosplay")
 	case "asianporn":
-		return "亚洲"
+		return i18n.T("Asian porn")
 	case "non-h":
-		return "非 H"
+		return i18n.T("Non-H")
 	case "misc":
-		return "杂项"
+		return i18n.T("Misc")
 	case "other":
-		return "其他"
+		return i18n.T("Other")
 	default:
 		return code
 	}

@@ -2,10 +2,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"manga-reader/cmd/desktop-native/app/i18n"
 )
 
 // Downloads is the app's view of the backend's prefill jobs: offline copies of
@@ -147,7 +150,7 @@ func (a *App) startDownload(c *ui.Context, s *detailState) {
 			_, urls, err = a.client.CachedPages(ctx, id, token)
 		}
 		if err == nil && len(urls) == 0 {
-			err = fmt.Errorf("这个画廊没有可下载的页面")
+			err = errors.New(i18n.T("This gallery has no downloadable pages"))
 		}
 		var job PrefillJob
 		if err == nil {
@@ -164,8 +167,8 @@ func (a *App) startDownload(c *ui.Context, s *detailState) {
 			a.ensureDownloads()
 			a.toastLocked(ui.Toast{
 				ID: "download-" + job.ID, Type: "success",
-				Title: "已加入下载队列",
-				Description: fmt.Sprintf("%d 页 · %s", len(urls),
+				Title: i18n.T("Job queued"),
+				Description: i18n.Sprintf("%d pages · %s", len(urls),
 					downloadStatusLabel(job.Status)),
 			})
 		})
@@ -212,15 +215,15 @@ func (a *App) deleteDownload(id string) {
 func downloadStatusLabel(status string) string {
 	switch status {
 	case "queued":
-		return "排队中"
+		return i18n.T("Queued")
 	case "running":
-		return "下载中"
+		return i18n.T("Running")
 	case "completed":
-		return "已完成"
+		return i18n.T("Completed")
 	case "cancelled":
-		return "已取消"
+		return i18n.T("Cancelled")
 	case "failed":
-		return "失败"
+		return i18n.T("Failed")
 	}
 	return status
 }
@@ -258,11 +261,11 @@ func (a *App) downloadsPage(c *ui.Context) {
 	ui.Column(c).Fill().Padding(20, 24).Gap(14).Children(func() {
 		ui.Row(c).AlignItems(ui.End).Gap(12).Children(func() {
 			ui.Column(c).Gap(2).Grow(1).Children(func() {
-				ui.Text(c, "下载管理").FontSize(26).Bold()
-				ui.Text(c, "离线下载的页面会存入本地图片缓存，断网也能阅读。").
+				ui.Text(c, i18n.T("Downloads")).FontSize(26).Bold()
+				ui.Text(c, i18n.T("Offline downloads are stored in the local image cache and readable offline.")).
 					FontSize(12).TextColor(t.TextMuted)
 			})
-			if ui.Button(c, "刷新").Clicked() {
+			if ui.Button(c, i18n.T("Refresh")).Clicked() {
 				a.loadDownloads()
 			}
 		})
@@ -271,12 +274,12 @@ func (a *App) downloadsPage(c *ui.Context) {
 		case a.downloads.loading && len(a.downloads.items) == 0:
 			ui.Column(c).Fill().Center().Gap(10).Children(func() {
 				ui.Spinner(c)
-				ui.Text(c, "正在加载任务…").FontSize(12).TextColor(t.TextMuted)
+				ui.Text(c, i18n.T("Loading jobs…")).FontSize(12).TextColor(t.TextMuted)
 			})
 		case a.downloads.err != "" && len(a.downloads.items) == 0:
 			a.errorBlock(c, a.downloads.err, func() { a.loadDownloads() })
 		case len(a.downloads.items) == 0:
-			a.emptyPage(c, "还没有离线下载任务", "在画廊详情页点击「离线下载」", "")
+			a.emptyPage(c, i18n.T("No offline downloads yet"), i18n.T("Click Download on a gallery's page"), "")
 		default:
 			if a.zipMsg != "" {
 				ui.Text(c, a.zipMsg).FontSize(11).TextColor(t.TextMuted)
@@ -300,9 +303,9 @@ func (a *App) downloadRow(c *ui.Context, j PrefillJob) {
 		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 			title := j.Title
 			if title == "" {
-				title = fmt.Sprintf("画廊 %d", j.GalleryID)
+				title = fmt.Sprintf(i18n.T("Gallery %d"), j.GalleryID)
 			}
-			open := ui.Box(c).Focusable().Label("打开 " + title).Grow(1)
+			open := ui.Box(c).Focusable().Label(i18n.Tf("Open %s", title)).Grow(1)
 			open.Children(func() {
 				ui.Text(c, title).FontSize(14).Bold().SingleLine()
 			})
@@ -311,23 +314,23 @@ func (a *App) downloadRow(c *ui.Context, j PrefillJob) {
 			}
 			ui.Text(c, downloadStatusLabel(j.Status)).FontSize(12).TextColor(t.TextMuted)
 			if running {
-				if ui.Button(c, "取消").Clicked() {
+				if ui.Button(c, i18n.T("Cancel")).Clicked() {
 					a.cancelDownload(j.ID)
 				}
 			} else {
 				if j.Status == "completed" && j.GalleryID > 0 && j.Token != "" {
-					if ui.Button(c, "离线阅读").Clicked() {
+					if ui.Button(c, i18n.T("Read offline")).Clicked() {
 						a.router.Push(fmt.Sprintf("/reader/%d/%s?offline=1", j.GalleryID, j.Token))
 					}
-					label := "导出 ZIP"
+					label := i18n.T("Export ZIP")
 					if a.zipBusy[j.ID] {
-						label = "正在导出…"
+						label = i18n.T("Exporting…")
 					}
 					if ui.Button(c, label).Disabled(a.zipBusy[j.ID]).Clicked() {
 						a.saveZip(j)
 					}
 				}
-				if ui.Button(c, "删除").Clicked() {
+				if ui.Button(c, i18n.T("Delete")).Clicked() {
 					a.deleteDownload(j.ID)
 				}
 			}
@@ -336,9 +339,9 @@ func (a *App) downloadRow(c *ui.Context, j PrefillJob) {
 		if p := downloadProgress(j); p >= 0 {
 			ui.Progress(c, p).FillWidth()
 		}
-		detail := fmt.Sprintf("%d / %d 页", donePages(j), j.Total)
+		detail := i18n.Sprintf("%d / %d pages", donePages(j), j.Total)
 		if j.FailedCount > 0 {
-			detail += fmt.Sprintf(" · %d 页失败", j.FailedCount)
+			detail = i18n.Sprintf("%d / %d pages (%d failed)", donePages(j), j.Total, j.FailedCount)
 		}
 		ui.Text(c, detail).FontSize(11).TextColor(t.TextMuted)
 	})
