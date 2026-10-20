@@ -37,6 +37,11 @@ type Reader struct {
 	// offline reads the downloaded copy: the reader asks the cache first
 	// instead of waiting on upstream to fail.
 	offline bool
+	// startPage is the page the reader was opened at (a thumbnail click or a
+	// jump), -1 when the saved progress decides. It outlives the moment the
+	// target is applied, so a late load result cannot override it with the
+	// saved page.
+	startPage int
 
 	zoom  float32
 	panX  float32
@@ -102,6 +107,7 @@ func (a *App) ensureReader(id int64, token string, offline bool) {
 	r.id, r.token, r.offline = id, token, offline
 	r.started = false
 	r.page = 0
+	r.startPage = -1
 	r.pages = nil
 	r.total = 0
 	r.loaded = false
@@ -122,6 +128,11 @@ func (a *App) startReaderLoad(r *Reader) {
 	r.loading = true
 	r.started = true
 	r.err = ""
+	// A target set before the load began decides the page, not the saved
+	// progress that arrives with the list.
+	if a.readerStart >= 0 {
+		r.startPage = a.readerStart
+	}
 	// partial is how many pages the view already shows. Until the backend
 	// sends the first one, the reader waits; after that it stays readable
 	// while the rest arrives.
@@ -146,6 +157,12 @@ func (a *App) startReaderLoad(r *Reader) {
 			// The first page makes the reader usable: drop the spinner so
 			// the toolbar and the page show while the rest streams in.
 			r.loading = false
+			// Apply a target as soon as its page arrives, rather than when
+			// the whole list does: on a slow gallery that can be a minute.
+			if r.startPage >= 0 && r.startPage < len(r.pages) {
+				r.page = r.startPage
+				r.resetView()
+			}
 		})
 	}
 
@@ -187,7 +204,12 @@ func (a *App) startReaderLoad(r *Reader) {
 			r.partial = len(urls)
 			r.complete = true
 			r.loaded = true
-			if progress.CurrentPage > 0 && progress.CurrentPage < len(urls) {
+			// The saved progress resumes reading, unless the page list came
+			// with a target: a thumbnail click or a jump must not be undone
+			// here. The stream marks the reader loaded on its first page, so
+			// this runs after readerPage may already have applied one.
+			if progress.CurrentPage > 0 && progress.CurrentPage < len(urls) &&
+				a.readerStart < 0 && r.startPage < 0 {
 				r.page = progress.CurrentPage
 			}
 		})
@@ -328,6 +350,9 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 			r.resetView()
 			a.saveProgress(r)
 		}
+		// Remember it: the page list may still be streaming, and its last
+		// result would otherwise restore the saved progress on top.
+		r.startPage = a.readerStart
 		a.readerStart = -1
 	}
 
