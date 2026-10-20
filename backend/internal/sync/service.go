@@ -70,15 +70,34 @@ func (s *Service) RegisterRoutes(r gin.IRouter) {
 	r.GET("/api/sync/config", s.handleConfigGet)
 	r.PUT("/api/sync/config", s.handleConfigPut)
 	r.GET("/api/sync/status", s.handleStatus)
-	if s.hostToken != "" {
-		r.POST("/api/sync/push", s.requireToken(), s.handlePush)
-		r.GET("/api/sync/events", s.requireToken(), s.handlePeerEvents)
-	}
+	// The peer routes are always mounted: the token is read per request, so
+	// the desktop settings page can turn accepting peers on and off without
+	// re-registering anything.
+	r.POST("/api/sync/push", s.requireToken(), s.handlePush)
+	r.GET("/api/sync/events", s.requireToken(), s.handlePeerEvents)
 }
 
+// SetHostToken enables or replaces the peer-facing endpoints' token at run
+// time: the desktop settings page lets the user turn sync on without
+// restarting the app. Empty disables accepting peers. Safe for concurrent
+// requests; a running push finishes with the token it read.
+func (s *Service) SetHostToken(token string) {
+	s.hostToken = token
+}
+
+// HostToken reports the peer-facing token, or "".
+func (s *Service) HostToken() string { return s.hostToken }
+
 func (s *Service) requireToken() gin.HandlerFunc {
-	want := []byte(s.hostToken)
 	return func(c *gin.Context) {
+		// Read per request: SetHostToken turns accepting peers on and off
+		// while the server is up, so the token cannot be captured here.
+		want := []byte(s.hostToken)
+		// No token configured: this instance does not accept peers.
+		if len(want) == 0 {
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "sync is not enabled on this host"})
+			return
+		}
 		got := []byte(c.GetHeader(headerToken))
 		if len(got) == 0 || subtle.ConstantTimeCompare(got, want) != 1 {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid sync token"})

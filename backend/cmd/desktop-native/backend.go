@@ -215,3 +215,29 @@ func (b *embeddedBackend) Language() string {
 
 // SettingsPath is the config.json the settings above are written to.
 func (b *embeddedBackend) SettingsPath() string { return desktop.SettingsPath() }
+
+// SyncToken is the peer-facing token this device accepts, or "".
+func (b *embeddedBackend) SyncToken() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.settings.SyncToken
+}
+
+// SetSyncToken persists the peer-facing token and applies it to the running
+// server without a restart. Empty stops accepting peers.
+func (b *embeddedBackend) SetSyncToken(token string) error {
+	b.mu.Lock()
+	settings := b.settings
+	settings.SyncToken = token
+	if err := desktop.SaveSettings(settings); err != nil {
+		b.mu.Unlock()
+		return fmt.Errorf("保存设置失败: %w", err)
+	}
+	b.settings = settings
+	srv := b.server
+	b.mu.Unlock()
+	if srv != nil {
+		srv.SetSyncToken(token)
+	}
+	return nil
+}

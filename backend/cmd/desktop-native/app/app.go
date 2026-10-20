@@ -68,6 +68,10 @@ type App struct {
 	language    string
 	languageMsg string
 
+	// sync is the settings page's data-sync section: the form fields, the
+	// loaded config and the engine's live state.
+	sync syncSection
+
 	// cache stats shown on the settings page.
 	cacheBytes   int64
 	cacheMax     int64 // 0 means unlimited
@@ -120,6 +124,36 @@ type App struct {
 	readerStart int
 	// readerJump is the page-number field under the reader.
 	readerJump string
+}
+
+// syncSection is the data-sync part of the settings page. The form holds
+// what the user edits; the rest mirrors the backend's config and engine
+// state.
+type syncSection struct {
+	form         syncForm
+	config       SyncConfig
+	loaded       bool
+	loading      bool
+	saveBusy     bool
+	msg          string
+	err          string
+	status       SyncStatus
+	statusLoaded bool
+	statusBusy   bool
+	// accepting is this device's own peer switch, applied through the
+	// backend rather than the engine's config.
+	accepting     bool
+	acceptingInit bool
+}
+
+// syncForm is the editable part of the sync section. tokenInit stops the
+// masked stored token from being written over the user's typing on the
+// first load.
+type syncForm struct {
+	enabled   bool
+	serverURL string
+	token     string
+	tokenInit bool
 }
 
 type listKind int
@@ -1282,6 +1316,11 @@ func (a *App) settingsPage(c *ui.Context) {
 			ui.Text(c, "清空后，已缓存的图片会在再次浏览时重新下载。").
 				FontSize(11).TextColor(t.TextMuted)
 
+			if a.backend != nil {
+				ui.Divider(c)
+				a.syncSettingsSection(c)
+			}
+
 			ui.Divider(c)
 			ui.Text(c, "外观").FontSize(16).Bold()
 			a.appearanceRow(c)
@@ -1535,6 +1574,87 @@ var languageNames = []struct{ tag, label string }{
 	{"zh-CN", "简体中文"},
 }
 
+// syncSettingsSection is the 数据同步 part of the settings page: enable the
+// engine, point it at another device running this app, and see whether it
+// is connected. Both sides must use the same token, and both sides must
+// have the peer endpoints on (a sync token in the settings).
+func (a *App) syncSettingsSection(c *ui.Context) {
+	t := c.Theme()
+	a.ensureSyncConfig()
+	s := &a.sync
+
+	ui.Text(c, "数据同步").FontSize(16).Bold()
+	ui.Text(c, "把书架、阅读进度与离线缓存在两台设备间双向同步；两边都要开启并互相填写对方的地址与令牌。").
+		FontSize(12).TextColor(t.TextMuted)
+
+	ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+		label := "未启用"
+		if s.form.enabled {
+			label = "✓ 已启用"
+		}
+		if ui.Button(c, label).Disabled(s.saveBusy).Label("切换同步开关").Clicked() {
+			s.form.enabled = !s.form.enabled
+		}
+		ui.Text(c, syncStatusLine(s.status)).FontSize(12).TextColor(t.TextMuted)
+		if s.status.Pending > 0 {
+			ui.Textf(c, "待推送 %d 条", s.status.Pending).FontSize(12).TextColor(t.TextMuted)
+		}
+		if s.statusBusy {
+			ui.Spinner(c)
+		}
+	})
+
+	ui.Row(c).Gap(8).AlignItems(ui.End).Children(func() {
+		ui.Column(c).Gap(2).Grow(1).Children(func() {
+			ui.TextInput(c, &s.form.serverURL).Label("对方地址").
+				Placeholder("http://192.168.1.20:8080")
+		})
+		ui.Column(c).Gap(2).Children(func() {
+			ui.TextInput(c, &s.form.token).Width(220).Label("同步令牌").
+				Placeholder("两边设置相同的令牌")
+		})
+		if ui.PrimaryButton(c, "保存同步设置").Disabled(s.saveBusy).Clicked() {
+			a.saveSyncSettings()
+		}
+		if s.saveBusy {
+			ui.Spinner(c)
+		}
+	})
+	if a.backend != nil {
+		label := "本机不接受同步"
+		if s.accepting {
+			label = "✓ 本机接受同步"
+		}
+		if ui.Button(c, label).Disabled(s.saveBusy).Label("切换本机是否接受同步").Clicked() {
+			s.accepting = !s.accepting
+		}
+		ui.Text(c, "对方要能连进来，本机也要开启并持有相同令牌。").
+			FontSize(11).TextColor(t.TextMuted)
+	}
+	ui.Text(c, "令牌两边必须一致；留空清除，显示 ******** 表示保持已存令牌不变。").
+		FontSize(11).TextColor(t.TextMuted)
+
+	switch {
+	case s.err != "":
+		ui.Text(c, s.err).FontSize(12).TextColor(t.Danger)
+	case s.msg != "":
+		ui.Text(c, s.msg).FontSize(12).TextColor(t.TextMuted)
+	}
+	if s.status.LastError != "" && s.status.Enabled {
+		ui.Textf(c, "上次同步出错：%s", s.status.LastError).FontSize(12).TextColor(t.Danger)
+	}
+	if s.status.LastSyncAt != nil {
+		ui.Textf(c, "上次同步 %s", s.status.LastSyncAt.Local().Format("2006-01-02 15:04")).
+			FontSize(11).TextColor(t.TextMuted)
+	}
+	if !s.loaded && s.loading {
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Spinner(c)
+			ui.Text(c, "正在读取同步配置…").FontSize(12).TextColor(t.TextMuted)
+		})
+	}
+}
+
 // languageRow is the interface language choice. The UI is translated in
 // Chinese only, so the row says so and the choice is stored with the rest of
 // config.json rather than offered as a control that does nothing.
@@ -1734,5 +1854,127 @@ func cookieLabel(configured bool) string {
 func (a *App) requestFrame() {
 	if a.win != nil {
 		a.win.Update(func() {})
+	}
+}
+
+// --- Data sync settings ---
+
+// ensureSyncConfig loads the sync configuration and engine state once per
+// visit to the settings page.
+func (a *App) ensureSyncConfig() {
+	s := &a.sync
+	if s.loading || (s.loaded && s.statusLoaded) {
+		return
+	}
+	if s.loading {
+		return
+	}
+	s.loading = true
+	s.err = ""
+	client := a.client
+	go func() {
+		cfg, cfgErr := client.GetSyncConfig(context.Background())
+		var st SyncStatus
+		stErr := error(nil)
+		if cfgErr == nil {
+			st, stErr = client.SyncStatus(context.Background())
+		}
+		a.update(func() {
+			s.loading = false
+			if cfgErr != nil {
+				s.err = cfgErr.Error()
+				return
+			}
+			s.config = cfg
+			s.loaded = true
+			if !s.form.tokenInit {
+				s.form.enabled = cfg.Enabled
+				s.form.serverURL = cfg.ServerURL
+				// The stored token arrives masked; keep the field showing
+				// that, and save the mask back untouched unless edited.
+				s.form.token = cfg.Token
+				s.form.tokenInit = true
+			}
+			if stErr == nil {
+				s.status = st
+				s.statusLoaded = true
+			}
+			if !s.acceptingInit {
+				s.accepting = a.backend != nil && a.backend.SyncToken() != ""
+				s.acceptingInit = true
+			}
+		})
+	}()
+}
+
+// saveSyncSettings applies the form both ways: the engine's client config
+// through the API, and this device's willingness to accept peers through
+// the backend (which also persists the token). An empty token clears it;
+// the mask keeps the stored one.
+func (a *App) saveSyncSettings() {
+	s := &a.sync
+	if s.saveBusy {
+		return
+	}
+	s.saveBusy = true
+	s.msg = ""
+	s.err = ""
+
+	enabled := s.form.enabled
+	serverURL := strings.TrimSpace(s.form.serverURL)
+	token := strings.TrimSpace(s.form.token)
+	var tokenPtr *string
+	if token != SyncTokenMask {
+		tokenPtr = &token
+	}
+	accepting := s.accepting
+	backend := a.backend
+	client := a.client
+	go func() {
+		var cfg SyncConfig
+		var err error
+		cfg, err = client.SaveSyncConfig(context.Background(), &enabled, &serverURL, tokenPtr)
+		if err == nil && backend != nil {
+			if accepting {
+				// The peer token is its own secret; reuse the engine's
+				// token when the user has not set one for this device.
+				err = backend.SetSyncToken(token)
+			} else {
+				err = backend.SetSyncToken("")
+			}
+		}
+		a.update(func() {
+			s.saveBusy = false
+			if err != nil {
+				s.err = err.Error()
+				return
+			}
+			s.config = cfg
+			s.form.enabled = cfg.Enabled
+			s.form.serverURL = cfg.ServerURL
+			s.form.token = cfg.Token
+			s.msg = "已保存，同步引擎已按新配置重启"
+			// The engine restarts with the new config; refresh its state.
+			s.statusLoaded = false
+			a.ensureSyncConfig()
+		})
+	}()
+}
+
+// SyncTokenMask is what the backend sends instead of the stored token, and
+// what keeps the stored token unchanged when saved back.
+const SyncTokenMask = "********"
+
+// syncStatusLine is what the section says about the engine right now.
+func syncStatusLine(st SyncStatus) string {
+	switch {
+	case !st.Enabled:
+		return "未启用"
+	case !st.Configured:
+		return "缺少服务器地址或令牌"
+	case st.SSEConnected:
+		return "已连接"
+	default:
+		return "未连接"
 	}
 }

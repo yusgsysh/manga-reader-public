@@ -38,6 +38,11 @@ type Backend interface {
 	// StartError is a failure that happened before the backend could start
 	// and that the setup screen should explain; "" when none.
 	StartError() string
+	// SetSyncToken enables accepting sync peers with this token (empty
+	// disables) and persists it; it applies without restarting.
+	SetSyncToken(token string) error
+	// SyncToken is the peer-facing token this device accepts, or "".
+	SyncToken() string
 }
 
 // BackendStorage is the set of paths the settings page shows.
