@@ -125,7 +125,11 @@ cmd/desktop-native/
 
 ## CI
 
-`.github/workflows/native-desktop.yml` 在 Linux 上装 GTK3 跑 `gofmt`/`vet`/`test`/`-race`，并用矩阵交叉编译 linux/amd64、darwin/arm64、darwin/amd64、windows/amd64 的桌面包；Linux 额外产出完整二进制 artifact。
+`.github/workflows/native-desktop.yml` 在 Linux 上跑 `gofmt`/`vet`/`test`/`-race`，并交叉编译校验 darwin 与 windows。构建不需要 GUI 开发包：mygo 通过 purego 在运行时 dlopen 系统库，`CGO_ENABLED=0` 即可编译。
+
+构建矩阵在各自平台上产出归档（`manga-reader-<os>-<arch>.tar.gz|.zip`，内含二进制与文档），推送 `v*` tag 时自动创建 GitHub Release 并附加这些归档。版本号经 `-ldflags -X main.version` 注入，显示在设置页「关于」。
+
+Linux 用户的**运行时**依赖是 GTK 3 与 WebKitGTK 4.1；macOS 与 Windows 使用系统自带组件。
 
 ## 测试
 

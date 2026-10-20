@@ -239,9 +239,11 @@
 - [x] 用户可导出的诊断信息：设置页「导出诊断信息」写出文本（版本、平台、路径、缓存大小、翻译库/规则/任务数量），不含 Cookie 与图片。
 - [ ] 崩溃日志（当前只有进程 stderr）。
 - [x] CI
-  - [x] Linux 安装 GTK3 依赖并跑 `go test` / `go vet` / `go test -race`（`.github/workflows/native-desktop.yml`，并在 `.forgejo/workflows/` 同步一份给自托管仓库）。
-  - [x] 三平台矩阵：linux/amd64、darwin/arm64、darwin/amd64、windows/amd64 交叉编译 app + desktop 内部包 + 后端包；Linux 额外产出完整二进制 artifact。
-  - [ ] 正式发布流水线（签名、公证、`.deb`/`.exe` 安装包）。
+  - [x] Linux 跑 `gofmt` / `go vet` / `go test` / `go test -race`，并交叉编译校验 darwin、windows（`.github/workflows/native-desktop.yml`，并在 `.forgejo/workflows/` 同步一份给自托管仓库）。**不再安装 GTK3/WebKit 开发包**：mygo 用 purego 在运行时 dlopen 系统库，整个程序 `CGO_ENABLED=0` 即可构建。
+  - [x] 三平台矩阵：linux/amd64（ubuntu）、darwin/arm64 + darwin/amd64（macos-14）、windows/amd64（windows-latest）各自在本机平台构建，均产出可下载归档（含日志与文档），保留 14 天。
+  - [x] 版本注入：tag 推送时用 tag 名（去掉 `v`），否则用 `dev-<short sha>`，显示在设置页「关于」。
+  - [x] 推送 `v*` tag 时自动创建 GitHub Release 并附上四个平台的归档（`gh release create --generate-notes`）。
+  - [~] 正式发布流水线：已能产出并发布四平台归档；**签名/公证、`.deb`/`.exe` 安装包仍未做**。
 - [ ] 性能基准
   - [x] 1000+ 页画廊滚动帧率：`BenchmarkScrollHome` / `BenchmarkScrollThumbnails` 以虚拟化网格渲染 1000 个画廊与 1000 页缩略图，滚动帧成本不随列表长度增长。
   - [x] 常驻内存目标 < 300MB：`TestMemoryUnderTarget` 实测 1000 页缩略图网格仅占 **约 1.4MB 堆**（远低于目标；GPU 路径下纹理另计）。
