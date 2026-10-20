@@ -60,6 +60,28 @@ type TagSettings struct {
 	syncing            bool
 	syncErr            string
 	syncResult         string
+	// conflicts is the dialog for tags both sides changed; nil when closed.
+	conflicts *conflictDialog
+}
+
+// conflictDialog resolves the sync's conflicts one tag at a time. Each item
+// shows the local and source rule; the answer map keeps the decisions made so
+// far, and submitting sends them all in one sync.
+type conflictDialog struct {
+	open     bool
+	selected int
+	items    []conflictItem
+	choices  map[string]string // tag -> "local" or "remote"
+	// submit asks the caller to run the sync with choices; the caller clears
+	// it once it has.
+	submit bool
+}
+
+// conflictItem is one tag both sides changed.
+type conflictItem struct {
+	tag    string
+	local  *apiTagRule
+	remote *apiTagRule
 }
 
 // tagRule returns the rule of a namespace:name tag, if any.
@@ -228,16 +250,14 @@ func (a *App) toggleTagRule(tag string) {
 	a.saveTagRules()
 }
 
-// syncTagSettings runs the three-way merge with the source's My Tags.
+// syncTagSettings runs the three-way merge with the source's My Tags. Tags
+// both sides changed come back as conflicts; the dialog the page shows
+// resolves them one by one, and then the sync runs again with those answers.
 func (a *App) syncTagSettings() {
 	s := &a.tags
 	if s.syncing {
 		return
 	}
-	s.syncing = true
-	s.syncErr = ""
-	s.syncResult = ""
-
 	confirmDeletes := strings.TrimSpace(s.syncConfirmDeletes) == "确认删除"
 	resolution := ""
 	switch s.syncResolution {
@@ -246,9 +266,19 @@ func (a *App) syncTagSettings() {
 	case "保留本地":
 		resolution = "local"
 	}
+	a.runTagSync(confirmDeletes, resolution, nil)
+}
+
+// runTagSync performs one sync request. choices are per-tag answers that take
+// precedence over resolution.
+func (a *App) runTagSync(confirmDeletes bool, resolution string, choices []syncConflictChoice) {
+	s := &a.tags
+	s.syncing = true
+	s.syncErr = ""
+	s.syncResult = ""
 
 	go func() {
-		res, err := a.client.SyncTagSettings(context.Background(), confirmDeletes, resolution)
+		res, err := a.client.SyncTagSettings(context.Background(), confirmDeletes, resolution, choices)
 		a.update(func() {
 			s.syncing = false
 			if err != nil {
@@ -257,12 +287,105 @@ func (a *App) syncTagSettings() {
 			}
 			s.rules = tagRulesFromAPI(res.Tags)
 			s.loaded = true
-			s.syncResult = fmt.Sprintf(
-				"拉取 %d · 新增 %d · 更新 %d · 删除 %d · 未变 %d · 待确认删除 %d · 冲突 %d · 失败 %d",
-				res.Pulled, res.Added, res.Updated, res.Deleted, res.Unchanged,
-				len(res.PendingDeletes), len(res.Conflicts), len(res.Failed))
+			s.syncResult = syncSummary(res)
+			// A fresh conflict list replaces the old answers: they were for
+			// the state before this sync.
+			s.conflicts = newConflictDialog(res.Conflicts)
 		})
 	}()
+}
+
+// syncSummary is the one-line account of what a sync did.
+func syncSummary(res apiTagSyncResult) string {
+	line := fmt.Sprintf(
+		"拉取 %d · 新增 %d · 更新 %d · 删除 %d · 未变 %d · 待确认删除 %d · 冲突 %d · 失败 %d",
+		res.Pulled, res.Added, res.Updated, res.Deleted, res.Unchanged,
+		len(res.PendingDeletes), len(res.Conflicts), len(res.Failed))
+	if len(res.Failed) > 0 {
+		// The first failure says why; the rest are listed by tag.
+		line += "；失败原因：" + res.Failed[0].Error
+	}
+	return line
+}
+
+// newConflictDialog opens the dialog for the conflicts a sync reported. It
+// returns nil (closed) when there are none.
+func newConflictDialog(conflicts []apiTagSyncConflict) *conflictDialog {
+	if len(conflicts) == 0 {
+		return nil
+	}
+	d := &conflictDialog{open: true, choices: map[string]string{}}
+	for _, c := range conflicts {
+		d.items = append(d.items, conflictItem{tag: c.Tag, local: c.Local, remote: c.Remote})
+	}
+	return d
+}
+
+// applyConflictChoice records the answer for the tag at index and moves to
+// the next undecided one.
+func (d *conflictDialog) applyConflictChoice(index int, resolution string) {
+	if index < 0 || index >= len(d.items) {
+		return
+	}
+	if d.choices == nil {
+		d.choices = map[string]string{}
+	}
+	d.choices[d.items[index].tag] = resolution
+	if next := d.nextUndecided(); next >= 0 {
+		d.selected = next
+		return
+	}
+	// The last answer: nothing left to ask.
+	d.open = false
+	d.submit = true
+}
+
+// nextUndecided is the first item after selected without an answer, then the
+// first one anywhere, or -1 when all are answered.
+func (d *conflictDialog) nextUndecided() int {
+	for offset := 1; offset <= len(d.items); offset++ {
+		i := (d.selected + offset) % len(d.items)
+		if _, done := d.choices[d.items[i].tag]; !done {
+			return i
+		}
+	}
+	return -1
+}
+
+// remainingConflicts counts the answers still missing.
+func (d *conflictDialog) remainingConflicts() int {
+	n := 0
+	for _, it := range d.items {
+		if _, done := d.choices[it.tag]; !done {
+			n++
+		}
+	}
+	return n
+}
+
+// choiceList turns the answers into the request's list, in the order the
+// conflicts were reported.
+func (d *conflictDialog) choiceList() []syncConflictChoice {
+	out := make([]syncConflictChoice, 0, len(d.items))
+	for _, it := range d.items {
+		if c, ok := d.choices[it.tag]; ok {
+			out = append(out, syncConflictChoice{Tag: it.tag, Resolution: c})
+		}
+	}
+	return out
+}
+
+// conflictSideLabel names one side of a conflict: the rule, or that the tag
+// was deleted there.
+func conflictSideLabel(side *apiTagRule) string {
+	if side == nil {
+		return "已删除"
+	}
+	label := "喜欢"
+	if side.Action == string(TagDislike) {
+		label = "不喜欢"
+	}
+	return fmt.Sprintf("%s · 权重 %d", label, side.Weight)
 }
 
 // splitTag splits a "namespace:name" tag; a bare tag has an empty namespace.
@@ -414,6 +537,88 @@ func (a *App) tagSettingsPage(c *ui.Context) {
 			}
 		})
 	})
+
+	a.tagConflictDialog(c, s)
+}
+
+// tagConflictDialog shows the tags both sides changed and takes one answer
+// for each: 保留本地 pushes the local rule over the source's, 保留源站 takes
+// the source's. When every conflict has an answer the dialog hands the list
+// to the page, which runs the sync again with them.
+func (a *App) tagConflictDialog(c *ui.Context, s *TagSettings) {
+	d := s.conflicts
+	if d == nil {
+		return
+	}
+	t := c.Theme()
+	if d.selected < 0 || d.selected >= len(d.items) {
+		d.selected = 0
+	}
+	// A frame after the last answer (or after Apply) closes the dialog
+	// before building it, so the closed dialog is never drawn.
+	if d.submit || d.remainingConflicts() == 0 {
+		d.open = false
+	}
+	it := d.items[d.selected]
+	ui.Modal(c, &d.open, func() {
+		ui.Column(c).Width(560).Gap(12).Children(func() {
+			ui.Textf(c, "同步冲突 %d / %d", d.selected+1, len(d.items)).FontSize(18).Bold()
+			ui.Text(c, "两边都改过这个标签，选择保留哪边。").
+				FontSize(12).TextColor(t.TextMuted)
+			ui.Text(c, it.tag).FontSize(15).Bold()
+			ui.Column(c).Gap(4).Children(func() {
+				ui.Textf(c, "本地：%s", conflictSideLabel(it.local)).FontSize(12)
+				ui.Textf(c, "源站：%s", conflictSideLabel(it.remote)).FontSize(12)
+			})
+			if chosen, done := d.choices[it.tag]; done {
+				label := "保留源站"
+				if chosen == "local" {
+					label = "保留本地"
+				}
+				ui.Badge(c, "已选择："+label)
+			}
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				if ui.Button(c, "保留本地").Label("保留本地规则").Clicked() {
+					d.applyConflictChoice(d.selected, "local")
+				}
+				if ui.Button(c, "保留源站").Label("保留源站规则").Clicked() {
+					d.applyConflictChoice(d.selected, "remote")
+				}
+				if ui.Button(c, "跳过").Label("跳过此冲突").Clicked() {
+					d.selected = (d.selected + 1) % len(d.items)
+				}
+				if ui.Button(c, "稍后").Label("关闭冲突窗口").Clicked() {
+					d.open = false
+				}
+			})
+			ui.Textf(c, "还剩 %d 个冲突未选择", d.remainingConflicts()).
+				FontSize(11).TextColor(t.TextMuted)
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				if ui.PrimaryButton(c, "应用选择").Disabled(len(d.choices) == 0 || s.syncing).Clicked() {
+					d.open = false
+					d.submit = true
+				}
+				if s.syncing {
+					ui.Spinner(c)
+				}
+			})
+		})
+	})
+	if !d.open {
+		// Closed from the backdrop, Escape or 稍后. Every answer in means
+		// the dialog is done, so the answers are applied; a close without
+		// answers drops it and the conflicts come back with the next sync.
+		switch {
+		case d.remainingConflicts() == 0 && len(d.items) > 0:
+			d.submit = true
+		case len(d.choices) == 0:
+			s.conflicts = nil
+		}
+	}
+	if d.submit {
+		s.conflicts = nil
+		a.runTagSync(strings.TrimSpace(s.syncConfirmDeletes) == "确认删除", "", d.choiceList())
+	}
 }
 
 func (a *App) tagAddRow(c *ui.Context, s *TagSettings) {

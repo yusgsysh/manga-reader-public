@@ -46,6 +46,14 @@ type tagPullOp struct {
 	Remote   *model.TagPreference
 }
 
+// tagSyncChoice is the client's decision on one conflicting tag in a sync
+// request: "local" pushes the local rule over the source's, "remote" pulls
+// the source's over the local rule.
+type tagSyncChoice struct {
+	Tag        string `json:"tag"`
+	Resolution string `json:"resolution"`
+}
+
 // tagSyncPlan is the three-way merge between local rules, the sync baseline
 // (source state at the last sync) and the fetched source snapshot.
 type tagSyncPlan struct {
@@ -218,7 +226,12 @@ func (p *tagSyncPlan) addPush(key string, local model.TagPreference, hasLocal bo
 // With an empty baseline (first run) everything counts as changed on the
 // side that exists: source-only rows are imported, local-only rows are
 // pushed, and overlapping rows that differ are conflicts.
-func mergeTagState(local, baseline []model.TagPreference, remote []exhentai.UserTag, resolution string) tagSyncPlan {
+//
+// resolution is the answer to every conflict at once ("remote" or "local"),
+// as it was before the dialog could choose per tag; resolutions overrides it
+// per tag key for the conflicts the user decided one by one. A tag with no
+// entry in either stays a conflict.
+func mergeTagState(local, baseline []model.TagPreference, remote []exhentai.UserTag, resolution string, resolutions map[string]string) tagSyncPlan {
 	plan := tagSyncPlan{BaselineAfter: make(map[string]*model.TagPreference)}
 
 	localByKey := make(map[string]model.TagPreference, len(local))
@@ -278,7 +291,12 @@ func mergeTagState(local, baseline []model.TagPreference, remote []exhentai.User
 
 		switch {
 		case localChanged && remoteChanged:
-			if resolution == "" {
+			// The tag's own choice wins over the answer to all of them.
+			choice := resolutions[key]
+			if choice != "remote" && choice != "local" {
+				choice = resolution
+			}
+			if choice == "" {
 				// Unresolved: report and leave local, source and baseline alone.
 				plan.Conflicts = append(plan.Conflicts, model.TagSyncConflict{
 					Tag:    key,
@@ -287,7 +305,7 @@ func mergeTagState(local, baseline []model.TagPreference, remote []exhentai.User
 				})
 				continue
 			}
-			if resolution == "remote" {
+			if choice == "remote" {
 				plan.addPull(key, localRule, hasLocal, remoteRow, hasRemote)
 			} else {
 				plan.addPush(key, localRule, hasLocal, remoteRow, hasRemote, true)
@@ -313,13 +331,17 @@ func mergeTagState(local, baseline []model.TagPreference, remote []exhentai.User
 // handleTagSettingsSync three-way merges the local rules with the source
 // My Tags page: source changes are pulled into the local list, local changes
 // are pushed to the source, and tags both sides changed are reported as
-// conflicts until the client passes conflict_resolution ("remote"/"local").
+// conflicts until the client passes conflict_resolution ("remote"/"local")
+// or, for individual tags, an entry in conflicts.
 // Source deletions of locally-deleted rows still require confirm_deletes
 // (or an explicit conflict resolution).
 func (s *Server) handleTagSettingsSync(c *gin.Context) {
 	var body struct {
 		ConfirmDeletes     bool   `json:"confirm_deletes"`
 		ConflictResolution string `json:"conflict_resolution"`
+		// Conflicts answers individual conflicts, so the dialog can keep
+		// one side for one tag and the other for the next.
+		Conflicts []tagSyncChoice `json:"conflicts"`
 	}
 	// An empty body means confirm_deletes=false; only reject malformed JSON.
 	if err := c.ShouldBindJSON(&body); err != nil && !strings.Contains(err.Error(), "EOF") {
@@ -331,6 +353,21 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid conflict_resolution %q", body.ConflictResolution)})
 		return
+	}
+	resolutions := make(map[string]string, len(body.Conflicts))
+	for _, choice := range body.Conflicts {
+		key := syncKey(choice.Tag)
+		if key == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "conflicts entries need a tag"})
+			return
+		}
+		switch choice.Resolution {
+		case "remote", "local":
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid resolution %q for tag %q", choice.Resolution, choice.Tag)})
+			return
+		}
+		resolutions[key] = choice.Resolution
 	}
 
 	if s.Client == nil {
@@ -362,7 +399,7 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 		return
 	}
 
-	plan := mergeTagState(local, baseline, snapshot.Tags, body.ConflictResolution)
+	plan := mergeTagState(local, baseline, snapshot.Tags, body.ConflictResolution, resolutions)
 
 	result := model.TagSyncResult{
 		Unchanged:      plan.Unchanged,

@@ -245,7 +245,7 @@ func TestMergeTagState_FirstRunImportsSourceAndPushesLocalOnly(t *testing.T) {
 		{TagID: 304301, Tag: "male:males only", Hide: true, Weight: -10},                   // remote-only → pull
 	}
 
-	plan := mergeTagState(local, nil, remote, "")
+	plan := mergeTagState(local, nil, remote, "", nil)
 
 	if len(plan.Adds) != 1 || plan.Adds[0].Tag != "artist:new person" {
 		t.Errorf("Adds = %+v, want artist:new person", plan.Adds)
@@ -274,7 +274,7 @@ func TestMergeTagState_OnlyLocalChangedPushesUpdate(t *testing.T) {
 	baseline := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionLike, Weight: 6}}
 	remote := []exhentai.UserTag{{TagID: 5354, Tag: "male:gender change", Watch: true, Weight: 6, Color: "#AABBCC"}}
 
-	plan := mergeTagState(local, baseline, remote, "")
+	plan := mergeTagState(local, baseline, remote, "", nil)
 
 	if len(plan.Updates) != 1 || len(plan.Adds) != 0 || len(plan.Deletes) != 0 ||
 		len(plan.Pulls) != 0 || len(plan.Conflicts) != 0 || plan.Unchanged != 0 {
@@ -294,7 +294,7 @@ func TestMergeTagState_OnlyRemoteChangedPullsUpdate(t *testing.T) {
 	baseline := []model.TagPreference{{Tag: "language:chinese", Action: model.TagActionLike, Weight: 10}}
 	remote := []exhentai.UserTag{{TagID: 3437, Tag: "language:chinese", Watch: true, Weight: 90}}
 
-	plan := mergeTagState(local, baseline, remote, "")
+	plan := mergeTagState(local, baseline, remote, "", nil)
 
 	if len(plan.Pulls) != 1 || plan.Pulls[0].Remote == nil ||
 		plan.Pulls[0].Remote.Weight != 90 || plan.Pulls[0].Existing == nil {
@@ -310,7 +310,7 @@ func TestMergeTagState_BothChangedIsConflict(t *testing.T) {
 	baseline := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionLike, Weight: 90}}
 	remote := []exhentai.UserTag{{TagID: 5354, Tag: "male:gender change", Watch: true, Weight: 6}}
 
-	plan := mergeTagState(local, baseline, remote, "")
+	plan := mergeTagState(local, baseline, remote, "", nil)
 
 	if len(plan.Conflicts) != 1 {
 		t.Fatalf("Conflicts = %+v, want 1", plan.Conflicts)
@@ -338,7 +338,7 @@ func TestMergeTagState_ResolutionRemotePulls(t *testing.T) {
 	baseline := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionLike, Weight: 90}}
 	remote := []exhentai.UserTag{{TagID: 5354, Tag: "male:gender change", Watch: true, Weight: 6}}
 
-	plan := mergeTagState(local, baseline, remote, "remote")
+	plan := mergeTagState(local, baseline, remote, "remote", nil)
 
 	if len(plan.Conflicts) != 0 {
 		t.Errorf("Conflicts = %+v, want none after resolution", plan.Conflicts)
@@ -356,7 +356,7 @@ func TestMergeTagState_ResolutionLocalPushes(t *testing.T) {
 	baseline := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionLike, Weight: 90}}
 	remote := []exhentai.UserTag{{TagID: 5354, Tag: "male:gender change", Watch: true, Weight: 6}}
 
-	plan := mergeTagState(local, baseline, remote, "local")
+	plan := mergeTagState(local, baseline, remote, "local", nil)
 
 	if len(plan.Conflicts) != 0 {
 		t.Errorf("Conflicts = %+v, want none after resolution", plan.Conflicts)
@@ -369,12 +369,85 @@ func TestMergeTagState_ResolutionLocalPushes(t *testing.T) {
 	}
 }
 
+// TestMergeTagState_PerTagChoices checks the dialog's per-tag answers: two
+// conflicts get opposite resolutions in one merge, each applied on its own
+// side, and a tag with no answer stays a conflict.
+func TestMergeTagState_PerTagChoices(t *testing.T) {
+	local := []model.TagPreference{
+		{Tag: "male:gender change", Action: model.TagActionDislike, Weight: -25},
+		{Tag: "language:chinese", Action: model.TagActionLike, Weight: 10},
+		{Tag: "female:yuri", Action: model.TagActionDislike, Weight: -5},
+	}
+	baseline := []model.TagPreference{
+		{Tag: "male:gender change", Action: model.TagActionLike, Weight: 90},
+		{Tag: "language:chinese", Action: model.TagActionLike, Weight: 90},
+		{Tag: "female:yuri", Action: model.TagActionLike, Weight: 50},
+	}
+	remote := []exhentai.UserTag{
+		{TagID: 5354, Tag: "male:gender change", Watch: true, Weight: 6},
+		{TagID: 3437, Tag: "language:chinese", Watch: true, Weight: 20},
+		{TagID: 304301, Tag: "female:yuri", Hide: true, Weight: -7},
+	}
+
+	plan := mergeTagState(local, baseline, remote, "", map[string]string{
+		"male:gender change": "remote",
+		"language:chinese":   "local",
+	})
+
+	if len(plan.Conflicts) != 1 || plan.Conflicts[0].Tag != "female:yuri" {
+		t.Fatalf("Conflicts = %+v, want only female:yuri unresolved", plan.Conflicts)
+	}
+	if len(plan.Pulls) != 1 || plan.Pulls[0].Key != "male:gender change" ||
+		plan.Pulls[0].Remote == nil || plan.Pulls[0].Remote.Weight != 6 {
+		t.Errorf("Pulls = %+v, want gender change pulled to 6", plan.Pulls)
+	}
+	if len(plan.Updates) != 1 || plan.Updates[0].Rule.Tag != "language:chinese" ||
+		plan.Updates[0].Rule.Weight != 10 {
+		t.Errorf("Updates = %+v, want chinese pushed at 10", plan.Updates)
+	}
+	if got := plan.BaselineAfter["language:chinese"]; got == nil || got.Weight != 20 {
+		t.Errorf("baseline for chinese = %+v, want the pre-write source value 20", got)
+	}
+	if _, touched := plan.BaselineAfter["female:yuri"]; touched {
+		t.Error("unresolved conflict must leave its baseline row alone")
+	}
+}
+
+func TestMergeTagState_PerTagChoiceBeatsGlobalResolution(t *testing.T) {
+	local := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionDislike, Weight: -25}}
+	baseline := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionLike, Weight: 90}}
+	remote := []exhentai.UserTag{{TagID: 5354, Tag: "male:gender change", Watch: true, Weight: 6}}
+
+	plan := mergeTagState(local, baseline, remote, "remote", map[string]string{
+		"male:gender change": "local",
+	})
+
+	if len(plan.Updates) != 1 || len(plan.Pulls) != 0 {
+		t.Fatalf("plan = %+v, want the tag's own local choice to win over the global remote", plan)
+	}
+}
+
+func TestMergeTagState_PerTagChoiceIgnoresOtherTags(t *testing.T) {
+	local := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionDislike, Weight: -25}}
+	baseline := []model.TagPreference{{Tag: "male:gender change", Action: model.TagActionLike, Weight: 90}}
+	remote := []exhentai.UserTag{{TagID: 5354, Tag: "male:gender change", Watch: true, Weight: 6}}
+
+	// A choice for a tag that is not in conflict does nothing to it.
+	plan := mergeTagState(local, baseline, remote, "", map[string]string{
+		"language:chinese": "local",
+	})
+
+	if len(plan.Conflicts) != 1 || len(plan.Updates) != 0 || len(plan.Pulls) != 0 {
+		t.Fatalf("plan = %+v, want the conflict still unresolved", plan)
+	}
+}
+
 func TestMergeTagState_LocalDeleteStaysPending(t *testing.T) {
 	// Local rule deleted, source unchanged → source deletion candidate.
 	baseline := []model.TagPreference{{Tag: "male:males only", Action: model.TagActionDislike, Weight: -10}}
 	remote := []exhentai.UserTag{{TagID: 304301, Tag: "male:males only", Hide: true, Weight: -10}}
 
-	plan := mergeTagState(nil, baseline, remote, "")
+	plan := mergeTagState(nil, baseline, remote, "", nil)
 
 	if len(plan.Deletes) != 1 {
 		t.Fatalf("Deletes = %+v, want 1", plan.Deletes)
@@ -391,7 +464,7 @@ func TestMergeTagState_SourceDeletePullsLocalRule(t *testing.T) {
 	local := []model.TagPreference{{Tag: "female:yuri", Action: model.TagActionLike, Weight: 10}}
 	baseline := []model.TagPreference{{Tag: "female:yuri", Action: model.TagActionLike, Weight: 10}}
 
-	plan := mergeTagState(local, baseline, nil, "")
+	plan := mergeTagState(local, baseline, nil, "", nil)
 
 	if len(plan.Pulls) != 1 || plan.Pulls[0].Remote != nil || plan.Pulls[0].Existing == nil {
 		t.Fatalf("Pulls = %+v, want one local removal", plan.Pulls)
@@ -410,7 +483,7 @@ func TestMergeTagState_SourceDeletePullsLocalRule(t *testing.T) {
 func TestMergeTagState_BothDeletedRetiresBaseline(t *testing.T) {
 	baseline := []model.TagPreference{{Tag: "female:yuri", Action: model.TagActionLike, Weight: 10}}
 
-	plan := mergeTagState(nil, baseline, nil, "")
+	plan := mergeTagState(nil, baseline, nil, "", nil)
 
 	if len(plan.Pulls) != 0 || len(plan.Deletes) != 0 || len(plan.Conflicts) != 0 || plan.Unchanged != 0 {
 		t.Errorf("plan = %+v, want a pure baseline cleanup", plan)
@@ -426,12 +499,12 @@ func TestMergeTagState_ConflictResolutionLocalConsentsDelete(t *testing.T) {
 	baseline := []model.TagPreference{{Tag: "male:males only", Action: model.TagActionLike, Weight: 5}}
 	remote := []exhentai.UserTag{{TagID: 304301, Tag: "male:males only", Hide: true, Weight: -10}}
 
-	plan := mergeTagState(nil, baseline, remote, "")
+	plan := mergeTagState(nil, baseline, remote, "", nil)
 	if len(plan.Conflicts) != 1 || plan.Conflicts[0].Local != nil {
 		t.Fatalf("Conflicts = %+v, want one with nil local side", plan.Conflicts)
 	}
 
-	plan = mergeTagState(nil, baseline, remote, "local")
+	plan = mergeTagState(nil, baseline, remote, "local", nil)
 	if len(plan.Deletes) != 1 || !plan.Deletes[0].Consented {
 		t.Fatalf("Deletes = %+v, want one consented delete", plan.Deletes)
 	}
@@ -444,7 +517,7 @@ func TestMergeTagState_CaseInsensitiveMatch(t *testing.T) {
 	local := []model.TagPreference{{Tag: "Language:Chinese", Action: model.TagActionLike, Weight: 90}}
 	remote := []exhentai.UserTag{{TagID: 1, Tag: "language:chinese", Watch: true, Weight: 90}}
 
-	plan := mergeTagState(local, nil, remote, "")
+	plan := mergeTagState(local, nil, remote, "", nil)
 	if plan.Unchanged != 1 || len(plan.Adds) != 0 || len(plan.Updates) != 0 || len(plan.Pulls) != 0 {
 		t.Errorf("plan = %+v, want unchanged (case-insensitive)", plan)
 	}
@@ -824,6 +897,67 @@ func TestHandleTagSettingsSync_ResolutionLocalPushesLocal(t *testing.T) {
 	}
 	if b := readBaseline(t, client)["male:gender change"]; b.Weight != -25 {
 		t.Errorf("baseline = %+v, want converged to -25", b)
+	}
+}
+
+// TestHandleTagSettingsSync_PerTagConflicts covers the dialog's per-tag
+// answers over HTTP: one conflict resolved toward the source, one toward
+// the local rules, in a single request.
+func TestHandleTagSettingsSync_PerTagConflicts(t *testing.T) {
+	upstream := newSyncMockServer(t)
+	defer upstream.Close()
+
+	client := newTestDB(t)
+	// Both are conflicts: baseline differs from local and source on each.
+	seedBaseline(t, client, "male:gender change", model.TagActionLike, 90)
+	seedBaseline(t, client, "language:chinese", model.TagActionLike, 90)
+	seedTagRule(t, client, "male:gender change", model.TagActionDislike, -25)
+	seedTagRule(t, client, "language:chinese", model.TagActionLike, 10)
+	// The fixture's third row stays equal on both sides.
+	seedBaseline(t, client, "male:males only", model.TagActionDislike, -10)
+	seedTagRule(t, client, "male:males only", model.TagActionDislike, -10)
+
+	r := setupSyncServer(t, upstream, client)
+	code, result := doSync(t, r, `{"conflicts":[
+		{"tag":"male:gender change","resolution":"remote"},
+		{"tag":"language:chinese","resolution":"local"}
+	]}`)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d", code)
+	}
+	if len(result.Conflicts) != 0 {
+		t.Errorf("conflicts = %+v, want none resolved", result.Conflicts)
+	}
+	if result.Pulled != 1 || result.Updated != 1 {
+		t.Errorf("pulled/updated = %d/%d, want 1/1", result.Pulled, result.Updated)
+	}
+	rules := readRules(t, client)
+	if rules["male:gender change"].Weight != 6 {
+		t.Errorf("gender change = %+v, want pulled to the source's 6", rules["male:gender change"])
+	}
+	if rules["language:chinese"].Weight != 10 {
+		t.Errorf("chinese = %+v, want the local 10 kept", rules["language:chinese"])
+	}
+	if len(upstream.setUserTagCalls) != 1 || upstream.setUserTagCalls[0]["tagweight"] != "10" {
+		t.Fatalf("setusertag calls = %+v, want only chinese pushed at 10", upstream.setUserTagCalls)
+	}
+}
+
+func TestHandleTagSettingsSync_InvalidPerTagChoice(t *testing.T) {
+	upstream := newSyncMockServer(t)
+	defer upstream.Close()
+	r := setupSyncServer(t, upstream, newTestDB(t))
+
+	for _, body := range []string{
+		`{"conflicts":[{"tag":"male:gender change","resolution":"sideways"}]}`,
+		`{"conflicts":[{"tag":"","resolution":"local"}]}`,
+	} {
+		if code, _ := doSync(t, r, body); code != http.StatusBadRequest {
+			t.Errorf("body %s: status = %d, want 400", body, code)
+		}
+	}
+	if upstream.mutations() != 0 {
+		t.Errorf("upstream mutations = %d, want 0 for rejected bodies", upstream.mutations())
 	}
 }
 

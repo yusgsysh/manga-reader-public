@@ -245,15 +245,52 @@ func newFakeServerWithHooks(t *testing.T, onImage func(r *http.Request)) *httpte
 			writeJSON(w, map[string]any{"tags": tagRules})
 		}
 	})
+	// The sync reports one conflict until the request answers it by tag, as
+	// the backend's three-way merge does: an answered tag is applied, and
+	// the rest come back.
 	mux.HandleFunc("/api/tag-settings/sync", func(w http.ResponseWriter, r *http.Request) {
 		tagMu.Lock()
 		defer tagMu.Unlock()
+		var body struct {
+			ConfirmDeletes     bool   `json:"confirm_deletes"`
+			ConflictResolution string `json:"conflict_resolution"`
+			Conflicts          []struct {
+				Tag        string `json:"tag"`
+				Resolution string `json:"resolution"`
+			} `json:"conflicts"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		choose := func(tag string) string {
+			for _, c := range body.Conflicts {
+				if c.Tag == tag {
+					return c.Resolution
+				}
+			}
+			return body.ConflictResolution
+		}
+		tags := []map[string]any{{"tag": "female:yuri", "action": "like", "weight": 10}}
+		conflicts := []any{}
+		pulled := 2
+		switch choose("male:gender change") {
+		case "remote":
+			// The source's value replaces the local rule.
+			tags = append(tags, map[string]any{"tag": "male:gender change", "action": "like", "weight": 6})
+			pulled++
+		case "local":
+			// The local rule is pushed, so it stays as it was.
+			tags = append(tags, map[string]any{"tag": "male:gender change", "action": "dislike", "weight": -25})
+		default:
+			conflicts = append(conflicts, map[string]any{
+				"tag":    "male:gender change",
+				"local":  map[string]any{"tag": "male:gender change", "action": "dislike", "weight": -25},
+				"remote": map[string]any{"tag": "male:gender change", "action": "like", "weight": 6},
+			})
+		}
+		sort.Slice(tags, func(i, j int) bool { return tags[i]["tag"].(string) < tags[j]["tag"].(string) })
 		writeJSON(w, map[string]any{
-			"added": 0, "updated": 0, "deleted": 0, "pulled": 2, "unchanged": 1,
-			"pending_deletes": []string{}, "conflicts": []any{}, "failed": []any{},
-			"tags": []map[string]any{
-				{"tag": "female:yuri", "action": "like", "weight": 10},
-			},
+			"added": 0, "updated": 0, "deleted": 0, "pulled": pulled, "unchanged": 1,
+			"pending_deletes": []string{}, "conflicts": conflicts, "failed": []any{},
+			"tags": tags,
 		})
 	})
 	mux.HandleFunc("/api/bookshelf/1/tok1/status", func(w http.ResponseWriter, r *http.Request) {
@@ -2416,4 +2453,112 @@ func TestSettingsReportsBrokenConfigFile(t *testing.T) {
 	navSettle(tt)
 	waitText(t, tt, "配置文件不是有效的 JSON")
 	waitText(t, tt, "已写入")
+}
+
+// TestTagSyncConflictDialog covers per-tag conflict resolution from the tag
+// page: the sync's conflict opens the dialog, 保留源站 takes the source's
+// rule for that tag, and the answers run the sync again as one request.
+func TestTagSyncConflictDialog(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("标签设置"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "与源站同步")
+
+	if err := tt.Click("同步"); err != nil {
+		t.Fatalf("click 同步: %v", err)
+	}
+	waitText(t, tt, "同步冲突")
+	if !tt.HasText("male:gender change") {
+		t.Fatalf("dialog does not name the tag; texts=%q", tt.Texts())
+	}
+	if !tt.HasText("本地：不喜欢 · 权重 -25") || !tt.HasText("源站：喜欢 · 权重 6") {
+		t.Fatalf("dialog does not show both sides; texts=%q", tt.Texts())
+	}
+
+	// The only conflict: one answer applies it without pressing Apply.
+	if err := tt.Click("保留源站规则"); err != nil {
+		t.Fatalf("click 保留源站: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if a.tags.syncResult != "" && a.tags.conflicts == nil {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if a.tags.conflicts != nil {
+		t.Fatalf("dialog still open after answering; texts=%q", tt.Texts())
+	}
+	// The word from the source replaced the local rule.
+	found := false
+	for _, r := range a.tags.rules {
+		if r.Tag == "male:gender change" {
+			found = true
+			if r.Action != TagLike || r.Weight != 6 {
+				t.Fatalf("resolved rule = %+v, want the source's like 6", r)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("resolved tag missing from rules: %+v", a.tags.rules)
+	}
+	waitText(t, tt, "冲突 0")
+}
+
+// TestConflictDialogMovesOn covers the dialog's navigation with several
+// conflicts: answering one moves to the next undecided tag, 跳过 moves on
+// without answering, and the dialog closes once every tag has an answer.
+func TestConflictDialogMovesOn(t *testing.T) {
+	local := func(weight int) *apiTagRule {
+		return &apiTagRule{Tag: "t", Action: string(TagDislike), Weight: weight}
+	}
+	d := newConflictDialog([]apiTagSyncConflict{
+		{Tag: "male:gender change", Local: local(-25), Remote: &apiTagRule{Action: string(TagLike), Weight: 6}},
+		{Tag: "language:chinese", Local: local(-1), Remote: &apiTagRule{Action: string(TagLike), Weight: 90}},
+		{Tag: "female:yuri", Local: local(-2), Remote: nil},
+	})
+	if d == nil || !d.open || len(d.items) != 3 {
+		t.Fatalf("dialog = %+v, want open with 3 items", d)
+	}
+
+	d.applyConflictChoice(d.selected, "local")
+	if d.selected != 1 || d.remainingConflicts() != 2 {
+		t.Fatalf("after first answer selected=%d remaining=%d", d.selected, d.remainingConflicts())
+	}
+	// 跳过 moves on without recording anything.
+	d.selected = (d.selected + 1) % len(d.items)
+	if _, done := d.choices["language:chinese"]; done {
+		t.Fatal("skipping recorded an answer")
+	}
+
+	// Answering the last undecided tag leaves only the skipped one, so the
+	// dialog stays open on it.
+	d.applyConflictChoice(2, "remote")
+	if !d.open || d.selected != 1 || d.remainingConflicts() != 1 {
+		t.Fatalf("after third answer open=%v selected=%d remaining=%d",
+			d.open, d.selected, d.remainingConflicts())
+	}
+	// Its answer closes the dialog; the choices come in the reported order.
+	d.applyConflictChoice(1, "remote")
+	if d.open {
+		t.Fatal("dialog still open with every tag answered")
+	}
+	want := []syncConflictChoice{
+		{Tag: "male:gender change", Resolution: "local"},
+		{Tag: "language:chinese", Resolution: "remote"},
+		{Tag: "female:yuri", Resolution: "remote"},
+	}
+	got := d.choiceList()
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Fatalf("choices = %+v, want %+v", got, want)
+	}
+
+	// A clean sync opens no dialog at all.
+	if d := newConflictDialog(nil); d != nil {
+		t.Fatalf("dialog for no conflicts = %+v", d)
+	}
 }

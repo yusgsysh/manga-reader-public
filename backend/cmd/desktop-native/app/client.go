@@ -477,13 +477,24 @@ func (c *Client) SaveTagSettings(ctx context.Context, rules []TagRule) ([]TagRul
 	return tagRulesFromAPI(out.Tags), nil
 }
 
+// syncConflictChoice is one tag's answer in a sync request.
+type syncConflictChoice struct {
+	Tag        string `json:"tag"`
+	Resolution string `json:"resolution"`
+}
+
 // SyncTagSettings merges the local rules with the source's My Tags, optionally
-// confirming source deletions and resolving every conflict one way.
-func (c *Client) SyncTagSettings(ctx context.Context, confirmDeletes bool, resolution string) (apiTagSyncResult, error) {
-	body, err := json.Marshal(map[string]any{
+// confirming source deletions. resolution answers every conflict at once and
+// choices answers individual ones, which take precedence.
+func (c *Client) SyncTagSettings(ctx context.Context, confirmDeletes bool, resolution string, choices []syncConflictChoice) (apiTagSyncResult, error) {
+	payload := map[string]any{
 		"confirm_deletes":     confirmDeletes,
 		"conflict_resolution": resolution,
-	})
+	}
+	if len(choices) > 0 {
+		payload["conflicts"] = choices
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return apiTagSyncResult{}, err
 	}
