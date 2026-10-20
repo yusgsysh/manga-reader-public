@@ -29,6 +29,15 @@ type Backend interface {
 	SetAppearance(source string) error
 	// Appearance is the saved appearance ("", "system", "light" or "dark").
 	Appearance() string
+	// SetLanguage persists the interface language tag ("zh-CN").
+	SetLanguage(tag string) error
+	// Language is the saved interface language tag; empty when unset.
+	Language() string
+	// SettingsPath is config.json, where the preferences above are written.
+	SettingsPath() string
+	// StartError is a failure that happened before the backend could start
+	// and that the setup screen should explain; "" when none.
+	StartError() string
 }
 
 // BackendStorage is the set of paths the settings page shows.
