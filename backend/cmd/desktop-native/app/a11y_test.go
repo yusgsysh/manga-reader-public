@@ -13,7 +13,7 @@ func TestTabOrderReachesControls(t *testing.T) {
 	_, tt := newTestApp(t)
 	waitText(t, tt, "示例 A")
 
-		// Every frame, record which rendered items have the focus. A focused
+	// Every frame, record which rendered items have the focus. A focused
 	// container also reports as focused for its children, so this collects
 	// the trail; what matters is that the walk reaches more than the first
 	// container and ends up on real controls.

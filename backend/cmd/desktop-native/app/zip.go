@@ -13,6 +13,8 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+
+	"manga-reader/cmd/desktop-native/app/i18n"
 )
 
 // saveZip asks for a path with the native save dialog and streams the job's
@@ -54,7 +56,7 @@ func (a *App) saveZip(j PrefillJob) {
 				a.zipMsg = err.Error()
 				return
 			}
-			a.zipMsg = fmt.Sprintf("已保存 %s（%s）", filepath.Base(path), humanBytes(n))
+			a.zipMsg = i18n.Tf("Saved %s (%s)", filepath.Base(path), humanBytes(n))
 		})
 	}()
 }
@@ -80,12 +82,12 @@ func (c *Client) downloadTo(path, apiPath string, timeout time.Duration) (int64,
 	}
 	resp, err := (&http.Client{}).Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("下载失败：%w", err)
+		return 0, fmt.Errorf("%s: %w", i18n.T("Download failed"), err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return 0, fmt.Errorf("后端返回 %d：%s", resp.StatusCode, apiError(msg))
+		return 0, fmt.Errorf(i18n.T("Backend returned %d: %s"), resp.StatusCode, apiError(msg))
 	}
 
 	f, err := os.Create(path)
@@ -99,7 +101,7 @@ func (c *Client) downloadTo(path, apiPath string, timeout time.Duration) (int64,
 	}
 	if copyErr != nil {
 		_ = os.Remove(path)
-		return 0, fmt.Errorf("写入文件失败：%w", copyErr)
+		return 0, fmt.Errorf("%s: %w", i18n.T("Failed to write the file"), copyErr)
 	}
 	return n, nil
 }
@@ -135,9 +137,9 @@ func zipFileName(j PrefillJob) string {
 var pickSavePath = func(parent *mygo.Window, dir, name string) (string, error) {
 	opts := mygo.SaveDialogOptions{
 		Parent:      parent,
-		Title:       "保存 ZIP",
+		Title:       i18n.T("Save ZIP"),
 		DefaultPath: filepath.Join(dir, name),
-		ButtonLabel: "保存",
+		ButtonLabel: i18n.T("Save"),
 		Filters:     []mygo.FileFilter{{Name: "ZIP 压缩包", Extensions: []string{"zip"}}},
 	}
 	return mygo.Dialog.Save(opts)
@@ -155,12 +157,12 @@ func (a *App) detailDownloadsBlock(c *ui.Context, s *detailState) {
 	}
 
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-		label := "离线下载"
+		label := i18n.T("Download")
 		if s.downloadBusy {
-			label = "正在创建任务…"
+			label = i18n.T("Creating the job…")
 		}
 		if s.downloadJob != "" {
-			label = "查看下载"
+			label = i18n.T("View download")
 		}
 		if ui.Button(c, label).Disabled(s.downloadBusy).Clicked() {
 			if s.downloadJob != "" {
@@ -170,7 +172,7 @@ func (a *App) detailDownloadsBlock(c *ui.Context, s *detailState) {
 			}
 		}
 		if s.downloadJob != "" && status == "completed" {
-			if ui.Button(c, "导出 ZIP").Disabled(a.zipBusy[s.downloadJob]).Clicked() {
+			if ui.Button(c, i18n.T("Export ZIP")).Disabled(a.zipBusy[s.downloadJob]).Clicked() {
 				a.saveZip(PrefillJob{ID: s.downloadJob, GalleryID: s.id, Title: s.g.Title})
 			}
 		}

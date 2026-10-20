@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+
+	"manga-reader/cmd/desktop-native/app/i18n"
 )
 
 // Torrent is one torrent the gallery page lists; the backend scrapes it live.
@@ -100,7 +102,7 @@ func (a *App) saveTorrent(t *torrentsState, tr Torrent) {
 				t.msg = err.Error()
 				return
 			}
-			t.msg = fmt.Sprintf("已保存 %s（%s）", filepath.Base(path), humanBytes(n))
+			t.msg = i18n.Tf("Saved %s (%s)", filepath.Base(path), humanBytes(n))
 		})
 	}()
 }
@@ -144,14 +146,14 @@ func (a *App) torrentsBlock(c *ui.Context, s *detailState) {
 	ts := &s.torrents
 
 	ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-		ui.Text(c, "种子").FontSize(16).Bold().Grow(1)
+		ui.Text(c, i18n.T("Torrents")).FontSize(16).Bold().Grow(1)
 		if !s.showTorrents {
-			if ui.Button(c, "查看种子").Clicked() {
+			if ui.Button(c, i18n.T("Show torrents")).Clicked() {
 				a.loadTorrents(s)
 			}
 			return
 		}
-		if ui.Button(c, "刷新").Clicked() {
+		if ui.Button(c, i18n.T("Refresh")).Clicked() {
 			s.showTorrents = false
 			a.loadTorrents(s)
 		}
@@ -164,7 +166,7 @@ func (a *App) torrentsBlock(c *ui.Context, s *detailState) {
 	case ts.loading && !ts.loaded:
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Spinner(c)
-			ui.Text(c, "正在获取种子列表…").FontSize(12).TextColor(t.TextMuted)
+			ui.Text(c, i18n.T("Loading torrents…")).FontSize(12).TextColor(t.TextMuted)
 		})
 	case ts.err != "" && !ts.loaded:
 		a.errorBlock(c, ts.err, func() {
@@ -172,7 +174,7 @@ func (a *App) torrentsBlock(c *ui.Context, s *detailState) {
 			a.loadTorrents(s)
 		})
 	case len(ts.items) == 0:
-		ui.Text(c, "这个画廊没有种子。").FontSize(12).TextColor(t.TextMuted)
+		ui.Text(c, i18n.T("This gallery has no torrents.")).FontSize(12).TextColor(t.TextMuted)
 	default:
 		ui.Column(c).Gap(6).Children(func() {
 			for _, tr := range ts.items {
@@ -197,9 +199,9 @@ func (a *App) torrentRow(c *ui.Context, ts *torrentsState, tr Torrent) {
 			}
 			ui.Text(c, meta).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		})
-		label := "下载种子"
+		label := i18n.T("Download torrent")
 		if ts.busy == tr.GTID {
-			label = "保存中…"
+			label = i18n.T("Saving…")
 		}
 		if ui.Button(c, label).Disabled(ts.busy != "").Clicked() {
 			a.saveTorrent(ts, tr)

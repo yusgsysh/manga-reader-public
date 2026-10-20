@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"fmt"
 	"github.com/egoist/mygo"
@@ -15,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"manga-reader/cmd/desktop-native/app/i18n"
 )
 
 // TagTranslationDB is the EhTagTranslation database (name and intro per
@@ -94,7 +97,7 @@ func parseTagTranslationDB(data []byte) (*TagTranslationDB, error) {
 
 	var raw rawTagDB
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, fmt.Errorf("解析标签翻译库失败：%w", err)
+		return nil, fmt.Errorf(i18n.T("Failed to parse the tag library: %v"), err)
 	}
 
 	db := &TagTranslationDB{
@@ -285,11 +288,11 @@ func (db *TagTranslationDB) readOrFetch() ([]byte, error) {
 		}
 	}
 	if db.path == "" {
-		return nil, fmt.Errorf("标签翻译库路径未配置")
+		return nil, errors.New(i18n.T("Tag translation path is not configured"))
 	}
 	data, err := httpGetBytes(TagTranslationsRemote, 2*time.Minute)
 	if err != nil {
-		return nil, fmt.Errorf("下载标签翻译库失败：%w", err)
+		return nil, fmt.Errorf(i18n.T("Failed to download the tag library: %v"), err)
 	}
 	if err := writeFileAtomic(db.path, data); err != nil {
 		// The database still parses; failing to cache it only costs the next
@@ -345,23 +348,26 @@ func (db *TagTranslationDB) Status() string {
 	defer db.mu.RUnlock()
 	switch {
 	case db.loading:
-		return "正在加载翻译库…"
+		return i18n.T("Loading translation library…")
 	case db.err != "" && !db.loaded:
-		return "翻译库不可用：" + db.err
+		return i18n.Tf("Translation library unavailable: %s", db.err)
 	case db.loaded:
 		v := db.version
 		if v == "" {
-			v = "未知版本"
+			v = i18n.T("Unknown version")
 		}
-		line := fmt.Sprintf("已加载 %d 个标签 · 版本 %s", len(db.entries), v)
+		// One message, not a translated sentence with a translated suffix
+		// spliced on: a suffix is correct only in the language the sentence
+		// was written in.
 		if db.customCount > 0 {
-			line += fmt.Sprintf(" · 自定义 %d 条", db.customCount)
+			return i18n.Sprintf(i18n.T("%d tags loaded (%d custom) · version %s"),
+				len(db.entries), db.customCount, v)
 		}
-		return line
+		return i18n.Sprintf(i18n.T("%d tags loaded · version %s"), len(db.entries), v)
 	case db.err != "":
-		return "翻译库不可用：" + db.err
+		return i18n.Tf("Translation library unavailable: %s", db.err)
 	}
-	return "尚未加载翻译库"
+	return i18n.T("Translation library not loaded yet")
 }
 
 // writeFileAtomic replaces path with data through a temporary file, so a
@@ -473,7 +479,7 @@ func readCustomTranslations(data []byte) (customTranslationsFile, error) {
 	if err := json.Unmarshal(data, &wrapped); err == nil && wrapped.Translations != nil {
 		return wrapped.Translations.normalised(), nil
 	}
-	return nil, fmt.Errorf("不是可识别的标签翻译文件")
+	return nil, errors.New(i18n.T("Not a recognised tag translation file"))
 }
 
 // normalised trims the entries and drops ones without a namespace:tag key or
@@ -494,7 +500,7 @@ func (f customTranslationsFile) normalised() customTranslationsFile {
 // exportCustomTranslations writes the given entries as the user's file.
 func exportCustomTranslations(path string, entries customTranslationsFile) error {
 	if len(entries) == 0 {
-		return fmt.Errorf("没有可导出的自定义翻译")
+		return errors.New(i18n.T("No custom translations to export"))
 	}
 	data, err := json.MarshalIndent(entries.normalised(), "", "  ")
 	if err != nil {
@@ -506,7 +512,7 @@ func exportCustomTranslations(path string, entries customTranslationsFile) error
 // exportCustomPath is the file the 导出 button writes: the translations the
 // user has added on top of the EhTagTranslation database.
 func (a *App) exportCustomPath() (string, customTranslationsFile, error) {
-	path, err := pickSavePath(a.win, userDocumentsDir(), "我的标签翻译"+customTranslationsSuffix)
+	path, err := pickSavePath(a.win, userDocumentsDir(), i18n.T("my tag translations")+customTranslationsSuffix)
 	if err != nil {
 		return "", nil, err
 	}
@@ -559,7 +565,7 @@ func (db *TagTranslationDB) customLocked() customTranslationsFile {
 func (db *TagTranslationDB) importCustomTranslations(path string) (int, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return 0, fmt.Errorf("读取文件失败：%w", err)
+		return 0, fmt.Errorf(i18n.T("Failed to read the file: %v"), err)
 	}
 	incoming, err := readCustomTranslations(data)
 	if err != nil {
@@ -569,7 +575,7 @@ func (db *TagTranslationDB) importCustomTranslations(path string) (int, error) {
 	merged := db.mergedCustomLocked(incoming)
 	if err := writeFileAtomic(db.customPath, merged); err != nil {
 		db.mu.Unlock()
-		return 0, fmt.Errorf("写入自定义翻译失败：%w", err)
+		return 0, fmt.Errorf(i18n.T("Failed to write custom translations: %v"), err)
 	}
 	if db.loaded && db.entries != nil {
 		db.reloadCustomLocked()
@@ -614,8 +620,8 @@ var pickOpenPath = func(parent *mygo.Window, title string) (string, error) {
 	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 		Parent:      parent,
 		Title:       title,
-		ButtonLabel: "导入",
-		Filters:     []mygo.FileFilter{{Name: "标签翻译 JSON", Extensions: []string{"json", "tag-tr"}}},
+		ButtonLabel: i18n.T("Import"),
+		Filters:     []mygo.FileFilter{{Name: i18n.T("Tag translation JSON"), Extensions: []string{"json", "tag-tr"}}},
 	})
 	if len(paths) == 0 {
 		return "", err
@@ -631,7 +637,7 @@ func (a *App) importCustomTranslations() {
 	}
 	a.transBusy = true
 	a.transMsg = ""
-	path, err := pickOpenPath(a.win, "导入自定义标签翻译")
+	path, err := pickOpenPath(a.win, i18n.T("Import custom tag translations"))
 	if err != nil || path == "" {
 		a.transBusy = false
 		a.requestFrame()
@@ -646,7 +652,7 @@ func (a *App) importCustomTranslations() {
 				a.transMsg = err.Error()
 				return
 			}
-			a.transMsg = fmt.Sprintf("已导入 %d 条自定义翻译", n)
+			a.transMsg = fmt.Sprintf(i18n.T("Imported %d custom translations"), n)
 		})
 	}()
 }
@@ -676,7 +682,7 @@ func (a *App) exportCustomTranslations() {
 				a.transMsg = err.Error()
 				return
 			}
-			a.transMsg = fmt.Sprintf("已导出 %d 条自定义翻译到 %s", len(entries), path)
+			a.transMsg = fmt.Sprintf(i18n.T("%d custom translations saved to %s"), len(entries), path)
 		})
 	}()
 }

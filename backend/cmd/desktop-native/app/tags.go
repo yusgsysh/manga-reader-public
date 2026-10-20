@@ -2,12 +2,13 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+
+	"manga-reader/cmd/desktop-native/app/i18n"
 )
 
 // TagAction is how a tag rule marks a tag: liked (blue), disliked (red) or
@@ -151,7 +152,7 @@ func (a *App) saveTagRules() {
 				return
 			}
 			s.rules = saved
-			s.msg = "已保存"
+			s.msg = i18n.T("Saved")
 		})
 	}()
 }
@@ -166,7 +167,7 @@ func (a *App) addTagRule() {
 	s := &a.tags
 	key := tagInputKey(s.input)
 	if key == "" {
-		s.inputErr = "请输入标签，如 female:yuri"
+		s.inputErr = i18n.T("Enter a tag, e.g. female:yuri")
 		return
 	}
 	if !strings.Contains(key, ":") {
@@ -177,7 +178,7 @@ func (a *App) addTagRule() {
 	if raw := strings.TrimSpace(s.weight); raw != "" {
 		n, err := strconv.Atoi(raw)
 		if err != nil || n < -999 || n > 999 {
-			s.inputErr = "权重需为 -999 到 999 的整数"
+			s.inputErr = i18n.T("Weight must be an integer from -999 to 999")
 			return
 		}
 		weight = n
@@ -258,12 +259,12 @@ func (a *App) syncTagSettings() {
 	if s.syncing {
 		return
 	}
-	confirmDeletes := strings.TrimSpace(s.syncConfirmDeletes) == "确认删除"
+	confirmDeletes := strings.TrimSpace(s.syncConfirmDeletes) == i18n.T("Type 确认删除")
 	resolution := ""
 	switch s.syncResolution {
-	case "保留源站":
+	case i18n.T("Keep source rule"):
 		resolution = "remote"
-	case "保留本地":
+	case i18n.T("Keep local rule"):
 		resolution = "local"
 	}
 	a.runTagSync(confirmDeletes, resolution, nil)
@@ -297,13 +298,13 @@ func (a *App) runTagSync(confirmDeletes bool, resolution string, choices []syncC
 
 // syncSummary is the one-line account of what a sync did.
 func syncSummary(res apiTagSyncResult) string {
-	line := fmt.Sprintf(
-		"拉取 %d · 新增 %d · 更新 %d · 删除 %d · 未变 %d · 待确认删除 %d · 冲突 %d · 失败 %d",
+	line := i18n.Sprintf(
+		i18n.T("Synced: %d pulled · %d added · %d updated · %d deleted · %d unchanged · %d pending deletions · %d conflicts · %d failed"),
 		res.Pulled, res.Added, res.Updated, res.Deleted, res.Unchanged,
 		len(res.PendingDeletes), len(res.Conflicts), len(res.Failed))
 	if len(res.Failed) > 0 {
 		// The first failure says why; the rest are listed by tag.
-		line += "；失败原因：" + res.Failed[0].Error
+		line = i18n.Sprintf(i18n.T("%s; first failure: %s"), line, res.Failed[0].Error)
 	}
 	return line
 }
@@ -379,13 +380,13 @@ func (d *conflictDialog) choiceList() []syncConflictChoice {
 // was deleted there.
 func conflictSideLabel(side *apiTagRule) string {
 	if side == nil {
-		return "已删除"
+		return i18n.T("Deleted")
 	}
-	label := "喜欢"
+	label := i18n.T("Like")
 	if side.Action == string(TagDislike) {
-		label = "不喜欢"
+		label = i18n.T("Dislike")
 	}
-	return fmt.Sprintf("%s · 权重 %d", label, side.Weight)
+	return i18n.Sprintf("%s · weight %d", label, side.Weight)
 }
 
 // splitTag splits a "namespace:name" tag; a bare tag has an empty namespace.
@@ -471,11 +472,11 @@ func (a *App) tagSettingsPage(c *ui.Context) {
 		ui.Column(c).Padding(20, 24).Gap(14).MaxWidth(900).Children(func() {
 			ui.Row(c).AlignItems(ui.End).Gap(12).Children(func() {
 				ui.Column(c).Gap(2).Grow(1).Children(func() {
-					ui.Text(c, "标签设置").FontSize(26).Bold()
-					ui.Text(c, "喜欢标蓝、不喜欢标红；只影响显示与排序，不过滤列表。").
+					ui.Text(c, i18n.T("Tag settings")).FontSize(26).Bold()
+					ui.Text(c, i18n.T("Liked tags turn blue, disliked red; this only colours and orders, it never filters.")).
 						FontSize(12).TextColor(t.TextMuted)
 				})
-				if ui.Button(c, "刷新").Clicked() {
+				if ui.Button(c, i18n.T("Refresh")).Clicked() {
 					a.loadTagSettings()
 				}
 			})
@@ -486,12 +487,12 @@ func (a *App) tagSettingsPage(c *ui.Context) {
 			case s.loading && !s.loaded:
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(c)
-					ui.Text(c, "正在加载规则…").FontSize(12).TextColor(t.TextMuted)
+					ui.Text(c, i18n.T("Loading rules…")).FontSize(12).TextColor(t.TextMuted)
 				})
 			case s.err != "" && !s.loaded:
 				a.errorBlock(c, s.err, func() { a.loadTagSettings() })
 			case len(s.rules) == 0:
-				ui.Text(c, "还没有规则。在上方输入标签并选择「喜欢」或「不喜欢」。").
+				ui.Text(c, i18n.T("No rules yet. Type a tag above and choose Like or Dislike.")).
 					FontSize(12).TextColor(t.TextMuted)
 			default:
 				ui.Column(c).Gap(6).Children(func() {
@@ -504,7 +505,7 @@ func (a *App) tagSettingsPage(c *ui.Context) {
 			if s.busy {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(c)
-					ui.Text(c, "正在保存…").FontSize(12).TextColor(t.TextMuted)
+					ui.Text(c, i18n.T("Saving…")).FontSize(12).TextColor(t.TextMuted)
 				})
 			} else if s.msg != "" {
 				ui.Text(c, s.msg).FontSize(12).TextColor(t.TextMuted)
@@ -514,15 +515,15 @@ func (a *App) tagSettingsPage(c *ui.Context) {
 			a.tagSearchPanel(c, s)
 
 			ui.Divider(c)
-			ui.Text(c, "与源站同步").FontSize(16).Bold()
-			ui.Text(c, "三路合并本地规则与源站 My Tags；双方都改过的标签需要选择保留哪边。").
+			ui.Text(c, i18n.T("Synced with the source")).FontSize(16).Bold()
+			ui.Text(c, i18n.T("Three-way merge of local rules and the source's My Tags; tags both sides changed need a choice.")).
 				FontSize(12).TextColor(t.TextMuted)
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.TextInput(c, &s.syncConfirmDeletes).Width(180).
-					Label("确认删除源站标签").Placeholder("输入「确认删除」")
+					Label(i18n.T("Confirm source deletions")).Placeholder(i18n.T("Type 确认删除"))
 				ui.TextInput(c, &s.syncResolution).Width(160).
-					Label("冲突处理").Placeholder("保留本地/保留源站")
-				if ui.Button(c, "同步").Disabled(s.syncing).Clicked() {
+					Label(i18n.T("Conflict handling")).Placeholder(i18n.T("Keep local / keep source"))
+				if ui.Button(c, i18n.T("Sync")).Disabled(s.syncing).Clicked() {
 					a.syncTagSettings()
 				}
 				if s.syncing {
@@ -562,39 +563,39 @@ func (a *App) tagConflictDialog(c *ui.Context, s *TagSettings) {
 	it := d.items[d.selected]
 	ui.Modal(c, &d.open, func() {
 		ui.Column(c).Width(560).Gap(12).Children(func() {
-			ui.Textf(c, "同步冲突 %d / %d", d.selected+1, len(d.items)).FontSize(18).Bold()
-			ui.Text(c, "两边都改过这个标签，选择保留哪边。").
+			ui.Textf(c, i18n.T("Sync conflict %d / %d"), d.selected+1, len(d.items)).FontSize(18).Bold()
+			ui.Text(c, i18n.T("Both sides changed this tag. Choose which side to keep.")).
 				FontSize(12).TextColor(t.TextMuted)
 			ui.Text(c, it.tag).FontSize(15).Bold()
 			ui.Column(c).Gap(4).Children(func() {
-				ui.Textf(c, "本地：%s", conflictSideLabel(it.local)).FontSize(12)
-				ui.Textf(c, "源站：%s", conflictSideLabel(it.remote)).FontSize(12)
+				ui.Textf(c, i18n.T("Local: %s"), conflictSideLabel(it.local)).FontSize(12)
+				ui.Textf(c, i18n.T("Source: %s"), conflictSideLabel(it.remote)).FontSize(12)
 			})
 			if chosen, done := d.choices[it.tag]; done {
-				label := "保留源站"
+				label := i18n.T("Keep source rule")
 				if chosen == "local" {
-					label = "保留本地"
+					label = i18n.T("Keep local rule")
 				}
-				ui.Badge(c, "已选择："+label)
+				ui.Badge(c, i18n.T("Chosen: ")+label)
 			}
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				if ui.Button(c, "保留本地").Label("保留本地规则").Clicked() {
+				if ui.Button(c, "保留本地").Label(i18n.T("Keep local rule")).Clicked() {
 					d.applyConflictChoice(d.selected, "local")
 				}
-				if ui.Button(c, "保留源站").Label("保留源站规则").Clicked() {
+				if ui.Button(c, "保留源站").Label(i18n.T("Keep source rule")).Clicked() {
 					d.applyConflictChoice(d.selected, "remote")
 				}
-				if ui.Button(c, "跳过").Label("跳过此冲突").Clicked() {
+				if ui.Button(c, i18n.T("Skip")).Label("跳过此冲突").Clicked() {
 					d.selected = (d.selected + 1) % len(d.items)
 				}
-				if ui.Button(c, "稍后").Label("关闭冲突窗口").Clicked() {
+				if ui.Button(c, "稍后").Label(i18n.T("Close the conflict dialog")).Clicked() {
 					d.open = false
 				}
 			})
-			ui.Textf(c, "还剩 %d 个冲突未选择", d.remainingConflicts()).
+			ui.Textf(c, i18n.T("%d conflicts still unanswered"), d.remainingConflicts()).
 				FontSize(11).TextColor(t.TextMuted)
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				if ui.PrimaryButton(c, "应用选择").Disabled(len(d.choices) == 0 || s.syncing).Clicked() {
+				if ui.PrimaryButton(c, i18n.T("Apply choices")).Disabled(len(d.choices) == 0 || s.syncing).Clicked() {
 					d.open = false
 					d.submit = true
 				}
@@ -617,7 +618,7 @@ func (a *App) tagConflictDialog(c *ui.Context, s *TagSettings) {
 	}
 	if d.submit {
 		s.conflicts = nil
-		a.runTagSync(strings.TrimSpace(s.syncConfirmDeletes) == "确认删除", "", d.choiceList())
+		a.runTagSync(strings.TrimSpace(s.syncConfirmDeletes) == i18n.T("Type 确认删除"), "", d.choiceList())
 	}
 }
 
@@ -626,24 +627,24 @@ func (a *App) tagAddRow(c *ui.Context, s *TagSettings) {
 		s.action = TagLike
 	}
 	ui.Row(c).Gap(8).AlignItems(ui.End).Children(func() {
-		if ui.TextInput(c, &s.input).Width(240).Label("添加标签").
+		if ui.TextInput(c, &s.input).Width(240).Label(i18n.T("Add tag")).
 			Placeholder("female:yuri").Submitted() {
 			a.addTagRule()
 		}
-		action := "喜欢"
+		action := i18n.T("Like")
 		if s.action == TagDislike {
-			action = "不喜欢"
+			action = i18n.T("Dislike")
 		}
-		if ui.Button(c, action).Label("切换喜欢/不喜欢").Clicked() {
+		if ui.Button(c, action).Label(i18n.T("Toggle like/dislike")).Clicked() {
 			if s.action == TagLike {
 				s.action = TagDislike
 			} else {
 				s.action = TagLike
 			}
 		}
-		ui.TextInput(c, &s.weight).Width(100).Label("权重").
+		ui.TextInput(c, &s.weight).Width(100).Label(i18n.T("Weight")).
 			Placeholder(strconv.Itoa(defaultTagWeight(s.action)))
-		if ui.PrimaryButton(c, "添加").Clicked() {
+		if ui.PrimaryButton(c, i18n.T("Add")).Clicked() {
 			a.addTagRule()
 		}
 	})
@@ -656,15 +657,15 @@ func (a *App) tagRuleRow(c *ui.Context, r TagRule) {
 	t := c.Theme()
 	ui.Row(c).Gap(10).AlignItems(ui.Center).Padding(8).Radius(8).
 		Border(1, t.Border).Children(func() {
-		label := "喜欢"
+		label := i18n.T("Like")
 		if r.Action == TagDislike {
-			label = "不喜欢"
+			label = i18n.T("Dislike")
 		}
 		ui.Badge(c, label).Background(tagActionColor(r.Action)).
 			TextColor(ui.Hex("#f1f1f1"))
 		ui.Text(c, r.Tag).Grow(1).SingleLine()
-		ui.Textf(c, "权重 %d", r.Weight).FontSize(11).TextColor(t.TextMuted)
-		if ui.Button(c, "删除").Label("删除标签规则").Clicked() {
+		ui.Textf(c, i18n.T("Weight %d"), r.Weight).FontSize(11).TextColor(t.TextMuted)
+		if ui.Button(c, i18n.T("Delete")).Label(i18n.T("Delete tag rule")).Clicked() {
 			a.removeTagRule(r.Tag)
 		}
 	})
@@ -716,7 +717,7 @@ func (db *TagTranslationDB) isLoading() bool {
 func (a *App) tagSuggestionRow(c *ui.Context, s *TagSettings, sug TagSuggestion) {
 	t := c.Theme()
 	tag := sug.Namespace + ":" + sug.Tag
-	row := ui.Column(c).Gap(2).Padding(6).Radius(6).Focusable().Label("选用 " + tag)
+	row := ui.Column(c).Gap(2).Padding(6).Radius(6).Focusable().Label(i18n.Tf("Use %s", tag))
 	row.Children(func() {
 		ui.Text(c, tag+" — "+sug.Translation).FontSize(12)
 		if sug.Description != "" {
@@ -735,18 +736,18 @@ func (a *App) tagSuggestionRow(c *ui.Context, s *TagSettings, sug TagSuggestion)
 func (a *App) tagSearchPanel(c *ui.Context, s *TagSettings) {
 	t := c.Theme()
 	db := &a.translations
-	ui.Text(c, "标签翻译").FontSize(16).Bold()
+	ui.Text(c, i18n.T("Tag translations")).FontSize(16).Bold()
 	ui.Text(c, db.Status()).FontSize(12).TextColor(t.TextMuted)
 	ui.Row(c).Gap(8).AlignItems(ui.End).Children(func() {
-		ui.TextInput(c, &s.tagQuery).Width(320).Label("搜索标签翻译").
-			Placeholder("输入中文或英文，如 百合 / yuri")
-		if ui.Button(c, "更新翻译库").Disabled(db.isLoading()).Clicked() {
+		ui.TextInput(c, &s.tagQuery).Width(320).Label(i18n.T("Search tag translations")).
+			Placeholder(i18n.T("Type Chinese or English, e.g. 百合 / yuri"))
+		if ui.Button(c, i18n.T("Update library")).Disabled(db.isLoading()).Clicked() {
 			db.Update()
 		}
-		if ui.Button(c, "导入自定义翻译").Disabled(a.transBusy).Clicked() {
+		if ui.Button(c, i18n.T("Import custom translations")).Disabled(a.transBusy).Clicked() {
 			a.importCustomTranslations()
 		}
-		if ui.Button(c, "导出自定义翻译").Disabled(a.transBusy).Clicked() {
+		if ui.Button(c, i18n.T("Export custom translations")).Disabled(a.transBusy).Clicked() {
 			a.exportCustomTranslations()
 		}
 		if a.transBusy {
@@ -757,7 +758,7 @@ func (a *App) tagSearchPanel(c *ui.Context, s *TagSettings) {
 		ui.Text(c, a.transMsg).FontSize(11).TextColor(t.TextMuted)
 	}
 	if db.CustomPath() != "" {
-		ui.Text(c, "自定义翻译保存在 "+db.CustomPath()+"，导入会与它合并。").
+		ui.Text(c, i18n.Tf("Custom translations are saved to %s; imports merge into it.", db.CustomPath())).
 			FontSize(11).TextColor(t.TextMuted)
 	}
 	for _, sug := range db.Search(s.tagQuery, 8) {

@@ -26,6 +26,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"manga-reader/cmd/desktop-native/app"
+	"manga-reader/cmd/desktop-native/app/i18n"
 	"manga-reader/cmd/desktop-native/assets"
 	"manga-reader/cmd/desktop-native/internal/desktop"
 	"manga-reader/cmd/desktop-native/internal/singleinstance"
@@ -99,6 +100,12 @@ func main() {
 		case "light":
 			mygo.Theme.SetSource(mygo.ThemeLight)
 		}
+		// The interface language: the saved one, or the system's when it
+		// asks for Chinese. The localizer is read by every frame; mygo's
+		// own texts follow once the app is ready.
+		locale := i18n.Normalise(settings.LanguageOrDefault())
+		i18n.SetLanguage(locale)
+		mygo.App.SetLocale(locale.String())
 		if settings.CookieConfig().IsValid() {
 			if _, err := embedded.Start(settings.Cookie); err != nil {
 				// A database or cache path that cannot be opened must not

@@ -2599,7 +2599,7 @@ func TestTagSyncConflictDialog(t *testing.T) {
 	if !tt.HasText("male:gender change") {
 		t.Fatalf("dialog does not name the tag; texts=%q", tt.Texts())
 	}
-	if !tt.HasText("本地：不喜欢 · 权重 -25") || !tt.HasText("源站：喜欢 · 权重 6") {
+	if !tt.HasText("本地：不喜欢 · weight -25") || !tt.HasText("源站：喜欢 · weight 6") {
 		t.Fatalf("dialog does not show both sides; texts=%q", tt.Texts())
 	}
 

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"manga-reader/cmd/desktop-native/app/i18n"
 )
 
 // Reader is the state of the reader page: the page list, where it is in a
@@ -130,7 +132,7 @@ func (a *App) ensureReader(id int64, token string, offline bool) {
 	// window bookkeeping is stale.
 	r.preloaded = nil
 	r.resetView()
-	r.title = "阅读器"
+	r.title = i18n.T("Reader")
 	if d := a.details[id]; d != nil && d.loaded && d.g.Title != "" {
 		r.title = d.g.Title
 	}
@@ -251,13 +253,13 @@ const progressFlushDelay = 600 * time.Millisecond
 func fitLabelFor(r *Reader) string {
 	switch {
 	case r.fitHeight:
-		return "适应高度"
+		return i18n.T("Fit height")
 	case r.fit == ui.Cover:
-		return "适应宽度"
+		return i18n.T("Fit width")
 	case r.fit == ui.NaturalSize:
-		return "原始尺寸"
+		return i18n.T("Original size")
 	default:
-		return "适合页面"
+		return i18n.T("Fit page")
 	}
 }
 
@@ -413,7 +415,7 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 
 	ui.Column(c).Fill().Children(func() {
 		ui.Row(c).Padding(10, 16).Gap(10).AlignItems(ui.Center).Background(t.Surface).Children(func() {
-			if ui.Button(c, "← 返回").Clicked() {
+			if ui.Button(c, i18n.T("← Back")).Clicked() {
 				a.router.Push(fmt.Sprintf("/gallery/%d/%s", r.id, r.token))
 			}
 			ui.Column(c).Gap(1).Grow(1).Children(func() {
@@ -422,41 +424,43 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 					// While the backend still scrapes, say how much has
 					// arrived so a big gallery does not look stuck.
 					if !r.complete && r.total > 0 && len(r.pages) < r.total {
-						ui.Textf(c, "已加载 %d / %d 页…", len(r.pages), r.total).
+						ui.Textf(c, i18n.T("%d / %d pages"), len(r.pages), r.total).
 							FontSize(11).TextColor(t.TextMuted)
 						return
 					}
-					line := fmt.Sprintf("%d / %d 页 · %d%%", r.page+1, len(r.pages), int(r.zoom*100))
+					var line string
 					if r.offline {
-						line += " · 离线"
+						line = i18n.Sprintf(i18n.T("%d / %d pages · %d%% · offline"), r.page+1, len(r.pages), int(r.zoom*100))
+					} else {
+						line = i18n.Sprintf(i18n.T("%d / %d pages · %d%%"), r.page+1, len(r.pages), int(r.zoom*100))
 					}
 					ui.Text(c, line).FontSize(11).TextColor(t.TextMuted)
 				} else {
-					ui.Text(c, "正在加载…").FontSize(11).TextColor(t.TextMuted)
+					ui.Text(c, i18n.T("Loading…")).FontSize(11).TextColor(t.TextMuted)
 				}
 			})
-			if ui.Button(c, "−").Width(36).Label("缩小").Disabled(!r.loaded).Clicked() {
+			if ui.Button(c, "−").Width(36).Label(i18n.T("Zoom out")).Disabled(!r.loaded).Clicked() {
 				r.zoomBy(-0.2)
 			}
 			// Cycle: whole page → fill width → 100% pixels → whole page.
-			if ui.Button(c, fitLabelFor(r)).Label("切换适应模式").Disabled(!r.loaded).Clicked() {
+			if ui.Button(c, fitLabelFor(r)).Label(i18n.T("Switch fit mode")).Disabled(!r.loaded).Clicked() {
 				nextFit(r)
 				r.resetView()
 			}
-			if ui.Button(c, "+").Width(36).Label("放大").Disabled(!r.loaded).Clicked() {
+			if ui.Button(c, "+").Width(36).Label(i18n.T("Zoom in")).Disabled(!r.loaded).Clicked() {
 				r.zoomBy(0.2)
 			}
-			if ui.Button(c, "上一页").Disabled(!r.loaded || r.page == 0).Clicked() {
+			if ui.Button(c, i18n.T("Previous page")).Disabled(!r.loaded || r.page == 0).Clicked() {
 				a.readerPrev(r)
 			}
-			if ui.PrimaryButton(c, "下一页").Disabled(!r.loaded || r.page+r.readerStep() >= len(r.pages)).Clicked() {
+			if ui.PrimaryButton(c, i18n.T("Next page")).Disabled(!r.loaded || r.page+r.readerStep() >= len(r.pages)).Clicked() {
 				a.readerNext(r)
 			}
-			fullscreen := "全屏"
+			fullscreen := i18n.T("Full screen")
 			if a.isFullscreen() {
-				fullscreen = "退出全屏"
+				fullscreen = i18n.T("Exit full screen")
 			}
-			if ui.Button(c, fullscreen).Label("切换全屏").Clicked() {
+			if ui.Button(c, fullscreen).Label(i18n.T("Toggle full screen")).Clicked() {
 				a.toggleFullscreen()
 			}
 		})
@@ -465,12 +469,12 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 		case r.loading && !r.loaded:
 			ui.Column(c).Fill().Center().Gap(10).Children(func() {
 				ui.Spinner(c)
-				ui.Text(c, "正在获取页面列表…").FontSize(12).TextColor(t.TextMuted)
+				ui.Text(c, i18n.T("Loading pages…")).FontSize(12).TextColor(t.TextMuted)
 			})
 		case r.err != "" && !r.loaded:
 			a.errorBlock(c, r.err, func() { a.retryReader(r) })
 		case !r.loaded || len(r.pages) == 0:
-			a.emptyPage(c, "没有页面", "这个画廊没有可读取的页面", "")
+			a.emptyPage(c, i18n.T("No pages"), i18n.T("This gallery has no readable pages"), "")
 		default:
 			// Start the neighbouring pages downloading before the frame is
 			// painted, so the visible page and its successors arrive together.
@@ -569,23 +573,23 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 
 			ui.Progress(c, float64(r.page+1)/float64(len(r.pages))).FillWidth().Height(3)
 			ui.Row(c).Padding(6, 16).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "← → 翻页 · Ctrl + 滚轮缩放 · 拖拽平移 · 0 重置 · F 全屏").
+				ui.Text(c, i18n.T("← → pages · Ctrl + wheel zoom · drag to pan · 0 reset · F fullscreen")).
 					FontSize(11).TextColor(t.TextMuted).Grow(1)
 			})
 			ui.Row(c).Padding(2, 16, 6, 16).Gap(8).AlignItems(ui.Center).Children(func() {
-				dir := "从左到右"
+				dir := i18n.T("Left to right")
 				if r.paging.rtl {
-					dir = "从右到左"
+					dir = i18n.T("Right to left")
 				}
-				if ui.Button(c, dir).Label("切换阅读方向").Clicked() {
+				if ui.Button(c, dir).Label(i18n.T("Switch reading direction")).Clicked() {
 					r.paging.rtl = !r.paging.rtl
 					a.paging = r.paging
 				}
-				layout := "单页"
+				layout := i18n.T("Single page")
 				if r.paging.double {
-					layout = "双页"
+					layout = i18n.T("Double page")
 				}
-				if ui.Button(c, layout).Label("切换单页/双页").Clicked() {
+				if ui.Button(c, layout).Label(i18n.T("Toggle single/double page")).Clicked() {
 					r.paging.double = !r.paging.double
 					// Keep the spread aligned to even page indices.
 					if r.paging.double && r.page%2 == 1 {
@@ -593,16 +597,16 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 					}
 					a.paging = r.paging
 				}
-				wheel := "滚轮平移"
+				wheel := i18n.T("Wheel pans")
 				if r.paging.wheelTurns {
-					wheel = "滚轮翻页"
+					wheel = i18n.T("Wheel turns")
 				}
-				if ui.Button(c, wheel).Label("切换滚轮行为").Clicked() {
+				if ui.Button(c, wheel).Label(i18n.T("Toggle wheel behaviour")).Clicked() {
 					r.paging.wheelTurns = !r.paging.wheelTurns
 					a.paging = r.paging
 				}
-				ui.TextInput(c, &a.readerJump).Width(64).Label("跳转页码").Placeholder("页码")
-				if ui.Button(c, "跳转").Clicked() {
+				ui.TextInput(c, &a.readerJump).Width(64).Label(i18n.T("Jump to page")).Placeholder(i18n.T("Page number"))
+				if ui.Button(c, i18n.T("Jump")).Clicked() {
 					a.readerJumpTo(r)
 				}
 			})
@@ -771,8 +775,8 @@ func (a *App) readerPagePlaceholder(c *ui.Context, r *Reader, page int, url stri
 	}
 	col.Children(func() {
 		if err := a.pageImages.Err(url); err != "" {
-			ui.Text(c, "第 "+strconv.Itoa(page+1)+" 页加载失败").FontSize(12).TextColor(t.Danger)
-			if ui.Button(c, "重试").Clicked() {
+			ui.Text(c, i18n.Tf("Page %d failed to load", page+1)).FontSize(12).TextColor(t.Danger)
+			if ui.Button(c, i18n.T("Retry")).Clicked() {
 				a.pageImages.Retry(url)
 			}
 			// A second failure means the cache path itself is the problem
@@ -780,14 +784,14 @@ func (a *App) readerPagePlaceholder(c *ui.Context, r *Reader, page int, url stri
 			// skips the local cache entirely. Only shown when cache mode is
 			// on — with it off, url is already the live endpoint.
 			if a.client.UsingImageCache() {
-				if ui.Button(c, "绕过缓存重试").Label("绕过缓存重试本页").Clicked() {
+				if ui.Button(c, i18n.T("Retry without cache")).Label(i18n.T("Retry this page without the cache")).Clicked() {
 					a.pageImages.Retry(a.client.LivePageImageURL(r.pages[page]))
 				}
 			}
 			return
 		}
 		ui.Spinner(c)
-		ui.Text(c, "正在加载第 "+strconv.Itoa(page+1)+" 页…").
+		ui.Text(c, i18n.Tf("Loading page %d…", page+1)).
 			FontSize(12).TextColor(t.TextMuted)
 	})
 }
