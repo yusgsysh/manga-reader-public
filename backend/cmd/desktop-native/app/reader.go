@@ -52,16 +52,15 @@ type Reader struct {
 	// fit is how the page fills the area: ui.Contain shows the whole page,
 	// ui.Cover fills the width (and crops the overflow, which pan shows).
 	fit ui.Fit
-	// rtl reads right to left: the right side turns forward, as Japanese
-	// manga do.
-	rtl bool
-	// double shows two pages side by side; wheelTurns makes the wheel turn
-	// pages instead of panning.
-	double     bool
-	wheelTurns bool
+	// paging holds the direction, layout and wheel behaviour, which outlive
+	// one gallery (see readerPaging).
+	paging readerPaging
 	// fitHeight scales a page to the reader's height instead of using the
 	// Image fit mode, which cannot express "as tall as the area".
 	fitHeight bool
+	// preloaded is the page URLs the last frame asked the image store for,
+	// so the pages leaving that window can be released.
+	preloaded map[string]bool
 	// downX/downY and moved tell a click from a drag, so a tap can turn the
 	// page while dragging still pans.
 	downX, downY float32
@@ -92,6 +91,15 @@ func (r *Reader) zoomBy(d float32) {
 	r.zoom = clampFloat(r.zoom+d, 0.5, 6)
 }
 
+// readerPaging is how a page turns and what a turn shows. It is a property of
+// the reader's taste, not of one gallery, so opening the next gallery keeps
+// it: turning 从右到左 on once should not have to be done again.
+type readerPaging struct {
+	rtl        bool
+	double     bool
+	wheelTurns bool
+}
+
 // ensureReader starts loading the reader's page list unless it is already
 // loading or showing this gallery. offline selects the downloaded copy, so
 // a change of mode starts the load again.
@@ -105,6 +113,9 @@ func (a *App) ensureReader(id int64, token string, offline bool) {
 		return
 	}
 	r.id, r.token, r.offline = id, token, offline
+	// The direction, layout and wheel mode are the reader's, not this
+	// gallery's: the next gallery opens with the same ones.
+	r.paging = a.paging
 	r.started = false
 	r.page = 0
 	r.startPage = -1
@@ -115,6 +126,9 @@ func (a *App) ensureReader(id int64, token string, offline bool) {
 	r.partial = 0
 	r.complete = false
 	r.lastSaved = -1
+	// The previous gallery's pages keep whatever has loaded; only its
+	// window bookkeeping is stale.
+	r.preloaded = nil
 	r.resetView()
 	r.title = "阅读器"
 	if d := a.details[id]; d != nil && d.loaded && d.g.Title != "" {
@@ -275,7 +289,7 @@ func nextFit(r *Reader) {
 
 // readerStep is how far forward a turn moves: two pages in double mode.
 func (r *Reader) readerStep() int {
-	if r.double {
+	if r.paging.double {
 		return 2
 	}
 	return 1
@@ -364,14 +378,14 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 			a.readerPrev(r)
 		}
 		if c.Shortcut(0, ui.KeyRight) {
-			if r.rtl {
+			if r.paging.rtl {
 				a.readerPrev(r)
 			} else {
 				a.readerNext(r)
 			}
 		}
 		if c.Shortcut(0, ui.KeyLeft) {
-			if r.rtl {
+			if r.paging.rtl {
 				a.readerNext(r)
 			} else {
 				a.readerPrev(r)
@@ -479,7 +493,7 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 						} else {
 							r.zoomBy(0.1)
 						}
-					case r.wheelTurns:
+					case r.paging.wheelTurns:
 						// Wheel mode: a notch turns a page, as viewers do.
 						if ev.DY > 0 {
 							a.readerNext(r)
@@ -540,7 +554,7 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 				// Two pages side by side, left then right. In right-to-left
 				// mode the left page is the later one, as in Japanese manga.
 				first, second := r.page, -1
-				if r.double && r.page+1 < len(r.pages) {
+				if r.paging.double && r.page+1 < len(r.pages) {
 					second = r.page + 1
 				}
 				ui.Row(c).Fill().Children(func() {
@@ -558,29 +572,32 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 			})
 			ui.Row(c).Padding(2, 16, 6, 16).Gap(8).AlignItems(ui.Center).Children(func() {
 				dir := "从左到右"
-				if r.rtl {
+				if r.paging.rtl {
 					dir = "从右到左"
 				}
 				if ui.Button(c, dir).Label("切换阅读方向").Clicked() {
-					r.rtl = !r.rtl
+					r.paging.rtl = !r.paging.rtl
+					a.paging = r.paging
 				}
 				layout := "单页"
-				if r.double {
+				if r.paging.double {
 					layout = "双页"
 				}
 				if ui.Button(c, layout).Label("切换单页/双页").Clicked() {
-					r.double = !r.double
+					r.paging.double = !r.paging.double
 					// Keep the spread aligned to even page indices.
-					if r.double && r.page%2 == 1 {
+					if r.paging.double && r.page%2 == 1 {
 						r.page--
 					}
+					a.paging = r.paging
 				}
 				wheel := "滚轮平移"
-				if r.wheelTurns {
+				if r.paging.wheelTurns {
 					wheel = "滚轮翻页"
 				}
 				if ui.Button(c, wheel).Label("切换滚轮行为").Clicked() {
-					r.wheelTurns = !r.wheelTurns
+					r.paging.wheelTurns = !r.paging.wheelTurns
+					a.paging = r.paging
 				}
 				ui.TextInput(c, &a.readerJump).Width(64).Label("跳转页码").Placeholder("页码")
 				if ui.Button(c, "跳转").Clicked() {
@@ -600,18 +617,42 @@ const readerPreloadPages = 2
 // cheap once a page is queued or loaded; for a page that is not, it starts the
 // download in the background. The visible page is asked for first so it is not
 // queued behind its neighbours.
+//
+// The window is one page behind and readerPreloadPages ahead. Pages outside
+// it are released, which ends their downloads: a gallery turned through
+// quickly would otherwise keep every page it passed downloading behind the
+// page on screen. Release leaves loaded pages and failures alone, so turning
+// back to a page finds it, or its retry.
 func (a *App) preloadPages(r *Reader) {
+	urls := make([]string, len(r.pages))
+	for i, src := range r.pages {
+		urls[i] = a.client.PageImageURL(src)
+	}
+	step := r.readerStep()
+	keep := make(map[string]bool, 2+readerPreloadPages+1)
 	warm := func(i int) {
-		if i < 0 || i >= len(r.pages) {
+		if i < 0 || i >= len(r.pages) || keep[urls[i]] {
 			return
 		}
-		a.pageImages.Get(a.client.PageImageURL(r.pages[i]))
+		keep[urls[i]] = true
+		a.pageImages.Get(urls[i])
 	}
 	warm(r.page)
 	for i := 1; i <= readerPreloadPages; i++ {
-		warm(r.page + i)
+		warm(r.page + step*i)
+	}
+	if r.paging.double {
+		// The spread shows the page after the first.
+		warm(r.page + 1)
 	}
 	warm(r.page - 1)
+
+	for url := range r.preloaded {
+		if !keep[url] {
+			a.pageImages.Release(url)
+		}
+	}
+	r.preloaded = keep
 }
 
 // readerTap turns the page when the user taps the outer third of the reading
@@ -622,7 +663,7 @@ func (a *App) readerTap(r *Reader, x, width float32) {
 		return
 	}
 	left, right := a.readerPrev, a.readerNext
-	if r.rtl {
+	if r.paging.rtl {
 		left, right = right, left
 	}
 	switch {
@@ -697,13 +738,13 @@ func (a *App) readerPageImage(c *ui.Context, r *Reader, page int) {
 		w, h := bitmap.Size()
 		_, winH := c.Size()
 		scale := (winH - 120) / float32(h)
-		if r.double {
+		if r.paging.double {
 			// Two pages side by side share the width, so half the scale.
 			scale /= 2
 		}
 		img.Size(float32(w)*maxFloat(scale, 0.1), float32(h)*maxFloat(scale, 0.1))
 	}
-	if r.double {
+	if r.paging.double {
 		img.Grow(1)
 	}
 }
@@ -713,7 +754,7 @@ func (a *App) readerPageImage(c *ui.Context, r *Reader, page int) {
 func (a *App) readerPagePlaceholder(c *ui.Context, r *Reader, page int, url string) {
 	t := c.Theme()
 	col := ui.Column(c).Fill().Center().Gap(8)
-	if r.double {
+	if r.paging.double {
 		col.Grow(1)
 	}
 	col.Children(func() {

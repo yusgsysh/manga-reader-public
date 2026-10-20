@@ -257,6 +257,35 @@ func newFakeServerWithHooks(t *testing.T, onImage func(r *http.Request)) *httpte
 		w.WriteHeader(http.StatusOK)
 	})
 
+	// A second gallery, so the reader's own settings can be checked against
+	// another gallery and against its absence of saved progress.
+	detail2 := map[string]any{
+		"id": 2, "token": "tok2", "title": "示例 B", "category": "manga",
+		"page_count": 2, "tags": []map[string]string{{"namespace": "tag", "name": "full color"}},
+	}
+	mux.HandleFunc("/api/gallery/2/tok2", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, detail2) })
+	mux.HandleFunc("/api/gallery-cache/2/tok2", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, detail2) })
+	pages2 := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprintln(w, `{"type":"meta","total":2}`)
+		for i := 0; i < 2; i++ {
+			fmt.Fprintf(w, `{"type":"page","index":%d,"page_url":"https://img.example/b-%d.jpg"}`+"\n", i, i)
+		}
+		fmt.Fprintln(w, `{"type":"done","total":2}`)
+	}
+	mux.HandleFunc("/api/gallery/2/tok2/pages", pages2)
+	mux.HandleFunc("/api/gallery-cache/2/tok2/pages", pages2)
+	mux.HandleFunc("/api/progress/2/tok2", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		writeJSON(w, map[string]any{"current_page": 0, "progress": 0, "completed": false})
+	})
+	mux.HandleFunc("/api/bookshelf/2/tok2/status", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"in_bookshelf": false})
+	})
+
 	mux.HandleFunc("/api/progress/1/tok1", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut {
 			var body struct {
@@ -462,6 +491,55 @@ func TestReaderPreloadsNearbyPages(t *testing.T) {
 	}
 }
 
+// TestReaderPagingPersistsAcrossGalleries checks that the direction, layout
+// and wheel choices belong to the reader, not one gallery: turning 从右到左
+// on and then opening another gallery keeps it, so the reader does not have
+// to be set up again for every gallery.
+func TestReaderPagingPersistsAcrossGalleries(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "开始阅读")
+	if err := tt.Click("开始阅读"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "1 / 3 页")
+
+	if err := tt.Click("从左到右"); err != nil {
+		t.Fatalf("click direction: %v", err)
+	}
+	if err := tt.Click("单页"); err != nil {
+		t.Fatalf("click layout: %v", err)
+	}
+	if err := tt.Click("滚轮平移"); err != nil {
+		t.Fatalf("click wheel: %v", err)
+	}
+	want := readerPaging{rtl: true, double: true, wheelTurns: true}
+	if a.paging != want {
+		t.Fatalf("remembered paging = %+v, want %+v", a.paging, want)
+	}
+
+	// Leave for another gallery and open its reader.
+	a.router.Push("/gallery/2/tok2")
+	navSettle(tt)
+	waitText(t, tt, "示例 B")
+	a.openReaderAt(2, "tok2", 0)
+	navSettle(tt)
+	waitText(t, tt, "从右到左")
+	waitText(t, tt, "双页")
+	waitText(t, tt, "滚轮翻页")
+	if a.reader.id != 2 {
+		t.Fatalf("reader is on gallery %d, want 2", a.reader.id)
+	}
+	if got := a.reader.paging; got != want {
+		t.Fatalf("new gallery reader paging = %+v, want %+v", got, want)
+	}
+}
+
 // TestDetailThumbnailGridJumpsToPage checks the detail page's thumbnail grid:
 // cells fetch through the cache proxy, and clicking one opens the reader at
 // that page instead of the saved progress.
@@ -588,7 +666,7 @@ func TestReaderTapFitAndJump(t *testing.T) {
 	if err := tt.Click("从左到右"); err != nil {
 		t.Fatalf("click direction: %v", err)
 	}
-	if !a.reader.rtl {
+	if !a.reader.paging.rtl {
 		t.Fatal("rtl not enabled")
 	}
 	waitText(t, tt, "从右到左")
@@ -1759,7 +1837,7 @@ func TestReaderDoubleAndWheel(t *testing.T) {
 	if err := tt.Click("单页"); err != nil {
 		t.Fatalf("click 单页: %v", err)
 	}
-	if !a.reader.double {
+	if !a.reader.paging.double {
 		t.Fatal("double mode not enabled")
 	}
 	waitText(t, tt, "双页")

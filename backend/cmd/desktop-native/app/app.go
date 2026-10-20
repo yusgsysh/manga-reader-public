@@ -97,6 +97,9 @@ type App struct {
 	searchApplied string
 	searchSeq     int
 	reader        Reader
+	// paging is the reader's last chosen direction, layout and wheel mode,
+	// carried into the next gallery opened.
+	paging readerPaging
 	// readerStart is the page the next reader open should show, set when a
 	// detail-page thumbnail is clicked; -1 means "resume saved progress".
 	readerStart int
