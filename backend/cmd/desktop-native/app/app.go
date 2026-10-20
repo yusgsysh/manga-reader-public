@@ -1496,16 +1496,56 @@ func cacheLimitInput(maxBytes int64) string {
 	return strconv.FormatInt(maxBytes>>20, 10)
 }
 
+// emptyPage is the one empty state for pages: an icon tile, a title, a line
+// of explanation and an optional hint, all centred. Every list, the reader
+// and the downloads page use it, so "nothing here" looks the same anywhere.
 func (a *App) emptyPage(c *ui.Context, title, subtitle, hint string) {
 	t := c.Theme()
-	ui.Column(c).Fill().Center().Gap(8).Children(func() {
+	ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
+		stateIcon(c, moodEmpty)
 		ui.Text(c, title).FontSize(22).Bold()
-		ui.Text(c, subtitle).FontSize(13).TextColor(t.TextMuted)
+		ui.Text(c, subtitle).FontSize(13).TextColor(t.TextMuted).MaxWidth(560)
 		if hint != "" {
-			ui.Text(c, hint).FontSize(12).TextColor(t.TextMuted)
+			ui.Text(c, hint).FontSize(12).TextColor(t.TextMuted).MaxWidth(560)
 		}
 	})
 }
+
+// bookSVG is the app's mark as a line icon: an open book, matching the
+// application icon. Parsed once.
+var bookSVG = ui.MustParseSVG([]byte(
+	`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ` +
+		`stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">` +
+		`<path d="M12 6.5C10.5 5.2 8.5 4.6 5.5 4.5v13c3 .1 5 .7 6.5 2 1.5-1.3 3.5-1.9 6.5-2v-13c-3 .1-5 .7-6.5 2z"/>` +
+		`<path d="M12 6.5v13"/></svg>`))
+
+// stateIcon is the rounded tile above an empty or error message: the app's
+// book mark drawn in a muted colour, big enough to read as an illustration.
+func stateIcon(c *ui.Context, mood stateMood) {
+	t := c.Theme()
+	tile := ui.Box(c).Size(72, 72).Radius(18).Center()
+	switch mood {
+	case moodError:
+		tile.Background(t.Surface).Border(2, t.Danger)
+	default:
+		tile.Background(t.SurfaceHover)
+	}
+	ink := t.TextMuted
+	if mood == moodError {
+		ink = t.Danger
+	}
+	tile.Children(func() {
+		ui.Icon(c, bookSVG).Size(40, 40).TextColor(ink)
+	})
+}
+
+// stateMood picks the colour of a state icon.
+type stateMood int
+
+const (
+	moodEmpty stateMood = iota
+	moodError
+)
 
 // errorBlock is the one error state for pages: a title, the backend's
 // message, and 重试. Backend down, network failure and a bad response all
@@ -1516,12 +1556,22 @@ func (a *App) errorBlock(c *ui.Context, msg string, retry func()) {
 		msg = "发生未知错误"
 	}
 	ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
-		ui.Badge(c, "请求失败").Background(t.Danger).TextColor(t.Background)
+		stateIcon(c, moodError)
+		ui.Badge(c, errorBadge(msg)).Background(t.Danger).TextColor(t.Background)
 		ui.Text(c, msg).FontSize(12).TextColor(t.TextMuted).MaxWidth(560)
 		if ui.Button(c, "重试").Clicked() {
 			retry()
 		}
 	})
+}
+
+// errorBadge says which kind of failure this is, so the same block can read
+// "无法连接" for a dead backend and "请求失败" for a bad response.
+func errorBadge(msg string) string {
+	if strings.HasPrefix(msg, "连接后端失败") {
+		return "无法连接"
+	}
+	return "请求失败"
 }
 
 // appearanceRow is the 跟随系统/浅色/深色 choice. The window is themed by main

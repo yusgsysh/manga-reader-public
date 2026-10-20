@@ -90,7 +90,7 @@ func main() {
 		}
 		embedded = &embeddedBackend{settings: settings, token: token}
 		if settingsErr != nil {
-			embedded.startErr = fmt.Sprintf("读取配置文件失败：%v\n下面的设置页会把当前设置写回去，覆盖这个文件。", settingsErr)
+			embedded.startErr = fmt.Errorf("读取配置文件失败：%v\n下面的设置页会把当前设置写回去，覆盖这个文件。", settingsErr)
 		}
 		// Apply the saved appearance before the first window is drawn.
 		switch settings.AppearanceSource() {
@@ -103,9 +103,10 @@ func main() {
 			if _, err := embedded.Start(settings.Cookie); err != nil {
 				// A database or cache path that cannot be opened must not
 				// take the window down: the setup/settings screen shows the
-				// reason (StartError) and a save from it retries.
+				// reason and a save from it retries. Start failures carry
+				// their own advice (desktop.StartError.Explain).
 				log.Printf("启动内嵌后端失败: %v", err)
-				embedded.setStartError(fmt.Sprintf("内置服务启动失败：%v\n可在下方修正 Cookies 后重试；若提示数据库或缓存目录问题，请检查对应路径的权限。", err))
+				embedded.setStartError(err)
 			}
 		}
 		client := app.NewClient(embedded.BaseURL())

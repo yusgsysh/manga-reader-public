@@ -20,9 +20,10 @@ type embeddedBackend struct {
 	// token is a per-run secret required by the loopback API.
 	token string
 	// startErr is what went wrong before the backend could start, such as
-	// config.json not parsing. The setup screen shows it above the cookie
-	// field so the user knows why they are being asked again.
-	startErr string
+	// config.json not parsing or the database failing to open. The setup
+	// screen shows it above the cookie field so the user knows why they are
+	// being asked again.
+	startErr error
 }
 
 var _ app.Backend = (*embeddedBackend)(nil)
@@ -37,22 +38,26 @@ func (b *embeddedBackend) Configured() bool {
 // UI client keeps working after the user changes cookies.
 func (b *embeddedBackend) AuthToken() string { return b.token }
 
-// StartError is the failure that kept the backend from starting, or "".
+// StartError is the failure that kept the backend from starting, or "";
+// a desktop.StartError explains what to try.
 func (b *embeddedBackend) StartError() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.startErr
+	if b.startErr == nil {
+		return ""
+	}
+	return b.startErr.Error()
 }
 
 // clearStartErrorLocked drops the startup failure once the user has acted on
 // it: a successful start rewrote the settings file.
-func (b *embeddedBackend) clearStartErrorLocked() { b.startErr = "" }
+func (b *embeddedBackend) clearStartErrorLocked() { b.startErr = nil }
 
 // setStartError records a startup failure for the setup/settings screens.
 // The caller (main) has already logged it.
-func (b *embeddedBackend) setStartError(msg string) {
+func (b *embeddedBackend) setStartError(err error) {
 	b.mu.Lock()
-	b.startErr = msg
+	b.startErr = err
 	b.mu.Unlock()
 }
 

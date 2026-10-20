@@ -137,13 +137,13 @@ func Start(ctx context.Context, opts Options) (*Server, error) {
 
 	db, err := database.NewDB(database.Options{Driver: database.DriverSQLite, DSN: opts.DBPath})
 	if err != nil {
-		return nil, fmt.Errorf("open database: %w", err)
+		return nil, &StartError{Kind: FailDatabase, Path: opts.DBPath, Err: err}
 	}
 
 	fsCache, err := cache.NewFSCache(opts.CacheDir, opts.CacheMaxBytes)
 	if err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("open image cache: %w", err)
+		return nil, &StartError{Kind: FailCacheDir, Path: opts.CacheDir, Err: err}
 	}
 	// A previous run may have left the cache over the limit; prune it now
 	// rather than waiting for the first write.
