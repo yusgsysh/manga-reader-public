@@ -2043,6 +2043,50 @@ func TestReaderProgressIsBatched(t *testing.T) {
 }
 
 // TestGalleryContinueReading labels the start button with the saved page.
+// TestShelfShowsCompleted covers the finished mark: a shelf entry whose
+// progress says completed shows 已读完 instead of a page number, and the
+// detail page offers 重读 rather than 继续阅读.
+func TestShelfShowsCompleted(t *testing.T) {
+	// The fake bookshelf reports current_page 2 of 3 pages with completed;
+	// the detail page's own progress endpoint reports the saved page 2 too,
+	// so 重读 (>= last page) is what it offers.
+	savedPage.Lock()
+	savedPage.n = 2
+	savedPage.Unlock()
+	t.Cleanup(func() {
+		savedPage.Lock()
+		savedPage.n = 0
+		savedPage.Unlock()
+	})
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("书架"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+
+	// Mark the shelf row completed the way the backend would send it.
+	s := a.lists["/bookshelf"]
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && (s == nil || len(s.items) == 0) {
+		tt.Frame()
+		time.Sleep(2 * time.Millisecond)
+	}
+	if s == nil || len(s.items) == 0 {
+		t.Fatal("bookshelf did not load")
+	}
+	a.update(func() {
+		s.items[0].Reading = &ReadingProgress{CurrentPage: 2, Progress: 1, Completed: true}
+	})
+	waitText(t, tt, "已读完")
+
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "重读")
+}
+
 func TestGalleryContinueReading(t *testing.T) {
 	a, tt := newTestApp(t)
 	waitText(t, tt, "示例 A")
@@ -2907,5 +2951,108 @@ func TestSettingsSyncSection(t *testing.T) {
 	}
 	if !a.sync.accepting {
 		t.Fatal("accept switch not kept")
+	}
+}
+
+// TestReaderDoubleRTLSwapsSpread covers the double-page order in right-to-left
+// mode: the later page sits on the left of the spread, as Japanese manga do.
+func TestReaderDoubleRTLSwapsSpread(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "开始阅读")
+	if err := tt.Click("开始阅读"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "1 / 3 页")
+
+	if err := tt.Click("从左到右"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("单页"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, tt, "双页")
+
+	// The spread draws second-then-first under rtl; probe the draw order by
+	// asking both image stores' pages and checking the children order isn't
+	// directly observable, so assert the state that drives it instead.
+	if !a.reader.paging.rtl || !a.reader.paging.double {
+		t.Fatalf("paging = %+v, want rtl+double", a.reader.paging)
+	}
+	// The spread for page 0 shows pages 1 (left) and 0 (right).
+	first, second := a.reader.page, -1
+	if a.reader.page+1 < len(a.reader.pages) {
+		second = a.reader.page + 1
+	}
+	if first != 0 || second != 1 {
+		t.Fatalf("spread pages = %d/%d, want 0/1", first, second)
+	}
+	// swapSpread mirrors what the view does.
+	l, r := swapSpread(a.reader.paging.rtl, first, second)
+	if l != 1 || r != 0 {
+		t.Fatalf("rtl spread = %d/%d, want 1/0", l, r)
+	}
+	l, r = swapSpread(false, first, second)
+	if l != 0 || r != 1 {
+		t.Fatalf("ltr spread = %d/%d, want 0/1", l, r)
+	}
+}
+
+// TestReaderBypassCacheRetry covers the second failure's escape hatch: after
+// the cache proxy fails, the placeholder offers 绕过缓存重试, whose URL is the
+// live endpoint.
+func TestReaderBypassCacheRetry(t *testing.T) {
+	fail := true
+	srv := newFakeServerWithHooks(t, nil)
+	mux := srv.Config.Handler.(*http.ServeMux)
+	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/image-cache/page" {
+			http.Error(w, "cache down", http.StatusBadGateway)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	}))
+	defer broken.Close()
+	_ = fail
+
+	client := NewClient(broken.URL)
+	client.UseImageCache(true)
+	a := New(client)
+	tt := ui.NewTester(a.View, 1280, 860)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "开始阅读")
+	if err := tt.Click("开始阅读"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "第 1 页加载失败")
+
+	if !tt.HasText("绕过缓存重试") {
+		t.Fatalf("bypass button missing; texts=%q", tt.Texts())
+	}
+	// The live endpoint on the fake backend serves images, so choosing the
+	// bypass loads the page without the cache.
+	if err := tt.Click("绕过缓存重试本页"); err != nil {
+		t.Fatalf("click bypass: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if a.pageImages.Get(a.client.LivePageImageURL("https://img.example/page-0.jpg")) != nil {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if got := a.pageImages.Get(a.client.LivePageImageURL("https://img.example/page-0.jpg")); got == nil {
+		t.Fatal("live endpoint did not serve the page after bypass")
 	}
 }

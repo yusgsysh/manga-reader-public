@@ -824,9 +824,16 @@ func (a *App) galleryCard(c *ui.Context, g Gallery) {
 			ui.Box(c).AspectRatio(3.0 / 4.0).Radius(10).Background(t.SurfaceHover)
 		}
 		ui.Text(c, displayTitle(g)).FontSize(13).SingleLine()
-		meta := fmt.Sprintf("%s · %d 页", g.Category, g.Pages)
-		if g.Reading != nil && g.Reading.CurrentPage > 0 {
+		var meta string
+		switch {
+		case g.Reading != nil && g.Reading.Completed:
+			// 读完了 stays visible: the shelf should say so, not silently
+			// look like page 1 of a fresh gallery.
+			meta = fmt.Sprintf("%s · 已读完 · %d 页", g.Category, g.Pages)
+		case g.Reading != nil && g.Reading.CurrentPage > 0:
 			meta = fmt.Sprintf("%s · 读到第 %d 页", g.Category, g.Reading.CurrentPage+1)
+		default:
+			meta = fmt.Sprintf("%s · %d 页", g.Category, g.Pages)
 		}
 		ui.Text(c, meta).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		if len(g.Tags) > 0 {
@@ -1006,7 +1013,9 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 				}
 				ui.Text(c, displayTitle(g)).FontSize(22).Bold().Grow(1)
 				label := "开始阅读"
-				if next := g.NextPage(); next > 0 {
+				if s.readingKnown && s.reading >= g.Pages-1 && g.Pages > 0 {
+					label = "重读"
+				} else if next := g.NextPage(); next > 0 {
 					label = fmt.Sprintf("继续阅读（第 %d 页）", next+1)
 				}
 				if ui.PrimaryButton(c, label).Clicked() {

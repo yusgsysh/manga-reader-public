@@ -51,6 +51,9 @@ type Settings struct {
 	// empty means the system's tag, which the UI shows as 简体中文 when the
 	// system asks for Chinese.
 	Language string `json:"language,omitempty"`
+	// CookieInKeyring records that the cookie lives in the OS credential
+	// store rather than this file, so Load knows to fetch it from there.
+	CookieInKeyring bool `json:"cookie_in_keyring,omitempty"`
 }
 
 // AppearanceSource validates Appearance for mygo.Theme.SetSource: an unknown
@@ -173,15 +176,40 @@ func loadSettingsFrom(dir string) (Settings, error) {
 	default:
 		return s, fmt.Errorf("read %s: %w", filepath.Join(dir, configFileName), err)
 	}
+	// The cookie may live in the credential store rather than the file; the
+	// file's flag decides. A store miss (the entry was deleted, a different
+	// user, the store went away) falls back to whatever the file holds.
+	if s.CookieInKeyring && s.Cookie == "" {
+		if cookie, err := keyringLoad(); err == nil && cookie != "" {
+			s.Cookie = cookie
+		}
+	}
 	return settingsFromEnv(s), nil
 }
 
-// SaveSettings writes config.json atomically. The file holds the cookie, so
-// it is created with 0600 and the whole file is replaced at once.
+// SaveSettings persists the settings. The cookie goes to the OS credential
+// store when one answers (so it stops sitting in a plain-text file) and the
+// rest to config.json; the file's cookie field is then cleared. When no
+// store is available the cookie stays in config.json, written 0600 as
+// before. Either way the file remains the source of the non-secret settings.
 func SaveSettings(s Settings) error {
 	dir, err := ConfigDir()
 	if err != nil {
 		return err
+	}
+	if s.Cookie != "" && KeyringAvailable() {
+		if err := keyringSave(s.Cookie); err == nil {
+			// Stored: keep the file free of the secret. A stale file copy
+			// from before the keyring is overwritten with an empty field.
+			s.Cookie = ""
+			// Remember that the keyring holds it, so a load without the
+			// file's cookie still reaches the engine.
+			s.CookieInKeyring = true
+		}
+	} else if s.Cookie == "" && s.CookieInKeyring {
+		// The caller cleared the cookie (a logout): drop it from the store.
+		_ = keyringDelete()
+		s.CookieInKeyring = false
 	}
 	return saveSettingsTo(dir, s)
 }

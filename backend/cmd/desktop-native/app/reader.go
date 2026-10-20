@@ -552,15 +552,17 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 					bitmap = a.pageCache.Get(int(r.id), r.page)
 				}
 				// Two pages side by side, left then right. In right-to-left
-				// mode the left page is the later one, as in Japanese manga.
+				// mode the spread swaps: the later page sits on the left,
+				// as in Japanese manga.
 				first, second := r.page, -1
 				if r.paging.double && r.page+1 < len(r.pages) {
 					second = r.page + 1
 				}
+				left, right := swapSpread(r.paging.rtl, first, second)
 				ui.Row(c).Fill().Children(func() {
-					a.readerPageImage(c, r, first)
-					if second >= 0 {
-						a.readerPageImage(c, r, second)
+					a.readerPageImage(c, r, left)
+					if right >= 0 {
+						a.readerPageImage(c, r, right)
 					}
 				})
 			})
@@ -696,6 +698,16 @@ func (a *App) readerJumpTo(r *Reader) {
 	a.readerJump = ""
 }
 
+// swapSpread orders a two-page spread: left-to-right shows the pages in
+// order; right-to-left swaps them, so the later page sits on the left as
+// Japanese manga do. A single page (second < 0) is unaffected.
+func swapSpread(rtl bool, first, second int) (left, right int) {
+	if rtl && second >= 0 {
+		return second, first
+	}
+	return first, second
+}
+
 func absFloat(v float32) float32 {
 	if v < 0 {
 		return -v
@@ -762,6 +774,15 @@ func (a *App) readerPagePlaceholder(c *ui.Context, r *Reader, page int, url stri
 			ui.Text(c, "第 "+strconv.Itoa(page+1)+" 页加载失败").FontSize(12).TextColor(t.Danger)
 			if ui.Button(c, "重试").Clicked() {
 				a.pageImages.Retry(url)
+			}
+			// A second failure means the cache path itself is the problem
+			// (a full or unwritable cache): offer the live endpoint, which
+			// skips the local cache entirely. Only shown when cache mode is
+			// on — with it off, url is already the live endpoint.
+			if a.client.UsingImageCache() {
+				if ui.Button(c, "绕过缓存重试").Label("绕过缓存重试本页").Clicked() {
+					a.pageImages.Retry(a.client.LivePageImageURL(r.pages[page]))
+				}
 			}
 			return
 		}
