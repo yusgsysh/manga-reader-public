@@ -157,9 +157,14 @@ type detailState struct {
 	busy        bool
 
 	// thumbGrid scrolls the detail page's page-thumbnail grid; thumbSel is
-	// the chosen item.
+	// the cell the keyboard has moved to.
 	thumbGrid *ui.GridState
 	thumbSel  int
+
+	// reading is the saved page, loaded with the bookshelf status, which
+	// the grid marks as where reading stopped.
+	reading      int
+	readingKnown bool
 
 	// offline download started from this page.
 	downloadBusy bool
@@ -867,6 +872,7 @@ func (a *App) startDetailLoad(s *detailState) {
 			d, err = a.client.CachedGallery(ctx, id, token)
 		}
 		inShelf, shelfErr := a.client.BookshelfStatus(ctx, id, token)
+		reading, readingErr := a.client.Progress(ctx, id, token)
 		a.update(func() {
 			if s.loadID != lid {
 				return
@@ -884,6 +890,9 @@ func (a *App) startDetailLoad(s *detailState) {
 			s.loaded = true
 			if shelfErr == nil {
 				s.inBookshelf, s.shelfKnown = inShelf, true
+			}
+			if readingErr == nil {
+				s.reading, s.readingKnown = reading.CurrentPage, true
 			}
 		})
 	}()
@@ -1021,6 +1030,12 @@ func (a *App) pageThumbGrid(c *ui.Context, g Gallery, s *detailState) {
 		return
 	}
 
+	// The page the reader would open at, marked in the grid: the saved
+	// progress, so the grid says where reading stopped.
+	marked := -1
+	if s.readingKnown && s.reading >= 0 && s.reading < g.Pages {
+		marked = s.reading
+	}
 	if s.thumbGrid == nil {
 		s.thumbSel = -1
 		s.thumbGrid = &ui.GridState{
@@ -1031,9 +1046,29 @@ func (a *App) pageThumbGrid(c *ui.Context, g Gallery, s *detailState) {
 	}
 	ui.GridView(c, s.thumbGrid, g.Pages, 120, 190, func(i int) {
 		cell := ui.Column(c).Gap(4).Focusable().Label(fmt.Sprintf("第 %d 页", i+1))
+		if i == marked {
+			cell.Radius(8).Border(2, t.Accent)
+		}
 		cell.Children(func() {
-			ui.Image(c, a.pageThumbs.Get(a.client.PageThumbnailURL(g.ID, g.Token, i))).
-				AspectRatio(200.0 / 282.0).Fit(ui.Cover).Radius(8)
+			url := a.client.PageThumbnailURL(g.ID, g.Token, i)
+			thumb := a.pageThumbs.Get(url)
+			switch {
+			case thumb != nil:
+				ui.Image(c, thumb).AspectRatio(200.0 / 282.0).Fit(ui.Cover).Radius(8)
+			case a.pageThumbs.Err(url) != "":
+				// A failed thumbnail offers its retry in place.
+				box := ui.Box(c).AspectRatio(200.0 / 282.0).Radius(8).Center().
+					Background(t.SurfaceHover).Label("第 " + strconv.Itoa(i+1) + " 页缩略图加载失败，点击重试")
+				box.Children(func() {
+					ui.Text(c, "加载失败").FontSize(11).TextColor(t.Danger)
+				})
+				if box.Clicked() {
+					a.pageThumbs.Retry(url)
+				}
+				return
+			default:
+				ui.Box(c).AspectRatio(200.0 / 282.0).Radius(8).Background(t.SurfaceHover)
+			}
 			ui.Textf(c, "%d", i+1).FontSize(11).TextColor(t.TextMuted)
 		})
 		if cell.Clicked() {
