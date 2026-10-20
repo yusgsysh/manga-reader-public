@@ -20,7 +20,8 @@
 - **单实例 + 访问令牌**：重复启动聚焦已有窗口；内嵌后端要求每次启动的随机令牌
 - **离线下载**：详情页一键排队，`/downloads` 显示任务状态、进度、失败页数，可取消/删除，完成后「离线阅读」或导出 ZIP
 - **种子**：详情页按需加载 torrents 列表，可保存 `.torrent` 文件
-- **标签设置**：喜欢/不喜欢 + 权重规则，列表卡片与详情页标签按规则着色排序并显示中文翻译，支持与源站 My Tags 三路合并同步
+- **标签设置**：喜欢/不喜欢 + 权重规则，列表卡片与详情页标签按规则着色排序并显示中文翻译，支持与源站 My Tags 三路合并同步（冲突逐个选择保留本地或源站）
+- **自定义翻译**：把 EhTagTranslation 没有的词条写进 `my-tag-translations.json`，可导入/导出（JSON，`namespace:tag → 名称`），叠加显示在数据库之上
 - 无后端时显示错误页与「重试」，不会空白或崩溃
 
 暂未实现：逐条冲突选择、数据同步、三平台打包。
@@ -113,8 +114,9 @@ cmd/desktop-native/
 - 阅读进度在翻页 600ms 后异步上报（批量），离开阅读器时立即补写；详情页按钮显示「继续阅读（第 N 页）」。
 - 离线下载：详情页先取页面列表，再 `POST /api/prefill` 建任务；`/downloads` 用 `c.After` 在每 1.5s 触发一次轮询，只轮询 `queued`/`running` 的任务。删除任务时先本地移除并把 ID 记入 `dropped`，避免删除前发出的列表请求把它带回来。
 - 标签规则：`Gallery.Tags` 存 `{namespace,name}`，列表接口给的 `"ns:name"` 用 `splitTag` 拆开；卡片最多显示前两个标签。`View` 每次比对 `announcedRules`，规则一变就通知已加载的列表与详情重画，无需重新请求。
-- 标签规则：`TagRule` 与后端 `tag_preference` 一一对应，保存是**全量替换**（`PUT /api/tag-settings`）；详情页 `sortedTags` + `tagChip` 按喜欢→不喜欢→其余排序并着色（#3377FF / #FF6666）。同步按钮把「确认删除」「冲突处理」两个输入框翻译成 `confirm_deletes` / `conflict_resolution` 发给后端。
+- 标签规则：`TagRule` 与后端 `tag_preference` 一一对应，保存是**全量替换**（`PUT /api/tag-settings`）；详情页 `sortedTags` + `tagChip` 按喜欢→不喜欢→其余排序并着色（#3377FF / #FF6666）。同步后如有冲突会弹出逐条对话框：每个冲突选「保留本地」（推送本地值）或「保留源站」（拉取源站值），答案随 `conflicts: [{tag, resolution}]` 一次性回给 `POST /api/tag-settings/sync`，优先于整批的 `conflict_resolution`。
 - 标签翻译：数据库取 `db.text.json`（发布里的 `db.text.js` 需要 JS inflate 运行时，原生端没法执行），解析出 `namespace:name → 中文`，缓存为 `<缓存目录上级>/tag-translations.json`，后台加载完成后请求一帧。加载失败会保留旧表。
+- 自定义翻译：`<缓存目录上级>/my-tag-translations.json`（同为 `namespace:tag → 名称` 的 JSON），内存中合并后叠加到数据库表上——替换已有的名称、新增数据库没有的词条，设置页状态行显示「自定义 N 条」。「导入自定义翻译」把所选文件与当前词条合并（新值覆盖旧值）后写回该文件；「导出自定义翻译」把当前自定义词条写成同格式。两个对话框都可以取消，取消不算错误。
 - 种子：进入详情页不会自动抓取（上游实时抓取较慢），点「查看种子」才加载；保存 `.torrent` 与 ZIP 共用 `Client.downloadTo`。
 - ZIP 导出：完成后点「导出 ZIP」，`mygo.Dialog.Save` 选路径（测试里用 `pickSavePath` 变量替换），然后流式 `io.Copy` 到文件，不占内存；失败时删除半成品。
 - 搜索输入用 300ms 防抖（`scheduleSearch`）：每次文本变化只保留最后一个定时器，因此连续输入只发一次请求。

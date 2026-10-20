@@ -731,7 +731,7 @@ func (a *App) tagSuggestionRow(c *ui.Context, s *TagSettings, sug TagSuggestion)
 }
 
 // tagSearchPanel shows the translation database's state, a query box and its
-// matches, and the update button.
+// matches, and the update, import and export buttons.
 func (a *App) tagSearchPanel(c *ui.Context, s *TagSettings) {
 	t := c.Theme()
 	db := &a.translations
@@ -743,10 +743,23 @@ func (a *App) tagSearchPanel(c *ui.Context, s *TagSettings) {
 		if ui.Button(c, "更新翻译库").Disabled(db.isLoading()).Clicked() {
 			db.Update()
 		}
-		if db.isLoading() {
+		if ui.Button(c, "导入自定义翻译").Disabled(a.transBusy).Clicked() {
+			a.importCustomTranslations()
+		}
+		if ui.Button(c, "导出自定义翻译").Disabled(a.transBusy).Clicked() {
+			a.exportCustomTranslations()
+		}
+		if a.transBusy {
 			ui.Spinner(c)
 		}
 	})
+	if a.transMsg != "" {
+		ui.Text(c, a.transMsg).FontSize(11).TextColor(t.TextMuted)
+	}
+	if db.CustomPath() != "" {
+		ui.Text(c, "自定义翻译保存在 "+db.CustomPath()+"，导入会与它合并。").
+			FontSize(11).TextColor(t.TextMuted)
+	}
 	for _, sug := range db.Search(s.tagQuery, 8) {
 		a.tagSuggestionRow(c, s, sug)
 	}

@@ -2562,3 +2562,181 @@ func TestConflictDialogMovesOn(t *testing.T) {
 		t.Fatalf("dialog for no conflicts = %+v", d)
 	}
 }
+
+// TestCustomTranslationsRoundTrip covers the user's own translations file:
+// parsing both shapes it may arrive in, normalising junk out, and the merge
+// where the imported file wins over what is already there.
+func TestCustomTranslationsRoundTrip(t *testing.T) {
+	flat, err := readCustomTranslations([]byte(`{"female:yuri":" 百合 ","nonsense":"", "bare":"x"}`))
+	if err != nil {
+		t.Fatalf("read flat: %v", err)
+	}
+	if len(flat) != 1 || flat["female:yuri"] != "百合" {
+		t.Fatalf("flat = %v, want the trimmed yuri entry only", flat)
+	}
+
+	wrapped, err := readCustomTranslations([]byte(`{"translations":{"male:y":"男生"}, "version":2}`))
+	if err != nil {
+		t.Fatalf("read wrapped: %v", err)
+	}
+	if len(wrapped) != 1 || wrapped["male:y"] != "男生" {
+		t.Fatalf("wrapped = %v", wrapped)
+	}
+	if _, err := readCustomTranslations([]byte(`[1,2,3]`)); err == nil {
+		t.Fatal("a JSON array was accepted")
+	}
+
+	// Export is the same shape the import reads.
+	path := filepath.Join(t.TempDir(), "mine.tag-tr.json")
+	if err := exportCustomTranslations(path, customTranslationsFile{"female:yuri": "百合"}); err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	back, err := readCustomTranslations(mustRead(t, path))
+	if err != nil || back["female:yuri"] != "百合" {
+		t.Fatalf("round trip = %v, %v", back, err)
+	}
+}
+
+func mustRead(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+// TestTranslationImportMergesAndShows covers the DB side of the import: the
+// entries overlay the downloaded tables at once, replacing names it knows
+// and adding ones it does not, and the status line counts them.
+func TestTranslationImportMergesAndShows(t *testing.T) {
+	dir := t.TempDir()
+	db := &TagTranslationDB{path: filepath.Join(dir, "db.json"), customPath: filepath.Join(dir, "mine.json")}
+	// A small "downloaded" database.
+	writeFileAtomic(db.path, []byte(`{"data":[{"namespace":"female","data":{"yuri":{"name":"百合","intro":"girls' love"}}}]}`))
+
+	db.Load()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && !db.Ready() {
+		time.Sleep(2 * time.Millisecond)
+	}
+	if !db.Ready() {
+		t.Fatalf("db not ready: %s", db.Status())
+	}
+	if got := db.Lookup("female", "yuri"); got != "百合" {
+		t.Fatalf("lookup = %q, want 百合", got)
+	}
+
+	// Importing a file replaces the name and adds a tag the database lacks.
+	if err := os.WriteFile(db.customPath, []byte(`{"female:yuri":"女同","male:y":"男生"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	n, err := db.importCustomTranslations(db.customPath)
+	if err != nil || n != 2 {
+		t.Fatalf("import = %d, %v", n, err)
+	}
+	if got := db.Lookup("female", "yuri"); got != "女同" {
+		t.Fatalf("lookup after import = %q, want the custom 女同", got)
+	}
+	if got := db.Lookup("male", "y"); got != "男生" {
+		t.Fatalf("added lookup = %q, want 男生", got)
+	}
+	// The downloaded description survives the name replacement.
+	_, desc := db.Describe("female", "yuri")
+	if desc != "girls' love" {
+		t.Fatalf("description after import = %q, want girls' love", desc)
+	}
+	if !strings.Contains(db.Status(), "自定义 2 条") {
+		t.Fatalf("status = %q, want the custom count", db.Status())
+	}
+
+	// The second import merges: existing entries stay, new ones join.
+	if err := os.WriteFile(db.customPath, []byte(`{"tag:netorare":"牛头人"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.importCustomTranslations(db.customPath); err != nil {
+		t.Fatal(err)
+	}
+	if got := db.Lookup("female", "yuri"); got != "女同" {
+		t.Fatalf("merged lookup = %q, want the earlier 女同 kept", got)
+	}
+	if got := db.Lookup("tag", "netorare"); got != "牛头人" {
+		t.Fatalf("merged add = %q, want 牛头人", got)
+	}
+}
+
+// TestTagPageImportExportTranslations drives the tag page's import and export
+// buttons end to end: the chosen file is merged in and the export writes the
+// custom entries back out.
+func TestTagPageImportExportTranslations(t *testing.T) {
+	dir := t.TempDir()
+	incoming := filepath.Join(dir, "incoming.tag-tr.json")
+	if err := os.WriteFile(incoming, []byte(`{"female:yuri":"女同","tag:netorare":"牛头人"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	exportPath := filepath.Join(dir, "mine.tag-tr.json")
+
+	srv := newFakeServer(t)
+	backend := &fakeBackend{serverURL: srv.URL, base: srv.URL, configured: true,
+		storage: BackendStorage{DBPath: filepath.Join(dir, "m.db"),
+			CacheDir: filepath.Join(dir, "images"), ConfigPath: filepath.Join(dir, "config.json")}}
+	a := New(NewClient(srv.URL))
+	a.SetBackend(backend)
+	// A small database file so the load does not reach the network.
+	if err := writeFileAtomic(filepath.Join(dir, "tag-translations.json"),
+		[]byte(`{"data":[{"namespace":"female","data":{"yuri":{"name":"百合"}}}]}`)); err != nil {
+		t.Fatal(err)
+	}
+
+	opened := false
+	oldOpen, oldSave := pickOpenPath, pickSavePath
+	pickOpenPath = func(parent *mygo.Window, title string) (string, error) {
+		opened = true
+		return incoming, nil
+	}
+	pickSavePath = func(parent *mygo.Window, dir, name string) (string, error) {
+		return exportPath, nil
+	}
+	t.Cleanup(func() { pickOpenPath, pickSavePath = oldOpen, oldSave })
+
+	tt := ui.NewTester(a.View, 1280, 860)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("标签设置"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "导入自定义翻译")
+	waitText(t, tt, "已加载")
+
+	if err := tt.Click("导入自定义翻译"); err != nil {
+		t.Fatalf("click import: %v", err)
+	}
+	waitText(t, tt, "已导入 2 条自定义翻译")
+	if !opened {
+		t.Fatal("the open dialog was not used")
+	}
+	if got := a.translations.Lookup("female", "yuri"); got != "女同" {
+		t.Fatalf("lookup after import = %q, want 女同", got)
+	}
+
+	if err := tt.Click("导出自定义翻译"); err != nil {
+		t.Fatalf("click export: %v", err)
+	}
+	waitText(t, tt, "已导出 2 条自定义翻译")
+	out, err := readCustomTranslations(mustRead(t, exportPath))
+	if err != nil || out["female:yuri"] != "女同" || out["tag:netorare"] != "牛头人" {
+		t.Fatalf("exported file = %v, %v", out, err)
+	}
+
+	// A canceled dialog is not an error and clears the busy state.
+	pickOpenPath = func(parent *mygo.Window, title string) (string, error) {
+		return "", nil
+	}
+	if err := tt.Click("导入自定义翻译"); err != nil {
+		t.Fatal(err)
+	}
+	waitNoText(t, tt, "已导入")
+	if a.transBusy {
+		t.Fatal("still busy after a canceled dialog")
+	}
+}

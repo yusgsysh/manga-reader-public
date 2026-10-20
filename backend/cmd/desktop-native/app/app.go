@@ -96,6 +96,11 @@ type App struct {
 	// announcedRules is the rule list last copied into lists and details
 	// that show tag chips, so a rule change recolours them.
 	announcedRules []TagRule
+	// transBusy/transMsg report the tag translation import/export the tag
+	// page started; transExportInFlight is set while the dialog is up.
+	transBusy bool
+	transMsg  string
+
 	// zipBusy is the jobs whose ZIP is being saved; zipMsg reports the last
 	// save's result on the downloads page.
 	zipBusy map[string]bool
@@ -237,6 +242,7 @@ func (a *App) SetBackend(b Backend) {
 	a.setAuthTokenLocked(b.AuthToken())
 	a.storage = b.Storage()
 	a.translations.path = tagTranslationCachePath(a.storage.CacheDir)
+	a.translations.customPath = customTranslationsPath(a.storage.CacheDir)
 	a.appearance = b.Appearance()
 	a.language = b.Language()
 	if b.Configured() {
@@ -1721,4 +1727,12 @@ func cookieLabel(configured bool) string {
 		return "已配置"
 	}
 	return "未配置"
+}
+
+// requestFrame asks the window for one more frame, for state changed outside
+// update. Without a window (tests) the next Frame covers it.
+func (a *App) requestFrame() {
+	if a.win != nil {
+		a.win.Update(func() {})
+	}
 }
