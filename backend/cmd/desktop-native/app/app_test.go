@@ -55,6 +55,13 @@ func galleryItem(id int, token, title, category string, pages int) map[string]an
 	}
 }
 
+// savedPage is the progress the fake backend reports for gallery 1. Tests
+// that need a resumed page set it before the detail page loads.
+var savedPage struct {
+	sync.Mutex
+	n int
+}
+
 func newFakeServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return newFakeServerWithHooks(t, nil)
@@ -189,6 +196,8 @@ func newFakeServerWithHooks(t *testing.T, onImage func(r *http.Request)) *httpte
 		writeJSON(w, map[string]any{"deleted": 1})
 	})
 
+	// The saved page of gallery 1, which its detail page reads to mark the
+	// grid; tests set it before opening the page.
 	shelf := []map[string]any{{
 		"id": 1, "token": "tok1", "title": "示例 A", "category": "doujinshi",
 		"thumbnail": "https://img.example/1.jpg", "pages": 3,
@@ -295,7 +304,9 @@ func newFakeServerWithHooks(t *testing.T, onImage func(r *http.Request)) *httpte
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		writeJSON(w, map[string]any{"current_page": 0, "progress": 0, "completed": false})
+		savedPage.Lock()
+		defer savedPage.Unlock()
+		writeJSON(w, map[string]any{"current_page": savedPage.n, "progress": 0, "completed": false})
 	})
 
 	image := func(w http.ResponseWriter, r *http.Request) {
@@ -488,6 +499,103 @@ func TestReaderPreloadsNearbyPages(t *testing.T) {
 		if !fetched[url] {
 			t.Errorf("page %s was not preloaded; fetched=%v", url, fetched)
 		}
+	}
+}
+
+// TestThumbnailMarksSavedPage covers the grid's mark: the page the reader
+// would open at carries a border, so the detail page says where reading
+// stopped.
+func TestThumbnailMarksSavedPage(t *testing.T) {
+	savedPage.Lock()
+	savedPage.n = 2
+	savedPage.Unlock()
+	t.Cleanup(func() {
+		savedPage.Lock()
+		savedPage.n = 0
+		savedPage.Unlock()
+	})
+
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "共 3 页 · 点击跳转")
+
+	s := a.details[1]
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && !s.readingKnown {
+		tt.Frame()
+		time.Sleep(2 * time.Millisecond)
+	}
+	if !s.readingKnown || s.reading != 2 {
+		t.Fatalf("reading = %d (known %v), want page 2", s.reading, s.readingKnown)
+	}
+	// The grid's mark is the page the button would open.
+	if next := s.g.NextPage(); next >= 0 && s.g.Reading != nil && next != s.reading {
+		t.Fatalf("button offers page %d, grid marks %d", next+1, s.reading+1)
+	}
+}
+
+// TestThumbnailFailureRetries checks a thumbnail that could not be cropped
+// shows a retry in its cell, which starts the request again.
+func TestThumbnailFailureRetries(t *testing.T) {
+	var mu sync.Mutex
+	fail := true
+	hits := 0
+	srv := newFakeServerWithHooks(t, nil)
+	// Wrap the thumbnail endpoint so the first request fails.
+	mux := srv.Config.Handler.(*http.ServeMux)
+	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/image-cache/page-thumbnail" {
+			mu.Lock()
+			hits++
+			shouldFail := fail
+			mu.Unlock()
+			if shouldFail {
+				http.Error(w, "crop failed", http.StatusBadGateway)
+				return
+			}
+		}
+		mux.ServeHTTP(w, r)
+	}))
+	defer broken.Close()
+
+	client := NewClient(broken.URL)
+	client.UseImageCache(true)
+	a := New(client)
+	tt := ui.NewTester(a.View, 1280, 860)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "共 3 页 · 点击跳转")
+	waitText(t, tt, "加载失败")
+
+	mu.Lock()
+	fail = false
+	before := hits
+	mu.Unlock()
+	if err := tt.Click("第 1 页缩略图加载失败，点击重试"); err != nil {
+		t.Fatalf("click retry: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		mu.Lock()
+		n := hits
+		mu.Unlock()
+		if n > before {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	waitText(t, tt, "1")
+	// The cell that failed now shows its page number as usual.
+	if a.pageThumbs.Err(a.client.PageThumbnailURL(1, "tok1", 0)) != "" {
+		t.Fatalf("thumbnail still failed after retry")
 	}
 }
 
