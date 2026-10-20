@@ -34,6 +34,12 @@ import (
 var mainWindow atomic.Pointer[mygo.Window]
 
 func main() {
+	// Crashes go to a file next to config.json: a GUI app has no visible
+	// stderr, so a panic would otherwise leave nothing behind.
+	if path := desktop.InstallCrashLog(); path != "" {
+		log.Printf("崩溃日志: %s", path)
+	}
+
 	baseURL := strings.TrimSpace(os.Getenv("MANGA_READER_API"))
 
 	// Single instance is a shipped-app concern: only one process should own
@@ -94,7 +100,11 @@ func main() {
 		}
 		if settings.CookieConfig().IsValid() {
 			if _, err := embedded.Start(settings.Cookie); err != nil {
+				// A database or cache path that cannot be opened must not
+				// take the window down: the setup/settings screen shows the
+				// reason (StartError) and a save from it retries.
 				log.Printf("启动内嵌后端失败: %v", err)
+				embedded.setStartError(fmt.Sprintf("内置服务启动失败：%v\n可在下方修正 Cookies 后重试；若提示数据库或缓存目录问题，请检查对应路径的权限。", err))
 			}
 		}
 		client := app.NewClient(embedded.BaseURL())

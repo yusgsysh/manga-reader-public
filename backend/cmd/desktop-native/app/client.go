@@ -94,6 +94,14 @@ func (c *Client) authTokenValue() string {
 }
 
 // imagePath returns the cache or live image proxy path for kind.
+// UsingImageCache reports whether image URLs point at the read-through
+// cache proxy.
+func (c *Client) UsingImageCache() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.imageCache
+}
+
 func (c *Client) imagePath(kind string) string {
 	c.mu.RLock()
 	cached := c.imageCache
@@ -671,6 +679,24 @@ func (c *Client) PageImageURL(source string) string {
 		return ""
 	}
 	return c.BaseURL() + c.imagePath("page") + "?url=" + url.QueryEscape(source)
+}
+
+// LivePageImageURL is the page image's live proxy endpoint, used as a
+// fallback when the read-through cache proxy keeps failing (a full or
+// unwritable cache, for example): live skips the cache write entirely.
+func (c *Client) LivePageImageURL(source string) string {
+	if source == "" {
+		return ""
+	}
+	return c.BaseURL() + "/api/image/page" + "?url=" + url.QueryEscape(source)
+}
+
+// LiveThumbnailURL is the cover thumbnail's live proxy endpoint.
+func (c *Client) LiveThumbnailURL(source string) string {
+	if source == "" {
+		return ""
+	}
+	return c.BaseURL() + "/api/image/thumbnail" + "?url=" + url.QueryEscape(source)
 }
 
 func (c *Client) PageThumbnailURL(id int64, token string, index int) string {

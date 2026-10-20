@@ -48,6 +48,14 @@ func (b *embeddedBackend) StartError() string {
 // it: a successful start rewrote the settings file.
 func (b *embeddedBackend) clearStartErrorLocked() { b.startErr = "" }
 
+// setStartError records a startup failure for the setup/settings screens.
+// The caller (main) has already logged it.
+func (b *embeddedBackend) setStartError(msg string) {
+	b.mu.Lock()
+	b.startErr = msg
+	b.mu.Unlock()
+}
+
 func (b *embeddedBackend) BaseURL() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
