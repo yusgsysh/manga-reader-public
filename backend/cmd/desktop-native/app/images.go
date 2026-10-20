@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,8 +39,10 @@ type imageEntry struct {
 	err      string
 	loading  bool
 	failedAt time.Time
-	prev     *imageEntry
-	next     *imageEntry
+	// cancel ends a download the view no longer wants (see Release).
+	cancel context.CancelFunc
+	prev   *imageEntry
+	next   *imageEntry
 }
 
 func NewImageStore(max int) *ImageStore {
@@ -156,6 +159,30 @@ func (s *ImageStore) Err(url string) string {
 	return ""
 }
 
+// Release drops an entry that the view no longer wants, which ends its
+// download. The reader calls it for pages that scrolled out of its preload
+// window: turning through a gallery quickly queues one fetch per page
+// passed, and those downloads would otherwise keep competing with the page
+// now on screen. An entry that finished loading is kept, and one another
+// part of the view is showing is left to Get's next use.
+func (s *ImageStore) Release(url string) {
+	if url == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.entries[url]
+	if e == nil || !e.loading {
+		return
+	}
+	// A cancelled entry is removed rather than marked failed: a later Get
+	// for the page starts it fresh, without waiting out the retry delay.
+	if e.cancel != nil {
+		e.cancel()
+	}
+	s.removeLocked(e)
+}
+
 // Retry drops a failed entry so the next Get starts the download again.
 func (s *ImageStore) Retry(url string) {
 	if url == "" {
@@ -169,12 +196,18 @@ func (s *ImageStore) Retry(url string) {
 }
 
 func (s *ImageStore) load(url string) {
+	if err := s.cancelOf(url); err != nil {
+		// Released between the Get that queued it and this goroutine: the
+		// entry is gone, so its result would have nowhere to go.
+		return
+	}
 	bitmap, err := s.fetch(url)
 
 	s.mu.Lock()
 	if e := s.entries[url]; e != nil {
 		e.loading = false
 		e.bitmap = bitmap
+		e.cancel = nil
 		if err != nil {
 			e.err = err.Error()
 			e.failedAt = time.Now()
@@ -191,14 +224,33 @@ func (s *ImageStore) load(url string) {
 	}
 }
 
-func (s *ImageStore) fetch(url string) (*ui.Bitmap, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
+// cancelOf gives the download of url its cancel handle, or reports that the
+// entry is gone.
+func (s *ImageStore) cancelOf(url string) error {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e := s.entries[url]; e != nil && e.loading {
+		return nil
+	}
+	return fmt.Errorf("已放弃 %s", url)
+}
+
+func (s *ImageStore) fetch(url string) (*ui.Bitmap, error) {
+	s.mu.Lock()
+	ctx, cancel := context.WithCancel(context.Background())
+	if e := s.entries[url]; e != nil && e.loading {
+		e.cancel = cancel
+	} else {
+		cancel()
+	}
 	user, pass, token := s.user, s.pass, s.token
 	s.mu.Unlock()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
 	if user != "" {
 		req.SetBasicAuth(user, pass)
 	}
