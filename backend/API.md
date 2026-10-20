@@ -1511,10 +1511,11 @@ sum(rate(image_cache_requests_total[5m]))
   - 新增：表单 `usertag_action=add`；更新：`s.exhentai.org/api.php` `setusertag`
   - **本地删除**（基线有、本地无、源站未变）：仅当 `confirm_deletes: true` 或该删除已在冲突中被“保留本地”确认时才执行批量删除（`usertag_action=mass`），否则只出现在 `pending_deletes` 里等客户端确认
 - **仅源站变更** → **拉取**：导入/更新本地规则；源站已删则同步删除本地规则（拉取不写源站，也无需确认）
-- **双方都变更** → **冲突**：该标签不动（本地、源站、基线均保持原样），作为 `conflicts` 返回，由客户端弹窗让用户选择保留哪边：
+- **双方都变更** → **冲突**：该标签不动（本地、源站、基线均保持原样），作为 `conflicts` 返回，由客户端让用户选择保留哪边：
   - `conflict_resolution: "remote"`（保留源站）→ 拉取源站值
   - `conflict_resolution: "local"`（保留本地）→ 推送本地值（含删除，视为已确认，无需 `confirm_deletes`）
-  - 省略 → 只报告冲突，其余非冲突标签仍正常同步
+  - `conflicts: [{ "tag": "…", "resolution": "local" \| "remote" }]` → 逐个标签的决定，**优先于** `conflict_resolution`，因此一次请求可以一个冲突保留源站、另一个保留本地
+  - 省略（两者都没有该标签的决定）→ 只报告冲突，其余非冲突标签仍正常同步
 
 首次运行（基线为空）：源站独有 → 全部导入本地；本地独有 → 推送源站；两边都有且不一致 → 冲突。源站行归一化：`Hidden → dislike`、`Watched → like`、两者皆无 → `weight<0 ? dislike : like`，weight 截断到 ±999（符号原样保留，与 action 无关），源站自定义色不参与比较。合并的拉取与基线更新在同一事务内完成；推送成功才把基线收敛到推送值（失败保留源站原值以便下次重试）。
 
@@ -1525,11 +1526,19 @@ sum(rate(image_cache_requests_total[5m]))
 **Request Body（可选）:**
 
 ```json
-{ "confirm_deletes": false, "conflict_resolution": "remote" }
+{
+  "confirm_deletes": false,
+  "conflict_resolution": "",
+  "conflicts": [
+    { "tag": "male:gender change", "resolution": "remote" },
+    { "tag": "language:chinese", "resolution": "local" }
+  ]
+}
 ```
 
 - `confirm_deletes`：确认执行 `pending_deletes` 里的源站删除（默认 `false`）
 - `conflict_resolution`：`"remote"` / `"local"`，一次性解决本次返回的全部冲突（省略则不解决）；其他值 → `400`
+- `conflicts`：按标签逐个解决冲突，`resolution` 同上；`tag` 按小写、去空白后的标签匹配。缺少 `tag` 或 `resolution` 取值非法 → `400`
 
 **Response (200):**
 
