@@ -677,3 +677,63 @@ func (c *Client) PageThumbnailURL(id int64, token string, index int) string {
 	return c.BaseURL() + fmt.Sprintf("%s?id=%d&token=%s&index=%d",
 		c.imagePath("page-thumbnail"), id, url.QueryEscape(token), index)
 }
+
+// --- Data sync ---
+
+// SyncConfig is the client side of the sync configuration: whether the
+// engine runs, where the peer is, and its token (masked on read).
+type SyncConfig struct {
+	Enabled   bool   `json:"enabled"`
+	ServerURL string `json:"server_url"`
+	Token     string `json:"token"`
+}
+
+// SyncStatus is what the engine reports about a configured peer.
+type SyncStatus struct {
+	Enabled      bool       `json:"enabled"`
+	Configured   bool       `json:"configured"`
+	ServerURL    string     `json:"server_url"`
+	SSEConnected bool       `json:"sse_connected"`
+	LastSyncAt   *time.Time `json:"last_sync_at,omitempty"`
+	LastError    string     `json:"last_error,omitempty"`
+	Pending      int        `json:"pending"`
+}
+
+// SyncConfig loads the stored sync configuration; the token comes back
+// masked (or empty) as the backend sends it.
+func (c *Client) GetSyncConfig(ctx context.Context) (SyncConfig, error) {
+	var out SyncConfig
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	err := c.do(ctx, http.MethodGet, "/api/sync/config", nil, nil, &out)
+	return out, err
+}
+
+// SaveSyncConfig applies a partial update and returns the stored result.
+// A nil field keeps the stored value; the mask keeps the stored token.
+func (c *Client) SaveSyncConfig(ctx context.Context, enabled *bool, serverURL, token *string) (SyncConfig, error) {
+	payload := struct {
+		Enabled   *bool   `json:"enabled,omitempty"`
+		ServerURL *string `json:"server_url,omitempty"`
+		Token     *string `json:"token,omitempty"`
+	}{enabled, serverURL, token}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return SyncConfig{}, err
+	}
+	var out SyncConfig
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	err = c.do(ctx, http.MethodPut, "/api/sync/config", nil, bytes.NewReader(body), &out)
+	return out, err
+}
+
+// SyncStatus reports the engine's live state: connected, last error and how
+// many local changes are still waiting to be pushed.
+func (c *Client) SyncStatus(ctx context.Context) (SyncStatus, error) {
+	var out SyncStatus
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	err := c.do(ctx, http.MethodGet, "/api/sync/status", nil, nil, &out)
+	return out, err
+}

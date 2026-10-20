@@ -296,6 +296,70 @@ func newFakeServerWithHooks(t *testing.T, onImage func(r *http.Request)) *httpte
 	mux.HandleFunc("/api/bookshelf/1/tok1/status", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"in_bookshelf": false})
 	})
+
+	// Data sync: configuration with a masked stored token, and engine state
+	// the settings page shows beside it. syncConfigured mirrors what was
+	// last saved, so a test can see the PUT land.
+	var syncMu sync.Mutex
+	syncCfg := map[string]any{"enabled": false, "server_url": "", "token": "peer-secret"}
+	syncMask := func() string {
+		if syncCfg["token"] != "" {
+			return SyncTokenMask
+		}
+		return ""
+	}
+	mux.HandleFunc("/api/sync/config", func(w http.ResponseWriter, r *http.Request) {
+		syncMu.Lock()
+		defer syncMu.Unlock()
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, map[string]any{
+				"enabled": syncCfg["enabled"], "server_url": syncCfg["server_url"], "token": syncMask(),
+			})
+		case http.MethodPut:
+			var body struct {
+				Enabled   *bool   `json:"enabled"`
+				ServerURL *string `json:"server_url"`
+				Token     *string `json:"token"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, `{"error":"bad json"}`, http.StatusBadRequest)
+				return
+			}
+			if body.Enabled != nil {
+				syncCfg["enabled"] = *body.Enabled
+			}
+			if body.ServerURL != nil {
+				syncCfg["server_url"] = *body.ServerURL
+			}
+			if body.Token != nil {
+				if *body.Token == "" {
+					syncCfg["token"] = ""
+				} else if *body.Token != SyncTokenMask {
+					syncCfg["token"] = *body.Token
+				}
+			}
+			writeJSON(w, map[string]any{
+				"enabled": syncCfg["enabled"], "server_url": syncCfg["server_url"], "token": syncMask(),
+			})
+		}
+	})
+	mux.HandleFunc("/api/sync/status", func(w http.ResponseWriter, r *http.Request) {
+		syncMu.Lock()
+		defer syncMu.Unlock()
+		enabled, _ := syncCfg["enabled"].(bool)
+		url, _ := syncCfg["server_url"].(string)
+		token, _ := syncCfg["token"].(string)
+		configured := enabled && url != "" && token != ""
+		resp := map[string]any{
+			"enabled": enabled, "configured": configured, "server_url": url,
+			"sse_connected": configured, "pending": 0,
+		}
+		if configured {
+			resp["pending"] = 3
+		}
+		writeJSON(w, resp)
+	})
 	mux.HandleFunc("/api/bookshelf/1/tok1", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost && r.Method != http.MethodDelete {
 			t.Errorf("bookshelf method = %s", r.Method)
@@ -1088,6 +1152,7 @@ type fakeBackend struct {
 	appearance string
 	language   string
 	startErr   string
+	syncToken  string
 	storage    BackendStorage
 }
 
@@ -1191,6 +1256,19 @@ func (f *fakeBackend) Language() string {
 func (f *fakeBackend) SettingsPath() string { return f.Storage().ConfigPath }
 
 func (f *fakeBackend) StartError() string { return f.startErr }
+
+func (f *fakeBackend) SyncToken() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.syncToken
+}
+
+func (f *fakeBackend) SetSyncToken(token string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.syncToken = token
+	return nil
+}
 
 func (f *fakeBackend) clearedCount() int {
 	f.mu.Lock()
@@ -2188,6 +2266,9 @@ func TestSettingsAppearance(t *testing.T) {
 	navSettle(tt)
 	waitText(t, tt, "✓ 跟随系统")
 
+	// The sync section above pushes the appearance row past one screen.
+	tt.Scroll(600, 600, 0, 600)
+	tt.Frame()
 	if err := tt.Click("深色"); err != nil {
 		t.Fatalf("click 深色: %v", err)
 	}
@@ -2738,5 +2819,93 @@ func TestTagPageImportExportTranslations(t *testing.T) {
 	waitNoText(t, tt, "已导入")
 	if a.transBusy {
 		t.Fatal("still busy after a canceled dialog")
+	}
+}
+
+// TestSettingsSyncSection covers the data-sync section: the stored config
+// loads (token masked), saving applies the form, a masked token keeps the
+// stored one, and the engine state shows beside it.
+func TestSettingsSyncSection(t *testing.T) {
+	srv := newFakeServer(t)
+	backend := &fakeBackend{serverURL: srv.URL, base: srv.URL, configured: true}
+	a := New(NewClient(srv.URL))
+	a.SetBackend(backend)
+	tt := ui.NewTester(a.View, 1280, 860)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "数据同步")
+	waitText(t, tt, "未启用")
+
+	// Enable, fill the peer and save. The stored token is masked; typing a
+	// new one replaces it.
+	if err := tt.Click("切换同步开关"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Click("对方地址")
+	tt.Type("http://192.168.1.20:8080")
+	tt.Click("同步令牌")
+	tt.Type("peer-secret")
+	if err := tt.Click("保存同步设置"); err != nil {
+		t.Fatalf("click save: %v", err)
+	}
+	waitText(t, tt, "✓ 已启用")
+	waitText(t, tt, "已保存")
+	waitText(t, tt, "已连接")
+	waitText(t, tt, "待推送 3 条")
+	if !a.sync.form.enabled {
+		t.Fatal("form did not keep the enabled state")
+	}
+
+	// Saving again without touching the token keeps the stored secret: the
+	// form shows the mask, and the fake reports the token still set (the
+	// status only reports 已连接 while the token is non-empty).
+	waitText(t, tt, "********")
+	if err := tt.Click("保存同步设置"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, tt, "已连接")
+
+	// Clearing the token disables the engine (no credentials): the status
+	// reports 缺少服务器地址或令牌 instead of 已连接.
+	tt.Click("同步令牌")
+	tt.Command("selectAll")
+	tt.Key(0, ui.KeyDelete)
+	if err := tt.Click("保存同步设置"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, tt, "缺少服务器地址或令牌")
+	if a.sync.status.Configured {
+		t.Fatal("status still configured after clearing the token")
+	}
+
+	// This device accepting peers is saved through the backend with the
+	// same token, not the engine's config. The row sits below the fold.
+	tt.Scroll(600, 600, 0, 500)
+	tt.Frame()
+	if err := tt.Click("切换本机是否接受同步"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Click("同步令牌")
+	tt.Type("shared-secret")
+	if err := tt.Click("保存同步设置"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, tt, "✓ 本机接受同步")
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tt.Frame()
+		if backend.SyncToken() == "shared-secret" {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if got := backend.SyncToken(); got != "shared-secret" {
+		t.Fatalf("backend sync token = %q, want shared-secret", got)
+	}
+	if !a.sync.accepting {
+		t.Fatal("accept switch not kept")
 	}
 }

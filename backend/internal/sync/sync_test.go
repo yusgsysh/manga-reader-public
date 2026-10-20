@@ -383,7 +383,8 @@ func TestPushRequiresToken(t *testing.T) {
 		t.Fatalf("right token = %d, want 200", code)
 	}
 
-	// Without a configured host token the peer routes must not exist.
+	// Without a configured host token the peer routes answer 404: mounted
+	// but disabled, so a settings-page switch can turn them on later.
 	plain := NewService(newTestClient(t), Options{})
 	plainRouter := newTestRouter(plain)
 	req := httptest.NewRequest(http.MethodPost, "/api/sync/push", bytes.NewReader(body))
@@ -391,6 +392,25 @@ func TestPushRequiresToken(t *testing.T) {
 	plainRouter.ServeHTTP(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("disabled host = %d, want 404", w.Code)
+	}
+
+	// Turning the host on at run time (the desktop settings page) accepts
+	// peers without re-registering routes; turning it off closes them again.
+	plain.SetHostToken("late")
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/sync/push", bytes.NewReader(body))
+	req.Header.Set(headerToken, "late")
+	plainRouter.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("enabled at run time = %d, want 200", w.Code)
+	}
+	plain.SetHostToken("")
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/sync/push", bytes.NewReader(body))
+	req.Header.Set(headerToken, "late")
+	plainRouter.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("disabled at run time = %d, want 404", w.Code)
 	}
 }
 

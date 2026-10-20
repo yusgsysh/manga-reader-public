@@ -52,6 +52,7 @@ type Server struct {
 	handlerSrv *handler.Server
 	db         *database.DB
 	fsCache    *cache.FSCache
+	syncSvc    *synclib.Service
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -62,6 +63,14 @@ type Server struct {
 
 // BaseURL returns the http://127.0.0.1:<port> address the server listens on.
 func (s *Server) BaseURL() string { return s.baseURL }
+
+// SetSyncToken turns accepting sync peers on (non-empty token) or off at
+// run time, for the settings page.
+func (s *Server) SetSyncToken(token string) {
+	if s.syncSvc != nil {
+		s.syncSvc.SetHostToken(token)
+	}
+}
 
 // ClearCache empties the on-disk image cache. Used by the settings page.
 func (s *Server) ClearCache() error {
@@ -196,6 +205,7 @@ func Start(ctx context.Context, opts Options) (*Server, error) {
 		handlerSrv: handlerSrv,
 		db:         db,
 		fsCache:    fsCache,
+		syncSvc:    syncSvc,
 		cancel:     cancel,
 		done:       make(chan struct{}),
 	}
