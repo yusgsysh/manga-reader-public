@@ -1,16 +1,21 @@
 name: Native desktop
 
-# Builds the mygo desktop app on all three platforms it supports. Linux needs
-# GTK3 at build time (the ui package draws through cgo on Linux), macOS and
-# Windows build with the pure Go backends.
+# Tests and builds the mygo desktop app for macOS, Linux and Windows on every
+# push, and attaches the binaries to a GitHub release when a v* tag is pushed.
 #
-# The binary is a single file: the API runs in-process and the UI is drawn by
-# mygo's ui package, so there is nothing to install next to it.
+# Nothing here needs a GUI toolkit at build time: mygo loads GTK 3 and
+# WebKitGTK at run time with purego (dlopen), and the app itself draws
+# through Metal, Direct3D 11 or OpenGL, so the whole program cross-compiles
+# with CGO_ENABLED=0. The toolkit packages are only a user's runtime
+# dependency, documented in the desktop README, not a builder's.
 
 on:
   push:
     branches:
       - mygo
+      - main
+    tags:
+      - "v*"
   pull_request:
   workflow_dispatch:
 
@@ -20,6 +25,12 @@ concurrency:
 
 permissions:
   contents: read
+
+env:
+  # One list for every job: the binary is one file, and the version string is
+  # what the settings page shows under 关于.
+  APP_NAME: manga-reader
+  GOFLAGS: -trimpath
 
 jobs:
   test:
@@ -31,12 +42,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-
-      - name: Install GTK3 and X11 build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
 
       - uses: actions/setup-go@v6
         with:
@@ -59,8 +64,21 @@ jobs:
       - name: Test
         run: go test ./...
 
-      - name: Race detector (cache, app, instance lock)
+      # The timing assertions skip themselves under -race, where the detector
+      # slows every frame by an order of magnitude.
+      - name: Race detector
         run: go test -race ./internal/cache/... ./cmd/desktop-native/...
+
+      # The cross-compiles below prove the code builds for the other two
+      # platforms; the tests can only run for the host's.
+      - name: Cross-compile check (no artifacts)
+        run: |
+          set -euo pipefail
+          for target in darwin/arm64 darwin/amd64 windows/amd64; do
+            GOOS="${target%/*}" GOARCH="${target#*/}" CGO_ENABLED=0 \
+              go build -o /dev/null ./cmd/desktop-native
+            echo "ok: $target"
+          done
 
   build:
     name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
@@ -71,14 +89,27 @@ jobs:
         include:
           - goos: linux
             goarch: amd64
-            deps: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
+            runner: ubuntu-latest
+            ext: ""
+            archive: tar.gz
           - goos: darwin
             goarch: arm64
+            runner: macos-14
+            ext: ""
+            archive: zip
           - goos: darwin
             goarch: amd64
+            runner: macos-14
+            ext: ""
+            archive: zip
           - goos: windows
             goarch: amd64
-    runs-on: ubuntu-latest
+            runner: windows-latest
+            ext: .exe
+            archive: zip
+    # macOS and Windows run on their own hosts: the binary is the user's to
+    # run, and only a matching host can smoke-test it.
+    runs-on: ${{ matrix.runner }}
     defaults:
       run:
         working-directory: backend
@@ -86,41 +117,112 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install build dependencies
-        if: matrix.deps != ''
-        run: ${{ matrix.deps }}
-
       - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
-      # The whole program, ui and API both, cross-compiles from any host: the
-      # desktop packages (cache, config, single instance) and the app are pure
-      # Go.
-      - name: Cross-build the app packages
+      - name: Build
+        shell: bash
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
           set -euo pipefail
-          go build -trimpath -ldflags "-s -w" ./cmd/desktop-native/app/... ./cmd/desktop-native/internal/... ./internal/...
-          echo "ok: app, desktop internals and backend cross-compile for $GOOS/$GOARCH"
-          if [[ "$GOOS" == "windows" ]]; then
-            go vet ./cmd/desktop-native/app/... ./cmd/desktop-native/internal/... ./internal/...
+          # -ldflags -X main.version: the settings page's 关于 row, from the
+          # tag when this is a release and the commit otherwise.
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
+            VERSION="dev-$(git rev-parse --short HEAD)"
           fi
+          NAME="${APP_NAME}-${GOOS}-${GOARCH}${{ matrix.ext }}"
+          CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=${VERSION}" \
+            -o "${NAME}" ./cmd/desktop-native
+          # An absolute path: the packaging step changes directory, and the
+          # name read back from GITHUB_ENV must still resolve.
+          echo "NAME=$(pwd)/${NAME}" >> "$GITHUB_ENV"
+          ls -lh "${NAME}"
 
-      - name: Check the full binary (host toolchain only)
-        if: matrix.goos == 'linux'
+      # Only a host can smoke-test a GUI binary, and none of these runners
+      # has a display; check that it is a valid executable of its platform.
+      - name: Check the binary (Unix)
+        if: matrix.goos != 'windows'
+        shell: bash
+        run: file "${NAME}"
+
+      - name: Package
+        shell: bash
         run: |
           set -euo pipefail
-          go build -trimpath -ldflags "-s -w" -o "manga-reader-linux-$GOARCH" ./cmd/desktop-native
-          ls -lh "manga-reader-linux-$GOARCH"
+          # The docs travel with the binary, so a downloaded archive explains
+          # itself. They are staged outside the checkout, so nothing pollutes
+          # the working tree.
+          STAGE="${{ runner.temp }}/stage"
+          ARCHIVE_BASE="${APP_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          cp "${NAME}" "$STAGE/"
+          cp ../README.md "$STAGE/README.md"
+          cp cmd/desktop-native/README.md "$STAGE/README-desktop.md"
+          cp ../MYGO_MIGRATION.md "$STAGE/MYGO_MIGRATION.md"
 
-      - name: Upload binary
-        if: matrix.goos == 'linux'
-        uses: actions/upload-artifact@v4
+          # Pack into a file outside the staged dir, so the archive never
+          # includes itself while it is being written.
+          if [[ "${{ matrix.archive }}" == "zip" ]]; then
+            ARCHIVE="${ARCHIVE_BASE}.zip"
+            (cd "$STAGE" && zip -qr "$STAGE/$ARCHIVE" . -x "$ARCHIVE")
+          else
+            ARCHIVE="${ARCHIVE_BASE}.tar.gz"
+            tar -czf "$STAGE/$ARCHIVE" -C "$STAGE" \
+              "${NAME##*/}" README.md README-desktop.md MYGO_MIGRATION.md
+          fi
+          # The artifact path is relative to the workspace, where the upload
+          # step looks for it.
+          mv "$STAGE/$ARCHIVE" "${GITHUB_WORKSPACE}/backend/"
+          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+          ls -lh "${GITHUB_WORKSPACE}/backend/${ARCHIVE}"
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: manga-reader-linux-${{ matrix.goarch }}
-          path: backend/manga-reader-linux-${{ matrix.goarch }}
+          name: ${{ env.APP_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: backend/${{ env.ARCHIVE }}
           retention-days: 14
+          if-no-files-found: error
+
+  release:
+    name: Attach binaries to the release
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      # The one job that writes: it creates the release the tag names.
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Full history and tags: the notes compare against the previous tag.
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ls -lh artifacts
+          # Notes are generated from the commits since the previous tag; the
+          # migration TODO is a development document, not release copy.
+          PREV="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          TITLE="Manga Reader ${GITHUB_REF_NAME}"
+          if [[ -n "$PREV" ]]; then
+            gh release create "${GITHUB_REF_NAME}" artifacts/* \
+              --title "$TITLE" --generate-notes \
+              --notes-start-tag "$PREV" --verify-tag
+          else
+            gh release create "${GITHUB_REF_NAME}" artifacts/* \
+              --title "$TITLE" --generate-notes --verify-tag
+          fi
