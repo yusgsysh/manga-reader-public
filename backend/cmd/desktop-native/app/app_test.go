@@ -3056,3 +3056,103 @@ func TestReaderBypassCacheRetry(t *testing.T) {
 		t.Fatal("live endpoint did not serve the page after bypass")
 	}
 }
+
+// TestAppearanceAppliesWithoutRestart covers what the settings row promises:
+// choosing an appearance gives it to mygo at once (mygo themes every window
+// from the source), so the switch is live and the message no longer says
+// "after restart".
+func TestAppearanceAppliesWithoutRestart(t *testing.T) {
+	srv := newFakeServer(t)
+	backend := &fakeBackend{serverURL: srv.URL, base: srv.URL, configured: true, appearance: "system"}
+	a := New(NewClient(srv.URL))
+	a.SetBackend(backend)
+	tt := ui.NewTester(a.View, 1280, 860)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "✓ 跟随系统")
+
+	tt.Scroll(600, 600, 0, 600)
+	tt.Frame()
+	for _, step := range []struct {
+		label string
+		want  mygo.ThemeSource
+	}{
+		{"深色", mygo.ThemeDark},
+		{"浅色", mygo.ThemeLight},
+		{"跟随系统", mygo.ThemeSystem},
+	} {
+		before := mygo.Theme.Source()
+		if before == step.want {
+			// The previous step already left this source in place; move
+			// away first so the click has something to change.
+			other := mygo.ThemeDark
+			if step.want == mygo.ThemeDark {
+				other = mygo.ThemeLight
+			}
+			go mygo.Theme.SetSource(other)
+			time.Sleep(20 * time.Millisecond)
+		}
+		if err := tt.Click(step.label); err != nil {
+			t.Fatalf("click %s: %v", step.label, err)
+		}
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) && mygo.Theme.Source() != step.want {
+			tt.Frame()
+			time.Sleep(2 * time.Millisecond)
+		}
+		if got := mygo.Theme.Source(); got != step.want {
+			t.Fatalf("after clicking %s, mygo theme source = %q, want %q", step.label, got, step.want)
+		}
+		waitText(t, tt, "已保存")
+	}
+	// The old promise is gone: nothing says a restart is needed.
+	if tt.HasText("重启后生效") {
+		t.Fatalf("settings still say a restart is needed; texts=%q", tt.Texts())
+	}
+}
+
+// TestThemeSwitchRedrawsLive covers the other half of a live appearance: the
+// same app, without restarting, renders its pages in the new theme. The frame
+// asks the theme each time it builds, so a change is visible on the next one.
+func TestThemeSwitchRedrawsLive(t *testing.T) {
+	_, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	light := tt.Image()
+
+	tt.SetDark(true)
+	tt.Frame()
+	dark := tt.Image()
+
+	// Nothing rebuilt: the same tester, the same app; only the appearance
+	// changed. The two frames must differ, and the dark one must be darker.
+	if samePixels(light, dark) {
+		t.Fatal("switching to dark changed nothing on screen")
+	}
+	if !darkerThan(dark, light) {
+		t.Fatal("the dark frame is not darker than the light one")
+	}
+}
+
+// samePixels reports whether two RGBA images hold the same bytes.
+func samePixels(a, b *image.RGBA) bool {
+	if a.Bounds() != b.Bounds() {
+		return false
+	}
+	return bytes.Equal(a.Pix, b.Pix)
+}
+
+// darkerThan compares the mean luminance of two images.
+func darkerThan(dark, light *image.RGBA) bool {
+	return meanLuma(dark) < meanLuma(light)
+}
+
+func meanLuma(img *image.RGBA) float64 {
+	var sum float64
+	for i := 0; i < len(img.Pix); i += 4 {
+		sum += 0.2126*float64(img.Pix[i]) + 0.7152*float64(img.Pix[i+1]) + 0.0722*float64(img.Pix[i+2])
+	}
+	return sum / float64(len(img.Pix)/4)
+}

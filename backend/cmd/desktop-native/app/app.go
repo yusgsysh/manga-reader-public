@@ -1595,7 +1595,10 @@ func (a *App) appearanceRow(c *ui.Context) {
 			if a.appearance == opt.value {
 				label = "✓ " + label
 			}
-			if ui.Button(c, label).Disabled(a.appearanceBusy || a.backend == nil).
+			// The appearance is the window's own, so it applies whether or
+			// not an embedded backend is there to remember it (external
+			// backend mode keeps it for this run only).
+			if ui.Button(c, label).Disabled(a.appearanceBusy).
 				Clicked() && a.appearance != opt.value {
 				a.saveAppearance(opt.value)
 			}
@@ -1609,24 +1612,53 @@ func (a *App) appearanceRow(c *ui.Context) {
 // saveAppearance persists the choice; main applies it to mygo.Theme through
 // the backend hook, so no page reload is needed.
 func (a *App) saveAppearance(value string) {
-	if a.backend == nil || a.appearanceBusy {
+	if a.appearanceBusy {
 		return
 	}
 	a.appearanceBusy = true
 	a.appearanceMsg = ""
+	// The window follows at once: mygo themes every window from the source,
+	// so there is nothing to restart. Applying before the save means a save
+	// that fails still shows the choice, and the message says so.
+	applyAppearance(value)
+	a.appearance = value
+	if a.backend == nil {
+		a.appearanceBusy = false
+		a.requestFrame()
+		return
+	}
 	backend := a.backend
 	go func() {
 		err := backend.SetAppearance(value)
 		a.update(func() {
 			a.appearanceBusy = false
 			if err != nil {
-				a.appearanceMsg = err.Error()
+				a.appearanceMsg = i18n.Tf("Shown, but not saved: %s", err.Error())
 				return
 			}
 			a.appearance = backend.Appearance()
-			a.appearanceMsg = i18n.T("Saved; takes effect after restart")
+			a.appearanceMsg = i18n.T("Saved")
 		})
 	}()
+}
+
+// applyAppearance gives mygo the appearance source: "system" follows the
+// desktop, "light" and "dark" pin it. The windows redraw from it.
+//
+// It runs in the background: Theme.SetSource marshals to the main thread and
+// waits, which would deadlock a caller inside an event handler anyway, and
+// would wait forever when no loop is running (headless tests).
+func applyAppearance(source string) {
+	var value mygo.ThemeSource
+	switch source {
+	case "light":
+		value = mygo.ThemeLight
+	case "dark":
+		value = mygo.ThemeDark
+	default:
+		value = mygo.ThemeSystem
+	}
+	go mygo.Theme.SetSource(value)
 }
 
 // languageOptions names the interface languages the UI can be shown in: the
