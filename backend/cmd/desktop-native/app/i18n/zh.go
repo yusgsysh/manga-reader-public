@@ -118,7 +118,7 @@ var zh = map[string]string{
 	"Follow system":                         "跟随系统",
 	"Light":                                 "浅色",
 	"Dark":                                  "深色",
-	"Saved; takes effect after restart":     "已保存，重启后生效",
+	"Shown, but not saved: %s":              "已应用，但未保存：%s",
 	"The interface is in the chosen language; dates, numbers and fonts follow the system region. The choice is written to the config file.": "界面使用所选语言；日期、数字与字体跟随系统区域设置。选择会写入配置文件。",
 	"Simplified Chinese": "简体中文",
 
