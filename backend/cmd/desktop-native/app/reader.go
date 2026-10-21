@@ -550,11 +550,6 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 				return false
 			})
 			area.Children(func() {
-				src := r.pages[r.page]
-				bitmap := a.pageImages.Get(a.client.PageImageURL(src))
-				if bitmap == nil {
-					bitmap = a.pageCache.Get(int(r.id), r.page)
-				}
 				// Two pages side by side, left then right. In right-to-left
 				// mode the spread swaps: the later page sits on the left,
 				// as in Japanese manga.
@@ -619,28 +614,37 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 // behind is warmed too, making a step back instant.
 const readerPreloadPages = 2
 
+// readerKeepPages is how many pages past the window the reader keeps asking
+// for, without warming them up first.
+const readerKeepPages = 2
+
 // preloadPages asks the page-image store for the pages around r.page. Get is
 // cheap once a page is queued or loaded; for a page that is not, it starts the
 // download in the background. The visible page is asked for first so it is not
 // queued behind its neighbours.
 //
-// The window is one page behind and readerPreloadPages ahead. Pages outside
-// it are released, which ends their downloads: a gallery turned through
-// quickly would otherwise keep every page it passed downloading behind the
-// page on screen. Release leaves loaded pages and failures alone, so turning
-// back to a page finds it, or its retry.
+// The warm window is one page behind and readerPreloadPages ahead. Pages
+// further out are released, which ends their downloads: a gallery turned
+// through quickly would otherwise keep every page it passed downloading
+// behind the page on screen. Release leaves loaded pages and failures alone,
+// so turning back to a page finds it, or its retry.
+//
+// readerKeepPages beyond the warm window the pages are still asked for, one
+// per frame: a hit is cheap, and it keeps the store from evicting a page that
+// failed. Once the store drops the failure to make room, the next hit starts
+// the page again instead of leaving a blank page nothing asks for.
 func (a *App) preloadPages(r *Reader) {
 	urls := make([]string, len(r.pages))
 	for i, src := range r.pages {
 		urls[i] = a.client.PageImageURL(src)
 	}
 	step := r.readerStep()
-	keep := make(map[string]bool, 2+readerPreloadPages+1)
+	near := map[string]bool{urls[r.page]: true}
 	warm := func(i int) {
-		if i < 0 || i >= len(r.pages) || keep[urls[i]] {
+		if i < 0 || i >= len(r.pages) || near[urls[i]] {
 			return
 		}
-		keep[urls[i]] = true
+		near[urls[i]] = true
 		a.pageImages.Get(urls[i])
 	}
 	warm(r.page)
@@ -652,6 +656,23 @@ func (a *App) preloadPages(r *Reader) {
 		warm(r.page + 1)
 	}
 	warm(r.page - 1)
+	// The keep window asks for these pages again every frame. A page that
+	// failed is asked for once per frame too: that is what starts it again
+	// once the store has dropped the failure, so a page outside the warm
+	// window cannot stay a blank box with no retry.
+	keep := make(map[string]bool, 2*readerKeepPages+len(near))
+	for url := range near {
+		keep[url] = true
+	}
+	for i := 1; i <= readerKeepPages; i++ {
+		for _, j := range [2]int{r.page + readerPreloadPages + i, r.page - 1 - i} {
+			if j < 0 || j >= len(r.pages) || keep[urls[j]] {
+				continue
+			}
+			keep[urls[j]] = true
+			a.pageImages.Get(urls[j])
+		}
+	}
 
 	for url := range r.preloaded {
 		if !keep[url] {
@@ -732,15 +753,31 @@ func clampFloat(v, lo, hi float32) float32 {
 // readerPageImage draws one page of the reader, filling half the area in
 // double mode. A missing bitmap asks for a frame once it arrives through the
 // image store; until then the page is blank rather than a stretched error.
+//
+// This is the only place the reader asks the image store for a page: a hit
+// moves the page to the end of the store's access list, so asking again for
+// the same page in the same frame would evict what the frame just queued.
 func (a *App) readerPageImage(c *ui.Context, r *Reader, page int) {
 	src := r.pages[page]
 	url := a.client.PageImageURL(src)
 	bitmap := a.pageImages.Get(url)
-	if bitmap == nil {
+	failed := a.pageImages.Err(url) != ""
+	if bitmap == nil && !failed {
 		bitmap = a.pageCache.Get(int(r.id), page)
 	}
 	if bitmap == nil {
 		a.readerPagePlaceholder(c, r, page, url)
+		return
+	}
+	if failed {
+		// The page is painted by the placeholder while its download runs,
+		// which a failed download would leave on screen: a page that never
+		// loads would stay a blank box with no way to retry it. Draw the
+		// failure over the placeholder instead, and ask for the page once
+		// per frame so that a failure the store dropped to make room starts
+		// the page again.
+		a.pageImages.Get(url)
+		a.readerPageFailure(c, r, page, url, bitmap)
 		return
 	}
 	img := ui.Image(c, bitmap).Fill().Fit(r.fit).
@@ -765,8 +802,9 @@ func (a *App) readerPageImage(c *ui.Context, r *Reader, page int) {
 	}
 }
 
-// readerPagePlaceholder fills a page that is still loading, or offers a retry
-// when it failed, instead of leaving the area blank with no explanation.
+// readerPagePlaceholder fills a page that is still loading, instead of leaving
+// the area blank with no explanation. A failed page takes its retry buttons
+// here too, when it has no placeholder to draw them over.
 func (a *App) readerPagePlaceholder(c *ui.Context, r *Reader, page int, url string) {
 	t := c.Theme()
 	col := ui.Column(c).Fill().Center().Gap(8)
@@ -774,24 +812,43 @@ func (a *App) readerPagePlaceholder(c *ui.Context, r *Reader, page int, url stri
 		col.Grow(1)
 	}
 	col.Children(func() {
-		if err := a.pageImages.Err(url); err != "" {
-			ui.Text(c, i18n.Tf("Page %d failed to load", page+1)).FontSize(12).TextColor(t.Danger)
-			if ui.Button(c, i18n.T("Retry")).Clicked() {
-				a.pageImages.Retry(url)
-			}
-			// A second failure means the cache path itself is the problem
-			// (a full or unwritable cache): offer the live endpoint, which
-			// skips the local cache entirely. Only shown when cache mode is
-			// on — with it off, url is already the live endpoint.
-			if a.client.UsingImageCache() {
-				if ui.Button(c, i18n.T("Retry without cache")).Label(i18n.T("Retry this page without the cache")).Clicked() {
-					a.pageImages.Retry(a.client.LivePageImageURL(r.pages[page]))
-				}
-			}
+		if a.pageImages.Err(url) != "" {
+			a.readerPageButtons(c, r, page, url)
 			return
 		}
 		ui.Spinner(c)
 		ui.Text(c, i18n.Tf("Loading page %d…", page+1)).
 			FontSize(12).TextColor(t.TextMuted)
 	})
+}
+
+// readerPageFailure draws a failed page over the placeholder it is showing:
+// the image is what the reader sees while the download runs, and the failure
+// says why it never arrived, with its retries over the dimmed page.
+func (a *App) readerPageFailure(c *ui.Context, r *Reader, page int, url string, bitmap *ui.Bitmap) {
+	if r.paging.double {
+		ui.Image(c, bitmap).Fill().Fit(r.fit).Grow(1)
+	} else {
+		ui.Image(c, bitmap).Fill().Fit(r.fit)
+	}
+	ui.Column(c).Fill().Center().Gap(8).Children(func() {
+		a.readerPageButtons(c, r, page, url)
+	})
+}
+
+// readerPageButtons offers the retries of a page that failed to load.
+func (a *App) readerPageButtons(c *ui.Context, r *Reader, page int, url string) {
+	ui.Text(c, i18n.Tf("Page %d failed to load", page+1)).FontSize(12).TextColor(c.Theme().Danger)
+	if ui.Button(c, i18n.T("Retry")).Clicked() {
+		a.pageImages.Retry(url)
+	}
+	// A second failure means the cache path itself is the problem (a full
+	// or unwritable cache): offer the live endpoint, which skips the local
+	// cache entirely. Only shown when cache mode is on — with it off, url is
+	// already the live endpoint.
+	if a.client.UsingImageCache() {
+		if ui.Button(c, i18n.T("Retry without cache")).Label(i18n.T("Retry this page without the cache")).Clicked() {
+			a.pageImages.Retry(a.client.LivePageImageURL(r.pages[page]))
+		}
+	}
 }

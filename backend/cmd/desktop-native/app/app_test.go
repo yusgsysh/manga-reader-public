@@ -3004,23 +3004,22 @@ func TestReaderDoubleRTLSwapsSpread(t *testing.T) {
 }
 
 // TestReaderBypassCacheRetry covers the second failure's escape hatch: after
-// the cache proxy fails, the placeholder offers 绕过缓存重试, whose URL is the
-// live endpoint.
+// the cache proxy fails, the page offers 绕过缓存重试, whose URL is the live
+// endpoint.
 func TestReaderBypassCacheRetry(t *testing.T) {
-	fail := true
 	srv := newFakeServerWithHooks(t, nil)
 	mux := srv.Config.Handler.(*http.ServeMux)
-	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// A plain listener, not httptest: the test's own goroutine must not block
+	// inside net/http (see apiURL).
+	broken := apiURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/image-cache/page" {
 			http.Error(w, "cache down", http.StatusBadGateway)
 			return
 		}
 		mux.ServeHTTP(w, r)
 	}))
-	defer broken.Close()
-	_ = fail
 
-	client := NewClient(broken.URL)
+	client := NewClient(broken)
 	client.UseImageCache(true)
 	a := New(client)
 	tt := ui.NewTester(a.View, 1280, 860)
@@ -3034,6 +3033,18 @@ func TestReaderBypassCacheRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
+	cache := a.client.PageImageURL("https://img.example/page-0.jpg")
+	waitText(t, tt, "1 / 3 页")
+	// The store learns of the 502 in its own goroutine: render frames until
+	// its record has the failure, which is what the reader shows.
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) && a.pageImages.Err(cache) == "" {
+		tt.Frame()
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := a.pageImages.Err(cache); err == "" {
+		t.Fatal("the cache proxy's failure never reached the store")
+	}
 	waitText(t, tt, "第 1 页加载失败")
 
 	if !tt.HasText("绕过缓存重试") {
@@ -3044,15 +3055,16 @@ func TestReaderBypassCacheRetry(t *testing.T) {
 	if err := tt.Click("绕过缓存重试本页"); err != nil {
 		t.Fatalf("click bypass: %v", err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
+	live := a.client.LivePageImageURL("https://img.example/page-0.jpg")
+	deadline = time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		tt.Frame()
-		if a.pageImages.Get(a.client.LivePageImageURL("https://img.example/page-0.jpg")) != nil {
+		if a.pageImages.Get(live) != nil {
 			break
 		}
 		time.Sleep(2 * time.Millisecond)
 	}
-	if got := a.pageImages.Get(a.client.LivePageImageURL("https://img.example/page-0.jpg")); got == nil {
+	if got := a.pageImages.Get(live); got == nil {
 		t.Fatal("live endpoint did not serve the page after bypass")
 	}
 }
