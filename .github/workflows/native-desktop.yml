@@ -175,9 +175,33 @@ jobs:
 
           # Pack into a file outside the staged dir, so the archive never
           # includes itself while it is being written.
+          #
+          # The command belongs to the host: zip is not on a Windows runner's
+          # Git Bash (there is no zip.exe there), and no runner is promised
+          # zip on macOS either, so the Windows and macOS archives use what
+          # each platform ships.
           if [[ "${{ matrix.archive }}" == "zip" ]]; then
             ARCHIVE="${ARCHIVE_BASE}.zip"
-            (cd "$STAGE" && zip -qr "$STAGE/$ARCHIVE" . -x "$ARCHIVE")
+            if [[ "${{ runner.os }}" == "Windows" ]]; then
+              # Compress-Archive ships with the runner, and Windows' own
+              # Explorer opens what it writes. -Force quotes the paths for
+              # PowerShell (the temp path holds no quote); the -Path wildcard
+              # skips dotfiles, which the binary, the docs and the icon are
+              # not.
+              ZIP_DIR="${STAGE//\'/\'\'}"
+              ZIP_OUT="${STAGE//\'/\'\'}/$ARCHIVE"
+              powershell -NoProfile -NonInteractive -Command \
+                "Compress-Archive -Path '${ZIP_DIR}/*' -DestinationPath '${ZIP_OUT}' -Force"
+            else
+              # ditto is the macOS archiver: it keeps the resource forks and
+              # permissions and stamps the archive with them.
+              ZIP_DIR="${STAGE//\'/\'\'}"
+              ZIP_OUT="${STAGE//\'/\'\'}/$ARCHIVE"
+              # A list of what landed in the archive shows in the log, so a
+              # release's contents are visible without downloading it.
+              ditto -c -k --sequesterRsrc --keepParent "$ZIP_DIR" "$ZIP_OUT"
+              unzip -l "$ZIP_OUT"
+            fi
           else
             ARCHIVE="${ARCHIVE_BASE}.tar.gz"
             tar -czf "$STAGE/$ARCHIVE" -C "$STAGE" \
