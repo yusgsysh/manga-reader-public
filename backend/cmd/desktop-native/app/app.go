@@ -170,6 +170,13 @@ const (
 	kindRecent
 )
 
+// browsable reports whether the list can be refreshed on a timer without a
+// user's query: the browse and shelf lists can, while search waits for what is
+// typed and must not reload on its own.
+func (k listKind) browsable() bool {
+	return k != kindSearch
+}
+
 // listState is the scroll, selection and page data of one gallery list.
 type listState struct {
 	kind     listKind
@@ -189,6 +196,11 @@ type listState struct {
 	err    string
 	query  string
 	loadID int
+	// refreshed is when the last automatic refresh of a browsable list began;
+	// zero until the first. refreshing guards against a second round while one
+	// is in flight.
+	refreshed  time.Time
+	refreshing bool
 }
 
 // detailState is one gallery's metadata, fetched first from the cache endpoint
@@ -583,6 +595,62 @@ func (a *App) resetList(s *listState, query string) {
 	a.reloadList(s)
 }
 
+// autoRefreshEvery is how often a browsable list quietly reloads its first
+// page, so a page left open shows galleries that appeared upstream without a
+// Refresh button.
+const autoRefreshEvery = 45 * time.Second
+
+// refreshList reloads the first page without blanking what is on screen: a
+// refresh replaces the items in place, and a failure during it keeps the
+// current items rather than turning the list into an error page. It is the
+// automatic counterpart of reloadList, which a deliberate retry uses.
+func (a *App) refreshList(s *listState) {
+	if s.loading || s.refreshing {
+		return
+	}
+	s.refreshing = true
+	s.refreshed = time.Now()
+	s.loadID++
+	lid := s.loadID
+	kind, query := s.kind, s.query
+	go func() {
+		items, total, pageSize, err := a.fetchList(kind, 0, query)
+		a.update(func() {
+			if s.loadID != lid {
+				return
+			}
+			s.refreshing = false
+			if err != nil {
+				// Keep the stale items: a background refresh should not
+				// replace a good page with an error.
+				return
+			}
+			s.items = items
+			s.page = 0
+			s.total = total
+			s.pageSize = pageSize
+			s.lastLen = len(items)
+			s.loaded = true
+			s.err = ""
+		})
+	}()
+}
+
+// scheduleRefresh asks for the frame that runs the next automatic refresh. It
+// is called from a list page each frame, and returns the wait until it is due.
+func (a *App) scheduleRefresh(c *ui.Context, s *listState) {
+	now := c.Now()
+	if s.refreshed.IsZero() {
+		s.refreshed = now
+	}
+	due := s.refreshed.Add(autoRefreshEvery)
+	if !s.loading && !s.refreshing && !now.Before(due) {
+		a.refreshList(s)
+		due = now.Add(autoRefreshEvery)
+	}
+	c.After(due.Sub(now))
+}
+
 // searchDebounce is how long the search box waits after the last keystroke
 // before hitting the API, so typing "gallery" is one request, not seven.
 const searchDebounce = 300 * time.Millisecond
@@ -602,9 +670,30 @@ func (a *App) scheduleSearch(s *listState) {
 			if a.searchSeq != seq {
 				return
 			}
+			if strings.TrimSpace(a.searchApplied) == "" {
+				// An empty box searches nothing: drop any results and stay
+				// on the prompt, so the page never browses all galleries.
+				a.clearList(s)
+				return
+			}
 			a.resetList(s, a.searchApplied)
 		})
 	})
+}
+
+// clearList empties a list and its state without fetching, so a page can show a
+// prompt instead of results until there is something to ask for.
+func (a *App) clearList(s *listState) {
+	s.loadID++
+	s.items = nil
+	s.page = 0
+	s.total = 0
+	s.lastLen = 0
+	s.loaded = false
+	s.loading = false
+	s.atEnd = false
+	s.err = ""
+	s.query = ""
 }
 
 func (a *App) loadMore(s *listState) {
@@ -724,16 +813,16 @@ func (a *App) listPage(c *ui.Context, path, title, subtitle string, kind listKin
 	t := c.Theme()
 	s := a.listFor(path, kind)
 	a.ensureList(s)
+	// A page left open keeps itself current: refresh the first page in the
+	// background on a timer, never showing a Refresh button.
+	if kind.browsable() {
+		a.scheduleRefresh(c, s)
+	}
 
 	ui.Column(c).Fill().Padding(20, 24).Gap(14).Children(func() {
-		ui.Row(c).AlignItems(ui.End).Gap(12).Children(func() {
-			ui.Column(c).Gap(2).Grow(1).Children(func() {
-				ui.Text(c, title).FontSize(26).Bold()
-				ui.Text(c, listSummary(subtitle, s)).FontSize(12).TextColor(t.TextMuted)
-			})
-			if ui.Button(c, i18n.T("Refresh")).Clicked() {
-				a.reloadList(s)
-			}
+		ui.Column(c).Gap(2).Children(func() {
+			ui.Text(c, title).FontSize(26).Bold()
+			ui.Text(c, listSummary(subtitle, s)).FontSize(12).TextColor(t.TextMuted)
 		})
 
 		switch {
@@ -885,7 +974,12 @@ func (a *App) searchPage(c *ui.Context) {
 	t := c.Theme()
 	s := a.listFor("/search", kindSearch)
 	a.scheduleSearch(s)
-	a.ensureList(s)
+	// Nothing to search yet: the page starts on a prompt, and only asks the
+	// API once there is a query.
+	hasQuery := strings.TrimSpace(s.query) != ""
+	if hasQuery {
+		a.ensureList(s)
+	}
 
 	ui.Column(c).Fill().Padding(20, 24).Gap(14).Children(func() {
 		ui.Text(c, i18n.T("Search")).FontSize(26).Bold()
@@ -894,6 +988,8 @@ func (a *App) searchPage(c *ui.Context) {
 		ui.Text(c, listSummary(i18n.T("Search results"), s)).FontSize(12).TextColor(t.TextMuted)
 
 		switch {
+		case !hasQuery:
+			a.emptyPage(c, i18n.T("Search"), i18n.T("Type a keyword to search titles, categories or tags"), "")
 		case s.loading && len(s.items) == 0:
 			ui.Column(c).Fill().Center().Gap(10).Children(func() {
 				pageLoading(c, i18n.T("Searching…"))
