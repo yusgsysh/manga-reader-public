@@ -27,6 +27,9 @@ type Downloads struct {
 	// from starting a second round. polled is when the last round started.
 	polling bool
 	polled  time.Time
+	// refreshed is when the idle full reload last ran, so the page picks up
+	// jobs started elsewhere without a Refresh button.
+	refreshed time.Time
 
 	// dropped holds the IDs deleted from the list. A reload that raced the
 	// delete may still carry them, so they are filtered out until it is done.
@@ -36,6 +39,10 @@ type Downloads struct {
 // downloadPollInterval is how often a running job is polled. The backend
 // updates progress per page, and a page takes far longer than this.
 const downloadPollInterval = 1500 * time.Millisecond
+
+// downloadRefreshIdle is how often the downloads page reloads its whole list
+// while nothing is running, so jobs queued elsewhere show up.
+const downloadRefreshIdle = 10 * time.Second
 
 // ensureDownloads loads the job list once. The sidebar badge and the download
 // page share it.
@@ -82,6 +89,40 @@ func (a *App) loadDownloads() {
 			}
 			d.items = jobs
 			d.loaded = true
+		})
+	}()
+}
+
+// refreshDownloadsIdle reloads the job list on the idle tick without stomping
+// the rows already polled: it adds jobs it has not seen yet at the front and
+// keeps the existing rows as they are, so a completed job does not flip back
+// to the list snapshot's older status just because the page sat idle.
+func (a *App) refreshDownloadsIdle() {
+	d := &a.downloads
+	if d.loading {
+		return
+	}
+	d.loadID++
+	lid := d.loadID
+	go func() {
+		jobs, err := a.client.PrefillJobs(context.Background())
+		a.update(func() {
+			if d.loadID != lid || err != nil {
+				return
+			}
+			known := make(map[string]bool, len(d.items))
+			for _, j := range d.items {
+				known[j.ID] = true
+			}
+			var added []PrefillJob
+			for _, j := range jobs {
+				if !known[j.ID] && (d.dropped == nil || !d.dropped[j.ID]) {
+					added = append(added, j)
+				}
+			}
+			if len(added) > 0 {
+				d.items = append(added, d.items...)
+			}
 		})
 	}()
 }
@@ -247,7 +288,9 @@ func downloadProgress(j PrefillJob) float64 {
 
 // downloadsPage lists prefill jobs, newest first, with live progress. A frame
 // while jobs run is requested again after the poll interval, so the list keeps
-// itself up to date without a timer per row.
+// itself up to date without a timer per row; when nothing runs it reloads the
+// whole list on a slower tick, so jobs started elsewhere appear without a
+// Refresh button.
 func (a *App) downloadsPage(c *ui.Context) {
 	t := c.Theme()
 	a.ensureDownloads()
@@ -256,18 +299,22 @@ func (a *App) downloadsPage(c *ui.Context) {
 	if len(a.downloads.items) > 0 && a.hasRunningDownload() {
 		// Ask for the frame that polls again when this round is due.
 		c.After(a.nextPollWait(now))
+	} else if a.downloads.loaded {
+		// Nothing is running: look for jobs started elsewhere on a slow
+		// tick, without overwriting the rows already polled. Wake on the
+		// shorter poll interval so the wake-up itself is never the wait.
+		if a.downloads.refreshed.IsZero() || now.Sub(a.downloads.refreshed) >= downloadRefreshIdle {
+			a.downloads.refreshed = now
+			a.refreshDownloadsIdle()
+		}
+		c.After(downloadPollInterval)
 	}
 
 	ui.Column(c).Fill().Padding(20, 24).Gap(14).Children(func() {
-		ui.Row(c).AlignItems(ui.End).Gap(12).Children(func() {
-			ui.Column(c).Gap(2).Grow(1).Children(func() {
-				ui.Text(c, i18n.T("Downloads")).FontSize(26).Bold()
-				ui.Text(c, i18n.T("Offline downloads are stored in the local image cache and readable offline.")).
-					FontSize(12).TextColor(t.TextMuted)
-			})
-			if ui.Button(c, i18n.T("Refresh")).Clicked() {
-				a.loadDownloads()
-			}
+		ui.Column(c).Gap(2).Children(func() {
+			ui.Text(c, i18n.T("Downloads")).FontSize(26).Bold()
+			ui.Text(c, i18n.T("Offline downloads are stored in the local image cache and readable offline.")).
+				FontSize(12).TextColor(t.TextMuted)
 		})
 
 		switch {

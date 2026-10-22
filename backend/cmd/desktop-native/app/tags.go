@@ -470,15 +470,10 @@ func (a *App) tagSettingsPage(c *ui.Context) {
 
 	ui.Scroll(c).Fill().Children(func() {
 		ui.Column(c).Padding(20, 24).Gap(14).MaxWidth(900).Children(func() {
-			ui.Row(c).AlignItems(ui.End).Gap(12).Children(func() {
-				ui.Column(c).Gap(2).Grow(1).Children(func() {
-					ui.Text(c, i18n.T("Tag settings")).FontSize(26).Bold()
-					ui.Text(c, i18n.T("Liked tags turn blue, disliked red; this only colours and orders, it never filters.")).
-						FontSize(12).TextColor(t.TextMuted)
-				})
-				if ui.Button(c, i18n.T("Refresh")).Clicked() {
-					a.loadTagSettings()
-				}
+			ui.Column(c).Gap(2).Children(func() {
+				ui.Text(c, i18n.T("Tag settings")).FontSize(26).Bold()
+				ui.Text(c, i18n.T("Liked tags turn blue, disliked red; this only colours and orders, it never filters.")).
+					FontSize(12).TextColor(t.TextMuted)
 			})
 
 			a.tagAddRow(c, s)

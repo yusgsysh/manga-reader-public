@@ -148,14 +148,12 @@ func (a *App) torrentsBlock(c *ui.Context, s *detailState) {
 	ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
 		ui.Text(c, i18n.T("Torrents")).FontSize(16).Bold().Grow(1)
 		if !s.showTorrents {
+			// Torrents load once, on request; there is no refresh button, so
+			// a second click is not needed.
 			if ui.Button(c, i18n.T("Show torrents")).Clicked() {
 				a.loadTorrents(s)
 			}
 			return
-		}
-		if ui.Button(c, i18n.T("Refresh")).Clicked() {
-			s.showTorrents = false
-			a.loadTorrents(s)
 		}
 	})
 	if !s.showTorrents {

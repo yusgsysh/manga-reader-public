@@ -1481,7 +1481,8 @@ func TestSaveCacheLimitRejectsBadInput(t *testing.T) {
 }
 
 // TestSearchDebouncesRequests proves typing several characters quickly results
-// in a single API call for the final text, plus the initial empty query.
+// in a single API call for the final text, and that an empty search box asks
+// the API for nothing.
 func TestSearchDebouncesRequests(t *testing.T) {
 	var mu sync.Mutex
 	var queries []string
@@ -1538,11 +1539,9 @@ func TestSearchDebouncesRequests(t *testing.T) {
 	got := append([]string(nil), queries...)
 	mu.Unlock()
 
-	if len(got) != 2 {
-		t.Fatalf("search queries = %v, want [\"\" \"abc\"]", got)
-	}
-	if got[0] != "" || got[1] != "abc" {
-		t.Fatalf("search queries = %v, want [\"\" \"abc\"]", got)
+	// An empty box searches nothing, so only the typed query reaches the API.
+	if len(got) != 1 || got[0] != "abc" {
+		t.Fatalf("search queries = %v, want [\"abc\"]", got)
 	}
 }
 

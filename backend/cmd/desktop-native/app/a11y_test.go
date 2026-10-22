@@ -7,8 +7,8 @@ import (
 )
 
 // TestTabOrderReachesControls covers keyboard reachability of the pages: Tab
-// walks focusable controls, so a keyboard-only user can reach the sidebar,
-// the refresh button and the gallery cards without a pointer.
+// walks focusable controls, so a keyboard-only user can reach the sidebar and
+// the gallery cards without a pointer.
 func TestTabOrderReachesControls(t *testing.T) {
 	_, tt := newTestApp(t)
 	waitText(t, tt, "示例 A")
@@ -29,8 +29,8 @@ func TestTabOrderReachesControls(t *testing.T) {
 			}
 		}
 	}
-	// The list's refresh button and a gallery card are both reached.
-	for _, want := range []string{"刷新", "示例 A"} {
+	// The sidebar and a gallery card are both reached.
+	for _, want := range []string{"首页", "示例 A"} {
 		if !seen[want] {
 			t.Fatalf("Tab never reached %q; visited %v", want, focused)
 		}
