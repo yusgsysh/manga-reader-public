@@ -14,11 +14,13 @@ import (
 // that waits on the network to one look: a large indicator on a page that is
 // still empty, a small one beside a label while something is refreshed.
 
-// The two sizes the interface uses. inlineSpinnerSize sits with 11–12 pt
-// text; pageSpinnerSize heads a full-page "Loading…" state.
+// The sizes the interface uses. inlineSpinnerSize sits with 11–12 pt text;
+// pageSpinnerSize heads a full-page "Loading…" state; imageSpinnerSize marks
+// a picture's own placeholder while its bytes download.
 const (
 	inlineSpinnerSize float32 = 16
 	pageSpinnerSize   float32 = 32
+	imageSpinnerSize  float32 = 24
 )
 
 // inlineLoading is the small indicator that turns beside a line of text
@@ -43,6 +45,20 @@ func pageLoading(c *ui.Context, label string) {
 	}
 	loading.Ring(c, loading.Options{
 		Size:   pageSpinnerSize,
+		Color:  c.Theme().Accent,
+		Easing: loading.EaseInOut,
+	}).Label(label)
+}
+
+// imageLoadingCenter is the indicator laid over a picture whose bytes are
+// still arriving. Build it as the filled, centering child of a box that holds
+// the picture, so it turns in the middle of the picture rather than beside it.
+func imageLoadingCenter(c *ui.Context, label string) {
+	if label == "" {
+		label = i18n.T("Loading image…")
+	}
+	loading.Ring(c, loading.Options{
+		Size:   imageSpinnerSize,
 		Color:  c.Theme().Accent,
 		Easing: loading.EaseInOut,
 	}).Label(label)

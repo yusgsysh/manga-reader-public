@@ -160,6 +160,19 @@ func (s *ImageStore) Err(url string) string {
 	return ""
 }
 
+// Loading reports whether url's first bytes are still arriving: its download
+// started and has neither finished nor failed. The view reads it to lay a
+// loading indicator over a picture's placeholder until the picture appears.
+func (s *ImageStore) Loading(url string) bool {
+	if url == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.entries[url]
+	return e != nil && e.loading && e.bitmap == nil
+}
+
 // Release drops an entry that the view no longer wants, which ends its
 // download. The reader calls it for pages that scrolled out of its preload
 // window: turning through a gallery quickly queues one fetch per page

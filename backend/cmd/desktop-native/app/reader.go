@@ -762,8 +762,12 @@ func (a *App) readerPageImage(c *ui.Context, r *Reader, page int) {
 	url := a.client.PageImageURL(src)
 	bitmap := a.pageImages.Get(url)
 	failed := a.pageImages.Err(url) != ""
+	placeholder := false
 	if bitmap == nil && !failed {
 		bitmap = a.pageCache.Get(int(r.id), page)
+		// The gradient stands in only until the page arrives; the indicator
+		// over it says the real page is still downloading.
+		placeholder = bitmap != nil
 	}
 	if bitmap == nil {
 		a.readerPagePlaceholder(c, r, page, url)
@@ -780,26 +784,44 @@ func (a *App) readerPageImage(c *ui.Context, r *Reader, page int) {
 		a.readerPageFailure(c, r, page, url, bitmap)
 		return
 	}
-	img := ui.Image(c, bitmap).Fill().Fit(r.fit).
-		TransformOrigin(0.5, 0.5).
-		Translate(r.panX, r.panY).
-		Scale(r.zoom, r.zoom)
-	if r.fitHeight && bitmap != nil {
-		// The area is the reader's content height; the toolbar and bars
-		// take about 120 DIPs, and the image keeps its aspect ratio at the
-		// scaled-up size, cropped horizontally when it overflows.
-		w, h := bitmap.Size()
-		_, winH := c.Size()
-		scale := (winH - 120) / float32(h)
-		if r.paging.double {
-			// Two pages side by side share the width, so half the scale.
-			scale /= 2
+	draw := func() {
+		img := ui.Image(c, bitmap).Fill().Fit(r.fit).
+			TransformOrigin(0.5, 0.5).
+			Translate(r.panX, r.panY).
+			Scale(r.zoom, r.zoom)
+		if r.fitHeight && bitmap != nil {
+			// The area is the reader's content height; the toolbar and bars
+			// take about 120 DIPs, and the image keeps its aspect ratio at the
+			// scaled-up size, cropped horizontally when it overflows.
+			w, h := bitmap.Size()
+			_, winH := c.Size()
+			scale := (winH - 120) / float32(h)
+			if r.paging.double {
+				// Two pages side by side share the width, so half the scale.
+				scale /= 2
+			}
+			img.Size(float32(w)*maxFloat(scale, 0.1), float32(h)*maxFloat(scale, 0.1))
 		}
-		img.Size(float32(w)*maxFloat(scale, 0.1), float32(h)*maxFloat(scale, 0.1))
+		if r.paging.double {
+			img.Grow(1)
+		}
 	}
-	if r.paging.double {
-		img.Grow(1)
+	if placeholder {
+		// Centre the indicator over the stand-in gradient. It is a sibling
+		// above the image so neither the image's zoom nor pan moves it.
+		box := ui.Box(c).Fill().Clip()
+		if r.paging.double {
+			box.Grow(1)
+		}
+		box.Children(func() {
+			ui.Box(c).Fill().Absolute().Children(func() { draw() })
+			ui.Column(c).Fill().Center().Absolute().Children(func() {
+				imageLoadingCenter(c, i18n.Tf("Loading page %d…", page+1))
+			})
+		})
+		return
 	}
+	draw()
 }
 
 // readerPagePlaceholder fills a page that is still loading, instead of leaving
