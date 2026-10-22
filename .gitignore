@@ -18,6 +18,9 @@
 *.prof
 coverage.out
 
+# Local Go build/module cache used when the shared ~/.go is read-only.
+/.gocache/
+
 # MyGo desktop: only the native app's source is tracked under cmd/. The
 # reload rule keeps that directory while ignoring anything else a stray
 # build or an old Wails checkout leaves there.

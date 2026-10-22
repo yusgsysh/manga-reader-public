@@ -468,7 +468,7 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 		switch {
 		case r.loading && !r.loaded:
 			ui.Column(c).Fill().Center().Gap(10).Children(func() {
-				ui.Spinner(c)
+				pageLoading(c, i18n.T("Loading pages…"))
 				ui.Text(c, i18n.T("Loading pages…")).FontSize(12).TextColor(t.TextMuted)
 			})
 		case r.err != "" && !r.loaded:
@@ -816,7 +816,7 @@ func (a *App) readerPagePlaceholder(c *ui.Context, r *Reader, page int, url stri
 			a.readerPageButtons(c, r, page, url)
 			return
 		}
-		ui.Spinner(c)
+		pageLoading(c, i18n.Tf("Loading page %d…", page+1))
 		ui.Text(c, i18n.Tf("Loading page %d…", page+1)).
 			FontSize(12).TextColor(t.TextMuted)
 	})

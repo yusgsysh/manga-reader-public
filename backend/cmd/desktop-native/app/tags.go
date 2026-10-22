@@ -486,7 +486,7 @@ func (a *App) tagSettingsPage(c *ui.Context) {
 			switch {
 			case s.loading && !s.loaded:
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(c)
+					inlineLoading(c, i18n.T("Loading rules…"))
 					ui.Text(c, i18n.T("Loading rules…")).FontSize(12).TextColor(t.TextMuted)
 				})
 			case s.err != "" && !s.loaded:
@@ -504,7 +504,7 @@ func (a *App) tagSettingsPage(c *ui.Context) {
 
 			if s.busy {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(c)
+					inlineLoading(c, i18n.T("Saving…"))
 					ui.Text(c, i18n.T("Saving…")).FontSize(12).TextColor(t.TextMuted)
 				})
 			} else if s.msg != "" {
@@ -527,7 +527,7 @@ func (a *App) tagSettingsPage(c *ui.Context) {
 					a.syncTagSettings()
 				}
 				if s.syncing {
-					ui.Spinner(c)
+					inlineLoading(c, i18n.T("Syncing tags…"))
 				}
 			})
 			if s.syncErr != "" {
@@ -600,7 +600,7 @@ func (a *App) tagConflictDialog(c *ui.Context, s *TagSettings) {
 					d.submit = true
 				}
 				if s.syncing {
-					ui.Spinner(c)
+					inlineLoading(c, i18n.T("Applying choices…"))
 				}
 			})
 		})
@@ -751,7 +751,7 @@ func (a *App) tagSearchPanel(c *ui.Context, s *TagSettings) {
 			a.exportCustomTranslations()
 		}
 		if a.transBusy {
-			ui.Spinner(c)
+			inlineLoading(c, i18n.T("Working…"))
 		}
 	})
 	if a.transMsg != "" {
