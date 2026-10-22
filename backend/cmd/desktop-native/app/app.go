@@ -810,9 +810,20 @@ func (a *App) galleryCard(c *ui.Context, g Gallery) {
 		}
 	}
 	cell.Children(func() {
+		loading := a.images.Loading(g.CoverURL)
 		switch {
-		case cover != nil:
+		case cover != nil && !loading:
 			ui.Image(c, cover).AspectRatio(3.0 / 4.0).Fit(ui.Cover).Radius(10)
+		case cover != nil:
+			// A gradient stands in while the real cover downloads; the
+			// indicator turns over it so the card says it is still coming.
+			box := ui.Box(c).AspectRatio(3.0 / 4.0).Radius(10).Clip()
+			box.Children(func() {
+				ui.Image(c, cover).Fill().Fit(ui.Cover).Absolute()
+				ui.Column(c).Fill().Center().Absolute().Children(func() {
+					imageLoadingCenter(c, i18n.T("Loading cover…"))
+				})
+			})
 		case a.images.Err(g.CoverURL) != "":
 			// A failed cover retries on click instead of staying blank.
 			box := ui.Box(c).AspectRatio(3.0 / 4.0).Radius(10).Center().
@@ -824,7 +835,10 @@ func (a *App) galleryCard(c *ui.Context, g Gallery) {
 				a.images.Retry(g.CoverURL)
 			}
 		default:
-			ui.Box(c).AspectRatio(3.0 / 4.0).Radius(10).Background(t.SurfaceHover)
+			box := ui.Box(c).AspectRatio(3.0 / 4.0).Radius(10).Center().Background(t.SurfaceHover)
+			box.Children(func() {
+				imageLoadingCenter(c, i18n.T("Loading cover…"))
+			})
 		}
 		ui.Text(c, displayTitle(g)).FontSize(13).SingleLine()
 		var meta string
@@ -1028,7 +1042,17 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 			})
 
 			ui.Row(c).Gap(20).AlignItems(ui.Start).Children(func() {
-				ui.Image(c, cover).Size(240, 320).Fit(ui.Cover).Radius(12)
+				if a.images.Loading(g.CoverURL) {
+					box := ui.Box(c).Size(240, 320).Radius(12).Clip()
+					box.Children(func() {
+						ui.Image(c, cover).Fill().Fit(ui.Cover).Absolute()
+						ui.Column(c).Fill().Center().Absolute().Children(func() {
+							imageLoadingCenter(c, i18n.T("Loading cover…"))
+						})
+					})
+				} else {
+					ui.Image(c, cover).Size(240, 320).Fit(ui.Cover).Radius(12)
+				}
 				ui.Column(c).Gap(10).Grow(1).Children(func() {
 					if g.TitleJPN != "" && g.TitleJPN != g.Title {
 						ui.Text(c, g.TitleJPN).FontSize(13).TextColor(t.TextMuted)
@@ -1130,7 +1154,10 @@ func (a *App) pageThumbGrid(c *ui.Context, g Gallery, s *detailState) {
 				}
 				return
 			default:
-				ui.Box(c).AspectRatio(200.0 / 282.0).Radius(8).Background(t.SurfaceHover)
+				box := ui.Box(c).AspectRatio(200.0 / 282.0).Radius(8).Center().Background(t.SurfaceHover)
+				box.Children(func() {
+					imageLoadingCenter(c, i18n.Tf("Loading thumbnail for page %d…", i+1))
+				})
 			}
 			ui.Textf(c, "%d", i+1).FontSize(11).TextColor(t.TextMuted)
 		})
