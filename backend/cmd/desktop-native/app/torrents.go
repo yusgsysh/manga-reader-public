@@ -165,7 +165,7 @@ func (a *App) torrentsBlock(c *ui.Context, s *detailState) {
 	switch {
 	case ts.loading && !ts.loaded:
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Spinner(c)
+			inlineLoading(c, i18n.T("Loading torrents…"))
 			ui.Text(c, i18n.T("Loading torrents…")).FontSize(12).TextColor(t.TextMuted)
 		})
 	case ts.err != "" && !ts.loaded:

@@ -5,7 +5,7 @@ go 1.27.1
 require (
 	entgo.io/ent v0.14.6
 	github.com/PuerkitoBio/goquery v1.13.0
-	github.com/egoist/mygo v0.5.5
+	github.com/egoist/mygo v0.6.2
 	github.com/gen2brain/webp v0.6.4
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
@@ -14,6 +14,7 @@ require (
 	github.com/prometheus/client_golang v1.25.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/sync v0.24.0
+	golang.org/x/text v0.43.0
 	modernc.org/sqlite v1.59.0
 )
 
@@ -93,7 +94,6 @@ require (
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/tools v0.51.0 // indirect
 	golang.org/x/tools/go/packages/packagestest v0.1.1-deprecated // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
