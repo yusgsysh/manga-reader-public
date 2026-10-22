@@ -42,6 +42,7 @@
 
 - [x] 新建 `mygo` 分支。
 - [x] `backend/go.mod` 引入 `github.com/egoist/mygo v0.5.5`，Go 指令升至 `1.27.1`。
+- [x] 升级 mygo 至 `v0.6.2`（0.6 带来 loading 插件）；原 `ui.Spinner` 的等待态统一改用 `plugins/loading` 的原生动画：整页加载用 `loading.Ring`（32 DIP、强调色、`EaseInOut`），行内小等待用 `loading.BouncingDots`（16 DIP、强调色）。集中封装在 `app/loading.go` 的 `pageLoading`/`inlineLoading`，并带无障碍 `Label`。新增的 6 条英文键已补中文翻译。
 - [x] `.gitignore` 只放行 `backend/cmd/desktop-native/`，旧 Wails 构建目录继续忽略。
 - [x] 本机为旧 Wails 目录加了被忽略的嵌套 `backend/cmd/desktop/go.mod`，避免 `go build ./...` 扫描到 Wails 生成文件。**该文件不在仓库中，新克隆不需要。**
 - [x] `go build ./...`、`go vet ./cmd/desktop-native/...` 通过。

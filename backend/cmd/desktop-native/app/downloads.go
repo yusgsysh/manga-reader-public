@@ -273,7 +273,7 @@ func (a *App) downloadsPage(c *ui.Context) {
 		switch {
 		case a.downloads.loading && len(a.downloads.items) == 0:
 			ui.Column(c).Fill().Center().Gap(10).Children(func() {
-				ui.Spinner(c)
+				pageLoading(c, i18n.T("Loading jobs…"))
 				ui.Text(c, i18n.T("Loading jobs…")).FontSize(12).TextColor(t.TextMuted)
 			})
 		case a.downloads.err != "" && len(a.downloads.items) == 0:

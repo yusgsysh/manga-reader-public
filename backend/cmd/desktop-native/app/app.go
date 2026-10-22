@@ -739,7 +739,7 @@ func (a *App) listPage(c *ui.Context, path, title, subtitle string, kind listKin
 		switch {
 		case s.loading && len(s.items) == 0:
 			ui.Column(c).Fill().Center().Gap(10).Children(func() {
-				ui.Spinner(c)
+				pageLoading(c, i18n.T("Loading…"))
 				ui.Text(c, i18n.T("Loading…")).FontSize(12).TextColor(t.TextMuted)
 			})
 		case s.err != "" && len(s.items) == 0:
@@ -767,8 +767,8 @@ func (a *App) listFooter(c *ui.Context, s *listState) {
 	t := c.Theme()
 	switch {
 	case s.loading:
-		ui.Row(c).Center().Gap(8).Children(func() {
-			ui.Spinner(c)
+		ui.Row(c).Center().Gap(8).AlignItems(ui.Center).Children(func() {
+			inlineLoading(c, i18n.T("Loading…"))
 			ui.Text(c, i18n.T("Loading…")).FontSize(11).TextColor(t.TextMuted)
 		})
 	case s.err != "":
@@ -882,7 +882,7 @@ func (a *App) searchPage(c *ui.Context) {
 		switch {
 		case s.loading && len(s.items) == 0:
 			ui.Column(c).Fill().Center().Gap(10).Children(func() {
-				ui.Spinner(c)
+				pageLoading(c, i18n.T("Searching…"))
 				ui.Text(c, i18n.T("Searching…")).FontSize(12).TextColor(t.TextMuted)
 			})
 		case s.err != "" && len(s.items) == 0:
@@ -992,7 +992,7 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 
 	if s.loading && !s.loaded {
 		ui.Column(c).Fill().Center().Gap(10).Children(func() {
-			ui.Spinner(c)
+			pageLoading(c, i18n.T("Loading gallery…"))
 			ui.Text(c, i18n.T("Loading gallery…")).FontSize(12).TextColor(t.TextMuted)
 		})
 		return
@@ -1203,7 +1203,7 @@ func (a *App) setupView(c *ui.Context) {
 					a.beginSetup()
 				}
 				if a.setupBusy {
-					ui.Spinner(c)
+					inlineLoading(c, i18n.T("Starting the built-in service…"))
 					ui.Text(c, i18n.T("Starting the built-in service…")).FontSize(12).TextColor(t.TextMuted)
 				}
 			})
@@ -1308,7 +1308,7 @@ func (a *App) settingsPage(c *ui.Context) {
 						a.saveCacheLimit()
 					}
 					if a.cacheMaxBusy {
-						ui.Spinner(c)
+						inlineLoading(c, i18n.T("Saving…"))
 					}
 				})
 				if a.cacheMaxErr != "" {
@@ -1321,7 +1321,7 @@ func (a *App) settingsPage(c *ui.Context) {
 						a.clearCache()
 					}
 					if a.cacheBusy {
-						ui.Spinner(c)
+						inlineLoading(c, i18n.T("Clearing cache…"))
 					}
 				})
 			}
@@ -1715,7 +1715,7 @@ func (a *App) syncSettingsSection(c *ui.Context) {
 			ui.Textf(c, i18n.T("%d changes waiting"), s.status.Pending).FontSize(12).TextColor(t.TextMuted)
 		}
 		if s.statusBusy {
-			ui.Spinner(c)
+			inlineLoading(c, i18n.T("Checking sync status…"))
 		}
 	})
 
@@ -1732,7 +1732,7 @@ func (a *App) syncSettingsSection(c *ui.Context) {
 			a.saveSyncSettings()
 		}
 		if s.saveBusy {
-			ui.Spinner(c)
+			inlineLoading(c, i18n.T("Saving sync settings…"))
 		}
 	})
 	if a.backend != nil {
@@ -1764,7 +1764,7 @@ func (a *App) syncSettingsSection(c *ui.Context) {
 	}
 	if !s.loaded && s.loading {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Spinner(c)
+			inlineLoading(c, i18n.T("Reading sync configuration…"))
 			ui.Text(c, i18n.T("Reading sync configuration…")).FontSize(12).TextColor(t.TextMuted)
 		})
 	}
