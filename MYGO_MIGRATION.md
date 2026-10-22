@@ -44,6 +44,7 @@
 - [x] `backend/go.mod` 引入 `github.com/egoist/mygo v0.5.5`，Go 指令升至 `1.27.1`。
 - [x] 升级 mygo 至 `v0.6.2`（0.6 带来 loading 插件）；原 `ui.Spinner` 的等待态统一改用 `plugins/loading` 的原生动画：整页加载用 `loading.Ring`（32 DIP、强调色、`EaseInOut`），行内小等待用 `loading.BouncingDots`（16 DIP、强调色）。集中封装在 `app/loading.go` 的 `pageLoading`/`inlineLoading`，并带无障碍 `Label`。新增的 6 条英文键已补中文翻译。
 - [x] 图片占位也加动画：封面（列表卡片、详情大图）、页面缩略图、阅读器页面在真实图片下载期间，其占位（渐变图或空盒）上居中叠一个 `loading.Ring`（24 DIP、强调色），即 `app/loading.go` 的 `imageLoadingCenter`；`ImageStore` 新增 `Loading(url)` 查询"正在下载"。新增 3 条英文键已补中文翻译。
+- [x] 重做占位图观感：`gradientBitmap` 由原来的斜向双色混合 + 正弦丝带 + 硬横条改为平滑对角渐变 + 两处低对比柔光 + 轻微暗角，配色换成协调的 12 组暗调（每组渐变两端 + 高光色），角度/柔光位置随种子变化。仍是纯算术逐像素、无高频噪声，冷启动首帧仍 ~91ms（预算 1s）。
 - [x] `.gitignore` 只放行 `backend/cmd/desktop-native/`，旧 Wails 构建目录继续忽略。
 - [x] 本机为旧 Wails 目录加了被忽略的嵌套 `backend/cmd/desktop/go.mod`，避免 `go build ./...` 扫描到 Wails 生成文件。**该文件不在仓库中，新克隆不需要。**
 - [x] `go build ./...`、`go vet ./cmd/desktop-native/...` 通过。
