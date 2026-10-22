@@ -28,7 +28,9 @@ func TestEnglishInterface(t *testing.T) {
 	_, tt := newTestApp(t)
 	waitText(t, tt, "Browse")
 	waitText(t, tt, "示例 A") // gallery titles are data, shown as given
-	if !tt.HasText("Start reading") && !tt.HasText("Refresh") {
+	// The home page's own copy is in English: its section subtitle and the
+	// nav section names prove the whole interface translated.
+	if !tt.HasText("Latest galleries") && !tt.HasText("Downloads") {
 		t.Fatalf("English controls missing; texts=%q", tt.Texts())
 	}
 	for _, s := range tt.Texts() {

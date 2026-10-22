@@ -8,12 +8,13 @@ package i18n
 // (the coverage test fails on a key that has no zh entry).
 var zh = map[string]string{
 	// --- navigation and lists ---
-	"Native":                                 "原生",
-	"Browse":                                 "浏览",
-	"Home":                                   "首页",
-	"Watched":                                "订阅",
-	"Popular":                                "热门",
-	"Search":                                 "搜索",
+	"Native":  "原生",
+	"Browse":  "浏览",
+	"Home":    "首页",
+	"Watched": "订阅",
+	"Popular": "热门",
+	"Search":  "搜索",
+	"Type a keyword to search titles, categories or tags": "输入关键词以搜索标题、分类或标签",
 	"My":                                     "我的",
 	"Bookshelf":                              "书架",
 	"Recently read":                          "最近阅读",
