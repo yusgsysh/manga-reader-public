@@ -27,11 +27,15 @@ type ImageStore struct {
 	// eviction drops: a page the reader has come back to stays.
 	head, tail *imageEntry
 	max        int
-	win        *mygo.Window
-	http       *http.Client
-	user       string
-	pass       string
-	token      string
+	// wanted are the URLs a frame is showing in the frame being built (see
+	// BeginFrame): eviction and Release leave them alone, whatever their
+	// place in the access list.
+	wanted map[string]bool
+	win    *mygo.Window
+	http   *http.Client
+	user   string
+	pass   string
+	token  string
 }
 
 type imageEntry struct {
@@ -72,6 +76,33 @@ func (s *ImageStore) touchLocked(e *imageEntry) {
 		s.head = e
 	}
 	s.tail = e
+}
+
+// BeginFrame starts recording which URLs the frame shows, for eviction and
+// Release to leave them alone. The view calls it before it draws anything that
+// can ask for a picture. Recency alone is not enough: the reader asks for the
+// pages of its window once a frame, and with a few inside the store's limit,
+// keeping the window current empties the store's capacity, so the page on
+// screen can be the first evicted, disappear for the frame it takes to fetch a
+// gain, and come back: a blink between the gradient stand-in and the picture,
+// over and over.
+func (s *ImageStore) BeginFrame() {
+	s.mu.Lock()
+	s.wanted = make(map[string]bool, 8)
+	s.mu.Unlock()
+}
+
+// Showed marks url as one the frame shows, from now on.
+func (s *ImageStore) Showed(url string) {
+	if url == "" {
+		return
+	}
+	s.mu.Lock()
+	if s.wanted == nil {
+		s.wanted = make(map[string]bool, 8)
+	}
+	s.wanted[url] = true
+	s.mu.Unlock()
 }
 
 // unlinkLocked takes e out of the access list, as touchLocked moves it
@@ -185,6 +216,11 @@ func (s *ImageStore) Release(url string) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.wanted[url] {
+		// A frame is showing it: a window that moved on must not take the
+		// picture off the screen (see BeginFrame).
+		return
+	}
 	e := s.entries[url]
 	if e == nil || !e.loading {
 		return
@@ -288,12 +324,15 @@ func (s *ImageStore) fetch(url string) (*ui.Bitmap, error) {
 
 // evictLocked drops the least recently used bitmaps until the cache is
 // within its limit. Entries still downloading are kept: they are the ones
-// the latest frames asked for. A hit moves an entry to the most recently
-// used end (touchLocked), so pages the reader came back to stay.
+// the latest frames asked for. So are the ones the frame being built shows
+// (BeginFrame): the reader keeps its whole window current, which can fill the
+// store, and the page on screen must not be the first to go. A hit moves an
+// entry to the most recently used end (touchLocked), so pages the reader came
+// back to stay.
 func (s *ImageStore) evictLocked() {
 	for e := s.head; e != nil && len(s.entries) > s.max; {
 		next := e.next
-		if !e.loading {
+		if !e.loading && !s.wanted[e.url] {
 			s.removeLocked(e)
 		}
 		e = next
