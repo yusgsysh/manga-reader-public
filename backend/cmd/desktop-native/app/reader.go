@@ -413,7 +413,11 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 		title = d.g.Title
 	}
 
-	ui.Column(c).Fill().Children(func() {
+	// The key keeps the skeleton (toolbar, page area, bottom bars) the same
+	// element across navigations, so entering the reader from a gallery
+	// replaces the page in place instead of reading as a new page sliding in.
+	// Layout is unaffected: a key only names the element.
+	ui.Column(c).Fill().Key("reader").Children(func() {
 		ui.Row(c).Padding(10, 16).Gap(10).AlignItems(ui.Center).Background(t.Surface).Children(func() {
 			if ui.Button(c, i18n.T("← Back")).Clicked() {
 				a.router.Push(fmt.Sprintf("/gallery/%d/%s", r.id, r.token))

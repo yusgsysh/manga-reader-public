@@ -452,10 +452,61 @@ func newTestApp(t *testing.T) (*App, *ui.Tester) {
 	return a, tt
 }
 
-// navSettle advances past the router's page transition. A page sliding in is
-// offset until it ends, so a click on its controls would miss.
-func navSettle(tt *ui.Tester) {
-	tt.Advance(400 * time.Millisecond)
+// navSettle is what navigation used to need: the router's page transition
+// offset a page until it ended, so a click on its controls would miss. Pages
+// appear at once now (newRouter), so it has nothing to wait for; the calls
+// stay, so a transition reintroduced later has one place to settle.
+func navSettle(*ui.Tester) {}
+
+// TestPagesAppearWithoutTransition checks a page is whole in the first frame
+// after a navigation: no slide, no fade over the frame, and its controls are
+// hit-testable at once, as a native window replaces its content.
+func TestPagesAppearWithoutTransition(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if got := a.router.Transition; got != ui.TransitionNone {
+		t.Fatalf("router transition = %v, want ui.TransitionNone", got)
+	}
+
+	// Into a gallery: the page's controls are laid out in this very frame.
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatalf("click gallery: %v", err)
+	}
+	tt.Frame()
+	if got := a.router.Path(); got != "/gallery/1/tok1" {
+		t.Fatalf("path after gallery click = %q", got)
+	}
+	for _, label := range []string{"← 返回", "开始阅读"} {
+		if _, ok := tt.Find(label); !ok {
+			t.Fatalf("%q is not on the page in the frame it first shows; texts=%q", label, tt.Texts())
+		}
+	}
+
+	// Into the reader, likewise: its toolbar responds without settling.
+	if err := tt.Click("开始阅读"); err != nil {
+		t.Fatalf("click 开始阅读 in its first frame: %v", err)
+	}
+	tt.Frame()
+	if got := a.router.Path(); got != "/reader/1/tok1" {
+		t.Fatalf("path after 开始阅读 = %q", got)
+	}
+	waitText(t, tt, "1 / 3 页")
+	if _, ok := tt.Find("下一页"); !ok {
+		t.Fatalf("reader toolbar missing in the page's first frames; texts=%q", tt.Texts())
+	}
+
+	// Across pages from the sidebar: the new page's heading is there in the
+	// frame it first shows, not after a fade.
+	if err := tt.Click("书架"); err != nil {
+		t.Fatalf("click 书架: %v", err)
+	}
+	tt.Frame()
+	if got := a.router.Path(); got != "/bookshelf" {
+		t.Fatalf("path after clicking 书架 = %q, want /bookshelf", got)
+	}
+	if !tt.HasText("收藏的画廊") {
+		t.Fatalf("bookshelf heading missing in its first frame; texts=%q", tt.Texts())
+	}
 }
 
 // waitText renders frames until s shows, failing the test on timeout. Loads
