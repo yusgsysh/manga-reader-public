@@ -240,9 +240,25 @@ type detailState struct {
 	showTorrents bool
 }
 
+// newRouter builds the window's router with no page transition. Every page is
+// a list, a gallery or the reader, all a sidebar click or one gallery apart,
+// and both of mygo's defaults read as motion for its own sake: pages across
+// (every sidebar click, and coming back from a gallery to the reader) faded in
+// whole for 150 ms, and going deeper slid 250 ms, rebuilding the page left
+// behind for the slide. A page appears at once instead, as a native app's
+// window replaces its content. Changes inside a page (a load finishing, list
+// rows settling, the reader's progress bar) are instant too, through
+// c.DisableAnimations in View; loading indicators are untouched, as they play
+// timelines of their own rather than animating towards a target.
+func newRouter() *ui.Router {
+	r := ui.NewRouter("/")
+	r.Transition = ui.TransitionNone
+	return r
+}
+
 func New(client *Client) *App {
 	a := &App{
-		router:      ui.NewRouter("/"),
+		router:      newRouter(),
 		selected:    "/",
 		lastList:    "/",
 		client:      client,
@@ -400,6 +416,14 @@ func (a *App) View(c *ui.Context) {
 	// goroutine) are shown here, where the frame, not the goroutine, adds
 	// them: mygo's toasts are only safe to touch while a view builds.
 	a.flushToasts(c)
+	// The view is a function of the state, so what changes between frames is
+	// data arriving, not a person moving: a page's loader giving way to its
+	// content, the reader growing a toolbar, a list row appearing, the
+	// progress bar stepping. Those show at once rather than sliding or fading
+	// on their own, and a load finishing never blurs the page it lands on.
+	// Navigating is instant already (newRouter); the desktop's Reduce Motion
+	// preference still applies to anything that does animate.
+	c.DisableAnimations()
 
 	if a.backend != nil && a.showSetup {
 		a.setupView(c)
