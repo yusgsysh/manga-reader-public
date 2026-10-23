@@ -20,6 +20,28 @@ type Ref struct {
 	Token     string
 }
 
+// HasMetadata reports whether the snapshot carries anything a list can show:
+// a title, a category, a cover or a page count. A snapshot with none of them
+// describes no gallery at all, only which one some work belongs to.
+func HasMetadata(snap model.GalleryCacheSnapshot) bool {
+	return snap.Title != "" || snap.TitleJPN != "" || snap.Category != "" ||
+		snap.Thumbnail != "" || snap.PageCount != 0
+}
+
+// IsEmptyRow reports whether a cache row holds nothing a list can show. Rows
+// like this exist because the page-list and page-thumbnail writes create a row
+// when none is there yet (to store the pages they just walked); when the
+// metadata write that should follow fails, or is refused by a gallery with no
+// metadata at all, the shell is all that is left. Lists tell such a row from a
+// filled one and fetch the metadata instead of showing a blank card.
+func IsEmptyRow(row *ent.GalleryCache) bool {
+	if row == nil {
+		return true
+	}
+	return row.Title == "" && row.TitleJpn == "" && row.Category == "" &&
+		row.Thumbnail == "" && row.PageCount == 0
+}
+
 // Get returns the cached row for a gallery and whether it exists.
 func Get(ctx context.Context, client *ent.Client, galleryID int64, token string) (*ent.GalleryCache, bool, error) {
 	row, err := client.GalleryCache.Query().
@@ -78,6 +100,36 @@ func GetMany(ctx context.Context, client *ent.Client, refs []Ref) (map[Ref]*ent.
 		result[Ref{GalleryID: row.GalleryID, Token: row.Token}] = row
 	}
 	return result, nil
+}
+
+// Delete removes a gallery's row. It is for a row that upstream turned out to
+// have no metadata for at all (a withdrawn or expunged gallery): kept, it
+// would make every list that references it fetch again and show a blank card.
+func Delete(ctx context.Context, client *ent.Client, galleryID int64, token string) error {
+	_, err := client.GalleryCache.Delete().
+		Where(
+			gallerycache.GalleryID(galleryID),
+			gallerycache.Token(token),
+		).
+		Exec(ctx)
+	return err
+}
+
+// GetExisting returns the rows of refs that are in the cache, keyed by ref,
+// with the rows that have no metadata dropped: a caller filling metadata only
+// has work to do where nothing has come back from upstream yet, and a row
+// holding only pages and thumbnails is exactly that.
+func GetExisting(ctx context.Context, client *ent.Client, refs []Ref) (map[Ref]*ent.GalleryCache, error) {
+	rows, err := GetMany(ctx, client, refs)
+	if err != nil {
+		return nil, err
+	}
+	for ref, row := range rows {
+		if IsEmptyRow(row) {
+			delete(rows, ref)
+		}
+	}
+	return rows, nil
 }
 
 // UpsertMeta writes metadata into the cache, keeping it in sync with the API:

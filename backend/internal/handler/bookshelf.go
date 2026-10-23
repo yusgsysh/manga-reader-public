@@ -136,16 +136,32 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 
 	// Metadata lives in gallery_cache (the bookshelf table only stores the
 	// reference), so a bookshelf entry always reflects the latest known
-	// upstream data regardless of when or how it was added.
+	// upstream data regardless of when or how it was added. An entry whose
+	// row holds only pages or thumbnails has nothing to show, so its
+	// metadata is fetched before the list is built, as the reading history
+	// does.
 	refs := make([]gallerycache.Ref, 0, len(items))
 	for _, b := range items {
 		refs = append(refs, gallerycache.Ref{GalleryID: b.GalleryID, Token: b.Token})
 	}
-	metaByRef, err := gallerycache.GetMany(ctx, s.DB.Client, refs)
+	entries, err := gallerycache.GetExisting(ctx, s.DB.Client, refs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load gallery cache failed: %v", err)})
 		return
 	}
+	metaByRef := make(map[gallerycache.Ref]*model.Gallery, len(entries))
+	for ref, row := range entries {
+		metaByRef[ref] = &model.Gallery{
+			ID:        row.GalleryID,
+			Token:     row.Token,
+			Title:     row.Title,
+			TitleJPN:  row.TitleJpn,
+			Category:  model.GalleryCategory(row.Category),
+			Thumbnail: row.Thumbnail,
+			PageCount: row.PageCount,
+		}
+	}
+	s.fillShelfMeta(ctx, refs, metaByRef)
 
 	for _, b := range items {
 		progress := progressByKey[galleryRef{id: b.GalleryID, token: b.Token}]
@@ -159,7 +175,7 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 
 		if meta := metaByRef[gallerycache.Ref{GalleryID: b.GalleryID, Token: b.Token}]; meta != nil {
 			item.Title = meta.Title
-			item.TitleJPN = meta.TitleJpn
+			item.TitleJPN = meta.TitleJPN
 			item.Category = model.GalleryCategory(meta.Category)
 			item.Thumbnail = meta.Thumbnail
 			item.Pages = meta.PageCount

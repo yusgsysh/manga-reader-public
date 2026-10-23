@@ -55,12 +55,27 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 	for _, rp := range entities {
 		refs = append(refs, gallerycache.Ref{GalleryID: rp.GalleryID, Token: rp.Token})
 	}
-	metaByRef, err := gallerycache.GetMany(ctx, s.DB.Client, refs)
+	// A row that holds only pages or thumbnails has nothing to show, so the
+	// entries without metadata are filled before the list is built: a card
+	// without its title is worse than a few extra requests.
+	entries, err := gallerycache.GetExisting(ctx, s.DB.Client, refs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load gallery cache failed: %v", err)})
 		return
 	}
-
+	metaByRef := make(map[gallerycache.Ref]*model.Gallery, len(entries))
+	for ref, row := range entries {
+		metaByRef[ref] = &model.Gallery{
+			ID:        row.GalleryID,
+			Token:     row.Token,
+			Title:     row.Title,
+			TitleJPN:  row.TitleJpn,
+			Category:  model.GalleryCategory(row.Category),
+			Thumbnail: row.Thumbnail,
+			PageCount: row.PageCount,
+		}
+	}
+	s.fillShelfMeta(ctx, refs, metaByRef)
 	items := make([]model.RecentlyReadItem, 0, len(entities))
 
 	for _, rp := range entities {
@@ -82,7 +97,7 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 
 		if meta := metaByRef[gallerycache.Ref{GalleryID: rp.GalleryID, Token: rp.Token}]; meta != nil {
 			item.Title = meta.Title
-			item.TitleJPN = meta.TitleJpn
+			item.TitleJPN = meta.TitleJPN
 			item.Category = model.GalleryCategory(meta.Category)
 			item.Thumbnail = meta.Thumbnail
 			item.Pages = meta.PageCount

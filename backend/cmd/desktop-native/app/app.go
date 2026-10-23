@@ -954,6 +954,13 @@ func (a *App) galleryCard(c *ui.Context, g Gallery) {
 			})
 		}
 		ui.Text(c, displayTitle(g)).FontSize(13).SingleLine()
+		if !g.HasMetadata() {
+			// The reading record (or the shelf entry) is there but its
+			// metadata never arrived: say so, once, in place of the
+			// category/page line an empty card would leave as " · 0 pages".
+			ui.Text(c, i18n.T("Details unavailable")).FontSize(11).TextColor(t.TextMuted).SingleLine()
+			return
+		}
 		var meta string
 		switch {
 		case g.Reading != nil && g.Reading.Completed:
@@ -982,6 +989,15 @@ func (a *App) galleryCard(c *ui.Context, g Gallery) {
 	if cell.Clicked() {
 		a.router.Push(fmt.Sprintf("/gallery/%d/%s", g.ID, g.Token))
 	}
+}
+
+// HasMetadata reports whether the gallery can describe itself: a title, a
+// category or a page count. The bookshelf and the history refer to galleries
+// whose upstream entry is gone, and the backend fetches such an entry the
+// first time a list needs it; until that read succeeds the card has only the
+// record, and says so instead of showing blanks.
+func (g Gallery) HasMetadata() bool {
+	return g.Title != "" || g.TitleJPN != "" || g.Pages > 0 || g.CoverURL != ""
 }
 
 func displayTitle(g Gallery) string {

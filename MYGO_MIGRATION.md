@@ -325,6 +325,7 @@
 - [x] ~~标签没有翻译。~~ EhTagTranslation 数据库已接入，chip 显示中文翻译。
 - [x] ~~下载管理/标签设置是空状态页。~~ 下载管理已接 prefill 任务；标签设置已接规则、同步与冲突解决。
 - [x] ~~错误文案、加载文案全部硬编码中文。~~ 已全部走 `i18n.T`，中英可切换。
+- [x] ~~最近阅读里有的画廊信息加载不出来（卡片只剩「画廊 <id>」和「 · 0 页」）。~~ 根因是 `gallery_cache` 里存在"只有页面/缩略图、没有元数据"的行：写页面列表的 `ReplacePages`/`ReplaceThumbnails` 在行不存在时会直接建行，而随后补元数据的 `PostGalleryMetadata` 失败（或源站对该画廊返回 `ErrNoMetadata`，如已下架/删除）时，`ReplacePages` 成功仍会 `recordGalleryCacheChange`，于是这具空壳被同步给了对端，两个列表都只能画出空卡片。修复：`gallerycache.GetExisting` 把这种行视为缺失，`handleBookshelfList`/`handleRecentlyRead` 在返回前用 `fillShelfMeta` 补抓元数据（`PostGalleryMetadata`，最多 8 个、4 并发、单画廊 singleflight，命中缓存不发请求），抓到后立即回填响应并落库；源站明确"没有元数据"时用 `dropEmptyCacheRow` 删掉空壳（阅读进度/书架条目另表保留），避免每次都重抓。客户端 `Gallery.HasMetadata` 为假时卡片改显示「画廊信息暂不可用」而不是空 meta 行。新增 `shelf_meta_test.go`（补抓并落库、第二次不再请求、书架同样生效、源站查无此画廊时删行）与 `TestRecentlyReadShowsMissingDetails`。
 - [ ] 本机 `backend/cmd/desktop/go.mod` 是本地补丁，不在仓库；若删除旧 Wails 目录可移除。
 - [ ] Go 模块代理在本环境对 mygo 返回过 502；需要 `GOPROXY=https://proxy.golang.org,direct`。
 - [ ] `snapshot_test.go` 需要 `-tags snapshot`，默认测试不会写文件。

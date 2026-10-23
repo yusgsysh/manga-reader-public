@@ -2158,6 +2158,46 @@ func TestGalleryContinueReading(t *testing.T) {
 	}
 }
 
+// TestRecentlyReadShowsMissingDetails covers a history entry whose gallery the
+// backend could not describe (an upstream row that never landed): the card
+// names the gallery and says its details are unavailable, instead of showing
+// the bare title and a " · 0 页" line no reader can make sense of.
+func TestRecentlyReadShowsMissingDetails(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("最近阅读"); err != nil {
+		t.Fatalf("click 最近阅读: %v", err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "示例 A")
+
+	s := a.lists["/recently-read"]
+	if s == nil || len(s.items) == 0 {
+		t.Fatal("recently-read list did not load")
+	}
+	// What the backend sends when the gallery cache row holds only pages.
+	a.update(func() {
+		s.items[0].Title, s.items[0].Category = "", ""
+		s.items[0].Pages, s.items[0].CoverURL = 0, ""
+	})
+	waitText(t, tt, "画廊 1")
+	waitText(t, tt, "画廊信息暂不可用")
+	if tt.HasText(" · 0 页") {
+		t.Fatalf("an empty card still shows its blank meta line; texts=%q", tt.Texts())
+	}
+
+	// Once the details arrive the card goes back to the usual line, which
+	// here keeps saying where reading stopped.
+	a.update(func() {
+		s.items[0].Title, s.items[0].Category = "示例 A", "同人志"
+		s.items[0].Pages = 3
+	})
+	waitText(t, tt, "同人志 · 读到第 2 页")
+	if tt.HasText("画廊信息暂不可用") {
+		t.Fatalf("the note stays after the details arrived; texts=%q", tt.Texts())
+	}
+}
+
 // TestReaderDoubleAndWheel covers double-page steps and wheel turning.
 func TestReaderDoubleAndWheel(t *testing.T) {
 	a, tt := newTestApp(t)
