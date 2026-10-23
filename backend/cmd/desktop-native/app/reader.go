@@ -761,9 +761,12 @@ func clampFloat(v, lo, hi float32) float32 {
 // This is the only place the reader asks the image store for a page: a hit
 // moves the page to the end of the store's access list, so asking again for
 // the same page in the same frame would evict what the frame just queued.
+// The page it draws is marked as shown, so neither eviction nor Release can
+// take it off the screen while this frame is what the user sees.
 func (a *App) readerPageImage(c *ui.Context, r *Reader, page int) {
 	src := r.pages[page]
 	url := a.client.PageImageURL(src)
+	a.pageImages.Showed(url)
 	bitmap := a.pageImages.Get(url)
 	failed := a.pageImages.Err(url) != ""
 	placeholder := false
