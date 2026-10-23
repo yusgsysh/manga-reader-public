@@ -47,6 +47,7 @@ var zh = map[string]string{
 	"%s · Page %d":                           "%s · 读到第 %d 页",
 	"%s · %d pages":                          "%s · %d 页",
 	"Gallery %d":                             "画廊 %d",
+	"Details unavailable":                    "画廊信息暂不可用",
 	"Search field":                           "搜索框",
 	"Search titles, categories or tags…":     "搜索标题、分类或标签…",
 	"Search results":                         "搜索结果",
