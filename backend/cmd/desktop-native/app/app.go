@@ -449,6 +449,16 @@ func (a *App) isFullscreen() bool {
 	return a.win != nil && a.win.IsFullScreen()
 }
 
+// exitFullscreen leaves full screen, if the window is in it. Leaving the reader
+// calls it, so a full-screen read never leaves the rest of the app full screen.
+// Without a window (tests) it does nothing.
+func (a *App) exitFullscreen() {
+	if a.win == nil || !a.win.IsFullScreen() {
+		return
+	}
+	a.win.SetFullScreen(false)
+}
+
 // View builds the whole window.
 func (a *App) View(c *ui.Context) {
 	a.mu.Lock()
@@ -483,11 +493,21 @@ func (a *App) View(c *ui.Context) {
 	t := c.Theme()
 	a.syncSelection()
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Background(t.Background).Children(func() {
-		a.sidebar(c, t)
+		// The reader is read, not browsed: it takes the whole window, without
+		// the sidebar its content column would otherwise sit right of.
+		if !a.readerActive() {
+			a.sidebar(c, t)
+		}
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 			a.router.View(c, func(r *ui.Route) { a.route(c, r) })
 		})
 	})
+}
+
+// readerActive reports whether the reader page is the one shown, which is what
+// decides the sidebar and the reading area's width.
+func (a *App) readerActive() bool {
+	return strings.HasPrefix(a.router.Path(), "/reader/")
 }
 
 func (a *App) syncSelection() {

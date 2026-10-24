@@ -510,7 +510,12 @@ func TestPagesAppearWithoutTransition(t *testing.T) {
 	}
 
 	// Across pages from the sidebar: the new page's heading is there in the
-	// frame it first shows, not after a fade.
+	// frame it first shows, not after a fade. The reader hides the sidebar, so
+	// leave it first.
+	if err := tt.Click("← 返回"); err != nil {
+		t.Fatalf("click the reader's back: %v", err)
+	}
+	tt.Frame()
 	if err := tt.Click("书架"); err != nil {
 		t.Fatalf("click 书架: %v", err)
 	}
@@ -903,11 +908,11 @@ func TestReaderTapFitAndJump(t *testing.T) {
 	navSettle(tt)
 	waitText(t, tt, "1 / 3 页")
 
-	// The reading area starts right of the 220px sidebar and fills the rest,
-	// so x=1200 is the right third and x=300 the left third.
-	tt.ClickAt(1200, 400)
+	// The reader hides the sidebar, so the reading area spans the whole
+	// 1280px window: x=1100 is the right third and x=180 the left third.
+	tt.ClickAt(1100, 400)
 	waitText(t, tt, "2 / 3 页")
-	tt.ClickAt(300, 400)
+	tt.ClickAt(180, 400)
 	waitText(t, tt, "1 / 3 页")
 
 	if err := tt.Click("适合页面"); err != nil {
@@ -965,7 +970,7 @@ func TestReaderTapFitAndJump(t *testing.T) {
 	waitText(t, tt, "从右到左")
 	tt.Key(0, ui.KeyRight)
 	waitText(t, tt, "2 / 3 页")
-	tt.ClickAt(1200, 400)
+	tt.ClickAt(1100, 400)
 	waitText(t, tt, "1 / 3 页")
 }
 

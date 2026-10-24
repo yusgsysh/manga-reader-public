@@ -564,7 +564,9 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 			r.resetView()
 		}
 	}
-	// Full screen works whether or not the pages have arrived yet.
+	// Full screen works whether or not the pages have arrived yet. The reader
+	// is the only page that offers it (this function only runs on /reader/),
+	// so no other page can be left in full screen with nothing to leave it.
 	if c.Shortcut(0, ui.KeyF) {
 		a.toggleFullscreen()
 	}
@@ -578,7 +580,7 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 	// own back keys are macOS-only and the toolbar's Back is the only way back
 	// on the other platforms.
 	if c.Shortcut(0, ui.KeyEscape) {
-		a.router.Back()
+		a.leaveReader(r)
 	}
 
 	// The key keeps the skeleton (toolbar, page area, bottom bars) the same
@@ -594,7 +596,7 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 			// it (the entry before the reader); opened directly (a download,
 			// a deep link), it lands on whatever the reader replaced.
 			if ui.Button(c, i18n.T("← Back")).Clicked() {
-				a.router.Back()
+				a.leaveReader(r)
 			}
 			ui.Column(c).Gap(1).Grow(1).Children(func() {
 				ui.Text(c, title).Bold().FontSize(14).SingleLine()
@@ -658,10 +660,10 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 			// painted, so the visible page and its successors arrive together.
 			a.preloadPages(r)
 
-			// The area spans the content column, right of the 220px sidebar;
-			// a tap in its outer thirds turns the page (panning stays).
+			// The area spans the whole window: the reader hides the sidebar,
+			// and a tap in its outer thirds turns the page (panning stays).
 			windowW, _ := c.Size()
-			areaW := windowW - 220
+			areaW := windowW
 
 			area := ui.Box(c).Fill().Focusable().Clip()
 			area.HandleInput(func(ev ui.InputEvent) bool {
@@ -869,6 +871,16 @@ func (a *App) preloadPages(r *Reader) {
 		}
 	}
 	r.preloaded = keep
+}
+
+// leaveReader leaves the reader for the page before it. Leaving saves the page
+// first, as waiting for the debounced write would lose the turn, and leaves
+// full screen: the screen belongs to the read, and the gallery or list behind
+// the reader is browsed windowed, with nothing left showing how to get out.
+func (a *App) leaveReader(r *Reader) {
+	a.flushProgressNow(r)
+	a.exitFullscreen()
+	a.router.Back()
 }
 
 // readerTap turns the page when the user taps the outer third of the reading
