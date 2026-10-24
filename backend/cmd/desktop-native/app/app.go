@@ -130,6 +130,10 @@ type App struct {
 	readerStart int
 	// readerJump is the page-number field under the reader.
 	readerJump string
+	// readings is the reading progress this app itself saved, per gallery, so
+	// lists and detail pages show the page just read instead of the one the
+	// backend's list rows still carry (see mergeListReading).
+	readings map[int64]readingAt
 }
 
 // syncSection is the data-sync part of the settings page. The form holds
@@ -218,6 +222,9 @@ type detailState struct {
 	loading, loaded        bool
 	err                    string
 	loadID                 int
+	// loadedAt is when the live metadata last arrived, which decides
+	// whether visiting the page again fetches it (ensureDetail).
+	loadedAt time.Time
 
 	inBookshelf bool
 	shelfKnown  bool
@@ -232,6 +239,9 @@ type detailState struct {
 	// the grid marks as where reading stopped.
 	reading      int
 	readingKnown bool
+	// readingSeq numbers the progress requests, so a late answer to an
+	// older one does not overwrite a newer page.
+	readingSeq int
 
 	// offline download started from this page.
 	downloadBusy bool
@@ -272,6 +282,7 @@ func New(client *Client) *App {
 		pageCache:   NewPageCache(4),
 		lists:       make(map[string]*listState),
 		details:     make(map[int64]*detailState),
+		readings:    make(map[int64]readingAt),
 		readerStart: -1,
 	}
 	a.images.SetAuth(client.user, client.password)
@@ -620,7 +631,12 @@ func (a *App) startListLoad(s *listState) {
 			}
 			s.loading = false
 			if err != nil {
-				s.err = err.Error()
+				// A list left open keeps what it shows; one that has nothing
+				// yet (a retry, or a first load) shows the failure with its
+				// retry rather than an empty grid.
+				if len(s.items) == 0 {
+					s.err = err.Error()
+				}
 				return
 			}
 			if page == 0 {
@@ -628,6 +644,7 @@ func (a *App) startListLoad(s *listState) {
 			} else {
 				s.items = append(s.items, items...)
 			}
+			a.mergeListReading(s)
 			s.page = page
 			s.total = total
 			s.pageSize = pageSize
@@ -637,16 +654,33 @@ func (a *App) startListLoad(s *listState) {
 	}()
 }
 
+// makeCard builds a gallery as a list card shows it: the list row, and the page
+// this app already knows the gallery was read to. The backend answers a list
+// from its own rows, which can lag behind a page the reader here just saved;
+// the card (and the detail page it opens) then still says "read to page N" and
+// opens there, as main keeps the just-saved progress in its list caches.
+func (a *App) makeCard(g Gallery) Gallery {
+	if known, ok := a.knownReading(g.ID); ok {
+		g.Reading = newerReading(g.Reading, known)
+	}
+	return g
+}
+
+// reloadList starts the list over from its first page, keeping the items on
+// screen until the new ones arrive: a list the reader comes back to shows what
+// it showed, and a reload of the same query is not a navigation that flashes an
+// empty grid. Only a list with nothing on it goes back to its loading state.
 func (a *App) reloadList(s *listState) {
 	s.loadID++
-	s.items = nil
 	s.page = 0
 	s.total = 0
 	s.lastLen = 0
-	s.loaded = false
 	s.loading = false
 	s.atEnd = false
 	s.err = ""
+	// loaded stays as it was: a list with items is still loaded while the
+	// replacement is on its way, so no page shows an empty state in between.
+	s.loaded = len(s.items) > 0
 	a.startListLoad(s)
 }
 
@@ -658,15 +692,98 @@ func (a *App) resetList(s *listState, query string) {
 	a.reloadList(s)
 }
 
-// autoRefreshEvery is how often a browsable list quietly reloads its first
-// page, so a page left open shows galleries that appeared upstream without a
-// Refresh button.
-const autoRefreshEvery = 45 * time.Second
+// readingAt is one gallery's reading progress as this app knows it: what a list
+// or the detail page reported, or what the reader saved itself.
+type readingAt struct {
+	progress ReadingProgress
+}
+
+// mergeListReading folds the reading progress this app already knows into the
+// items a list has just fetched.
+//
+// Reading a gallery writes the page to the backend right away, but the lists
+// that show it are fetched separately, and the backend answers a list from its
+// own rows: coming back from the reader can show the page the gallery had
+// before the visit, and a list left open never catches up at all. The reader's
+// saves are therefore remembered here (rememberReading) and re-applied to
+// the fetched items, where they are newer than the row's own reading (see
+// newerReading). This is the desktop counterpart of main's
+// applyReadingProgressToCaches, which writes the saved page into the
+// recently-read and bookshelf caches so the correct order shows before the
+// background refetch confirms it.
+//
+// Only the items the list has are touched; it never inserts a gallery the list
+// does not show.
+func (a *App) mergeListReading(s *listState) {
+	if len(a.readings) == 0 {
+		return
+	}
+	for i := range s.items {
+		if r, ok := a.readings[s.items[i].ID]; ok {
+			s.items[i].Reading = newerReading(s.items[i].Reading, r.progress)
+		}
+	}
+}
+
+// newerReading picks the progress to show: r unless current is later. A save
+// this app made beats a row from the list when the row is at most as new, and
+// loses to one the backend changed since (another device, say).
+func newerReading(current *ReadingProgress, r ReadingProgress) *ReadingProgress {
+	if current == nil || r.UpdatedAt == "" || current.UpdatedAt == "" {
+		return &r
+	}
+	rt, rerr := time.Parse(time.RFC3339Nano, r.UpdatedAt)
+	ct, cerr := time.Parse(time.RFC3339Nano, current.UpdatedAt)
+	if rerr != nil || cerr != nil || !ct.After(rt) {
+		return &r
+	}
+	return current
+}
+
+// rememberReading records the page the reader saved for a gallery, so the
+// lists and detail pages show it before the backend's own rows catch up.
+func (a *App) rememberReading(id int64, r ReadingProgress) {
+	if a.readings == nil {
+		a.readings = make(map[int64]readingAt)
+	}
+	a.readings[id] = readingAt{progress: r}
+}
+
+// knownReading is the progress this app remembers for a gallery, if any.
+func (a *App) knownReading(id int64) (ReadingProgress, bool) {
+	r, ok := a.readings[id]
+	return r.progress, ok
+}
+
+// autoRefreshEvery is how long a browsable list trusts what it fetched before
+// asking for its first page again, so a page left open shows galleries that
+// appeared upstream without a Refresh button. Coming back to a list within
+// the stale time shows it at once without a request, as main's GALLERY_LIST_
+// and BOOKSHELF_STALE_TIME do in the web frontend: the old refresh reloaded on
+// every visit, which both flashed the grid and spent a request per return.
+const autoRefreshEvery = 2 * time.Minute
+
+// searchStale is the same for a search: its results depend on a query that
+// changes more slowly than a browse list, so revisiting waits longer.
+const searchStale = 5 * time.Minute
+
+// listStale is how long s's first page is trusted before asking again.
+func (s *listState) listStale() time.Duration {
+	if s.kind == kindSearch {
+		return searchStale
+	}
+	return autoRefreshEvery
+}
 
 // refreshList reloads the first page without blanking what is on screen: a
 // refresh replaces the items in place, and a failure during it keeps the
 // current items rather than turning the list into an error page. It is the
 // automatic counterpart of reloadList, which a deliberate retry uses.
+//
+// The new page is merged with the reading progress this app already knows (see
+// mergeListReading), so a gallery just read does not go back to the page it
+// showed before: the backend's bookshelf/recently-read rows are not
+// re-read here, and waiting on them would show the old page on every return.
 func (a *App) refreshList(s *listState) {
 	if s.loading || s.refreshing {
 		return
@@ -689,6 +806,7 @@ func (a *App) refreshList(s *listState) {
 				return
 			}
 			s.items = items
+			a.mergeListReading(s)
 			s.page = 0
 			s.total = total
 			s.pageSize = pageSize
@@ -701,15 +819,32 @@ func (a *App) refreshList(s *listState) {
 
 // scheduleRefresh asks for the frame that runs the next automatic refresh. It
 // is called from a list page each frame, and returns the wait until it is due.
+//
+// A list being shown for the first time after a visit elsewhere is reloaded
+// only when its first page has gone stale; until then what it shows (and its
+// scrolling position) is what it showed. A list that failed leaves its error
+// to the Retry button instead of asking again every frame.
 func (a *App) scheduleRefresh(c *ui.Context, s *listState) {
 	now := c.Now()
-	if s.refreshed.IsZero() {
+	stale := s.listStale()
+	switch {
+	case !s.loaded:
+		// Nothing fetched yet, loading, or failed: the page's own state
+		// (a loader, an error and its Retry) says what happens next.
+		c.After(stale)
+		return
+	case s.refreshed.IsZero():
+		// Loaded while it was not the page on screen: the wait runs from the
+		// moment it is looked at.
 		s.refreshed = now
 	}
-	due := s.refreshed.Add(autoRefreshEvery)
+	due := s.refreshed.Add(stale)
 	if !s.loading && !s.refreshing && !now.Before(due) {
 		a.refreshList(s)
-		due = now.Add(autoRefreshEvery)
+		due = now.Add(stale)
+	}
+	if s.loading || s.refreshing {
+		due = now.Add(stale)
 	}
 	c.After(due.Sub(now))
 }
@@ -834,6 +969,9 @@ func (a *App) mapItems(items []apiGalleryItem) []Gallery {
 			CoverURL: a.client.ThumbnailURL(cover),
 		})
 	}
+	for i := range out {
+		out[i] = a.makeCard(out[i])
+	}
 	return out
 }
 
@@ -854,6 +992,7 @@ func (a *App) mapShelf(items []apiShelfItem) []Gallery {
 				CurrentPage: it.Reading.CurrentPage,
 				Progress:    it.Reading.Progress,
 				Completed:   it.Reading.Completed,
+				UpdatedAt:   it.Reading.UpdatedAt,
 			}
 		}
 		out = append(out, g)
@@ -1039,6 +1178,13 @@ func (g Gallery) HasMetadata() bool {
 	return g.Title != "" || g.TitleJPN != "" || g.Pages > 0 || g.CoverURL != ""
 }
 
+// finishedReading reports whether progress says the gallery was read to its
+// end. A gallery that was never opened has no progress (or page 0, not
+// completed), which is not the same as one finished on its first page.
+func finishedReading(r *ReadingProgress) bool {
+	return r != nil && r.Completed
+}
+
 func displayTitle(g Gallery) string {
 	if g.Title != "" {
 		return g.Title
@@ -1095,54 +1241,101 @@ func (a *App) searchPage(c *ui.Context) {
 
 // --- Gallery detail ---
 
+// detailStale is how long a gallery's metadata is trusted before visiting it
+// again asks the backend (main's GALLERY_DETAIL_STALE_TIME): a gallery's
+// metadata changes slowly, and re-fetching it on every visit put a spinner in
+// front of a page that was already known. Reading progress is different and is
+// asked for on every visit: main refetches it too.
+const detailStale = 5 * time.Minute
+
+// ensureDetail returns the gallery's page state, fetching what is missing or
+// stale. A page that is already known is shown as it is while the rest loads:
+// main's detail page shows its cached copy while the live scrape runs, and a
+// visit back from the reader should not blank the page it returns to.
 func (a *App) ensureDetail(id int64, token string) *detailState {
 	s := a.details[id]
 	if s == nil {
 		s = &detailState{id: id, token: token}
 		a.details[id] = s
 	}
-	if s.loaded || s.loading {
+	if s.loading {
 		return s
 	}
-	a.startDetailLoad(s)
+	needMeta := !s.loaded || s.loadedAt.IsZero() || time.Since(s.loadedAt) >= detailStale
+	// Reading progress is asked for on every visit, as main's detail page
+	// does: one cheap request which the button and the reader's start page
+	// depend on. It is a request of its own, leaving an already loaded page
+	// as it is until the answer lands (startDetailLoad).
+	if needMeta {
+		a.startDetailLoad(s, true)
+	} else {
+		a.refreshDetailReading(s)
+	}
 	return s
 }
 
-func (a *App) startDetailLoad(s *detailState) {
+// startDetailLoad asks for what the page does not have yet: the reading
+// progress (always, unless asked for metadata only) and, when withMeta, the
+// gallery's metadata: the cached copy first, as main's useOnlineThenCached
+// does (useCacheAsPlaceholder), then the live answer when it arrives. The two
+// run apart, so "Continue" and the reader's page do not wait on a live scrape
+// that takes seconds, and a page already on screen keeps showing it.
+func (a *App) startDetailLoad(s *detailState, withMeta bool) {
 	s.loading = true
 	s.err = ""
 	s.loadID++
 	lid := s.loadID
 	id, token := s.id, s.token
 
+	a.refreshDetailReading(s)
+
 	go func() {
 		ctx := context.Background()
+		if withMeta {
+			if d, err := a.client.CachedGallery(ctx, id, token); err == nil && d.PageCount > 0 {
+				a.update(func() {
+					if s.loadID != lid {
+						return
+					}
+					a.applyDetail(s, d)
+					s.loaded = true
+				})
+			}
+		}
+		if !withMeta {
+			a.update(func() {
+				if s.loadID == lid {
+					s.loading = false
+				}
+			})
+			return
+		}
 		d, err := a.client.Gallery(ctx, id, token)
 		if err != nil {
-			d, err = a.client.CachedGallery(ctx, id, token)
+			// The cache may have answered above; only a page with nothing
+			// on it shows this error.
+			a.update(func() {
+				if s.loadID != lid {
+					return
+				}
+				s.loading = false
+				if !s.loaded {
+					s.err = err.Error()
+				}
+			})
+			return
 		}
 		inShelf, shelfErr := a.client.BookshelfStatus(ctx, id, token)
-		reading, readingErr := a.client.Progress(ctx, id, token)
 		a.update(func() {
 			if s.loadID != lid {
 				return
 			}
 			s.loading = false
-			if err != nil {
-				s.err = err.Error()
-				return
-			}
-			s.g = a.galleryFromDetail(d)
-			s.tags = d.Tags
-			s.uploader = d.Uploader
-			s.posted = d.PostedAt
-			s.size = d.FileSize
+			a.applyDetail(s, d)
 			s.loaded = true
+			s.loadedAt = time.Now()
 			if shelfErr == nil {
 				s.inBookshelf, s.shelfKnown = inShelf, true
-			}
-			if readingErr == nil {
-				s.reading, s.readingKnown = reading.CurrentPage, true
 			}
 		})
 	}()
@@ -1152,7 +1345,64 @@ func (a *App) retryDetail(s *detailState) {
 	s.loaded = false
 	s.loading = false
 	s.err = ""
-	a.startDetailLoad(s)
+	a.startDetailLoad(s, true)
+}
+
+// refreshDetailReading asks for where the gallery was read to, without
+// touching the metadata: the detail page loads like main's (the progress query
+// runs on its own), so a page already on screen is never blanked for it, and a
+// visit to the reader shows up as soon as the answer lands.
+func (a *App) refreshDetailReading(s *detailState) {
+	s.readingSeq++
+	seq := s.readingSeq
+	id, token := s.id, s.token
+	go func() {
+		reading, err := a.client.Progress(context.Background(), id, token)
+		if err != nil {
+			return
+		}
+		a.update(func() {
+			if s.readingSeq == seq {
+				a.applyDetailReading(s, reading)
+			}
+		})
+	}()
+}
+
+// applyDetail copies a gallery's metadata into the detail page. The reading
+// progress comes from Progress, not from the metadata, and is left alone.
+func (a *App) applyDetail(s *detailState, d apiGalleryDetail) {
+	reading, readingKnown := s.reading, s.readingKnown
+	g := a.galleryFromDetail(d)
+	if readingKnown {
+		g.Reading = &ReadingProgress{CurrentPage: reading}
+	}
+	s.g = g
+	s.tags = d.Tags
+	s.uploader = d.Uploader
+	s.posted = d.PostedAt
+	s.size = d.FileSize
+	s.reading, s.readingKnown = reading, readingKnown
+}
+
+// applyDetailReading records where the gallery was read to: the backend's
+// progress row, and the page this app saved in it when that is further on (the
+// row can be read before a visit's write lands, or be a list row the backend
+// had not updated yet). The detail page's button and the reader both take their
+// page from it.
+func (a *App) applyDetailReading(s *detailState, r apiReading) {
+	progress := ReadingProgress{
+		CurrentPage: r.CurrentPage,
+		Progress:    r.Progress,
+		Completed:   r.Completed,
+		UpdatedAt:   r.UpdatedAt,
+	}
+	if known, ok := a.knownReading(s.id); ok && known.CurrentPage > progress.CurrentPage {
+		progress = known
+		progress.UpdatedAt = r.UpdatedAt
+	}
+	s.reading, s.readingKnown = progress.CurrentPage, true
+	s.g.Reading = &progress
 }
 
 func (a *App) galleryFromDetail(d apiGalleryDetail) Gallery {
@@ -1204,11 +1454,22 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 					a.router.Back()
 				}
 				ui.Text(c, displayTitle(g)).FontSize(22).Bold().Grow(1)
+				// NextPage is 0 both for a gallery never opened and for one
+				// read to its end: the saved page tells them apart. The page
+				// this app saved in the gallery counts too, so a gallery just
+				// read continues where it stopped even before the backend's
+				// progress row says so.
+				page, finished := s.reading, finishedReading(g.Reading)
+				if known, ok := a.knownReading(g.ID); ok && known.CurrentPage > page {
+					page, finished = known.CurrentPage, known.Completed
+				}
 				label := i18n.T("Start reading")
-				if s.readingKnown && s.reading >= g.Pages-1 && g.Pages > 0 {
+				if g.Pages > 0 && page >= g.Pages-1 {
 					label = i18n.T("Read again")
-				} else if next := g.NextPage(); next > 0 {
-					label = fmt.Sprintf(i18n.T("Continue (page %d)"), next+1)
+				} else if finished {
+					label = i18n.T("Read again")
+				} else if page > 0 {
+					label = fmt.Sprintf(i18n.T("Continue (page %d)"), page+1)
 				}
 				if ui.PrimaryButton(c, label).Clicked() {
 					a.readerStart = -1

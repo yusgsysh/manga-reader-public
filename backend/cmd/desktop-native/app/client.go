@@ -347,6 +347,11 @@ func (c *Client) pages(ctx context.Context, path string, timeout time.Duration, 
 	if total == 0 {
 		total = len(urls)
 	}
+	if total < len(urls) {
+		// The list is the truth when it outruns the announced total: a
+		// reader that took the smaller number would cut pages off.
+		total = len(urls)
+	}
 	return total, urls, nil
 }
 
@@ -356,6 +361,9 @@ type apiReading struct {
 	CurrentPage int     `json:"current_page"`
 	Progress    float64 `json:"progress"`
 	Completed   bool    `json:"completed"`
+	// UpdatedAt is when the page was last saved, which tells a cached reading
+	// from a live one (see detailState).
+	UpdatedAt string `json:"updated_at"`
 }
 
 type apiShelfItem struct {
