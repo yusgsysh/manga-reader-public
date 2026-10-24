@@ -38,6 +38,9 @@ type App struct {
 	pageImages *ImageStore
 	pageThumbs *ImageStore
 	pageCache  *PageCache
+	// inView is set while View builds a frame (see pageImageStore), so the
+	// pages a frame asks for are the ones it is about to draw.
+	inView bool
 
 	// backend is the in-process API lifecycle; nil in tests and when the app
 	// talks to an external server.
@@ -278,6 +281,35 @@ func New(client *Client) *App {
 	return a
 }
 
+// pageImageStore is the store the reader asks for a picture through. While
+// the view builds a frame, what it asks for is what it will draw within the
+// refresh, so the store keeps those until the next frame starts
+// (ImageStore.BeginFrame) and fetches their downloads first.
+//
+// Only the view's asks count: the preload window asks on the main thread
+// between frames, for pages nobody is looking at yet, and asking for those
+// again every frame would keep the whole window from ever being evicted.
+func (a *App) pageImageStore() interface {
+	Get(string) *ui.Bitmap
+} {
+	if !a.inView {
+		return shownStore{nil, a.pageImages}
+	}
+	return shownStore{a.pageImages, a.pageImages}
+}
+
+// shownStore is the image store seen from the view: asking it for a picture
+// marks the picture as one the frame being built shows. A nil marker is the
+// main thread's view between frames, which shows nothing yet.
+type shownStore struct{ marker, store *ImageStore }
+
+func (s shownStore) Get(url string) *ui.Bitmap {
+	if s.marker != nil {
+		s.marker.Showed(url)
+	}
+	return s.store.Get(url)
+}
+
 // SetBuild records the version and platform shown in settings (set by main).
 func (a *App) SetBuild(description string) {
 	a.mu.Lock()
@@ -411,6 +443,13 @@ func (a *App) View(c *ui.Context) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	// The frame starts here: what the image store keeps is what this frame
+	// asks for (see ImageStore.BeginFrame). Without this the store would keep
+	// everything every frame ever asked for, and a page the reader once
+	// ordered would never be released.
+	a.pageImages.BeginFrame()
+	a.inView = true
+	defer func() { a.inView = false }()
 	a.syncTagRulesLocked()
 	// Toasts asked for off the main thread (a download started in a
 	// goroutine) are shown here, where the frame, not the goroutine, adds

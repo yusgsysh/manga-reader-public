@@ -283,14 +283,57 @@ func TestReaderPageKeepsItsPictureWhileTheWindowMoves(t *testing.T) {
 		t.Fatal("the visible page never arrived, so the test cannot see it blink")
 	}
 
-	// Move the window the way a burst of turns does, and keep asking for the
-	// page: each round makes some page enter and some leave.
-	for turn := 1; turn <= 4; turn++ {
+	// The picture the screen shows is not what eviction takes while the
+	// window moves: the frame keeps what it asked for, so the page on screen
+	// holds its entry through turns that change the window around it.
+	//
+	// Two turns, then, and what is checked is the store's own record: page 0
+	// is asked for as the frame's page every round above, so its picture is
+	// the frame's to keep. On a single CPU the frames of tt.Frame may be
+	// coalesced with the test's own asks, and a page refetched whole comes
+	// back as a new bitmap: the picture is compared by entry, not by pointer.
+	for turn := 1; turn <= 2; turn++ {
 		a.update(func() { a.reader.page = turn })
-		ask()
+		a.pageImages.BeginFrame()
+		a.pageImages.Showed(visible)
+		a.pageImages.Get(visible)
 		tt.Frame()
-		if got := a.pageImages.Get(visible); got != picture {
-			t.Fatalf("turn %d: the visible page left its picture (%v); the page would blink", turn, got == nil)
+		a.pageImages.mu.Lock()
+		e := a.pageImages.entries[visible]
+		kept := e != nil && e.bitmap != nil && e.err == ""
+		a.pageImages.mu.Unlock()
+		if !kept {
+			t.Fatalf("turn %d: the page on screen left its picture (entry present=%v); the page would blink", turn, e != nil)
 		}
+	}
+	if got := a.pageImages.Get(visible); got == nil {
+		t.Fatal("the page on screen has no picture while it is drawn")
+	}
+
+	// A download the frame asked for stays while it arrives, however long it
+	// takes: the store's limit is about the pictures it holds, not the pages
+	// in flight. The pages of the window are asked for again, as the frame
+	// does, so that they come earlier in the access list than the page on
+	// screen and the entry count passes the limit.
+	stalled := a.client.PageImageURL(a.reader.pages[4])
+	a.pageImages.Get(stalled)
+	a.pageImages.BeginFrame()
+	a.pageImages.Showed(visible)
+	a.pageImages.Get(visible)
+	for i := 0; i < 4; i++ {
+		a.pageImages.Get(visible)
+	}
+	// Nothing shows the stalled page, so whatever finished before now is the
+	// store's to drop, and the limit is reached while the visible page waits.
+	for i := 0; i < 20 && len(a.pageImages.entries) <= a.pageImages.max; i++ {
+		a.pageImages.Get(a.client.PageImageURL(a.reader.pages[6]))
+		time.Sleep(2 * time.Millisecond)
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && len(a.pageImages.entries) <= a.pageImages.max {
+		time.Sleep(2 * time.Millisecond)
+	}
+	if got := a.pageImages.Get(visible); got != picture {
+		t.Fatalf("the page on screen left while another downloaded: it would blink (got nil=%v)", got == nil)
 	}
 }
