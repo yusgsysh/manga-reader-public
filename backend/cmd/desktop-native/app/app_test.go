@@ -458,9 +458,14 @@ func newTestApp(t *testing.T) (*App, *ui.Tester) {
 // stay, so a transition reintroduced later has one place to settle.
 func navSettle(*ui.Tester) {}
 
-// TestPagesAppearWithoutTransition checks a page is whole in the first frame
-// after a navigation: no slide, no fade over the frame, and its controls are
-// hit-testable at once, as a native window replaces its content.
+// TestPagesAppearWithoutTransition checks a navigation is not animated: the
+// router switches at once and the next frame is laid out where the page sits,
+// with no offset to wait out before its controls can be hit.
+//
+// It does not check that a page's data has arrived by then. The loads run in
+// goroutines, so a page that has not got its data yet says it is loading in a
+// frame of its own; what the test pins down is that nothing animates, which is
+// what used to move a control out from under a click.
 func TestPagesAppearWithoutTransition(t *testing.T) {
 	a, tt := newTestApp(t)
 	waitText(t, tt, "示例 A")
@@ -468,7 +473,9 @@ func TestPagesAppearWithoutTransition(t *testing.T) {
 		t.Fatalf("router transition = %v, want ui.TransitionNone", got)
 	}
 
-	// Into a gallery: the page's controls are laid out in this very frame.
+	// Into a gallery: the router is on the page in this very frame, and the
+	// page says one of two things at once, its loader or its content, with
+	// nothing between them to wait out.
 	if err := tt.Click("示例 A"); err != nil {
 		t.Fatalf("click gallery: %v", err)
 	}
@@ -476,9 +483,16 @@ func TestPagesAppearWithoutTransition(t *testing.T) {
 	if got := a.router.Path(); got != "/gallery/1/tok1" {
 		t.Fatalf("path after gallery click = %q", got)
 	}
+	if !tt.HasText("正在加载画廊…") && !tt.HasText("开始阅读") {
+		t.Fatalf("the gallery shows neither its loader nor its content in the frame it first shows; texts=%q", tt.Texts())
+	}
+	// Its controls are there by the time it draws them; the load is the only
+	// thing that can hold them back, and it holds back the whole page, not
+	// the position of the controls on it.
+	waitText(t, tt, "开始阅读")
 	for _, label := range []string{"← 返回", "开始阅读"} {
 		if _, ok := tt.Find(label); !ok {
-			t.Fatalf("%q is not on the page in the frame it first shows; texts=%q", label, tt.Texts())
+			t.Fatalf("%q is missing once the gallery has loaded; texts=%q", label, tt.Texts())
 		}
 	}
 
@@ -509,32 +523,44 @@ func TestPagesAppearWithoutTransition(t *testing.T) {
 	}
 }
 
-// waitText renders frames until s shows, failing the test on timeout. Loads
-// run in goroutines; each frame picks up whatever has arrived.
-func waitText(t *testing.T, tt *ui.Tester, s string) {
+// waitFor renders frames until cond holds, failing the test on timeout. It is
+// how a test waits for work that runs in a goroutine: the loads, saves and
+// poll rounds of the app all finish on some other goroutine and hand their
+// result to the view under the app lock, so a frame picks up whatever has
+// arrived meanwhile.
+//
+// What cond reads must be the state the test is about to assert on, not
+// something that merely tends to appear first. A view can show the text of one
+// step while the next is still running: a save leaves its message on screen
+// before the button stops saying it is busy, and a sync writes its summary in
+// the same frame that replaces the rules. Waiting for the text then returns
+// with the assertion's own precondition unmet, which on a single CPU, where
+// the goroutines interleave differently, is a failure and not a rare one.
+//
+// cond runs with the app lock held when it needs it; keep it free of frame
+// work, since it runs between frames, never during one.
+func waitFor(t *testing.T, tt *ui.Tester, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		tt.Frame()
-		if tt.HasText(s) {
+		if cond() {
 			return
 		}
 		time.Sleep(2 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for %q; texts=%q", s, tt.Texts())
+	t.Fatalf("timed out waiting for %s; texts=%q", what, tt.Texts())
+}
+
+// waitText renders frames until s shows.
+func waitText(t *testing.T, tt *ui.Tester, s string) {
+	t.Helper()
+	waitFor(t, tt, fmt.Sprintf("%q to show", s), func() bool { return tt.HasText(s) })
 }
 
 func waitNoText(t *testing.T, tt *ui.Tester, s string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		tt.Frame()
-		if !tt.HasText(s) {
-			return
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for %q to disappear; texts=%q", s, tt.Texts())
+	waitFor(t, tt, fmt.Sprintf("%q to disappear", s), func() bool { return !tt.HasText(s) })
 }
 
 func TestHomeLoadsAPI(t *testing.T) {
@@ -979,11 +1005,18 @@ func TestDownloadsStartAndPoll(t *testing.T) {
 
 	// The fake backend reports running twice, then completed. The page arms a
 	// c.After timer for the next poll, which the tester's clock drives: move
-	// it past the interval and render. Three rounds cover the two "running"
-	// answers and the last one.
+	// it past the interval, then wait for the round it starts. A round runs
+	// its requests in a goroutine, and the page will not start the next one
+	// while polling is set, so sleeping past the interval and moving the
+	// clock again would advance over a round that has not been sent yet.
+	// Three rounds cover the two "running" answers and the last one.
 	for i := 0; i < 3; i++ {
 		tt.Advance(downloadPollInterval)
-		time.Sleep(10 * time.Millisecond)
+		waitFor(t, tt, "the poll round to finish", func() bool {
+			a.mu.Lock()
+			defer a.mu.Unlock()
+			return !a.downloads.polling
+		})
 	}
 	if !tt.HasText("已完成") {
 		t.Fatalf("download did not reach 已完成; texts=%q", tt.Texts())
@@ -1617,9 +1650,21 @@ func TestDownloadExportZip(t *testing.T) {
 		t.Fatalf("click 下载管理: %v", err)
 	}
 	navSettle(tt)
+	// The list loads in a goroutine, and a round only polls the jobs it
+	// already has: moving the clock before it lands advances over a page
+	// that is still showing its loader.
+	waitFor(t, tt, "the job list to load", func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return a.downloads.loaded
+	})
 	for i := 0; i < 3; i++ {
 		tt.Advance(downloadPollInterval)
-		time.Sleep(10 * time.Millisecond)
+		waitFor(t, tt, "the poll round to finish", func() bool {
+			a.mu.Lock()
+			defer a.mu.Unlock()
+			return !a.downloads.polling
+		})
 	}
 	if !tt.HasText("已完成") {
 		t.Fatalf("job did not complete; texts=%q", tt.Texts()[14:])
@@ -1750,23 +1795,37 @@ func TestTagSettingsSync(t *testing.T) {
 	}
 	navSettle(tt)
 	waitText(t, tt, "与源站同步")
+	// The sync button is disabled while a sync runs, and this section's is
+	// the only control startable before the page has settled. Waiting for
+	// the page's own heading is not enough: it draws before the section's
+	// state has loaded.
+	waitFor(t, tt, "the tag rules to load", func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return a.tags.loaded && !a.tags.syncing
+	})
 
 	if err := tt.Click("同步"); err != nil {
 		t.Fatalf("click 同步: %v", err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		tt.Frame()
-		if a.tags.syncResult != "" {
-			break
-		}
-		time.Sleep(2 * time.Millisecond)
+	// The result and the rules it announces are written in the same update,
+	// the rules first; wait for the sync to end rather than for its summary,
+	// since the summary is set before the sync's own flag clears and reading
+	// either without the lock races the goroutine that writes them.
+	waitFor(t, tt, "the sync to finish", func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return !a.tags.syncing && a.tags.syncResult != ""
+	})
+	a.mu.Lock()
+	result := a.tags.syncResult
+	rules := a.tags.rules
+	a.mu.Unlock()
+	if !strings.Contains(result, "拉取 2") {
+		t.Fatalf("sync result = %q", result)
 	}
-	if !strings.Contains(a.tags.syncResult, "拉取 2") {
-		t.Fatalf("sync result = %q", a.tags.syncResult)
-	}
-	if got := a.tags.rules; len(got) != 1 || got[0].Tag != "female:yuri" {
-		t.Fatalf("rules after sync = %+v", got)
+	if len(rules) != 1 || rules[0].Tag != "female:yuri" {
+		t.Fatalf("rules after sync = %+v", rules)
 	}
 }
 
@@ -2406,14 +2465,13 @@ func TestSettingsAppearance(t *testing.T) {
 	if err := tt.Click("深色"); err != nil {
 		t.Fatalf("click 深色: %v", err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		tt.Frame()
-		if a.appearance == "dark" {
-			break
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
+	// The window takes the choice at once; the backend stores it on a
+	// goroutine. Waiting for the view's copy of the choice to say "dark" says
+	// nothing about the save, which is what this test then reads: wait for
+	// the backend instead.
+	waitFor(t, tt, "the backend to store the appearance", func() bool {
+		return backend.Appearance() == "dark"
+	})
 	if got := backend.Appearance(); got != "dark" {
 		t.Fatalf("backend appearance = %q", got)
 	}
@@ -2972,11 +3030,22 @@ func TestSettingsSyncSection(t *testing.T) {
 	navSettle(tt)
 	waitText(t, tt, "数据同步")
 	waitText(t, tt, "未启用")
+	// The section's controls are disabled until the stored config arrives,
+	// since the toggle reads and writes it: wait for it before the first
+	// click, or the click lands on a disabled button and nothing follows.
+	waitFor(t, tt, "the stored sync config to load", func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return a.sync.loaded && a.sync.statusLoaded
+	})
 
 	// Enable, fill the peer and save. The stored token is masked; typing a
 	// new one replaces it.
 	if err := tt.Click("切换同步开关"); err != nil {
 		t.Fatal(err)
+	}
+	if !a.sync.form.enabled {
+		t.Fatal("the toggle did not enable sync")
 	}
 	tt.Click("对方地址")
 	tt.Type("http://192.168.1.20:8080")
@@ -2985,6 +3054,15 @@ func TestSettingsSyncSection(t *testing.T) {
 	if err := tt.Click("保存同步设置"); err != nil {
 		t.Fatalf("click save: %v", err)
 	}
+	// The save runs on a goroutine and the button is disabled while it does,
+	// so a click before it finishes does nothing at all. Its message appears
+	// a frame before the button comes back, so wait on the button's own
+	// state, then on what the save was to show.
+	waitFor(t, tt, "the first save to finish", func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return !a.sync.saveBusy
+	})
 	waitText(t, tt, "✓ 已启用")
 	waitText(t, tt, "已保存")
 	waitText(t, tt, "已连接")
@@ -2996,10 +3074,17 @@ func TestSettingsSyncSection(t *testing.T) {
 	// Saving again without touching the token keeps the stored secret: the
 	// form shows the mask, and the fake reports the token still set (the
 	// status only reports 已连接 while the token is non-empty).
+	// The stored token comes back masked once the first save's answer lands,
+	// which is also when the button comes back.
 	waitText(t, tt, "********")
 	if err := tt.Click("保存同步设置"); err != nil {
 		t.Fatal(err)
 	}
+	waitFor(t, tt, "the second save to finish", func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return !a.sync.saveBusy
+	})
 	waitText(t, tt, "已连接")
 
 	// Clearing the token disables the engine (no credentials): the status
@@ -3010,6 +3095,11 @@ func TestSettingsSyncSection(t *testing.T) {
 	if err := tt.Click("保存同步设置"); err != nil {
 		t.Fatal(err)
 	}
+	waitFor(t, tt, "the save that clears the token to finish", func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return !a.sync.saveBusy
+	})
 	waitText(t, tt, "缺少服务器地址或令牌")
 	if a.sync.status.Configured {
 		t.Fatal("status still configured after clearing the token")
@@ -3194,17 +3284,22 @@ func TestAppearanceAppliesWithoutRestart(t *testing.T) {
 			if step.want == mygo.ThemeDark {
 				other = mygo.ThemeLight
 			}
+			// The source is set on a goroutine here as a window sets it, so
+			// wait for it to take effect rather than for a fixed sleep: on a
+			// single CPU the goroutine may not have run when the sleep ends,
+			// and the click below would then find the source it was moving
+			// away from.
 			go mygo.Theme.SetSource(other)
-			time.Sleep(20 * time.Millisecond)
+			waitFor(t, tt, "the theme source to move away", func() bool {
+				return mygo.Theme.Source() != step.want
+			})
 		}
 		if err := tt.Click(step.label); err != nil {
 			t.Fatalf("click %s: %v", step.label, err)
 		}
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) && mygo.Theme.Source() != step.want {
-			tt.Frame()
-			time.Sleep(2 * time.Millisecond)
-		}
+		waitFor(t, tt, fmt.Sprintf("the theme source to become %q", step.want), func() bool {
+			return mygo.Theme.Source() == step.want
+		})
 		if got := mygo.Theme.Source(); got != step.want {
 			t.Fatalf("after clicking %s, mygo theme source = %q, want %q", step.label, got, step.want)
 		}
