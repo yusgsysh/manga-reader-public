@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -180,15 +179,17 @@ func (a *App) startReaderLoad(r *Reader) {
 	r.loading = true
 	r.started = true
 	r.err = ""
+	// The page this app last saved can open the reader, ahead of the backend's
+	// row, which can lag behind a visit that just ended.
+	r.saved, r.savedSet = 0, false
+	if known, ok := a.knownReading(r.id); ok && known.CurrentPage > 0 {
+		r.saved, r.savedSet = known.CurrentPage, true
+	}
 	// A target set before the load began decides the page, not the saved
 	// progress that arrives with the list.
 	if a.readerStart >= 0 {
 		r.startPage = a.readerStart
 		r.saved, r.savedSet = 0, false
-	} else if known, ok := a.knownReading(r.id); ok && known.CurrentPage > 0 {
-		// The page this app last saved opens the reader, ahead of the
-		// backend's row, which can lag behind a visit that just ended.
-		r.saved, r.savedSet = known.CurrentPage, true
 	}
 	// partial is how many pages the view already shows. Until the backend
 	// sends the first one, the reader waits; after that it stays readable
@@ -573,14 +574,27 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 		title = d.g.Title
 	}
 
+	// Escape leaves the reader, as it closes the panels over it: the router's
+	// own back keys are macOS-only and the toolbar's Back is the only way back
+	// on the other platforms.
+	if c.Shortcut(0, ui.KeyEscape) {
+		a.router.Back()
+	}
+
 	// The key keeps the skeleton (toolbar, page area, bottom bars) the same
 	// element across navigations, so entering the reader from a gallery
 	// replaces the page in place instead of reading as a new page sliding in.
 	// Layout is unaffected: a key only names the element.
 	ui.Column(c).Fill().Key("reader").Children(func() {
 		ui.Row(c).Padding(10, 16).Gap(10).AlignItems(ui.Center).Background(t.Surface).Children(func() {
+			// Back is the history's, not a push to the gallery: pushing the
+			// gallery the reader was opened from adds an entry every visit,
+			// so reader → gallery → reader → gallery grows without end and
+			// leaving the two is never done. From a gallery, this lands on
+			// it (the entry before the reader); opened directly (a download,
+			// a deep link), it lands on whatever the reader replaced.
 			if ui.Button(c, i18n.T("← Back")).Clicked() {
-				a.router.Push(fmt.Sprintf("/gallery/%d/%s", r.id, r.token))
+				a.router.Back()
 			}
 			ui.Column(c).Gap(1).Grow(1).Children(func() {
 				ui.Text(c, title).Bold().FontSize(14).SingleLine()
