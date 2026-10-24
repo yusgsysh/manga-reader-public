@@ -198,7 +198,9 @@ var zh = map[string]string{
 	"Original size":                     "原始尺寸",
 	"Page %d failed to load":            "第 %d 页加载失败",
 	"Retry without cache":               "绕过缓存重试",
+	"Reload pages":                      "重新加载页面列表",
 	"Retry this page without the cache": "绕过缓存重试本页",
+	"Page %d could not be loaded from the source": "第 %d 页源站没有提供",
 	"Loading page %d…":                  "正在加载第 %d 页…",
 
 	// --- downloads ---

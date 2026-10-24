@@ -64,7 +64,7 @@ func TestReaderTargetBeatsLateProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "开始阅读")
+	waitText(t, tt, "继续阅读")
 
 	// As the detail page's thumbnail grid does: ask for page 3, then open.
 	a.readerStart = 2
@@ -99,8 +99,8 @@ func TestReaderResumesSavedProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "开始阅读")
-	if err := tt.Click("开始阅读"); err != nil {
+	waitText(t, tt, "继续阅读（第 4 页）")
+	if err := tt.Click("继续阅读（第 4 页）"); err != nil {
 		t.Fatal(err)
 	}
 	navSettle(tt)

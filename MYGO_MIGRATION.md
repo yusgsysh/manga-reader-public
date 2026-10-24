@@ -1,7 +1,7 @@
 # MyGo 原生桌面迁移 TODO
 
 > 分支：`mygo` · 关键提交：`fad66b5`（原生浏览/阅读器）、`81e3621`（迁移 TODO）、本次「内嵌后端 + 本地文件缓存」
-> 更新日期：2026-10-20
+> 更新日期：2026-10-24
 >
 > 目标：把整个产品改为 **MyGo 原生 UI 桌面应用**（macOS / Linux / Windows），不再提供浏览器访问和 Android APK。
 > 技术边界：纯 Go + `github.com/egoist/mygo/ui` 原生控件，不使用 WebView、不构建 React 前端。
@@ -90,6 +90,26 @@
 - [x] 底部进度条、页码/缩放百分比、快捷键提示。
 - [x] 图片未加载时显示占位页面，加载完成自动重绘。
 - [x] 返回画廊详情，不依赖浏览器 History。
+- [x] 与 main 分支（TypeScript 前端）对齐阅读器（详见 §2.4.1）
+  - [x] 页面槽位按画廊总页数一次铺开：`total` 以详情页的 `page_count` 为准，流式到达的页填入对应槽位，列表不再逐页增长、缩放/进度条分母稳定（对应 main 的 `galleryPageSlotsToManga`：先按 `total` 建固定槽位，URL 由 `PageUrlStore` 懒解析）。
+  - [x] 起始页判定与 main 一致：`?page=` / 缩略图点击 > 本地已保存页 > 后端 `current_page`，且目标页到达就生效，不必等整份列表；读到末页仍从末页打开（main 仅在 `restart` 时回第一页）。
+  - [x] 空槽位：流式未到时显示「正在加载第 N 页…」；流结束后该页源站确实没有时提示「第 N 页源站没有提供 / 重新加载页面列表」；流结束短于总数时裁掉尾部空槽，工具栏与进度条按实际页数计（main 用损坏图哨兵占位）。
+  - [x] 进度语义对齐 main 的 `calculateProgress`：末页即 100% 且 `completed`，进度写回夹到 `total-1`。
+  - [x] 进度本地缓存（对应 main 的 `applyReadingProgressToCaches`）：翻页即刻记到 `App.readings`，列表卡片、详情页「继续阅读」与再次打开阅读器都先看这一份，后端列表/进度行滞后也不会回退到旧页码。
+  - [x] 流内页数校验：`total` 小于实际页数时按实际页数计（main 的流校验要求 `done.total` 与收到页数一致）。
+
+### 2.4.1 与 main（TypeScript）阅读链路的逐项对照
+
+| main（frontend） | mygo（本分支） | 说明 |
+|---|---|---|
+| `useOnlineThenCached`（在线优先、缓存兜底、`useCacheAsPlaceholder`） | 详情页：先 `CachedGallery` 上屏，再 `Gallery` 覆盖；阅读页列表：在线流失败回退 `/api/gallery-cache/.../pages` | 单次加载合并为「缓存先显示、在线覆盖」，不再等在线抓取失败才回退 |
+| `GALLERY_DETAIL_STALE_TIME = 5min` | `detailStale = 5min`（`ensureDetail`） | 回到详情页 5 分钟内不再重新抓元数据、不再闪加载页 |
+| `PROGRESS_STALE_TIME = 30s`，详情页每次进入都查进度 | 每次进入详情页都单独 `refreshDetailReading` | 元数据与进度分开请求，读完后返回不会再显示旧页码，也不阻塞页面 |
+| `GALLERY_LIST_STALE_TIME = 2min` / `SEARCH_STALE_TIME = 5min` | `listStale()`：列表 2min、搜索 5min | 回到列表若仍新鲜则直接显示、滚动位置保留；`reloadList` 也不再先清空列表 |
+| `useReaderData` + `PageUrlStore` + 槽位漫画对象 | `Reader.total/pages` 槽位、`partial`、`applyStart`、`ensureSlots`/`trimSlots` | 见上 |
+| `useReadingProgressSync`（800ms 防抖、离开时 flush、先写缓存） | 600ms 防抖、`flushProgressNow`、`rememberReading` | 已有防抖与离开补写，新增本地进度缓存 |
+| 缩略图队列（`THUMBNAIL_CONCURRENCY = 5`） | 详情页缩略图网格虚拟化 + `ImageStore` 并发下载 | 两者策略不同（原生端按可见格构建），效果等价 |
+
 
 ### 2.5 图片管线
 
@@ -132,6 +152,7 @@
 - [x] **内嵌后端访问令牌**：每次启动随机生成（`crypto/rand`），`Options.AuthToken` + Gin 中间件常量时间校验；API 客户端与 `ImageStore` 携带 `X-Manga-Reader-Token`，并支持 `access_token` 查询参数兜底；缺失/错误返回 401。
 - [x] **单实例**：`internal/singleinstance` 在配置目录监听 `instance.sock`，第二个进程连接并发送 `focus` 后退出，主进程 `Window.Show()/Focus()`；崩溃遗留的 socket 会被探测并接管。
 - [x] 新增测试：设置保存往返 + 0600 权限；缓存 size/clear/prune（按最旧淘汰、超限自动清理、上限开关）；缓存上限解析与 env 覆盖；首次设置连接后端、空 cookie 拒绝；设置页缓存占用/上限/清空；保存上限与非法输入校验；令牌中间件（缺失/正确/错误/查询参数）；客户端与 ImageStore 携带令牌；单实例（主/次、聚焦回调、Close 后接管、过期 socket 接管）；搜索防抖（连续输入只发一次请求）；阅读器预加载（相邻页经缓存代理预取）；详情页缩略图网格（经缓存代理加载、点击跳到指定页）；阅读器点击左右翻页、适应模式切换、页码跳转、RTL 方向键；离线下载（创建任务、轮询到已完成、删除后不再回到列表、ZIP 导出到临时目录、默认文件名清洗）；标签规则（添加/删除/保存、权重校验、着色与排序、同步结果、列表卡片着色、任意标签拆分、快照）；种子列表（按需加载、保存 .torrent、文件名清洗）；标签翻译库（JSONP/纯 JSON 解析、HTML 清洗、缓存加载、chip 翻译）；进度批量写（连续翻页只写最后一页）；双页与滚轮翻页（步进、模式切换）；图片加载失败占位与重试；列表触底自动加载下一页与加载更多失败重试；关于行（版本注入与平台）；诊断信息导出（不含敏感字段）；统一错误块、入队 toast、任务标题跳转画廊；设置页主题持久化与生效；setup/settings 快照。
+- [x] 阅读器与 main 对齐的新增测试：`TestReaderSlotsCoverTheGalleryCount`（总页数一次铺开槽位、流式未完成的页不入队、翻页可用）、`TestReaderShortListEndsAtTheLastPage`（流短于声明页数时裁槽、末页写入 `completed`/100%）、`TestReaderReopensWhereItStopped`（读完返回列表与详情仍显示本地保存的页码、再次打开从该页继续，后端进度行故意滞后）；`TestThumbnailMarksSavedPage` 改为在 app 锁下等待进度，符合后台写入。
 - [x] 本地实跑：无 cookie 进入设置界面；有 cookie 自动启动内嵌服务并写入 `config.json`。
 - [x] `go test ./...`、`go test -race ./internal/cache/... ./cmd/desktop-native/...`、`go vet`、`go build ./...` 通过。
 - [x] 本地实跑：`go run ./cmd/desktop-native` 打印内嵌地址并打开窗口。
