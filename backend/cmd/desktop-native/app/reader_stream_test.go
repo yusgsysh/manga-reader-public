@@ -153,11 +153,25 @@ func TestReaderShowsStreamedPages(t *testing.T) {
 	navSettle(tt)
 
 	// The backend has sent three pages and is scraping the rest: the reader
-	// must already be readable, saying how many arrived.
+	// must already be readable, saying how many arrived. Its slots cover the
+	// gallery's whole count from the start (as main's reader lays out one slot
+	// per page), so the list does not rebuild page by page.
 	waitNoText(t, tt, "正在获取页面列表…")
 	waitText(t, tt, fmt.Sprintf("已加载 3 / %d 页…", total))
-	if !a.reader.loaded || len(a.reader.pages) != 3 {
-		t.Fatalf("reader loaded=%v pages=%d, want 3 streamed", a.reader.loaded, len(a.reader.pages))
+	if !a.reader.loaded || a.reader.partial != 3 {
+		t.Fatalf("reader loaded=%v partial=%d, want 3 streamed", a.reader.loaded, a.reader.partial)
+	}
+	if len(a.reader.pages) != total || a.reader.total != total {
+		t.Fatalf("reader slots=%d total=%d, want %d slots from the gallery count",
+			len(a.reader.pages), a.reader.total, total)
+	}
+	if got := a.reader.page; got != 0 {
+		t.Errorf("reader opened on page %d, want the first", got)
+	}
+	// The other slots are here but not filled: the list must not offer them
+	// as if they were readable.
+	if a.reader.hasPage(10) {
+		t.Error("slot 10 has a URL before the stream reached it")
 	}
 }
 

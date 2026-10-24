@@ -701,18 +701,25 @@ func TestThumbnailMarksSavedPage(t *testing.T) {
 	navSettle(tt)
 	waitText(t, tt, "共 3 页 · 点击跳转")
 
-	s := a.details[1]
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) && !s.readingKnown {
-		tt.Frame()
-		time.Sleep(2 * time.Millisecond)
-	}
-	if !s.readingKnown || s.reading != 2 {
-		t.Fatalf("reading = %d (known %v), want page 2", s.reading, s.readingKnown)
+	// The saved page arrives in the background; the frame reads it under the
+	// app's lock, so the test waits for it the same way.
+	var reading, next int
+	waitFor(t, tt, "the reading progress", func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		s := a.details[1]
+		if !s.readingKnown {
+			return false
+		}
+		reading, next = s.reading, s.g.NextPage()
+		return true
+	})
+	if reading != 2 {
+		t.Fatalf("reading = %d, want page 2", reading)
 	}
 	// The grid's mark is the page the button would open.
-	if next := s.g.NextPage(); next >= 0 && s.g.Reading != nil && next != s.reading {
-		t.Fatalf("button offers page %d, grid marks %d", next+1, s.reading+1)
+	if next >= 0 && next != reading {
+		t.Fatalf("button offers page %d, grid marks %d", next+1, reading+1)
 	}
 }
 

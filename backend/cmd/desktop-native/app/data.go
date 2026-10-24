@@ -33,6 +33,10 @@ type ReadingProgress struct {
 	CurrentPage int
 	Progress    float64
 	Completed   bool
+	// UpdatedAt is the API's updated_at, kept so a gallery reached through
+	// one list can be matched with the same gallery in another (see
+	// rememberReading).
+	UpdatedAt string
 }
 
 // categoryLabel turns the API's category code into the label the UI shows.
