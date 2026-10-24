@@ -95,40 +95,41 @@ func TestReaderPreloadReleasesPassedPages(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "1 / 8 页")
+	waitText(t, tt, "第 1 / 8 页")
 
-	// The first frame preloads the visible page and two ahead, and keeps the
-	// two past them asked for. The window is the store's record of what the
+	// The first frame preloads the shown page and four either side of it, as
+	// comimi's page stage does. The window is the store's record of what the
 	// reader asked for, so it is complete as soon as the frames that asked
 	// are drawn.
+	wantWindow := 1 + readerPreloadImages
 	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) && len(a.reader.preloaded) < 3+readerKeepPages {
+	for time.Now().Before(deadline) && len(a.reader.preloaded) < wantWindow {
 		tt.Frame()
 		time.Sleep(2 * time.Millisecond)
 	}
-	if got := len(a.reader.preloaded); got != 3+readerKeepPages {
-		t.Fatalf("first window = %v, want the visible page, two ahead and two kept", a.reader.preloaded)
+	if got := len(a.reader.preloaded); got != wantWindow {
+		t.Fatalf("first window = %v, want the shown page and four after it", a.reader.preloaded)
 	}
 
 	// Turn far enough that the first page leaves the window: by page 5 the
-	// warm window is pages 3 to 7 and page 1 is only kept, past its downloads.
+	// pages asked for are 1 to 9, four back and four ahead of it.
 	// Turning the page is what moves the window, so the turns are made
 	// directly: a click in the assembled view, with a single usable CPU, can
 	// wait for a frame the runtime has not scheduled.
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 5; i++ {
 		a.update(func() { a.readerNext(&a.reader) })
 		tt.Frame()
 	}
 	page0 := "https://img.example/p0.jpg"
 	storeURL := a.client.PageImageURL(page0)
-	if a.reader.page != 4 {
-		t.Fatalf("page = %d, want 4", a.reader.page)
+	if a.reader.page != 5 {
+		t.Fatalf("page = %d, want 5", a.reader.page)
 	}
 	if a.reader.preloaded[storeURL] {
 		t.Fatalf("page 1 never left the window: %v", a.reader.preloaded)
 	}
 	// The visible page is still wanted.
-	if !a.reader.preloaded[a.client.PageImageURL("https://img.example/p4.jpg")] {
+	if !a.reader.preloaded[a.client.PageImageURL("https://img.example/p5.jpg")] {
 		t.Fatalf("visible page is not preloaded: %v", a.reader.preloaded)
 	}
 
@@ -156,7 +157,7 @@ func TestReaderPreloadReleasesPassedPages(t *testing.T) {
 	// not left as a failure waiting out the retry delay. The turns go through
 	// update, as the view's do: the reader is drawn on the main thread, and
 	// the progress save a turn arms reads the page there too.
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 5; i++ {
 		a.update(func() { a.readerPrev(&a.reader) })
 		tt.Frame()
 	}

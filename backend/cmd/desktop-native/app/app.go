@@ -122,14 +122,16 @@ type App struct {
 	searchApplied string
 	searchSeq     int
 	reader        Reader
-	// paging is the reader's last chosen direction, layout and wheel mode,
-	// carried into the next gallery opened.
-	paging readerPaging
+	// readerSettings is the reader's last chosen direction, page mode,
+	// cover, auto page turn interval and background, carried into the next
+	// gallery opened (see readerSettings).
+	readerSettings readerSettings
 	// readerStart is the page the next reader open should show, set when a
 	// detail-page thumbnail is clicked; -1 means "resume saved progress".
 	readerStart int
-	// readerJump is the page-number field under the reader.
-	readerJump string
+	// overlayActivity is when the reader's overlay last saw activity, which
+	// its auto-hide counts from.
+	overlayActivity time.Time
 	// readings is the reading progress this app itself saved, per gallery, so
 	// lists and detail pages show the page just read instead of the one the
 	// backend's list rows still carry (see mergeListReading).
@@ -284,6 +286,8 @@ func New(client *Client) *App {
 		details:     make(map[int64]*detailState),
 		readings:    make(map[int64]readingAt),
 		readerStart: -1,
+
+		readerSettings: defaultReaderSettings(),
 	}
 	a.images.SetAuth(client.user, client.password)
 	a.pageImages.SetAuth(client.user, client.password)
@@ -433,6 +437,15 @@ func (a *App) update(fn func()) {
 		return
 	}
 	run()
+}
+
+// keepFrames asks the window for another frame while something in it moves on
+// its own: a page turning, auto page turn, an overlay about to hide. Without a
+// window (tests) the frames come from the tester, so it does nothing.
+func (a *App) keepFrames() {
+	if a.win != nil {
+		a.win.Invalidate()
+	}
 }
 
 // toggleFullscreen flips the main window between full screen and windowed.

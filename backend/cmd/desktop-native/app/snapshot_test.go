@@ -25,7 +25,7 @@ func savePNG(t *testing.T, tt *ui.Tester, name string) {
 }
 
 func TestSnapshots(t *testing.T) {
-	_, tt := newTestApp(t)
+	a, tt := newTestApp(t)
 
 	waitText(t, tt, "示例 A")
 	savePNG(t, tt, "home")
@@ -41,9 +41,25 @@ func TestSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "1 / 3 页")
+	waitText(t, tt, "第 1 / 3 页")
+	// The page alone first, then the overlay with its controls, then the
+	// settings sheet and the menu over it.
+	a.update(func() { a.closeOverlay(&a.reader) })
+	tt.Frame()
 	savePNG(t, tt, "reader")
+	showReaderOverlay(t, a, tt)
+	savePNG(t, tt, "reader-overlay")
+	showReaderPanel(t, a, tt, panelSettings)
+	savePNG(t, tt, "reader-settings")
+	showReaderPanel(t, a, tt, panelMenu)
+	savePNG(t, tt, "reader-menu")
 
+	// Back to the app for the search snapshot: the reader's menu holds the
+	// way out, and the app's own search is outside the reader.
+	if err := tt.Click("返回画廊"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
 	if err := tt.Click("搜索"); err != nil {
 		t.Fatal(err)
 	}
