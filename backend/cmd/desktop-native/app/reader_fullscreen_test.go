@@ -30,7 +30,7 @@ func TestReaderHidesSidebarAndLeavesFullScreen(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "1 / 3 页")
+	waitText(t, tt, "第 1 / 3 页")
 	if got := a.router.Path(); got != "/reader/1/tok1" {
 		t.Fatalf("path = %q, want the reader", got)
 	}
@@ -43,8 +43,9 @@ func TestReaderHidesSidebarAndLeavesFullScreen(t *testing.T) {
 		t.Error("readerActive = false on the reader page")
 	}
 
-	// Leaving the reader through its Back returns the sidebar.
-	if err := tt.Click("← 返回"); err != nil {
+	// Leaving the reader through its back returns the sidebar.
+	showReaderOverlay(t, a, tt)
+	if err := tt.Click("返回画廊"); err != nil {
 		t.Fatal(err)
 	}
 	navSettle(tt)

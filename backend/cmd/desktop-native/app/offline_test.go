@@ -94,7 +94,9 @@ func TestOfflineReadingUsesCache(t *testing.T) {
 		t.Fatalf("click 离线阅读: %v", err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "1 / 3 页")
+	waitText(t, tt, "第 1 / 3 页")
+	// The reader's own controls say it is reading offline, in its top bar.
+	showReaderOverlay(t, a, tt)
 	waitText(t, tt, "离线")
 
 	if *live != 0 {
@@ -126,7 +128,7 @@ func TestOnlineReaderStillPrefersLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "1 / 3 页")
+	waitText(t, tt, "第 1 / 3 页")
 
 	if *live == 0 {
 		t.Error("the online reader never asked the live page list")

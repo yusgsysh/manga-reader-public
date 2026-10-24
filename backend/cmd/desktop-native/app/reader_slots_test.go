@@ -143,8 +143,9 @@ func TestReaderSlotsCoverTheGalleryCount(t *testing.T) {
 	if page != 0 || pageURL == "" {
 		t.Fatalf("reader opened on page %d with page 1 %q, want page 1 filled", page, pageURL)
 	}
-	// Turning works while the list is incomplete, and it saves the page.
-	tt.Key(0, ui.KeyRight)
+	// Turning works while the list is incomplete, and it saves the page. The
+	// reader opens right to left, so the left key goes on.
+	tt.Key(0, ui.KeyLeft)
 	tt.Frame()
 	a.mu.Lock()
 	page = a.reader.page
@@ -154,7 +155,7 @@ func TestReaderSlotsCoverTheGalleryCount(t *testing.T) {
 	}
 	// The end of the stream settles the list: every slot is filled now.
 	waitNoText(t, tt, "已加载")
-	waitText(t, tt, fmt.Sprintf("2 / %d 页 · 100%%", total))
+	waitText(t, tt, fmt.Sprintf("第 2 / %d 页", total))
 }
 
 // TestReaderShortListEndsAtTheLastPage covers a gallery whose upstream list is
@@ -168,7 +169,7 @@ func TestReaderShortListEndsAtTheLastPage(t *testing.T) {
 	openReader(t, a, tt, "开始阅读")
 
 	waitNoText(t, tt, "已加载")
-	waitText(t, tt, "1 / 6 页")
+	waitText(t, tt, "第 1 / 6 页")
 	a.mu.Lock()
 	slots := len(a.reader.pages)
 	a.mu.Unlock()
@@ -176,8 +177,11 @@ func TestReaderShortListEndsAtTheLastPage(t *testing.T) {
 		t.Fatalf("reader kept %d slots after a short stream, want 6", slots)
 	}
 
-	// Jump to the last page: the write completes the gallery.
-	a.update(func() { a.readerJump = "6" })
+	// Jump to the last page from the page list: the write completes the
+	// gallery.
+	showReaderPanel(t, a, tt, panelPages)
+	a.update(func() { a.reader.jump = "6" })
+	tt.Frame()
 	if err := tt.Click("跳转"); err != nil {
 		t.Fatal(err)
 	}
@@ -212,13 +216,13 @@ func TestReaderReopensWhereItStopped(t *testing.T) {
 	a := New(NewClient(url))
 	tt := ui.NewTester(a.View, 1280, 860)
 	openReader(t, a, tt, "开始阅读")
-	waitText(t, tt, "1 / 10 页")
+	waitText(t, tt, "第 1 / 10 页")
 
 	for i := 0; i < 3; i++ {
-		tt.Key(0, ui.KeyRight)
+		tt.Key(0, ui.KeyLeft)
 	}
 	tt.Frame()
-	waitText(t, tt, "4 / 10 页")
+	waitText(t, tt, "第 4 / 10 页")
 	waitFor(t, tt, "the page written", func() bool {
 		for _, p := range srv.savedWrites() {
 			if p == 3 {

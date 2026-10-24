@@ -371,17 +371,17 @@ func newFakeServerWithHooks(t *testing.T, onImage func(r *http.Request)) *httpte
 	// another gallery and against its absence of saved progress.
 	detail2 := map[string]any{
 		"id": 2, "token": "tok2", "title": "示例 B", "category": "manga",
-		"page_count": 2, "tags": []map[string]string{{"namespace": "tag", "name": "full color"}},
+		"page_count": 4, "tags": []map[string]string{{"namespace": "tag", "name": "full color"}},
 	}
 	mux.HandleFunc("/api/gallery/2/tok2", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, detail2) })
 	mux.HandleFunc("/api/gallery-cache/2/tok2", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, detail2) })
 	pages2 := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-ndjson")
-		fmt.Fprintln(w, `{"type":"meta","total":2}`)
-		for i := 0; i < 2; i++ {
+		fmt.Fprintln(w, `{"type":"meta","total":4}`)
+		for i := 0; i < 4; i++ {
 			fmt.Fprintf(w, `{"type":"page","index":%d,"page_url":"https://img.example/b-%d.jpg"}`+"\n", i, i)
 		}
-		fmt.Fprintln(w, `{"type":"done","total":2}`)
+		fmt.Fprintln(w, `{"type":"done","total":4}`)
 	}
 	mux.HandleFunc("/api/gallery/2/tok2/pages", pages2)
 	mux.HandleFunc("/api/gallery-cache/2/tok2/pages", pages2)
@@ -504,15 +504,19 @@ func TestPagesAppearWithoutTransition(t *testing.T) {
 	if got := a.router.Path(); got != "/reader/1/tok1" {
 		t.Fatalf("path after 开始阅读 = %q", got)
 	}
-	waitText(t, tt, "1 / 3 页")
-	if _, ok := tt.Find("下一页"); !ok {
-		t.Fatalf("reader toolbar missing in the page's first frames; texts=%q", tt.Texts())
+	waitText(t, tt, "第 1 / 3 页")
+	// The overlay opens with the page and hides itself after a few idle
+	// seconds; while it is up, its controls are there in the page's first
+	// frames, not after a fade.
+	showReaderOverlay(t, a, tt)
+	if _, ok := tt.Find("阅读器菜单"); !ok {
+		t.Fatalf("reader controls missing in the page's first frames; texts=%q", tt.Texts())
 	}
 
 	// Across pages from the sidebar: the new page's heading is there in the
 	// frame it first shows, not after a fade. The reader hides the sidebar, so
 	// leave it first.
-	if err := tt.Click("← 返回"); err != nil {
+	if err := tt.Click("返回画廊"); err != nil {
 		t.Fatalf("click the reader's back: %v", err)
 	}
 	tt.Frame()
@@ -561,6 +565,27 @@ func waitFor(t *testing.T, tt *ui.Tester, what string, cond func() bool) {
 func waitText(t *testing.T, tt *ui.Tester, s string) {
 	t.Helper()
 	waitFor(t, tt, fmt.Sprintf("%q to show", s), func() bool { return tt.HasText(s) })
+}
+
+// showReaderOverlay puts the reader's overlay up, with its controls, and
+// renders it: the overlay hides itself after a few idle seconds, and a test
+// that clicks a control needs it to still be there.
+func showReaderOverlay(t *testing.T, a *App, tt *ui.Tester) {
+	t.Helper()
+	a.update(func() {
+		a.reader.overlay = true
+		a.reader.panel = panelNone
+		a.reader.guide = false
+		a.markActivity()
+	})
+	tt.Frame()
+}
+
+// showReaderPanel opens a reader panel over the overlay and renders it.
+func showReaderPanel(t *testing.T, a *App, tt *ui.Tester, p readerPanel) {
+	t.Helper()
+	a.update(func() { a.openPanel(&a.reader, p) })
+	tt.Frame()
 }
 
 func waitNoText(t *testing.T, tt *ui.Tester, s string) {
@@ -618,13 +643,17 @@ func TestGalleryToReader(t *testing.T) {
 	if got := a.router.Path(); got != "/reader/1/tok1" {
 		t.Fatalf("path after 开始阅读 = %q", got)
 	}
-	waitText(t, tt, "1 / 3 页")
-	if err := tt.Click("下一页"); err != nil {
-		t.Fatal(err)
+	waitText(t, tt, "第 1 / 3 页")
+	// The overlay opens with the page; a tap puts it away, and only then do
+	// the outer thirds turn. Right to left, so the left third goes on.
+	tt.ClickAt(640, 400)
+	if a.reader.overlay {
+		t.Fatal("a tap in the middle left the overlay up")
 	}
-	waitText(t, tt, "2 / 3 页")
-	tt.Key(0, ui.KeyRight)
-	waitText(t, tt, "3 / 3 页")
+	tt.ClickAt(180, 400)
+	waitText(t, tt, "第 2 / 3 页")
+	tt.Key(0, ui.KeyLeft)
+	waitText(t, tt, "第 3 / 3 页")
 }
 
 // TestReaderPreloadsNearbyPages checks that opening the reader warms the
@@ -805,36 +834,43 @@ func TestReaderPagingPersistsAcrossGalleries(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "1 / 3 页")
+	waitText(t, tt, "第 1 / 3 页")
 
+	// The overlay's settings sheet holds the direction and the page mode,
+	// as comimi's does.
+	if err := tt.Click("设置"); err != nil {
+		t.Fatalf("click settings: %v", err)
+	}
+	waitText(t, tt, "阅读方向")
 	if err := tt.Click("从左到右"); err != nil {
 		t.Fatalf("click direction: %v", err)
 	}
-	if err := tt.Click("单页"); err != nil {
-		t.Fatalf("click layout: %v", err)
+	if a.reader.settings.rtl {
+		t.Fatal("direction not switched to left to right")
 	}
-	if err := tt.Click("滚轮平移"); err != nil {
-		t.Fatalf("click wheel: %v", err)
+	if err := tt.Click("双页显示"); err != nil {
+		t.Fatalf("click two pages: %v", err)
 	}
-	want := readerPaging{rtl: true, double: true, wheelTurns: true}
-	if a.paging != want {
-		t.Fatalf("remembered paging = %+v, want %+v", a.paging, want)
+	if !a.reader.settings.double {
+		t.Fatal("page mode not switched to a spread")
+	}
+	if got := a.readerSettings; got.rtl || !got.double {
+		t.Fatalf("remembered settings = %+v, want ltr and a spread", got)
 	}
 
-	// Leave for another gallery and open its reader.
+	// Leave for another gallery and open its reader: it opens with the
+	// settings the last one was left with.
 	a.router.Push("/gallery/2/tok2")
 	navSettle(tt)
 	waitText(t, tt, "示例 B")
 	a.openReaderAt(2, "tok2", 0)
 	navSettle(tt)
-	waitText(t, tt, "从右到左")
-	waitText(t, tt, "双页")
-	waitText(t, tt, "滚轮翻页")
+	waitText(t, tt, "第 1 / 4 页")
 	if a.reader.id != 2 {
 		t.Fatalf("reader is on gallery %d, want 2", a.reader.id)
 	}
-	if got := a.reader.paging; got != want {
-		t.Fatalf("new gallery reader paging = %+v, want %+v", got, want)
+	if got := a.reader.settings; got.rtl || !got.double {
+		t.Fatalf("new gallery reader settings = %+v, want ltr and a spread", got)
 	}
 }
 
@@ -892,9 +928,10 @@ func TestDetailThumbnailGridJumpsToPage(t *testing.T) {
 	waitText(t, tt, "2 / 3 页")
 }
 
-// TestReaderTapFitAndJump covers the reading-area tap zones, the fit toggle
-// and the page-number field.
-func TestReaderTapFitAndJump(t *testing.T) {
+// TestReaderTapZones covers the reading area's tap zones as comimi splits
+// them: the outer thirds turn the page while the overlay is away, and the
+// middle shows the overlay; a tap on the overlay takes it away again.
+func TestReaderTapZones(t *testing.T) {
 	a, tt := newTestApp(t)
 	waitText(t, tt, "示例 A")
 	if err := tt.Click("示例 A"); err != nil {
@@ -906,72 +943,151 @@ func TestReaderTapFitAndJump(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "1 / 3 页")
+	waitText(t, tt, "第 1 / 3 页")
+
+	// A new gallery opens with the overlay up; a tap in the middle puts it
+	// away, leaving only the page and its count.
+	a.update(func() { a.reader.overlay = true })
+	tt.ClickAt(640, 400)
+	if a.reader.overlay {
+		t.Fatal("a tap in the middle left the overlay up")
+	}
+	waitNoText(t, tt, "点击页面中央可隐藏控件")
 
 	// The reader hides the sidebar, so the reading area spans the whole
 	// 1280px window: x=1100 is the right third and x=180 the left third.
-	tt.ClickAt(1100, 400)
-	waitText(t, tt, "2 / 3 页")
+	// Right to left by default, so the left third goes on and the right
+	// third back.
 	tt.ClickAt(180, 400)
-	waitText(t, tt, "1 / 3 页")
+	waitText(t, tt, "第 2 / 3 页")
+	tt.ClickAt(1100, 400)
+	waitText(t, tt, "第 1 / 3 页")
 
-	if err := tt.Click("适合页面"); err != nil {
-		t.Fatalf("click fit mode: %v", err)
+	// The middle brings the overlay back.
+	tt.ClickAt(640, 400)
+	if !a.reader.overlay {
+		t.Fatal("a tap in the middle did not show the overlay")
 	}
-	if a.reader.fit != ui.Cover {
-		t.Fatalf("fit = %v, want Cover", a.reader.fit)
-	}
-	waitText(t, tt, "适应宽度")
+}
 
-	// 适应高度, then 100% pixels, then back to the whole page.
-	if err := tt.Click("适应宽度"); err != nil {
+// TestReaderSwipeTurnsThePage checks a drag across the page turns it, with the
+// edge resisting at the end of the gallery, and a short drag snapping back.
+func TestReaderSwipeTurnsThePage(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("示例 A"); err != nil {
 		t.Fatal(err)
 	}
-	if !a.reader.fitHeight {
-		t.Fatal("fit height not enabled")
+	navSettle(tt)
+	waitText(t, tt, "开始阅读")
+	if err := tt.Click("开始阅读"); err != nil {
+		t.Fatal(err)
 	}
-	waitText(t, tt, "适应高度")
-	// The click on the button just relabelled it; render that frame first.
+	navSettle(tt)
+	waitText(t, tt, "第 1 / 3 页")
+	a.update(func() { a.reader.overlay = false })
+
+	// Right to left: dragging right brings the next page, and the turn slides
+	// before it lands.
+	tt.Press(400, 400)
+	tt.Move(560, 402)
+	tt.Move(700, 405)
+	tt.Release(700, 405)
+	if a.reader.turnDir == groupCurrent {
+		t.Fatal("a swipe did not start a turn")
+	}
+	waitText(t, tt, "第 2 / 3 页")
+
+	// A drag shorter than the swipe threshold is not a turn.
+	page := a.reader.page
+	tt.Press(400, 400)
+	tt.Move(410, 402)
+	tt.Release(410, 402)
+	if a.reader.page != page {
+		t.Fatalf("a short drag turned to page %d, want %d", a.reader.page, page)
+	}
+
+	// At the last page there is nowhere to go: the drag gives way with a
+	// resistance rather than moving the page a screen.
+	a.update(func() { a.goToPage(&a.reader, 2) })
 	tt.Frame()
-	if err := tt.Click("适应高度"); err != nil {
-		t.Fatal(err)
+	tt.Press(400, 400)
+	tt.Move(1200, 400)
+	waitFor(t, tt, "the drag to resist", func() bool {
+		return a.reader.drag > 0 && a.reader.drag < 140
+	})
+	tt.Release(1200, 400)
+	if a.reader.page != 2 {
+		t.Fatalf("page = %d after dragging past the end, want 2", a.reader.page)
 	}
-	if a.reader.fit != ui.NaturalSize {
-		t.Fatalf("fit = %v, want NaturalSize", a.reader.fit)
-	}
-	waitText(t, tt, "原始尺寸")
-	if err := tt.Click("原始尺寸"); err != nil {
-		t.Fatal(err)
-	}
-	if a.reader.fit != ui.Contain {
-		t.Fatalf("fit = %v, want Contain", a.reader.fit)
-	}
-	waitText(t, tt, "适合页面")
+}
 
-	if err := tt.Click("跳转页码"); err != nil {
+// TestReaderSeekAndPageList covers the two ways to jump: the seek bar's press
+// and the page list's field.
+func TestReaderSeekAndPageList(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "开始阅读")
+	if err := tt.Click("开始阅读"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "第 1 / 3 页")
+
+	// The seek bar spans the dock's width, and right to left the far side of
+	// it is the first page, so its other end is the last. The overlay is
+	// brought back up for it: it hides itself while idle.
+	showReaderOverlay(t, a, tt)
+	tt.ClickAt(20, 790)
+	waitText(t, tt, "第 3 / 3 页")
+
+	// The page list's field jumps by number.
+	a.update(func() { a.openPanel(&a.reader, panelPages) })
+	tt.Frame()
+	if err := tt.Click("页码"); err != nil {
 		t.Fatalf("click page field: %v", err)
 	}
-	tt.Type("3")
+	tt.Type("2")
 	if err := tt.Click("跳转"); err != nil {
-		t.Fatalf("click jump: %v", err)
+		t.Fatalf("click go: %v", err)
 	}
-	waitText(t, tt, "3 / 3 页")
-	if a.readerJump != "" {
-		t.Errorf("page field not cleared: %q", a.readerJump)
+	waitText(t, tt, "第 2 / 3 页")
+	if a.reader.jump != "" {
+		t.Errorf("page field not cleared: %q", a.reader.jump)
 	}
+}
 
-	// Right-to-left swaps the arrow keys and tap zones.
-	if err := tt.Click("从左到右"); err != nil {
-		t.Fatalf("click direction: %v", err)
+// TestReaderKeysFollowTheDirection checks the arrow keys move by side and
+// follow the reading direction, as comimi's shortcuts do.
+func TestReaderKeysFollowTheDirection(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
 	}
-	if !a.reader.paging.rtl {
-		t.Fatal("rtl not enabled")
+	navSettle(tt)
+	waitText(t, tt, "开始阅读")
+	if err := tt.Click("开始阅读"); err != nil {
+		t.Fatal(err)
 	}
-	waitText(t, tt, "从右到左")
+	navSettle(tt)
+	waitText(t, tt, "第 1 / 3 页")
+
+	// Right to left: the right arrow goes back, the left arrow on.
+	tt.Key(0, ui.KeyLeft)
+	waitText(t, tt, "第 2 / 3 页")
 	tt.Key(0, ui.KeyRight)
-	waitText(t, tt, "2 / 3 页")
-	tt.ClickAt(1100, 400)
-	waitText(t, tt, "1 / 3 页")
+	waitText(t, tt, "第 1 / 3 页")
+
+	// P turns the page mode, C the cover, and the settings remember both.
+	tt.Key(0, ui.KeyP)
+	waitFor(t, tt, "a spread", func() bool { return a.reader.settings.double })
+	tt.Key(0, ui.KeyC)
+	waitFor(t, tt, "no cover", func() bool { return !a.reader.settings.hasCover })
 }
 
 // TestDownloadsStartAndPoll drives the offline download flow: the detail page
@@ -1151,8 +1267,11 @@ func TestBackFromReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "1 / 3 页")
-	if err := tt.Click("← 返回"); err != nil {
+	waitText(t, tt, "第 1 / 3 页")
+	// The overlay holds the way back; it hides itself while idle, so bring it
+	// up before clicking it.
+	showReaderOverlay(t, a, tt)
+	if err := tt.Click("返回画廊"); err != nil {
 		t.Fatal(err)
 	}
 	navSettle(tt)
@@ -2133,15 +2252,13 @@ func TestReaderProgressIsBatched(t *testing.T) {
 
 	a.router.Push("/reader/1/tok1")
 	navSettle(tt)
-	waitText(t, tt, "1 / 3 页")
+	waitText(t, tt, "第 1 / 3 页")
 
 	// Two quick turns: only the last page should be reported.
-	if err := tt.Click("下一页"); err != nil {
-		t.Fatal(err)
-	}
-	waitText(t, tt, "2 / 3 页")
-	tt.Key(0, ui.KeyRight)
-	waitText(t, tt, "3 / 3 页")
+	tt.Key(0, ui.KeyLeft)
+	waitText(t, tt, "第 2 / 3 页")
+	tt.Key(0, ui.KeyLeft)
+	waitText(t, tt, "第 3 / 3 页")
 
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
@@ -2269,46 +2386,53 @@ func TestRecentlyReadShowsMissingDetails(t *testing.T) {
 	}
 }
 
-// TestReaderDoubleAndWheel covers double-page steps and wheel turning.
-func TestReaderDoubleAndWheel(t *testing.T) {
+// TestReaderDoublePagesAndWheel covers a spread's steps and the wheel: a
+// spread turns two pages at a time, and plain scrolling over the page does not
+// turn it, unlike comimi's, while ctrl-wheel zooms.
+func TestReaderDoublePagesAndWheel(t *testing.T) {
 	a, tt := newTestApp(t)
 	waitText(t, tt, "示例 A")
 	a.router.Push("/reader/1/tok1")
 	navSettle(tt)
-	waitText(t, tt, "1 / 3 页")
-	// The reader opens under the home page's grid for the router's
-	// transition; any frame after it lays the bottom bar out.
+	waitText(t, tt, "第 1 / 3 页")
 	tt.Frame()
 
-	// Double mode steps two pages at a time.
-	if err := tt.Click("单页"); err != nil {
-		t.Fatalf("click 单页: %v", err)
+	// A spread steps two pages at a time from the key, and the cover stands
+	// alone by default, so the first turn lands on the pair of 2 and 3.
+	a.update(func() { a.reader.settings.double = true })
+	tt.Frame()
+	tt.Key(0, ui.KeyLeft) // right to left: the left key goes on
+	waitText(t, tt, "第 2 - 3 / 3 页")
+	if a.reader.page != 1 {
+		t.Fatalf("page = %d, want 1 as the pair's first page", a.reader.page)
 	}
-	if !a.reader.paging.double {
-		t.Fatal("double mode not enabled")
-	}
-	waitText(t, tt, "双页")
-	if err := tt.Click("下一页"); err != nil {
-		t.Fatal(err)
-	}
-	waitText(t, tt, "3 / 3 页")
-	if err := tt.Click("上一页"); err != nil {
-		t.Fatal(err)
-	}
-	waitText(t, tt, "1 / 3 页")
+	tt.Key(0, ui.KeyRight)
+	waitText(t, tt, "第 1 / 3 页")
 
-	// Wheel mode: a notch down turns forward instead of panning.
-	if err := tt.Click("滚轮平移"); err != nil {
-		t.Fatalf("click wheel mode: %v", err)
-	}
-	waitText(t, tt, "滚轮翻页")
-	if err := tt.Click("双页"); err != nil {
-		t.Fatal(err)
-	}
+	// A wheel notch over the page turns nothing: only ctrl/⌘ zooms.
+	page := a.reader.page
 	tt.Scroll(640, 250, 0, 40)
-	waitText(t, tt, "2 / 3 页")
-	tt.Scroll(640, 250, 0, -40)
-	waitText(t, tt, "1 / 3 页")
+	if a.reader.page != page {
+		t.Fatalf("plain scrolling turned to page %d, want %d", a.reader.page, page)
+	}
+	if a.reader.zoom != 1 {
+		t.Fatalf("plain scrolling zoomed to %v, want 1", a.reader.zoom)
+	}
+	tt.Wheel(640, 250, 0, -20) // no ctrl: ignored
+	if a.reader.zoom != 1 {
+		t.Fatalf("a wheel without ctrl zoomed to %v, want 1", a.reader.zoom)
+	}
+	// The tester's wheel carries no modifiers, which the platform's do: a
+	// ctrl-wheel is given to the reader the way the stage hands it over.
+	a.update(func() {
+		a.readerInput(&a.reader, ui.InputEvent{Kind: ui.InputScroll, X: 640, Y: 250, Mods: ui.Ctrl, DY: -20}, 1280, 860)
+	})
+	if a.reader.zoom <= 1 {
+		t.Fatalf("ctrl-wheel left the zoom at %v, want it above 1", a.reader.zoom)
+	}
+	if a.reader.zoom > 1+zoomStep {
+		t.Fatalf("one ctrl-wheel step zoomed to %v, past one step", a.reader.zoom)
+	}
 }
 
 // TestImageStoreErrAndRetry covers the placeholder state: a failed load is
@@ -3146,9 +3270,10 @@ func TestSettingsSyncSection(t *testing.T) {
 	}
 }
 
-// TestReaderDoubleRTLSwapsSpread covers the double-page order in right-to-left
-// mode: the later page sits on the left of the spread, as Japanese manga do.
-func TestReaderDoubleRTLSwapsSpread(t *testing.T) {
+// TestReaderSpreadOrder covers the pages a spread shows and their visual
+// order: the later page sits on the left under right-to-left, as Japanese
+// manga do, and the cover stands alone.
+func TestReaderSpreadOrder(t *testing.T) {
 	a, tt := newTestApp(t)
 	waitText(t, tt, "示例 A")
 	if err := tt.Click("示例 A"); err != nil {
@@ -3160,38 +3285,28 @@ func TestReaderDoubleRTLSwapsSpread(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "1 / 3 页")
+	waitText(t, tt, "第 1 / 3 页")
 
-	if err := tt.Click("从左到右"); err != nil {
-		t.Fatal(err)
-	}
-	if err := tt.Click("单页"); err != nil {
-		t.Fatal(err)
-	}
-	waitText(t, tt, "双页")
+	a.update(func() {
+		a.reader.settings.rtl = true
+		a.reader.settings.double = true
+	})
+	tt.Frame()
 
-	// The spread draws second-then-first under rtl; probe the draw order by
-	// asking both image stores' pages and checking the children order isn't
-	// directly observable, so assert the state that drives it instead.
-	if !a.reader.paging.rtl || !a.reader.paging.double {
-		t.Fatalf("paging = %+v, want rtl+double", a.reader.paging)
+	// With a cover, the first page alone.
+	if got := a.shownGroup().indexes; len(got) != 1 || got[0] != 0 {
+		t.Fatalf("cover page spread = %v, want [0]", got)
 	}
-	// The spread for page 0 shows pages 1 (left) and 0 (right).
-	first, second := a.reader.page, -1
-	if a.reader.page+1 < len(a.reader.pages) {
-		second = a.reader.page + 1
+	// Past the cover, pages 1 and 2 pair up, the later one on the left.
+	a.update(func() { a.reader.page = 1 })
+	got := a.shownGroup().indexes
+	if len(got) != 2 || got[0] != 2 || got[1] != 1 {
+		t.Fatalf("rtl spread = %v, want [2 1]", got)
 	}
-	if first != 0 || second != 1 {
-		t.Fatalf("spread pages = %d/%d, want 0/1", first, second)
-	}
-	// swapSpread mirrors what the view does.
-	l, r := swapSpread(a.reader.paging.rtl, first, second)
-	if l != 1 || r != 0 {
-		t.Fatalf("rtl spread = %d/%d, want 1/0", l, r)
-	}
-	l, r = swapSpread(false, first, second)
-	if l != 0 || r != 1 {
-		t.Fatalf("ltr spread = %d/%d, want 0/1", l, r)
+	// Left to right keeps them in reading order.
+	a.update(func() { a.reader.settings.rtl = false })
+	if got := a.shownGroup().indexes; len(got) != 2 || got[0] != 1 || got[1] != 2 {
+		t.Fatalf("ltr spread = %v, want [1 2]", got)
 	}
 }
 
