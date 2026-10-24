@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// TestReaderBackLeavesTheGallery covers the reader's ← Back going backwards in
+// TestReaderBackLeavesTheGallery covers the reader's back going backwards in
 // the history rather than pushing the gallery it came from. A push added an
 // entry per visit, so Back from the reader landed on the gallery, Continue
 // pushed the reader again, and leaving the two never ended: every Back found
@@ -29,9 +29,13 @@ func TestReaderBackLeavesTheGallery(t *testing.T) {
 		if got := a.router.Path(); got != "/reader/1/tok1" {
 			t.Fatalf("visit %d: path after 开始阅读 = %q, want /reader/1/tok1", i, got)
 		}
-		waitText(t, tt, "1 / 3 页")
+		waitText(t, tt, "第 1 / 3 页")
 
-		if err := tt.Click("← 返回"); err != nil {
+		// The reader's overlay opens with the page; its back leaves the
+		// reader. The overlay hides itself after a few idle seconds, so a
+		// test puts it back up before reaching for it.
+		showReaderOverlay(t, a, tt)
+		if err := tt.Click("返回画廊"); err != nil {
 			t.Fatal(err)
 		}
 		navSettle(tt)
