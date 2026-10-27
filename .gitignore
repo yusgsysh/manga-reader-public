@@ -5,6 +5,7 @@
 # backend/desktop-native, and the release builds name it
 # manga-reader-linux-amd64 and the like. All of these were committed by
 # mistake once, so the patterns are anchored to backend/ where they land.
+/backend/manga
 /backend/desktop-native
 /backend/desktop-native.exe
 /backend/manga-reader
