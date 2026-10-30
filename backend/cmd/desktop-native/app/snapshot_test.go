@@ -158,3 +158,16 @@ func TestNarrowHomeSnapshot(t *testing.T) {
 	tt.Frame()
 	savePNG(t, tt, "home-narrow")
 }
+
+// TestDownloadsSnapshot shows the download manager with a running job.
+func TestDownloadsSnapshot(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("下载管理"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "取消")
+	savePNG(t, tt, "downloads")
+	_ = a
+}
