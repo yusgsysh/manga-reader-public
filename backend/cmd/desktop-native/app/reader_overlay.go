@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -123,12 +124,16 @@ func (a *App) readerDock(c *ui.Context, r *Reader) {
 	// at the top of the window instead.
 	ui.Column(c).FillWidth().Absolute().Bottom(0).Left(0).Padding(10, 14, 12, 14).Gap(8).
 		Children(func() {
+			if r.auto {
+				a.autoProgressLine(c, r)
+			}
 			a.readerSeek(c, r)
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				a.readerAutoButton(c, r)
 				ui.Text(c, a.readerCountText(r, false)).FontSize(12).
 					TextColor(readerOverlayMuted())
 				ui.Box(c).Grow(1)
+				a.readerZoomControls(c, r)
 				a.readerPageModeButtons(c, r)
 				if ui.Button(c, a.viewLabel()).Label(i18n.T("Switch view")).Clicked() {
 					a.cycleView()
@@ -141,8 +146,7 @@ func (a *App) readerDock(c *ui.Context, r *Reader) {
 		})
 }
 
-// readerAutoButton toggles auto page turn, and shows how long the page has left
-// as a thin line above the dock while it runs.
+// readerAutoButton toggles auto page turn.
 func (a *App) readerAutoButton(c *ui.Context, r *Reader) {
 	label := i18n.T("Auto page turn")
 	mark := "▶"
@@ -150,26 +154,28 @@ func (a *App) readerAutoButton(c *ui.Context, r *Reader) {
 		label = i18n.T("Stop auto page turn")
 		mark = "❚❚"
 	}
-	if r.auto {
-		ui.Box(c).Width(120).Height(3).Children(func() {
-			a.autoProgressFill(c, r)
-		})
-	}
 	if ui.Button(c, mark+i18n.T(" Auto")).Label(label).Clicked() {
 		a.setAuto(r, !r.auto)
 	}
 }
 
-// autoProgressFill is how long the page up under auto page turn has left,
-// drawn from the frame clock so it keeps up without a timer of its own.
-func (a *App) autoProgressFill(c *ui.Context, r *Reader) {
+// autoProgressLine is how long the page up under auto page turn has left: a
+// line across the top of the dock, drawn from the frame clock so it keeps up
+// without a timer of its own. It spans the seek bar's width, so the wait reads
+// as time against the whole gallery rather than a stray bar beside a button.
+func (a *App) autoProgressLine(c *ui.Context, r *Reader) {
 	if r.autoSince.IsZero() {
 		return
 	}
+	w := a.dockWidth(c)
 	interval := time.Duration(r.settings.autoInterval()) * time.Millisecond
 	progress := clampFloat(float32(time.Since(r.autoSince))/float32(interval), 0, 1)
-	ui.Box(c).Width(120 * progress).FillHeight().
-		Background(ui.RGBA(235, 235, 240, 0.75))
+	track := ui.Box(c).FillWidth().Height(2).Radius(1).
+		Background(ui.RGBA(255, 255, 255, 0.16))
+	track.Children(func() {
+		ui.Box(c).Height(2).Radius(1).Width(w * progress).
+			Background(ui.RGBA(235, 235, 240, 0.72))
+	})
 }
 
 // dockWidth is the width the seek bar spans.
@@ -240,6 +246,19 @@ func (a *App) readerSeek(c *ui.Context, r *Reader) {
 		// side is always the page further on.
 		ui.Box(c).FillWidth().Height(3).Absolute().Top(8).Left(0).
 			Background(ui.RGBA(255, 255, 255, 0.22))
+		// A page list still streaming shows how much of the bar is real: the
+		// seek bar can only land on pages that have arrived, so the light
+		// stretch says where the readable part ends.
+		if !r.complete && r.total > 0 {
+			stream := clampFloat(float32(r.partial)/float32(r.total), 0, 1)
+			streamBox := ui.Box(c).Absolute().Top(8).Height(3).Width(w * stream).
+				Background(ui.RGBA(255, 255, 255, 0.34))
+			if r.settings.rtl {
+				streamBox.Left(w - w*stream)
+			} else {
+				streamBox.Left(0)
+			}
+		}
 		fill := ui.Box(c).Absolute().Top(8).Height(3).Width(w * frac).
 			Background(ui.RGBA(255, 255, 255, 0.92))
 		if r.settings.rtl {
@@ -290,21 +309,77 @@ func (a *App) seekThumb(c *ui.Context, page int, grow bool) {
 	}
 }
 
+// readerZoomControls zoom out, say the current zoom (a click resets it) and
+// zoom in, so a mouse without a gesture can reach the same place a pinch can.
+// They stay on the dock at 100% rather than appearing with the first zoom, so
+// the percentages are where a reader looks for them.
+func (a *App) readerZoomControls(c *ui.Context, r *Reader) {
+	if ui.Button(c, "−").Label(i18n.T("Zoom out")).Width(30).Clicked() {
+		a.zoomBy(r, 1/(1+zoomStep))
+	}
+	percent := fmt.Sprintf("%d%%", int(r.zoom*100+0.5))
+	if ui.Button(c, percent).Label(i18n.T("Reset zoom")).Clicked() {
+		a.resetZoom(r)
+	}
+	if ui.Button(c, "+").Label(i18n.T("Zoom in")).Width(30).Clicked() {
+		a.zoomBy(r, 1+zoomStep)
+	}
+}
+
+// zoomBy zooms about the middle of the page, where a button-driven zoom
+// should keep the page.
+func (a *App) zoomBy(r *Reader, factor float32) {
+	w, h := a.readerSize()
+	a.zoomAt(r, w/2, h/2, r.zoom*factor, w, h)
+}
+
+// resetZoom goes back to the whole page.
+func (a *App) resetZoom(r *Reader) {
+	r.zoom, r.panX, r.panY = 1, 0, 0
+}
+
+// readerSize is the window the reader fills, which is the stage's size too.
+func (a *App) readerSize() (float32, float32) {
+	if a.reader.stageW > 0 && a.reader.stageH > 0 {
+		return a.reader.stageW, a.reader.stageH
+	}
+	if a.win == nil {
+		return 0, 0
+	}
+	w, h := a.win.Size()
+	return float32(w), float32(h)
+}
+
+// readerZoomBadge is the way back from a zoom while the controls are hidden:
+// a small pill at the top of the page saying how far in it is, which resets
+// the zoom when clicked.
+func (a *App) readerZoomBadge(c *ui.Context, r *Reader) {
+	if r.zoom <= 1.001 {
+		return
+	}
+	label := fmt.Sprintf("%d%%", int(r.zoom*100+0.5))
+	ui.Row(c).FillWidth().Absolute().Top(14).Left(0).Justify(ui.Center).Children(func() {
+		if ui.Button(c, label).Label(i18n.T("Reset zoom")).
+			Background(readerOverlaySurface(0.82)).
+			TextColor(readerOverlayInk()).Border(1, ui.RGBA(255, 255, 255, 0.18)).
+			Clicked() {
+			a.resetZoom(r)
+		}
+	})
+}
+
 // readerPageModeButtons switch between one page and a spread.
 func (a *App) readerPageModeButtons(c *ui.Context, r *Reader) {
-	if ui.Button(c, i18n.T("Single page")).Label(i18n.T("Show one page")).
-		Disabled(!r.settings.double).Clicked() {
+	a.readerChoice(c, i18n.T("Single page"), !r.settings.double, func() {
 		a.setSpread(r, false)
-	}
-	if ui.Button(c, i18n.T("Double page")).Label(i18n.T("Show two pages")).
-		Disabled(r.settings.double).Clicked() {
+	})
+	a.readerChoice(c, i18n.T("Double page"), r.settings.double, func() {
 		a.setSpread(r, true)
-	}
+	})
 	if r.settings.double && !r.narrow {
-		cover := i18n.T("Cover")
-		if ui.Button(c, cover).Label(i18n.T("Toggle the cover page")).Clicked() {
+		a.readerChoice(c, i18n.T("Cover"), r.settings.hasCover, func() {
 			a.setCover(r, !r.settings.hasCover)
-		}
+		})
 	}
 }
 
@@ -347,12 +422,14 @@ func (a *App) setCover(r *Reader, on bool) {
 	}
 }
 
-// viewLabel names the window's view on the dock's switch.
+// viewLabel names what the dock's view switch will do: enter full screen, or
+// leave it. Naming the action rather than the current view keeps the button
+// from reading as a statement of where the reader already is.
 func (a *App) viewLabel() string {
 	if a.isFullscreen() {
-		return i18n.T("Full screen")
+		return i18n.T("Exit full screen")
 	}
-	return i18n.T("Window")
+	return i18n.T("Full screen")
 }
 
 // cycleView flips the window between full screen and its window.

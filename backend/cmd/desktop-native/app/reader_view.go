@@ -18,8 +18,9 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 	r.trimSlots()
 	// A spread needs the width two pages deserve; a narrow window shows one
 	// at a time, as comimi does on a phone-width viewport.
-	w, _ := c.Size()
+	w, h := c.Size()
 	r.narrow = w < readerSpreadMinWidth
+	r.stageW, r.stageH = w, h
 
 	// A thumbnail click on the detail page asks for a particular page; apply
 	// it as soon as that page has streamed in, overriding the saved progress.
@@ -63,6 +64,7 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 			if r.overlay {
 				a.readerOverlay(c, r)
 			} else {
+				a.readerZoomBadge(c, r)
 				a.readerHint(c, r)
 			}
 		}
@@ -80,14 +82,6 @@ func readerPaper(r *Reader) ui.Color {
 		return ui.RGB(16, 16, 18)
 	}
 	return ui.RGB(246, 246, 247)
-}
-
-// readerInk is text on the reader's paper.
-func readerInk(r *Reader) ui.Color {
-	if r.settings.dark {
-		return ui.RGB(236, 236, 238)
-	}
-	return ui.RGB(28, 28, 30)
 }
 
 // readerMuted is secondary text on the reader's paper.
@@ -177,10 +171,14 @@ func (a *App) readerHint(c *ui.Context, r *Reader) {
 	// The line takes no press, and no room: it lies over the pages rather
 	// than beside them, so the stage keeps the whole window and a tap at the
 	// bottom of the page is still a tap on the page.
-	ui.Column(c).Fill().Absolute().Justify(ui.End).AlignItems(ui.Center).PassThrough().
-		Padding(0, 0, 8, 0).Children(func() {
-		ui.Text(c, a.readerCountText(r, true)).FontSize(11).TextColor(readerMuted(r)).PassThrough()
-	})
+	ui.Row(c).FillWidth().Absolute().Bottom(8).Left(0).Justify(ui.Center).PassThrough().
+		Children(func() {
+			ui.Box(c).Padding(3, 10).Radius(999).Background(ui.RGBA(0, 0, 0, 0.52)).
+				Children(func() {
+					ui.Text(c, a.readerCountText(r, true)).FontSize(11).
+						TextColor(ui.RGB(255, 255, 255))
+				})
+		})
 }
 
 // readerCountText is the page count the hints and the dock show: a spread's
@@ -267,6 +265,15 @@ func (a *App) readerKeys(c *ui.Context, r *Reader) {
 	}
 	if c.Shortcut(0, ui.KeyS) {
 		a.togglePanel(r, panelSettings)
+	}
+	if c.Shortcut(0, ui.KeyMinus) {
+		a.zoomBy(r, 1/(1+zoomStep))
+	}
+	if c.Shortcut(0, ui.KeyEqual) {
+		a.zoomBy(r, 1+zoomStep)
+	}
+	if c.Shortcut(0, ui.Key0) {
+		a.resetZoom(r)
 	}
 }
 

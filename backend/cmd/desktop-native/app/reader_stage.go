@@ -155,13 +155,34 @@ func (a *App) pageImage(c *ui.Context, page int, grow int, zoom, panX, panY floa
 		return
 	}
 	draw := func() {
-		img := ui.Image(c, bitmap).Fill().Fit(ui.Contain).
-			TransformOrigin(0.5, 0.5).
-			Translate(panX, panY).
-			Scale(zoom, zoom)
+		// The page is painted by hand so the shadow follows the picture, not
+		// the cell: Fit(Contain)'s element box is the whole cell, and a
+		// shadow round that would sit at the window's edges instead of round
+		// a page narrower or shorter than the stage.
+		bw, bh := bitmap.Size()
+		page := ui.Box(c).Fill().TransformOrigin(0.5, 0.5).
+			Translate(panX, panY).Scale(zoom, zoom)
 		if grow > 0 {
-			img.Grow(1)
+			page.Grow(1)
 		}
+		shadow := ui.RGBA(0, 0, 0, 0.22)
+		edge := ui.RGBA(0, 0, 0, 0.10)
+		if r.settings.dark {
+			shadow = ui.RGBA(0, 0, 0, 0.62)
+			edge = ui.RGBA(255, 255, 255, 0.10)
+		}
+		page.Draw(func(p *ui.Painter, box ui.Rect) {
+			if bw <= 0 || bh <= 0 {
+				return
+			}
+			scale := minFloat(box.W/float32(bw), box.H/float32(bh))
+			w, h := float32(bw)*scale, float32(bh)*scale
+			x, y := box.X+(box.W-w)/2, box.Y+(box.H-h)/2
+			r := ui.Rect{X: x, Y: y, W: w, H: h}
+			p.Shadow(r, 0, 0, 2, 14, 2, shadow)
+			p.Image(bitmap, r, ui.Cover)
+			p.Stroke(r, edge, 0, 1)
+		})
 	}
 	if placeholder {
 		// Centre the indicator over the stand-in gradient. It is a sibling
