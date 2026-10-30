@@ -12,11 +12,14 @@ type Gallery struct {
 	Title    string
 	TitleJPN string
 	Category string
-	Pages    int
-	Rating   float64
-	Tags     []apiTag
-	CoverURL string
-	Reading  *ReadingProgress
+	// CategoryCode is the API's category code (doujinshi, manga, …), kept
+	// for the chip colour; Category is its translated label.
+	CategoryCode string
+	Pages        int
+	Rating       float64
+	Tags         []apiTag
+	CoverURL     string
+	Reading      *ReadingProgress
 }
 
 // NextPage is the page a "continue reading" button should open: the saved

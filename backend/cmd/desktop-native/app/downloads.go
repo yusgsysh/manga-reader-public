@@ -310,12 +310,8 @@ func (a *App) downloadsPage(c *ui.Context) {
 		c.After(downloadPollInterval)
 	}
 
-	ui.Column(c).Fill().Padding(20, 24).Gap(14).Children(func() {
-		ui.Column(c).Gap(2).Children(func() {
-			ui.Text(c, i18n.T("Downloads")).FontSize(26).Bold()
-			ui.Text(c, i18n.T("Offline downloads are stored in the local image cache and readable offline.")).
-				FontSize(12).TextColor(t.TextMuted)
-		})
+	ui.Column(c).Fill().Padding(pagePadY, pagePadX).Gap(16).Children(func() {
+		pageHeader(c, i18n.T("Downloads"), i18n.T("Offline downloads are stored in the local image cache and readable offline."), iconSVG[iconDownloads])
 
 		switch {
 		case a.downloads.loading && len(a.downloads.items) == 0:

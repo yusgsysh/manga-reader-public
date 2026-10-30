@@ -85,6 +85,7 @@ var zh = map[string]string{
 	"Please paste your ExHentai cookies": "请粘贴 ExHentai Cookies",
 
 	// --- settings ---
+	"Account, storage, sync, appearance and about.": "账号、存储、同步、外观与关于。",
 	"Account": "账号",
 	"Changing the cookies restarts the built-in service.": "更改 Cookies 会重启内置服务。",
 	"Reconfigure cookies":   "重新配置 Cookies",
@@ -222,6 +223,7 @@ var zh = map[string]string{
 	"Back":                       "返回",
 	"Page list":                  "页面一览",
 	"%d pages":                   "共 %d 页",
+	"Rating %.1f":                "评分 %.1f",
 	"%d kept":                    "已收藏 %d 页",
 	"Every key the reader takes": "阅读器支持的全部按键",
 	"Copy the gallery's address": "复制画廊地址",
