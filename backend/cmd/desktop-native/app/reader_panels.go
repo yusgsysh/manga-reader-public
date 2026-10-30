@@ -9,6 +9,17 @@ import (
 	"manga-reader/cmd/desktop-native/app/i18n"
 )
 
+// The menu's marks, drawn as line icons so they take the menu's ink like the
+// labels beside them.
+var (
+	readerIconPages    = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>`))
+	readerIconFavorite = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7.5-4.7-7.5-10A4.5 4.5 0 0 1 12 6.7 4.5 4.5 0 0 1 19.5 10c0 5.3-7.5 10-7.5 10z"/></svg>`))
+	readerIconKeyboard = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M6 13.5h.01M9.5 13.5h.01M13 13.5h.01M16.5 13.5h.01M7.5 16.5h9"/></svg>`))
+	readerIconShare    = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v11"/><path d="m8 7.5 4-4 4 4"/><path d="M5 13.5v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>`))
+	readerIconAbout    = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><path d="M12 7.6h.01"/></svg>`))
+	readerIconExit     = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 4.5H5.5v15h4"/><path d="M14 8.5l4 3.5-4 3.5"/><path d="M18 12H9"/></svg>`))
+)
+
 // The reader's panels, after comimi's menu and settings sheet: the menu holds
 // the page list, the kept pages, the shortcuts and the gallery's own details,
 // and the settings hold how the pages move.
@@ -17,9 +28,10 @@ import (
 func (a *App) readerMenu(c *ui.Context, r *Reader) {
 	// The sheet starts below the top bar and lets presses above it through,
 	// so the bar's own buttons still take them.
-	ui.Column(c).FillWidth().FillHeight().Absolute().Top(0).Left(0).Padding(56, 0, 0, 0).
-		PassThrough().Children(func() {
-		ui.Column(c).FillWidth().FillHeight().Background(readerOverlaySurface(0.96)).
+	ui.Column(c).FillWidth().FillHeight().Absolute().Top(0).Left(0).Padding(56, 18, 24, 18).
+		AlignItems(ui.Center).PassThrough().Children(func() {
+		ui.Column(c).Width(560).FillHeight().Background(readerOverlaySurface(0.96)).
+			Radius(14).Border(1, ui.RGBA(255, 255, 255, 0.08)).
 			Padding(14, 18).Gap(10).Children(func() {
 			// The head of the menu: the view's name and the way back.
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -69,8 +81,8 @@ func (a *App) panelTitle(r *Reader) string {
 
 // menuEntry is a row of the menu's home: its label, what it says, and what it
 // opens.
-func (a *App) menuEntry(c *ui.Context, r *Reader, label, hint string, p readerPanel) {
-	ui.Box(c).FillWidth().Padding(10, 12).Radius(8).
+func (a *App) menuEntry(c *ui.Context, r *Reader, mark *ui.SVG, label, hint string, p readerPanel) {
+	ui.Box(c).FillWidth().Padding(9, 10).Radius(10).
 		Background(ui.RGBA(255, 255, 255, 0.06)).
 		HandleInput(func(ev ui.InputEvent) bool {
 			if ev.Kind != ui.InputPointerDown {
@@ -84,7 +96,11 @@ func (a *App) menuEntry(c *ui.Context, r *Reader, label, hint string, p readerPa
 			a.openPanel(r, p)
 			return true
 		}).Children(func() {
-		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
+			ui.Box(c).Size(32, 32).Radius(9).Center().Shrink(0).
+				Background(ui.RGBA(255, 255, 255, 0.08)).Children(func() {
+				ui.Icon(c, mark).Size(17, 17).TextColor(readerOverlayInk())
+			})
 			ui.Column(c).Gap(1).Grow(1).Children(func() {
 				ui.Text(c, label).FontSize(13).TextColor(readerOverlayInk())
 				ui.Text(c, hint).FontSize(11).TextColor(readerOverlayMuted())
@@ -96,15 +112,17 @@ func (a *App) menuEntry(c *ui.Context, r *Reader, label, hint string, p readerPa
 
 // readerMenuHome lists what the menu offers.
 func (a *App) readerMenuHome(c *ui.Context, r *Reader) {
-	a.menuEntry(c, r, i18n.T("Page list"),
+	a.menuEntry(c, r, readerIconPages, i18n.T("Page list"),
 		i18n.Sprintf(i18n.T("%d pages"), len(r.pages)), panelPages)
-	a.menuEntry(c, r, i18n.T("Favorites"),
+	a.menuEntry(c, r, readerIconFavorite, i18n.T("Favorites"),
 		i18n.Sprintf(i18n.T("%d kept"), len(r.favoritePages())), panelFavorites)
-	a.menuEntry(c, r, i18n.T("Keyboard shortcuts"),
+	a.menuEntry(c, r, readerIconKeyboard, i18n.T("Keyboard shortcuts"),
 		i18n.T("Every key the reader takes"), panelShortcuts)
-	a.menuEntry(c, r, i18n.T("Share"), i18n.T("Copy the gallery's address"), panelShare)
-	a.menuEntry(c, r, i18n.T("About"), i18n.T("About this reader"), panelAbout)
-	a.menuEntry(c, r, i18n.T("Back to the gallery"),
+	a.menuEntry(c, r, readerIconShare, i18n.T("Share"),
+		i18n.T("Copy the gallery's address"), panelShare)
+	a.menuEntry(c, r, readerIconAbout, i18n.T("About"),
+		i18n.T("About this reader"), panelAbout)
+	a.menuEntry(c, r, readerIconExit, i18n.T("Back to the gallery"),
 		i18n.T("Leave the reader where it is"), panelNone)
 }
 
@@ -120,8 +138,15 @@ func (a *App) readerPageList(c *ui.Context, r *Reader) {
 		ui.Text(c, i18n.Sprintf(i18n.T("%s / %d"), pageGroupText(a.shownGroup()), len(r.pages))).
 			FontSize(11).TextColor(readerOverlayMuted())
 	})
+	if r.pagesScrollTo >= 0 {
+		const pageListCols = 5
+		const pageListRow = 136 + 6
+		row := r.pagesScrollTo / pageListCols
+		r.pagesScroll.Y = float32(row) * pageListRow
+		r.pagesScrollTo = -1
+	}
 	ui.Scroll(c).Fill().TrackScroll(&r.pagesScroll).Children(func() {
-		ui.Grid(c).Columns(6).Gap(6).Padding(0, 0, 8, 0).Children(func() {
+		ui.Grid(c).Columns(5).Gap(6).Padding(0, 0, 8, 0).Children(func() {
 			for page := range r.pages {
 				a.pageListCell(c, r, page)
 			}
@@ -138,27 +163,33 @@ func (a *App) pageListCell(c *ui.Context, r *Reader, page int) {
 	if shown {
 		bg = ui.RGBA(110, 160, 255, 0.35)
 	}
-	cell := ui.Box(c).FillWidth().Height(96).Radius(6).Clip().
-		Background(bg).
-		HandleInput(func(ev ui.InputEvent) bool {
-			if ev.Kind != ui.InputPointerDown {
-				return false
-			}
-			a.markActivity()
-			a.goToPage(r, page)
-			return true
-		})
+	cell := ui.Box(c).Height(136).Radius(6).Clip().Background(bg)
+	if shown {
+		cell.Border(2, ui.RGB(110, 160, 255))
+	}
+	cell.HandleInput(func(ev ui.InputEvent) bool {
+		if ev.Kind != ui.InputPointerDown {
+			return false
+		}
+		a.markActivity()
+		a.goToPage(r, page)
+		return true
+	})
 	cell.Children(func() {
 		if r.hasPage(page) {
 			bitmap := a.pageThumbs.Get(a.readerThumbURL(page))
 			ui.Image(c, bitmap).Fill().Fit(ui.Cover).Absolute()
 		}
 		if r.fav[page] {
-			ui.Text(c, "♥").FontSize(11).TextColor(ui.RGB(255, 120, 150)).
-				Absolute().Top(2).Left(4)
+			ui.Box(c).Padding(2, 4).Radius(4).Background(ui.RGBA(0, 0, 0, 0.6)).
+				Absolute().Top(3).Left(3).Children(func() {
+				ui.Text(c, "♥").FontSize(10).TextColor(ui.RGB(255, 120, 150))
+			})
 		}
-		ui.Text(c, itoa(page+1)).FontSize(10).TextColor(ui.RGB(255, 255, 255)).
-			Absolute().Bottom(2).Left(4)
+		ui.Box(c).Padding(1, 4).Radius(4).Background(ui.RGBA(0, 0, 0, 0.62)).
+			Absolute().Bottom(3).Left(3).Children(func() {
+			ui.Text(c, itoa(page+1)).FontSize(10).TextColor(ui.RGB(255, 255, 255))
+		})
 	})
 }
 
@@ -180,30 +211,32 @@ func (a *App) readerFavorites(c *ui.Context, r *Reader) {
 	})
 }
 
-// favoriteCell is one kept page.
+// favoriteCell is one kept page: its thumbnail, the number, and the way to
+// let it go. It is a box rather than a column so the grid stretches it to its
+// cell, as the page list's cells do.
 func (a *App) favoriteCell(c *ui.Context, r *Reader, page int) {
-	ui.Column(c).Gap(4).Children(func() {
-		box := ui.Box(c).FillWidth().Height(130).Radius(6).Clip().
-			HandleInput(func(ev ui.InputEvent) bool {
-				if ev.Kind != ui.InputPointerDown {
-					return false
-				}
-				a.markActivity()
-				a.goToPage(r, page)
-				return true
-			})
-		box.Children(func() {
-			if r.hasPage(page) {
-				bitmap := a.pageThumbs.Get(a.readerThumbURL(page))
-				ui.Image(c, bitmap).Fill().Fit(ui.Cover).Absolute()
-			}
-		})
-		ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, itoa(page+1)).FontSize(11).TextColor(readerOverlayMuted()).Grow(1)
-			if ui.Button(c, "✕").Label(i18n.T("Remove from favorites")).Width(26).
-				Clicked() {
-				a.toggleFavorite(r, page)
-			}
+	box := ui.Box(c).Height(150).Radius(6).Clip().
+		Background(ui.RGBA(255, 255, 255, 0.06))
+	box.HandleInput(func(ev ui.InputEvent) bool {
+		if ev.Kind != ui.InputPointerDown {
+			return false
+		}
+		a.markActivity()
+		a.goToPage(r, page)
+		return true
+	})
+	box.Children(func() {
+		if r.hasPage(page) {
+			bitmap := a.pageThumbs.Get(a.readerThumbURL(page))
+			ui.Image(c, bitmap).Fill().Fit(ui.Cover).Absolute()
+		}
+		if ui.Button(c, "✕").Label(i18n.T("Remove from favorites")).Width(28).
+			Absolute().Top(4).Right(4).Clicked() {
+			a.toggleFavorite(r, page)
+		}
+		ui.Box(c).Padding(1, 4).Radius(4).Background(ui.RGBA(0, 0, 0, 0.62)).
+			Absolute().Bottom(3).Left(3).Children(func() {
+			ui.Text(c, itoa(page+1)).FontSize(10).TextColor(ui.RGB(255, 255, 255))
 		})
 	})
 }
@@ -221,6 +254,8 @@ func (a *App) readerShortcuts(c *ui.Context, r *Reader) {
 		{"M", i18n.T("The menu")},
 		{"O", i18n.T("This overlay")},
 		{"S", i18n.T("The settings")},
+		{"- / =", i18n.T("Zoom out or in")},
+		{"0", i18n.T("Reset the zoom")},
 		{"Esc", i18n.T("Back one step")},
 	}
 	for _, row := range rows {
@@ -275,32 +310,38 @@ func (a *App) readerSettingsPanel(c *ui.Context, r *Reader) {
 						ui.Text(c, i18n.T("Reading direction")).FontSize(12).
 							TextColor(readerOverlayMuted())
 						ui.Row(c).Gap(8).Children(func() {
-							if ui.Button(c, i18n.T("Right to left")).Label(i18n.T("Read right to left")).
-								Disabled(r.settings.rtl).Clicked() {
+							a.readerChoice(c, i18n.T("Right to left"), r.settings.rtl, func() {
 								a.setDirection(r, true)
-							}
-							if ui.Button(c, i18n.T("Left to right")).Label(i18n.T("Read left to right")).
-								Disabled(!r.settings.rtl).Clicked() {
+							})
+							a.readerChoice(c, i18n.T("Left to right"), !r.settings.rtl, func() {
 								a.setDirection(r, false)
-							}
+							})
 						})
 
 						ui.Text(c, i18n.T("Pages")).FontSize(12).TextColor(readerOverlayMuted())
 						ui.Column(c).Gap(6).Children(func() {
-							ui.Checkbox(c, &r.settings.double, i18n.T("Two pages at a time"))
-							ui.Checkbox(c, &r.settings.hasCover, i18n.T("The first page is a cover"))
+							// The checkbox writes a copy: a page-mode change
+							// goes through setSpread/setCover, which land the
+							// reader on the pair that holds the page it shows.
+							double, cover := r.settings.double, r.settings.hasCover
+							ui.Checkbox(c, &double, i18n.T("Two pages at a time"))
+							if double != r.settings.double {
+								a.setSpread(r, double)
+							}
+							ui.Checkbox(c, &cover, i18n.T("The first page is a cover"))
+							if cover != r.settings.hasCover {
+								a.setCover(r, cover)
+							}
 						})
 
 						ui.Text(c, i18n.T("Background")).FontSize(12).TextColor(readerOverlayMuted())
 						ui.Row(c).Gap(8).Children(func() {
-							if ui.Button(c, i18n.T("White")).Label(i18n.T("Read on white")).
-								Disabled(!r.settings.dark).Clicked() {
+							a.readerChoice(c, i18n.T("White"), !r.settings.dark, func() {
 								a.setDark(r, false)
-							}
-							if ui.Button(c, i18n.T("Black")).Label(i18n.T("Read on black")).
-								Disabled(r.settings.dark).Clicked() {
+							})
+							a.readerChoice(c, i18n.T("Black"), r.settings.dark, func() {
 								a.setDark(r, true)
-							}
+							})
 						})
 
 						ui.Text(c, i18n.T("Auto page turn")).FontSize(12).
@@ -323,6 +364,20 @@ func (a *App) readerSettingsPanel(c *ui.Context, r *Reader) {
 	// The panel edits the reader's settings directly; keep the app's copy in
 	// step so the next gallery opens with them.
 	a.readerSettings = r.settings
+}
+
+// readerChoice is one option of a pair in the settings sheet: the chosen one
+// in the accent colour, the other a normal button that switches to it on a
+// click. A pair of plain buttons left the choice ambiguous, since the chosen
+// one could only be told by the other being disabled.
+func (a *App) readerChoice(c *ui.Context, label string, chosen bool, choose func()) {
+	if chosen {
+		ui.PrimaryButton(c, label).Label(label)
+		return
+	}
+	if ui.Button(c, label).Label(label).Clicked() {
+		choose()
+	}
 }
 
 // setDirection turns the reading direction, landing on the spread's first page

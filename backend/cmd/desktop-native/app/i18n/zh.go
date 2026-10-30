@@ -7,6 +7,11 @@ package i18n
 // The keys are stable: change a key and its translation must change with it
 // (the coverage test fails on a key that has no zh entry).
 var zh = map[string]string{
+	"Zoom out":       "缩小",
+	"Zoom in":        "放大",
+	"Reset zoom":     "重置缩放",
+	"Zoom out or in": "缩小 / 放大",
+	"Reset the zoom": "重置缩放",
 	// --- navigation and lists ---
 	"Native":  "原生",
 	"Browse":  "浏览",

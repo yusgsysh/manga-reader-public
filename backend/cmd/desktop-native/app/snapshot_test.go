@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -54,6 +55,9 @@ func TestSnapshots(t *testing.T) {
 	savePNG(t, tt, "reader-settings")
 	showReaderPanel(t, a, tt, panelMenu)
 	savePNG(t, tt, "reader-menu")
+	showReaderPanel(t, a, tt, panelPages)
+	savePNG(t, tt, "reader-pages")
+	showReaderPanel(t, a, tt, panelMenu)
 
 	// Back to the app for the search snapshot: the reader's menu holds the
 	// way out, and the app's own search is outside the reader.
@@ -170,4 +174,83 @@ func TestDownloadsSnapshot(t *testing.T) {
 	waitText(t, tt, "取消")
 	savePNG(t, tt, "downloads")
 	_ = a
+}
+
+// TestReaderSpreadSnapshot shows a two-page spread on the widest common
+// window, where the page shadow doubles as the gutter between the pages.
+func TestReaderSpreadSnapshot(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.router.Push("/reader/1/tok1")
+	navSettle(tt)
+	waitText(t, tt, "第 1 / 3 页")
+	a.update(func() {
+		a.reader.settings.double = true
+		a.reader.settings.hasCover = true
+		a.reader.page = 1
+		a.reader.resetView()
+		a.closeOverlay(&a.reader)
+	})
+	tt.Frame()
+	savePNG(t, tt, "reader-spread")
+}
+
+// TestReaderZoomSnapshot shows a zoomed page with the badge the hidden
+// overlay leaves for getting back out.
+func TestReaderZoomSnapshot(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.router.Push("/reader/1/tok1")
+	navSettle(tt)
+	waitText(t, tt, "第 1 / 3 页")
+	a.update(func() {
+		a.reader.zoom = 2
+		a.closeOverlay(&a.reader)
+	})
+	tt.Frame()
+	savePNG(t, tt, "reader-zoom")
+}
+
+// TestReaderDarkSnapshot shows the black paper with the page shadow and the
+// hint pill, which have to stay readable without a dark app theme.
+func TestReaderDarkSnapshot(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.router.Push("/reader/1/tok1")
+	navSettle(tt)
+	waitText(t, tt, "第 1 / 3 页")
+	a.update(func() {
+		a.reader.settings.dark = true
+		a.closeOverlay(&a.reader)
+	})
+	tt.Frame()
+	savePNG(t, tt, "reader-dark")
+}
+
+// TestReaderNarrowSnapshot shows the dock at the smallest window, where its
+// controls have the least room.
+func TestReaderNarrowSnapshot(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.router.Push("/reader/1/tok1")
+	navSettle(tt)
+	waitText(t, tt, "第 1 / 3 页")
+	tt.SetSize(960, 700)
+	showReaderOverlay(t, a, tt)
+	savePNG(t, tt, "reader-narrow")
+}
+
+// TestReaderFavoritesSnapshot shows kept pages in the menu, where the cells
+// share the page list's grid and must not stretch across it.
+func TestReaderFavoritesSnapshot(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.router.Push("/reader/1/tok1")
+	navSettle(tt)
+	waitText(t, tt, "第 1 / 3 页")
+	a.update(func() {
+		a.reader.fav = map[int]bool{0: true, 2: true}
+	})
+	// The page list asks for the thumbnails the favorites view reuses.
+	showReaderPanel(t, a, tt, panelPages)
+	tt.Frame()
+	time.Sleep(150 * time.Millisecond)
+	tt.Frame()
+	showReaderPanel(t, a, tt, panelFavorites)
+	savePNG(t, tt, "reader-favorites")
 }

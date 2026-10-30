@@ -108,12 +108,18 @@ type Reader struct {
 	// narrow is set when the window is too narrow for a spread, which shows
 	// single pages whatever the setting says.
 	narrow bool
+	// stageW and stageH are the size of the last frame's stage, which the
+	// keyboard and dock zoom centre on.
+	stageW, stageH float32
 	// jump keeps the page-number field's text, in the pages view.
 	jump string
 	// seekPreview is the page the seek bar hovers over, -1 for none, and
 	// pagesScroll keeps the page list where it was scrolled to.
 	seekPreview int
 	pagesScroll ui.ScrollState
+	// pagesScrollTo is the page the page list should reveal when it next
+	// builds, -1 when it is already where the reader left it.
+	pagesScrollTo int
 
 	// The gesture in progress: where the pointer went down, what pan it
 	// started from, and whether it moved far enough to be a swipe rather
@@ -252,6 +258,7 @@ func (a *App) ensureReader(id int64, token string, offline bool) {
 	r.turnDir = groupCurrent
 	r.jump = ""
 	r.seekPreview = -1
+	r.pagesScrollTo = -1
 	r.title = i18n.T("Reader")
 	if d := a.details[id]; d != nil && d.loaded && d.g.Title != "" {
 		r.title = d.g.Title
@@ -738,6 +745,11 @@ func (a *App) closeOverlay(r *Reader) {
 func (a *App) openPanel(r *Reader, p readerPanel) {
 	r.overlay = true
 	r.panel = p
+	// The page list opens on the page being read, not at its first page: a
+	// long gallery is otherwise a scroll back to where the reader was.
+	if p == panelPages {
+		r.pagesScrollTo = pageGroupFirst(a.shownGroup())
+	}
 	a.overlayActivity = time.Now()
 }
 
@@ -795,6 +807,13 @@ func galleryURL(id int64, token string) string {
 }
 
 // maxFloat is the larger of a and b.
+func minFloat(a, b float32) float32 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func maxFloat(a, b float32) float32 {
 	if a > b {
 		return a
