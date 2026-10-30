@@ -386,7 +386,7 @@ func conflictSideLabel(side *apiTagRule) string {
 	if side.Action == string(TagDislike) {
 		label = i18n.T("Dislike")
 	}
-	return i18n.Sprintf("%s · weight %d", label, side.Weight)
+	return i18n.Tf("%s · weight %d", label, side.Weight)
 }
 
 // splitTag splits a "namespace:name" tag; a bare tag has an empty namespace.

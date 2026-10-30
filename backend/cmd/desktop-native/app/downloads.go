@@ -209,7 +209,7 @@ func (a *App) startDownload(c *ui.Context, s *detailState) {
 			a.toastLocked(ui.Toast{
 				ID: "download-" + job.ID, Type: "success",
 				Title: i18n.T("Job queued"),
-				Description: i18n.Sprintf("%d pages · %s", len(urls),
+				Description: i18n.Tf("%d pages · %s", len(urls),
 					downloadStatusLabel(job.Status)),
 			})
 		})
@@ -382,9 +382,9 @@ func (a *App) downloadRow(c *ui.Context, j PrefillJob) {
 		if p := downloadProgress(j); p >= 0 {
 			ui.Progress(c, p).FillWidth()
 		}
-		detail := i18n.Sprintf("%d / %d pages", donePages(j), j.Total)
+		detail := i18n.Tf("%d / %d pages downloaded", donePages(j), j.Total)
 		if j.FailedCount > 0 {
-			detail = i18n.Sprintf("%d / %d pages (%d failed)", donePages(j), j.Total, j.FailedCount)
+			detail = i18n.Tf("%d / %d pages downloaded (%d failed)", donePages(j), j.Total, j.FailedCount)
 		}
 		ui.Text(c, detail).FontSize(11).TextColor(t.TextMuted)
 	})

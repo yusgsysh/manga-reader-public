@@ -130,3 +130,32 @@ func TestNoConcatenatedTranslations(t *testing.T) {
 			strings.Join(offenders, "\n"))
 	}
 }
+
+// TestNoRawSprintf guards a format string that never passes through the
+// translation: i18n.Sprintf("… %d pages") reads as translated code but shows
+// English in every language. The key goes through i18n.Tf (or T first).
+func TestNoRawSprintf(t *testing.T) {
+	raw := regexp.MustCompile(`i18n\.Sprintf\(\s*"`)
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var offenders []string
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") || strings.HasPrefix(f, "i18n") {
+			continue
+		}
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for n, line := range strings.Split(string(src), "\n") {
+			if raw.MatchString(line) {
+				offenders = append(offenders, f+":"+itoa(n+1)+"  "+strings.TrimSpace(line))
+			}
+		}
+	}
+	if len(offenders) > 0 {
+		t.Fatalf("untranslated format strings:\n%s", strings.Join(offenders, "\n"))
+	}
+}
