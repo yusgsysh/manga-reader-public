@@ -469,12 +469,8 @@ func (a *App) tagSettingsPage(c *ui.Context) {
 	s := &a.tags
 
 	ui.Scroll(c).Fill().Children(func() {
-		ui.Column(c).Padding(20, 24).Gap(14).MaxWidth(900).Children(func() {
-			ui.Column(c).Gap(2).Children(func() {
-				ui.Text(c, i18n.T("Tag settings")).FontSize(26).Bold()
-				ui.Text(c, i18n.T("Liked tags turn blue, disliked red; this only colours and orders, it never filters.")).
-					FontSize(12).TextColor(t.TextMuted)
-			})
+		ui.Column(c).Padding(pagePadY, pagePadX).Gap(16).MaxWidth(900).Children(func() {
+			pageHeader(c, i18n.T("Tag settings"), i18n.T("Liked tags turn blue, disliked red; this only colours and orders, it never filters."), iconSVG[iconTags])
 
 			a.tagAddRow(c, s)
 
@@ -510,7 +506,7 @@ func (a *App) tagSettingsPage(c *ui.Context) {
 			a.tagSearchPanel(c, s)
 
 			ui.Divider(c)
-			ui.Text(c, i18n.T("Synced with the source")).FontSize(16).Bold()
+			sectionTitle(c, i18n.T("Synced with the source"), "")
 			ui.Text(c, i18n.T("Three-way merge of local rules and the source's My Tags; tags both sides changed need a choice.")).
 				FontSize(12).TextColor(t.TextMuted)
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -731,7 +727,7 @@ func (a *App) tagSuggestionRow(c *ui.Context, s *TagSettings, sug TagSuggestion)
 func (a *App) tagSearchPanel(c *ui.Context, s *TagSettings) {
 	t := c.Theme()
 	db := &a.translations
-	ui.Text(c, i18n.T("Tag translations")).FontSize(16).Bold()
+	sectionTitle(c, i18n.T("Tag translations"), "")
 	ui.Text(c, db.Status()).FontSize(12).TextColor(t.TextMuted)
 	ui.Row(c).Gap(8).AlignItems(ui.End).Children(func() {
 		ui.TextInput(c, &s.tagQuery).Width(320).Label(i18n.T("Search tag translations")).

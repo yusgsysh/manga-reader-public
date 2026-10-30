@@ -3,6 +3,7 @@
 package app
 
 import (
+	"fmt"
 	"image/png"
 	"os"
 	"testing"
@@ -119,4 +120,41 @@ func TestTagSettingsSnapshot(t *testing.T) {
 	navSettle(tt)
 	waitText(t, tt, "female:yuri")
 	savePNG(t, tt, "tags")
+}
+
+// TestDarkSnapshots captures the same pages in the dark appearance, where the
+// muted greys and cover shadows have to keep their contrast.
+func TestDarkSnapshots(t *testing.T) {
+	a, tt := newTestApp(t)
+	tt.SetDark(true)
+	waitText(t, tt, "示例 A")
+	savePNG(t, tt, "home-dark")
+
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "开始阅读")
+	savePNG(t, tt, "gallery-dark")
+
+	_ = a
+}
+
+// TestNarrowHomeSnapshot shows a full grid at the smallest window: the rows
+// must not overlap when a narrow window makes each cover taller.
+func TestNarrowHomeSnapshot(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	a.update(func() {
+		s := a.lists["/"]
+		base := append([]Gallery(nil), s.items...)
+		for i := 0; i < 8; i++ {
+			g := base[i%len(base)]
+			g.ID, g.Title = int64(100+i), fmt.Sprintf("画廊 %d", i+1)
+			s.items = append(s.items, g)
+		}
+	})
+	tt.SetSize(960, 700)
+	tt.Frame()
+	savePNG(t, tt, "home-narrow")
 }

@@ -550,25 +550,29 @@ func isListPath(p string) bool {
 func (a *App) sidebar(c *ui.Context, t *ui.Theme) {
 	nav := a.selected
 	ui.Column(c).Width(220).Shrink(0).Background(t.Surface).Children(func() {
-		ui.Row(c).Padding(14, 16, 8, 16).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "Manga Reader").Bold().FontSize(15).Grow(1)
-			ui.Text(c, i18n.T("Native")).FontSize(10).TextColor(t.TextMuted)
+		ui.Row(c).Padding(18, 16, 14, 16).AlignItems(ui.Center).Gap(10).Children(func() {
+			sidebarMark(c)
+			ui.Column(c).Gap(0).Grow(1).Children(func() {
+				ui.Text(c, "Manga Reader").Bold().FontSize(14).SingleLine()
+				ui.Text(c, i18n.T("Native")).FontSize(10).TextColor(t.TextMuted).SingleLine()
+			})
 		})
+		ui.Divider(c)
 		ui.Sidebar(c, &nav, func() {
 			ui.SidebarSection(c, i18n.T("Browse"), nil, func() {
-				ui.SidebarItem(c, "/", nil, i18n.T("Home"))
-				ui.SidebarItem(c, "/watched", nil, i18n.T("Watched"))
-				ui.SidebarItem(c, "/popular", nil, i18n.T("Popular"))
-				ui.SidebarItem(c, "/search", nil, i18n.T("Search"))
+				ui.SidebarItem(c, "/", iconSVG[iconHome], i18n.T("Home"))
+				ui.SidebarItem(c, "/watched", iconSVG[iconWatched], i18n.T("Watched"))
+				ui.SidebarItem(c, "/popular", iconSVG[iconPopular], i18n.T("Popular"))
+				ui.SidebarItem(c, "/search", iconSVG[iconSearch], i18n.T("Search"))
 			})
 			ui.SidebarSection(c, i18n.T("My"), nil, func() {
-				ui.SidebarItem(c, "/bookshelf", nil, i18n.T("Bookshelf"))
-				ui.SidebarItem(c, "/recently-read", nil, i18n.T("Recently read"))
-				ui.SidebarItem(c, "/downloads", nil, i18n.T("Downloads"))
+				ui.SidebarItem(c, "/bookshelf", iconSVG[iconBookshelf], i18n.T("Bookshelf"))
+				ui.SidebarItem(c, "/recently-read", iconSVG[iconRecent], i18n.T("Recently read"))
+				ui.SidebarItem(c, "/downloads", iconSVG[iconDownloads], i18n.T("Downloads"))
 			})
 			ui.SidebarSection(c, i18n.T("Manage"), nil, func() {
-				ui.SidebarItem(c, "/tag-settings", nil, i18n.T("Tag settings"))
-				ui.SidebarItem(c, "/settings", nil, i18n.T("Settings"))
+				ui.SidebarItem(c, "/tag-settings", iconSVG[iconTags], i18n.T("Tag settings"))
+				ui.SidebarItem(c, "/settings", iconSVG[iconSettings], i18n.T("Settings"))
 			})
 		}).Grow(1).OnChange(func() {
 			a.router.Push(nav)
@@ -991,15 +995,16 @@ func (a *App) mapItems(items []apiGalleryItem) []Gallery {
 			tags = append(tags, apiTag{Namespace: ns, Name: name})
 		}
 		out = append(out, Gallery{
-			ID:       it.ID,
-			Token:    it.Token,
-			Title:    it.Title,
-			TitleJPN: it.TitleJPN,
-			Category: categoryLabel(it.Category),
-			Pages:    pages,
-			Rating:   it.Rating,
-			Tags:     tags,
-			CoverURL: a.client.ThumbnailURL(cover),
+			ID:           it.ID,
+			Token:        it.Token,
+			Title:        it.Title,
+			TitleJPN:     it.TitleJPN,
+			Category:     categoryLabel(it.Category),
+			CategoryCode: it.Category,
+			Pages:        pages,
+			Rating:       it.Rating,
+			Tags:         tags,
+			CoverURL:     a.client.ThumbnailURL(cover),
 		})
 	}
 	for i := range out {
@@ -1012,13 +1017,14 @@ func (a *App) mapShelf(items []apiShelfItem) []Gallery {
 	out := make([]Gallery, 0, len(items))
 	for _, it := range items {
 		g := Gallery{
-			ID:       it.ID,
-			Token:    it.Token,
-			Title:    it.Title,
-			TitleJPN: it.TitleJPN,
-			Category: categoryLabel(it.Category),
-			Pages:    it.Pages,
-			CoverURL: a.client.ThumbnailURL(it.Thumbnail),
+			ID:           it.ID,
+			Token:        it.Token,
+			Title:        it.Title,
+			TitleJPN:     it.TitleJPN,
+			Category:     categoryLabel(it.Category),
+			CategoryCode: it.Category,
+			Pages:        it.Pages,
+			CoverURL:     a.client.ThumbnailURL(it.Thumbnail),
 		}
 		if it.Reading != nil {
 			g.Reading = &ReadingProgress{
@@ -1054,11 +1060,8 @@ func (a *App) listPage(c *ui.Context, path, title, subtitle string, kind listKin
 		a.scheduleRefresh(c, s)
 	}
 
-	ui.Column(c).Fill().Padding(20, 24).Gap(14).Children(func() {
-		ui.Column(c).Gap(2).Children(func() {
-			ui.Text(c, title).FontSize(26).Bold()
-			ui.Text(c, listSummary(subtitle, s)).FontSize(12).TextColor(t.TextMuted)
-		})
+	ui.Column(c).Fill().Padding(pagePadY, pagePadX).Gap(16).Children(func() {
+		pageHeader(c, title, listSummary(subtitle, s), listIcon(kind))
 
 		switch {
 		case s.loading && len(s.items) == 0:
@@ -1073,7 +1076,7 @@ func (a *App) listPage(c *ui.Context, path, title, subtitle string, kind listKin
 		default:
 			a.listForCard = s
 			_, a.cardWindowH = c.Size()
-			ui.GridView(c, s.grid, len(s.items), 190, 300, func(i int) {
+			ui.GridView(c, s.grid, len(s.items), 190, listCellHeightFor(c), func(i int) {
 				a.galleryCard(c, s.items[i])
 			}).Grow(1).Clip()
 			a.listForCard = nil
@@ -1124,78 +1127,86 @@ func (a *App) galleryCard(c *ui.Context, g Gallery) {
 		cover = a.covers.Get(int(g.ID))
 	}
 
-	cell := ui.Column(c).Gap(6).Focusable()
+	cell := ui.Column(c).Gap(9).Focusable()
 	// A cell laid out past the bottom of the grid scrolled view is the last
 	// item the grid built: the visible range ends there, so a cell in the last
 	// few rows means the list is at its end.
 	if s := a.listForCard; s != nil && a.cardWindowH > 0 {
-		if b := cell.Bounds(); b.H > 0 && b.Y > a.cardWindowH-2*300 {
+		if b := cell.Bounds(); b.H > 0 && b.Y > a.cardWindowH-2*listCellHeightFor(c) {
 			s.atEnd = true
 		}
 	}
 	cell.Children(func() {
 		loading := a.images.Loading(g.CoverURL)
-		switch {
-		case cover != nil && !loading:
-			ui.Image(c, cover).AspectRatio(3.0 / 4.0).Fit(ui.Cover).Radius(10)
-		case cover != nil:
-			// A gradient stands in while the real cover downloads; the
-			// indicator turns over it so the card says it is still coming.
-			box := ui.Box(c).AspectRatio(3.0 / 4.0).Radius(10).Clip()
-			box.Children(func() {
+		// One cover frame for every state: it keeps the artwork on the same
+		// rounded card and gives the card the same height whatever loads.
+		box := ui.Box(c).AspectRatio(3.0/4.0).Radius(coverRadius).Clip().
+			Background(t.SurfaceHover).Shadow(0, 6, 16, 0, shadowInk(t))
+		coverFailed := a.images.Err(g.CoverURL) != ""
+		box.Children(func() {
+			switch {
+			case cover != nil && !loading:
+				ui.Image(c, cover).Fill().Fit(ui.Cover).Absolute()
+				coverProgress(c, g)
+				coverRating(c, g)
+			case cover != nil:
+				// A gradient stands in while the real cover downloads; the
+				// indicator turns over it so the card says it is still coming.
 				ui.Image(c, cover).Fill().Fit(ui.Cover).Absolute()
 				ui.Column(c).Fill().Center().Absolute().Children(func() {
 					imageLoadingCenter(c, i18n.T("Loading cover…"))
 				})
-			})
-		case a.images.Err(g.CoverURL) != "":
-			// A failed cover retries on click instead of staying blank.
-			box := ui.Box(c).AspectRatio(3.0 / 4.0).Radius(10).Center().
-				Background(t.Surface).Label(i18n.T("Cover failed to load, click to retry"))
-			box.Children(func() {
-				ui.Text(c, i18n.T("Cover failed to load")).FontSize(11).TextColor(t.TextMuted)
-			})
-			if box.Clicked() {
-				a.images.Retry(g.CoverURL)
-			}
-		default:
-			box := ui.Box(c).AspectRatio(3.0 / 4.0).Radius(10).Center().Background(t.SurfaceHover)
-			box.Children(func() {
-				imageLoadingCenter(c, i18n.T("Loading cover…"))
-			})
-		}
-		ui.Text(c, displayTitle(g)).FontSize(13).SingleLine()
-		if !g.HasMetadata() {
-			// The reading record (or the shelf entry) is there but its
-			// metadata never arrived: say so, once, in place of the
-			// category/page line an empty card would leave as " · 0 pages".
-			ui.Text(c, i18n.T("Details unavailable")).FontSize(11).TextColor(t.TextMuted).SingleLine()
-			return
-		}
-		var meta string
-		switch {
-		case g.Reading != nil && g.Reading.Completed:
-			// 读完了 stays visible: the shelf should say so, not silently
-			// look like page 1 of a fresh gallery.
-			meta = fmt.Sprintf(i18n.T("%s · Finished · %d pages"), g.Category, g.Pages)
-		case g.Reading != nil && g.Reading.CurrentPage > 0:
-			meta = fmt.Sprintf(i18n.T("%s · Page %d"), g.Category, g.Reading.CurrentPage+1)
-		default:
-			meta = fmt.Sprintf(i18n.T("%s · %d pages"), g.Category, g.Pages)
-		}
-		ui.Text(c, meta).FontSize(11).TextColor(t.TextMuted).SingleLine()
-		if len(g.Tags) > 0 {
-			// Two chips at most: the card is small, and the colours are what
-			// matter at a glance.
-			ui.Row(c).Gap(4).Wrap().Children(func() {
-				for i, tag := range a.sortedTags(g.Tags) {
-					if i == 2 {
-						break
+				coverProgress(c, g)
+				coverRating(c, g)
+			case coverFailed:
+				// A failed cover says so and offers its own retry; the rest of
+				// the card still opens the gallery.
+				box.Label(i18n.T("Cover failed to load")).Center()
+				ui.Column(c).Gap(6).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, i18n.T("Cover failed to load")).FontSize(11).TextColor(t.TextMuted)
+					if ui.Button(c, i18n.T("Retry")).Clicked() {
+						a.images.Retry(g.CoverURL)
 					}
-					a.tagChip(c, tag.Namespace, tag.Name)
-				}
-			})
-		}
+				})
+			default:
+				box.Center()
+				imageLoadingCenter(c, i18n.T("Loading cover…"))
+			}
+		})
+		ui.Column(c).Gap(3).Children(func() {
+			ui.Text(c, displayTitle(g)).FontSize(14).FontWeight(550).SingleLine()
+			if !g.HasMetadata() {
+				// The reading record (or the shelf entry) is there but its
+				// metadata never arrived: say so, once, in place of the
+				// category/page line an empty card would leave as " · 0 pages".
+				ui.Text(c, i18n.T("Details unavailable")).FontSize(11).TextColor(t.TextMuted).SingleLine()
+				return
+			}
+			var meta string
+			switch {
+			case g.Reading != nil && g.Reading.Completed:
+				// 读完了 stays visible: the shelf should say so, not silently
+				// look like page 1 of a fresh gallery.
+				meta = fmt.Sprintf(i18n.T("%s · Finished · %d pages"), g.Category, g.Pages)
+			case g.Reading != nil && g.Reading.CurrentPage > 0:
+				meta = fmt.Sprintf(i18n.T("%s · Page %d"), g.Category, g.Reading.CurrentPage+1)
+			default:
+				meta = fmt.Sprintf(i18n.T("%s · %d pages"), g.Category, g.Pages)
+			}
+			ui.Text(c, meta).FontSize(12).TextColor(t.TextMuted).SingleLine()
+			if len(g.Tags) > 0 {
+				// Two chips at most: the card is small, and the colours are
+				// what matter at a glance.
+				ui.Row(c).Gap(4).Wrap().Children(func() {
+					for i, tag := range a.sortedTags(g.Tags) {
+						if i == 2 {
+							break
+						}
+						a.tagChip(c, tag.Namespace, tag.Name)
+					}
+				})
+			}
+		})
 	})
 	if cell.Clicked() {
 		a.router.Push(fmt.Sprintf("/gallery/%d/%s", g.ID, g.Token))
@@ -1239,11 +1250,18 @@ func (a *App) searchPage(c *ui.Context) {
 		a.ensureList(s)
 	}
 
-	ui.Column(c).Fill().Padding(20, 24).Gap(14).Children(func() {
-		ui.Text(c, i18n.T("Search")).FontSize(26).Bold()
-		ui.TextInput(c, &a.searchQuery).Width(480).Label(i18n.T("Search field")).
-			Placeholder(i18n.T("Search titles, categories or tags…")).AutoFocus()
-		ui.Text(c, listSummary(i18n.T("Search results"), s)).FontSize(12).TextColor(t.TextMuted)
+	subtitle := ""
+	if hasQuery {
+		subtitle = listSummary(i18n.T("Search results"), s)
+	}
+
+	ui.Column(c).Fill().Padding(pagePadY, pagePadX).Gap(16).Children(func() {
+		pageHeader(c, i18n.T("Search"), subtitle, iconSVG[iconSearch])
+		ui.Row(c).Width(600).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Icon(c, iconSVG[iconSearch]).Size(17, 17).TextColor(t.TextMuted)
+			ui.TextInput(c, &a.searchQuery).Grow(1).Label(i18n.T("Search field")).
+				Placeholder(i18n.T("Search titles, categories or tags…")).AutoFocus()
+		})
 
 		switch {
 		case !hasQuery:
@@ -1260,7 +1278,7 @@ func (a *App) searchPage(c *ui.Context) {
 		default:
 			a.listForCard = s
 			_, a.cardWindowH = c.Size()
-			ui.GridView(c, s.grid, len(s.items), 190, 300, func(i int) {
+			ui.GridView(c, s.grid, len(s.items), 190, listCellHeightFor(c), func(i int) {
 				a.galleryCard(c, s.items[i])
 			}).Grow(1).Clip()
 			a.listForCard = nil
@@ -1444,15 +1462,16 @@ func (a *App) galleryFromDetail(d apiGalleryDetail) Gallery {
 		cover = d.Cover
 	}
 	return Gallery{
-		ID:       d.ID,
-		Token:    d.Token,
-		Title:    d.Title,
-		TitleJPN: d.TitleJPN,
-		Category: categoryLabel(d.Category),
-		Pages:    d.PageCount,
-		Rating:   d.Rating,
-		Tags:     d.Tags,
-		CoverURL: a.client.ThumbnailURL(cover),
+		ID:           d.ID,
+		Token:        d.Token,
+		Title:        d.Title,
+		TitleJPN:     d.TitleJPN,
+		Category:     categoryLabel(d.Category),
+		CategoryCode: d.Category,
+		Pages:        d.PageCount,
+		Rating:       d.Rating,
+		Tags:         d.Tags,
+		CoverURL:     a.client.ThumbnailURL(cover),
 	}
 }
 
@@ -1480,87 +1499,117 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 		cover = a.covers.Get(int(g.ID))
 	}
 
+	// The page the reader would open at: the saved progress, and the page
+	// this app saved in the gallery, which the backend's progress row can
+	// lag behind.
+	page, finished := s.reading, finishedReading(g.Reading)
+	if known, ok := a.knownReading(g.ID); ok && known.CurrentPage > page {
+		page, finished = known.CurrentPage, known.Completed
+	}
+	label := i18n.T("Start reading")
+	if g.Pages > 0 && page >= g.Pages-1 {
+		label = i18n.T("Read again")
+	} else if finished {
+		label = i18n.T("Read again")
+	} else if page > 0 {
+		label = fmt.Sprintf(i18n.T("Continue (page %d)"), page+1)
+	}
+
 	ui.Scroll(c).Fill().Children(func() {
-		ui.Column(c).Padding(20, 24).Gap(18).MaxWidth(1100).Children(func() {
-			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+		ui.Column(c).Padding(pagePadY, pagePadX).Gap(22).MaxWidth(1120).Children(func() {
+			// The way back is a quiet control; the gallery itself is the
+			// page's headline.
+			ui.Row(c).Children(func() {
 				if ui.Button(c, i18n.T("← Back")).Clicked() {
 					a.router.Back()
 				}
-				ui.Text(c, displayTitle(g)).FontSize(22).Bold().Grow(1)
-				// NextPage is 0 both for a gallery never opened and for one
-				// read to its end: the saved page tells them apart. The page
-				// this app saved in the gallery counts too, so a gallery just
-				// read continues where it stopped even before the backend's
-				// progress row says so.
-				page, finished := s.reading, finishedReading(g.Reading)
-				if known, ok := a.knownReading(g.ID); ok && known.CurrentPage > page {
-					page, finished = known.CurrentPage, known.Completed
-				}
-				label := i18n.T("Start reading")
-				if g.Pages > 0 && page >= g.Pages-1 {
-					label = i18n.T("Read again")
-				} else if finished {
-					label = i18n.T("Read again")
-				} else if page > 0 {
-					label = fmt.Sprintf(i18n.T("Continue (page %d)"), page+1)
-				}
-				if ui.PrimaryButton(c, label).Clicked() {
-					a.readerStart = -1
-					a.router.Push(fmt.Sprintf("/reader/%d/%s", g.ID, g.Token))
-				}
 			})
 
-			ui.Row(c).Gap(20).AlignItems(ui.Start).Children(func() {
-				if a.images.Loading(g.CoverURL) {
-					box := ui.Box(c).Size(240, 320).Radius(12).Clip()
-					box.Children(func() {
+			ui.Row(c).Gap(28).AlignItems(ui.Start).Children(func() {
+				box := ui.Box(c).Size(220, 293).Radius(coverRadius).Clip().
+					Background(t.SurfaceHover).Border(1, t.Border).
+					Shadow(0, 10, 24, 0, shadowInk(t))
+				box.Children(func() {
+					if cover != nil {
 						ui.Image(c, cover).Fill().Fit(ui.Cover).Absolute()
+					}
+					if a.images.Loading(g.CoverURL) {
 						ui.Column(c).Fill().Center().Absolute().Children(func() {
 							imageLoadingCenter(c, i18n.T("Loading cover…"))
 						})
+					}
+					coverProgress(c, g)
+				})
+
+				ui.Column(c).Gap(18).Grow(1).Children(func() {
+					ui.Column(c).Gap(4).Children(func() {
+						ui.Text(c, displayTitle(g)).FontSize(26).FontWeight(650)
+						if g.TitleJPN != "" && g.TitleJPN != g.Title {
+							ui.Text(c, g.TitleJPN).FontSize(14).TextColor(t.TextMuted)
+						}
 					})
-				} else {
-					ui.Image(c, cover).Size(240, 320).Fit(ui.Cover).Radius(12)
-				}
-				ui.Column(c).Gap(10).Grow(1).Children(func() {
-					if g.TitleJPN != "" && g.TitleJPN != g.Title {
-						ui.Text(c, g.TitleJPN).FontSize(13).TextColor(t.TextMuted)
-					}
-					ui.Textf(c, i18n.T("Category: %s"), g.Category).FontSize(13)
-					ui.Textf(c, i18n.T("Pages: %d"), g.Pages).FontSize(13)
-					ui.Textf(c, i18n.T("Rating: %.1f"), g.Rating).FontSize(13)
-					if s.uploader != "" {
-						ui.Textf(c, i18n.T("Uploader: %s"), s.uploader).FontSize(13)
-					}
-					if s.posted != "" {
-						ui.Textf(c, i18n.T("Posted: %s"), s.posted).FontSize(13)
-					}
-					if s.size != "" {
-						ui.Textf(c, i18n.T("Size: %s"), s.size).FontSize(13)
+
+					ui.Row(c).Gap(14).Wrap().AlignItems(ui.Center).Children(func() {
+						categoryChip(c, g)
+						if g.Rating > 0 {
+							ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
+								ui.Icon(c, starSVG).Size(14, 14).TextColor(t.Warning)
+								ui.Textf(c, "%.1f", g.Rating).FontSize(13).FontWeight(600)
+							})
+						}
+						ui.Text(c, i18n.Tf("%d pages", g.Pages)).FontSize(13).TextColor(t.TextMuted)
+					})
+
+					ui.Row(c).Gap(8).Wrap().AlignItems(ui.Center).Children(func() {
+						if ui.PrimaryButton(c, label).Clicked() {
+							a.readerStart = -1
+							a.router.Push(fmt.Sprintf("/reader/%d/%s", g.ID, g.Token))
+						}
+						shelfLabel := i18n.T("Add to bookshelf")
+						if s.inBookshelf {
+							shelfLabel = i18n.T("Remove from bookshelf")
+						}
+						if ui.Button(c, shelfLabel).Disabled(s.busy).Clicked() {
+							a.toggleBookshelf(s)
+						}
+						a.detailDownloadsBlock(c, s)
+					})
+					if !s.shelfKnown {
+						ui.Text(c, i18n.T("Bookshelf state is unavailable")).FontSize(11).TextColor(t.TextMuted)
 					}
 
-					ui.Text(c, i18n.T("Tags")).FontSize(13).TextColor(t.TextMuted)
+					ui.Divider(c)
+					ui.Row(c).Gap(32).AlignItems(ui.Start).Children(func() {
+						ui.Column(c).Gap(6).Grow(1).Children(func() {
+							if s.uploader != "" {
+								ui.Textf(c, i18n.T("Uploader: %s"), s.uploader).FontSize(12).TextColor(t.TextMuted)
+							}
+							if s.posted != "" {
+								ui.Textf(c, i18n.T("Posted: %s"), s.posted).FontSize(12).TextColor(t.TextMuted)
+							}
+						})
+						ui.Column(c).Gap(6).Grow(1).Children(func() {
+							if s.size != "" {
+								ui.Textf(c, i18n.T("Size: %s"), s.size).FontSize(12).TextColor(t.TextMuted)
+							}
+							if g.Rating > 0 {
+								ui.Textf(c, i18n.T("Rating: %.1f"), g.Rating).FontSize(12).TextColor(t.TextMuted)
+							}
+						})
+					})
+				})
+			})
+
+			if len(s.tags) > 0 {
+				ui.Column(c).Gap(10).Children(func() {
+					sectionTitle(c, i18n.T("Tags"), "")
 					ui.Row(c).Gap(6).Wrap().Children(func() {
 						for _, tag := range a.sortedTags(s.tags) {
 							a.tagChip(c, tag.Namespace, tag.Name)
 						}
 					})
-
-					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-						label := i18n.T("Add to bookshelf")
-						if s.inBookshelf {
-							label = i18n.T("Remove from bookshelf")
-						}
-						if ui.Button(c, label).Disabled(s.busy).Clicked() {
-							a.toggleBookshelf(s)
-						}
-					})
-					a.detailDownloadsBlock(c, s)
-					if !s.shelfKnown {
-						ui.Text(c, i18n.T("Bookshelf state is unavailable")).FontSize(11).TextColor(t.TextMuted)
-					}
 				})
-			})
+			}
 
 			ui.Divider(c)
 			a.torrentsBlock(c, s)
@@ -1575,12 +1624,11 @@ func (a *App) galleryPage(c *ui.Context, id int64, token string) {
 // reader at that page.
 func (a *App) pageThumbGrid(c *ui.Context, g Gallery, s *detailState) {
 	t := c.Theme()
-	ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-		ui.Text(c, i18n.T("Page thumbnails")).FontSize(16).Bold()
-		if g.Pages > 0 {
-			ui.Textf(c, i18n.T("%d pages · click to jump"), g.Pages).FontSize(12).TextColor(t.TextMuted)
-		}
-	})
+	note := ""
+	if g.Pages > 0 {
+		note = i18n.Tf("%d pages · click to jump", g.Pages)
+	}
+	sectionTitle(c, i18n.T("Page thumbnails"), note)
 	if g.Pages <= 0 {
 		ui.Text(c, i18n.T("Page count unknown; open the reader to see the pages.")).FontSize(12).TextColor(t.TextMuted)
 		return
@@ -1602,31 +1650,32 @@ func (a *App) pageThumbGrid(c *ui.Context, g Gallery, s *detailState) {
 	}
 	ui.GridView(c, s.thumbGrid, g.Pages, 120, 190, func(i int) {
 		cell := ui.Column(c).Gap(4).Focusable().Label(fmt.Sprintf(i18n.T("Page %d"), i+1))
-		if i == marked {
-			cell.Radius(8).Border(2, t.Accent)
-		}
 		cell.Children(func() {
 			url := a.client.PageThumbnailURL(g.ID, g.Token, i)
 			thumb := a.pageThumbs.Get(url)
-			switch {
-			case thumb != nil:
-				ui.Image(c, thumb).AspectRatio(200.0 / 282.0).Fit(ui.Cover).Radius(8)
-			case a.pageThumbs.Err(url) != "":
-				// A failed thumbnail offers its retry in place.
-				box := ui.Box(c).AspectRatio(200.0 / 282.0).Radius(8).Center().
-					Background(t.SurfaceHover).Label(i18n.Tf("Thumbnail for page %d failed to load, click to retry", i+1))
-				box.Children(func() {
+			// The marked page wears its ring on the picture, not around the
+			// page number, so every cell keeps the same text baseline.
+			frame := ui.Box(c).AspectRatio(200.0/282.0).Radius(8).Clip().
+				Border(2, ui.Transparent)
+			if i == marked {
+				frame.Border(2, t.Accent)
+			}
+			frame.Children(func() {
+				switch {
+				case thumb != nil:
+					ui.Image(c, thumb).Fill().Fit(ui.Cover).Absolute()
+				case a.pageThumbs.Err(url) != "":
+					// A failed thumbnail offers its retry in place.
+					frame.Center().Background(t.SurfaceHover).
+						Label(i18n.Tf("Thumbnail for page %d failed to load, click to retry", i+1))
 					ui.Text(c, i18n.T("Failed to load")).FontSize(11).TextColor(t.Danger)
-				})
-				if box.Clicked() {
-					a.pageThumbs.Retry(url)
-				}
-				return
-			default:
-				box := ui.Box(c).AspectRatio(200.0 / 282.0).Radius(8).Center().Background(t.SurfaceHover)
-				box.Children(func() {
+				default:
+					frame.Center().Background(t.SurfaceHover)
 					imageLoadingCenter(c, i18n.Tf("Loading thumbnail for page %d…", i+1))
-				})
+				}
+			})
+			if a.pageThumbs.Err(url) != "" && frame.Clicked() {
+				a.pageThumbs.Retry(url)
 			}
 			ui.Textf(c, "%d", i+1).FontSize(11).TextColor(t.TextMuted)
 		})
@@ -1675,33 +1724,35 @@ func (a *App) toggleBookshelf(s *detailState) {
 func (a *App) setupView(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Fill().Background(t.Background).Center().Children(func() {
-		ui.Column(c).Width(620).Gap(14).Children(func() {
-			ui.Text(c, i18n.T("First run")).FontSize(26).Bold()
-			ui.Text(c, i18n.T("Paste your ExHentai cookie; the app starts the built-in service on this machine and saves the setting.")).
-				FontSize(13).TextColor(t.TextMuted)
-			if a.backend != nil {
-				if msg := a.backend.StartError(); msg != "" {
-					ui.Text(c, msg).FontSize(12).TextColor(t.Danger).MaxWidth(560)
+		ui.Column(c).Width(620).Gap(18).Children(func() {
+			pageHeader(c, i18n.T("First run"),
+				i18n.T("Paste your ExHentai cookie; the app starts the built-in service on this machine and saves the setting."),
+				bookSVG)
+			surfaceCard(c, func() {
+				if a.backend != nil {
+					if msg := a.backend.StartError(); msg != "" {
+						ui.Text(c, msg).FontSize(12).TextColor(t.Danger).MaxWidth(560)
+					}
 				}
-			}
-			ui.TextArea(c, &a.setupCookie).
-				Label("ExHentai Cookies").
-				Placeholder("ipb_member_id=...; ipb_pass_hash=...; igneous=...; sk=...").
-				Height(90).
-				AutoFocus()
-			ui.Text(c, i18n.T("Sign in to exhentai.org in a browser, then copy the Cookie from the request headers in the developer tools.")).
-				FontSize(11).TextColor(t.TextMuted).MaxWidth(560)
-			if a.setupErr != "" {
-				ui.Text(c, a.setupErr).FontSize(12).TextColor(t.Danger).MaxWidth(560)
-			}
-			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-				if ui.PrimaryButton(c, i18n.T("Save and start")).Disabled(a.setupBusy).Clicked() {
-					a.beginSetup()
+				ui.TextArea(c, &a.setupCookie).
+					Label("ExHentai Cookies").
+					Placeholder("ipb_member_id=...; ipb_pass_hash=...; igneous=...; sk=...").
+					Height(90).
+					AutoFocus()
+				ui.Text(c, i18n.T("Sign in to exhentai.org in a browser, then copy the Cookie from the request headers in the developer tools.")).
+					FontSize(11).TextColor(t.TextMuted).MaxWidth(560)
+				if a.setupErr != "" {
+					ui.Text(c, a.setupErr).FontSize(12).TextColor(t.Danger).MaxWidth(560)
 				}
-				if a.setupBusy {
-					inlineLoading(c, i18n.T("Starting the built-in service…"))
-					ui.Text(c, i18n.T("Starting the built-in service…")).FontSize(12).TextColor(t.TextMuted)
-				}
+				ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+					if ui.PrimaryButton(c, i18n.T("Save and start")).Disabled(a.setupBusy).Clicked() {
+						a.beginSetup()
+					}
+					if a.setupBusy {
+						inlineLoading(c, i18n.T("Starting the built-in service…"))
+						ui.Text(c, i18n.T("Starting the built-in service…")).FontSize(12).TextColor(t.TextMuted)
+					}
+				})
 			})
 		})
 	})
@@ -1751,8 +1802,8 @@ func (a *App) settingsPage(c *ui.Context) {
 	}
 
 	ui.Scroll(c).Fill().Children(func() {
-		ui.Column(c).Padding(20, 24).Gap(14).MaxWidth(760).Children(func() {
-			ui.Text(c, i18n.T("Settings")).FontSize(26).Bold()
+		ui.Column(c).Padding(pagePadY, pagePadX).Gap(18).MaxWidth(820).Children(func() {
+			pageHeader(c, i18n.T("Settings"), i18n.T("Account, storage, sync, appearance and about."), iconSVG[iconSettings])
 			if a.backend != nil && !a.backend.Configured() {
 				if msg := a.backend.StartError(); msg != "" {
 					ui.Text(c, msg).FontSize(12).TextColor(t.Danger).MaxWidth(720)
@@ -1760,98 +1811,98 @@ func (a *App) settingsPage(c *ui.Context) {
 			}
 
 			if a.backend != nil {
-				ui.Text(c, i18n.T("Account")).FontSize(16).Bold()
+				settingsSection(c, i18n.T("Account"), func() {
+					ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+						ui.Text(c, "ExHentai Cookies").Grow(1)
+						ui.Badge(c, a.cookieStatus())
+					})
+					ui.Text(c, i18n.T("Changing the cookies restarts the built-in service.")).FontSize(11).TextColor(t.TextMuted)
+					ui.Row(c).Children(func() {
+						if ui.Button(c, i18n.T("Reconfigure cookies")).Clicked() {
+							a.setupCookie = ""
+							a.setupErr = ""
+							a.showSetup = true
+						}
+					})
+				})
+			}
+
+			settingsSection(c, i18n.T("Storage"), func() {
+				a.settingsRow(c, i18n.T("Backend address"), a.client.BaseURL())
+				a.settingsRow(c, i18n.T("Config file"), a.storage.ConfigPath)
+				a.configFileRow(c)
+				a.settingsRow(c, i18n.T("Local database"), a.storage.DBPath)
+				a.settingsRow(c, i18n.T("Image cache directory"), a.storage.CacheDir)
 				ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-					ui.Text(c, "ExHentai Cookies").Grow(1)
-					ui.Badge(c, a.cookieStatus())
-				})
-				ui.Text(c, i18n.T("Changing the cookies restarts the built-in service.")).FontSize(11).TextColor(t.TextMuted)
-				ui.Row(c).Children(func() {
-					if ui.Button(c, i18n.T("Reconfigure cookies")).Clicked() {
-						a.setupCookie = ""
-						a.setupErr = ""
-						a.showSetup = true
+					ui.Text(c, i18n.T("Cache size")).Grow(1)
+					switch {
+					case a.cacheErr != "":
+						ui.Badge(c, i18n.T("Read failed"))
+					case a.cacheLoading && !a.cacheLoaded:
+						ui.Badge(c, i18n.T("Counting…"))
+					default:
+						ui.Badge(c, humanBytes(a.cacheBytes)+" / "+cacheLimitText(a.cacheMax))
 					}
 				})
-				ui.Divider(c)
-			}
-
-			ui.Text(c, i18n.T("Storage")).FontSize(16).Bold()
-			a.settingsRow(c, i18n.T("Backend address"), a.client.BaseURL())
-			a.settingsRow(c, i18n.T("Config file"), a.storage.ConfigPath)
-			a.configFileRow(c)
-			a.settingsRow(c, i18n.T("Local database"), a.storage.DBPath)
-			a.settingsRow(c, i18n.T("Image cache directory"), a.storage.CacheDir)
-			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-				ui.Text(c, i18n.T("Cache size")).Grow(1)
-				switch {
-				case a.cacheErr != "":
-					ui.Badge(c, i18n.T("Read failed"))
-				case a.cacheLoading && !a.cacheLoaded:
-					ui.Badge(c, i18n.T("Counting…"))
-				default:
-					ui.Badge(c, humanBytes(a.cacheBytes)+" / "+cacheLimitText(a.cacheMax))
+				if a.cacheErr != "" {
+					ui.Text(c, a.cacheErr).FontSize(11).TextColor(t.Danger)
 				}
-			})
-			if a.cacheErr != "" {
-				ui.Text(c, a.cacheErr).FontSize(11).TextColor(t.Danger)
-			}
-			if a.backend != nil {
-				ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-					ui.Text(c, i18n.T("Cache limit (MB)")).Grow(1)
-					ui.TextInput(c, &a.cacheMaxInput).Width(160)
-					if ui.Button(c, i18n.T("Save limit")).Disabled(a.cacheMaxBusy).Clicked() {
-						a.saveCacheLimit()
+				if a.backend != nil {
+					ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+						ui.Text(c, i18n.T("Cache limit (MB)")).Grow(1)
+						ui.TextInput(c, &a.cacheMaxInput).Width(160)
+						if ui.Button(c, i18n.T("Save limit")).Disabled(a.cacheMaxBusy).Clicked() {
+							a.saveCacheLimit()
+						}
+						if a.cacheMaxBusy {
+							inlineLoading(c, i18n.T("Saving…"))
+						}
+					})
+					if a.cacheMaxErr != "" {
+						ui.Text(c, a.cacheMaxErr).FontSize(11).TextColor(t.Danger)
 					}
-					if a.cacheMaxBusy {
-						inlineLoading(c, i18n.T("Saving…"))
-					}
-				})
-				if a.cacheMaxErr != "" {
-					ui.Text(c, a.cacheMaxErr).FontSize(11).TextColor(t.Danger)
+					ui.Text(c, i18n.T("0 means unlimited; past the limit the least recently used images are deleted.")).
+						FontSize(11).TextColor(t.TextMuted)
+					ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+						if ui.Button(c, i18n.T("Clear cache")).Disabled(a.cacheBusy).Clicked() {
+							a.clearCache()
+						}
+						if a.cacheBusy {
+							inlineLoading(c, i18n.T("Clearing cache…"))
+						}
+					})
 				}
-				ui.Text(c, i18n.T("0 means unlimited; past the limit the least recently used images are deleted.")).
-					FontSize(11).TextColor(t.TextMuted)
-				ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-					if ui.Button(c, i18n.T("Clear cache")).Disabled(a.cacheBusy).Clicked() {
-						a.clearCache()
-					}
-					if a.cacheBusy {
-						inlineLoading(c, i18n.T("Clearing cache…"))
-					}
-				})
-			}
-			ui.Text(c, i18n.T("Cleared images download again the next time they are shown.")).
-				FontSize(11).TextColor(t.TextMuted)
-
-			if a.backend != nil {
-				ui.Divider(c)
-				a.syncSettingsSection(c)
-			}
-
-			ui.Divider(c)
-			ui.Text(c, i18n.T("Appearance")).FontSize(16).Bold()
-			a.appearanceRow(c)
-
-			ui.Divider(c)
-			ui.Text(c, i18n.T("Language")).FontSize(16).Bold()
-			a.languageRow(c)
-
-			ui.Divider(c)
-			ui.Text(c, i18n.T("About")).FontSize(16).Bold()
-			a.settingsRow(c, i18n.T("Version"), a.build)
-			ui.Text(c, i18n.T("Third-party ExHentai client, native Go UI (mygo), no WebView.")).
-				FontSize(11).TextColor(t.TextMuted)
-			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-				if ui.Button(c, i18n.T("Export diagnostics")).Disabled(a.diagBusy).Clicked() {
-					a.exportDiagnostics()
-				}
-				ui.Text(c, i18n.T("Includes version, paths, cache size and job counts; no cookies or images.")).
+				ui.Text(c, i18n.T("Cleared images download again the next time they are shown.")).
 					FontSize(11).TextColor(t.TextMuted)
 			})
-			if a.diagMsg != "" {
-				ui.Text(c, a.diagMsg).FontSize(11).TextColor(t.TextMuted)
+
+			if a.backend != nil {
+				settingsSection(c, "", func() { a.syncSettingsSection(c) })
 			}
+
+			settingsSection(c, i18n.T("Appearance"), func() {
+				a.appearanceRow(c)
+			})
+
+			settingsSection(c, i18n.T("Language"), func() {
+				a.languageRow(c)
+			})
+
+			settingsSection(c, i18n.T("About"), func() {
+				a.settingsRow(c, i18n.T("Version"), a.build)
+				ui.Text(c, i18n.T("Third-party ExHentai client, native Go UI (mygo), no WebView.")).
+					FontSize(11).TextColor(t.TextMuted)
+				ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+					if ui.Button(c, i18n.T("Export diagnostics")).Disabled(a.diagBusy).Clicked() {
+						a.exportDiagnostics()
+					}
+					ui.Text(c, i18n.T("Includes version, paths, cache size and job counts; no cookies or images.")).
+						FontSize(11).TextColor(t.TextMuted)
+				})
+				if a.diagMsg != "" {
+					ui.Text(c, a.diagMsg).FontSize(11).TextColor(t.TextMuted)
+				}
+			})
 		})
 	})
 }
@@ -2194,7 +2245,7 @@ func (a *App) syncSettingsSection(c *ui.Context) {
 	a.ensureSyncConfig()
 	s := &a.sync
 
-	ui.Text(c, i18n.T("Data sync")).FontSize(16).Bold()
+	sectionTitle(c, i18n.T("Data sync"), "")
 	ui.Text(c, i18n.T("Sync bookshelf, reading progress and offline cache between two devices; both sides enable it and enter each other's address and token.")).
 		FontSize(12).TextColor(t.TextMuted)
 
