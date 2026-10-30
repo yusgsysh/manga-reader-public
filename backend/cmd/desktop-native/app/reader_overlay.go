@@ -266,14 +266,18 @@ func (a *App) readerSeek(c *ui.Context, r *Reader) {
 		} else {
 			fill.Left(0)
 		}
+		// The preview is a child of the bar, not of the dock, so it rises
+		// above the seek bar. Drawn beside the bar it would hang over the
+		// dock's buttons, which the pointer has to reach while scrubbing.
+		if r.seekPreview >= 0 && r.seekPreview < total {
+			a.readerSeekPreview(c, r, w)
+		}
 	})
-	if r.seekPreview >= 0 && r.seekPreview < total {
-		a.readerSeekPreview(c, r, w)
-	}
 }
 
 // readerSeekPreview draws the page the seek bar hovers over: its picture and
-// the number the turn would land on, above the pointer.
+// the number the turn would land on, above the bar and the pointer. Its bottom
+// clears the bar's own height so it never reaches the dock's button row.
 func (a *App) readerSeekPreview(c *ui.Context, r *Reader, w float32) {
 	total := len(r.pages)
 	g := a.pageIndexesFor(r.seekPreview, total)
@@ -283,7 +287,7 @@ func (a *App) readerSeekPreview(c *ui.Context, r *Reader, w float32) {
 	}
 	left := clampFloat(x*w-48, 0, maxFloat(w-96, 0))
 	ui.Column(c).Width(96).Gap(4).AlignItems(ui.Center).
-		Absolute().Left(left).Bottom(24).Children(func() {
+		Absolute().Left(left).Bottom(26).Children(func() {
 		ui.Box(c).Width(96).Height(128).Radius(6).Clip().
 			Background(ui.RGBA(0, 0, 0, 0.55)).Children(func() {
 			ui.Row(c).Fill().Children(func() {

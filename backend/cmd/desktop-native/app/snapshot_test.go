@@ -177,7 +177,7 @@ func TestDownloadsSnapshot(t *testing.T) {
 }
 
 // TestReaderSpreadSnapshot shows a two-page spread on the widest common
-// window, where the page shadow doubles as the gutter between the pages.
+// window, where the gutter between the pages has to read as a book's spine.
 func TestReaderSpreadSnapshot(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.router.Push("/reader/1/tok1")

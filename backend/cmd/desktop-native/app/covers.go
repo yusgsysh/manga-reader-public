@@ -11,28 +11,28 @@ import (
 )
 
 // placeholderTone is one placeholder scheme: two gradient ends and a soft
-// highlight colour. The tones are muted and harmonious, so a screen of
-// stand-in covers reads as calm art rather than clashing stripes.
+// highlight colour. The tones are neutral greys, so a screen of stand-in
+// covers reads as a loading skeleton rather than as artwork.
 type placeholderTone struct {
 	top, bottom, glow color.RGBA
 }
 
 // palette is the set of placeholder tones. Real covers come from the image
 // store; these keep the shell and the reader usable before the backend client
-// is connected.
+// is connected, and their grey says the picture has not arrived.
 var palette = []placeholderTone{
-	{rgb(0x3b4c6b), rgb(0x1e2637), rgb(0x6f8bc4)}, // indigo dusk
-	{rgb(0x5a3d5c), rgb(0x2b1e2e), rgb(0xb07ab4)}, // plum
-	{rgb(0x6b3f3f), rgb(0x2e1d1d), rgb(0xc08080)}, // rosewood
-	{rgb(0x2f5a4d), rgb(0x162b25), rgb(0x6fb8a0)}, // pine
-	{rgb(0x5c5230), rgb(0x2a2617), rgb(0xb5a866)}, // olive gold
-	{rgb(0x3a4f63), rgb(0x1a2733), rgb(0x7fb0cf)}, // slate blue
-	{rgb(0x6b4a2f), rgb(0x2e2015), rgb(0xc79a66)}, // amber
-	{rgb(0x2a5a60), rgb(0x143034), rgb(0x6fc2cb)}, // teal
-	{rgb(0x5a2f4f), rgb(0x2a1725), rgb(0xb06fa0)}, // magenta
-	{rgb(0x455a2f), rgb(0x1f2a15), rgb(0x9fd16f)}, // moss
-	{rgb(0x5c3333), rgb(0x2a1717), rgb(0xc47c7c)}, // brick
-	{rgb(0x33456b), rgb(0x171f33), rgb(0x7c98d4)}, // royal blue
+	{rgb(0x5a5a62), rgb(0x3c3c42), rgb(0x787882)}, // graphite
+	{rgb(0x56565e), rgb(0x3a3a40), rgb(0x74747e)}, // slate grey
+	{rgb(0x5e5e66), rgb(0x3e3e45), rgb(0x7c7c86)}, // ash
+	{rgb(0x585860), rgb(0x3b3b42), rgb(0x767680)}, // steel
+	{rgb(0x5c5c64), rgb(0x3d3d44), rgb(0x7a7a84)}, // pewter
+	{rgb(0x54545c), rgb(0x393940), rgb(0x72727c)}, // charcoal
+	{rgb(0x606068), rgb(0x3f3f46), rgb(0x7e7e88)}, // iron
+	{rgb(0x595961), rgb(0x3c3c43), rgb(0x777781)}, // smoke
+	{rgb(0x5b5b63), rgb(0x3d3d44), rgb(0x797983)}, // stone
+	{rgb(0x55555d), rgb(0x393940), rgb(0x73737d)}, // gunmetal
+	{rgb(0x5d5d65), rgb(0x3e3e45), rgb(0x7b7b85)}, // ash grey
+	{rgb(0x57575f), rgb(0x3a3a41), rgb(0x75757f)}, // lead
 }
 
 func rgb(v uint32) color.RGBA {
@@ -132,12 +132,12 @@ func (p *PageCache) SetWindow(w *mygo.Window) {
 	p.mu.Unlock()
 }
 
-// gradientBitmap paints a deterministic placeholder: a soft diagonal gradient
-// between a tone's two ends, with two broad, low-contrast glows for depth and
-// a gentle vignette. It is smooth and calm — no hard bands or noise — so a
-// screen of stand-in covers looks like intentional art while the real covers
-// download. The angle, glow positions and tone vary with seed, so each card
-// differs and page turns visibly change.
+// gradientBitmap paints a deterministic placeholder: a soft diagonal grey
+// gradient between a tone's two ends, with two broad, low-contrast glows for
+// depth and a gentle vignette. It is smooth and calm — no hard bands or noise —
+// so a screen of stand-in covers looks like a deliberate loading skeleton
+// while the real covers download. The angle, glow positions and tone vary with
+// seed, so each card differs slightly and page turns visibly change.
 //
 // The per-pixel work is a linear gradient plus two radial glows and a
 // vignette: additions and multiplications only, cheap enough to keep the
