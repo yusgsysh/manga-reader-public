@@ -147,9 +147,15 @@ func sameGroup(x, y pageGroup) bool {
 	return true
 }
 
-// readerGroupView draws a group's pages side by side, as they pair up.
+// readerGroupView draws a group's pages side by side, as they pair up, with a
+// gutter between the two pages of a spread so they read as facing pages rather
+// than one continuous image.
 func (a *App) readerGroupView(c *ui.Context, g pageGroup, zoom, panX, panY float32) {
-	ui.Row(c).Fill().Children(func() {
+	row := ui.Row(c).Fill()
+	if len(g.indexes) > 1 {
+		row.Gap(readerSpreadGap)
+	}
+	row.Children(func() {
 		for _, page := range g.indexes {
 			grow := 0
 			if len(g.indexes) > 1 {
