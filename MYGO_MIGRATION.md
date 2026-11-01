@@ -238,6 +238,22 @@
 - [x] 测试新增 `TestReaderZoomControls`（dock 缩放、百分比重置、键盘、隐藏控件后的药丸）、`TestReaderSpreadSettingLandsOnThePair`（设置页切双页落在同一对）、`TestReaderPageListOpensWhereItIs`（长画廊打开页面一览定位当前页）。
 - [x] 验证：`go test ./...`（726 通过）、`go test -race ./cmd/desktop-native/...`（152 通过）、`go vet ./cmd/desktop-native/...`、`gofmt` 均通过。
 
+### 2.10 首页一比一对齐 main 的 TS 前端
+
+对照 `main` 分支截图逐项量尺寸，把首页（以及所有列表共用的卡片与侧边栏）按 `main` 的 `HomePage` / `GalleryCard` / `DesktopSidebar` 重做：
+
+- [x] **侧边栏**：240 DIP 展开、72 DIP 折叠（顶部双箭头切换）；去掉「浏览/我的/管理」分组标题，改为 `书架` 之后一条分隔线；选中项改成 `main` 的蓝色圆角药丸（白字白图标，高 36、圆角 12），未选项 13 pt、图标 20；底部新增「浅色 / 深色 / 跟随系统」三段主题开关（选中格白底、强调色图标），折叠时改为竖排。
+- [x] **首页结构**：顶部「继续阅读」区（13 pt 半粗标题 + 右侧强调色「查看全部」，144 DIP 横滑卡片、16 间距、最多 12 张，封面底部进度条），下方「最新」`PageHeader`（36 DIP 强调色圆角图标块 + 16 pt 标题，无副标题），右上角两枚 32 DIP 图标按钮。
+- [x] **高级搜索**：漏斗按钮打开浮层，可按分类（11 个彩色药丸多选）、最少/最多页数、最低评分、有种子筛选；重置/应用后重置列表并按 `main` 的参数名（`categories`/`min_pages`/`max_pages`/`min_rating`/`has_torrent`）请求。
+- [x] **浏览定位**：日历按钮打开浮层，提供 `1 天 / 3 天 / 1 周 / 1 月 / 1 年` 快捷跳转、日期选择与「回到最新」，按 `seek`/`jump` 参数重载列表；筛选/跳转生效时按钮显示强调色底。
+- [x] **图卡**：封面 12 圆角、1 px 描边、悬停上浮 2 DIP 加阴影；右上角白色评分文字 + 琥珀星（无底色药丸）；右下角 28 DIP 半透明标签圆钮，点开在按钮上方弹出标签浮层（排除 language/group/artist，按标签规则着色）；标题 13 pt、行高 20、最多两行、最少占 40 DIP；元信息行「分类彩块 + 语言码 + Np」，下方浅色右对齐发布时间；封面底部进度条改为「30% 强调色轨道 + 实色已读段」。
+- [x] **栅格**：列数与 `main` 的 `.gallery-grid` 断点一致（<480 两列、<768 三列、<1024 四列、<1440 五列、<1920 六列、再上七列），卡间距 20 DIP；`GridView` 自身 8 DIP 间距由单元格内边距补齐，封面宽度与 `main` 的 `1fr` 列一致，侧栏折叠/展开时列宽随之变化。
+- [x] **数据**：`Gallery` 新增 `Posted`/`Language`；新增 `formatPosted`（日期直接 `YYYY/M/D`，UTC 时间转本地，按 `刚刚 / N 分钟前 / 今天 HH:MM / M/D HH:MM / YYYY/M/D HH:MM` 显示）与语言码表（`language:*` → zh/jp/en…），补中文键。
+- [x] 列表页共用：页面留白改为 32 DIP、标题块 36/16、卡片文字 96 DIP，搜索页也走同一套栅格。
+- [x] 测试新增 `TestHomeGridColumnsMatchMain`、`TestHomeFilterPanelApplies`、`TestHomeJumpPanelSeeks`、`TestSidebarFoldsToIcons`、`TestSidebarThemeSwitch`、`TestFormatPosted`、`TestLanguageCode`；旧测试里依赖「共 N 个结果」「读到第 N 页」的断言改为检查列表数据与进度条。
+- [x] 快照 `home`、`home-dark`、`home-narrow` 自动覆盖新首页（深色、窄窗列数与行高）。
+- [x] 验证：`go test ./cmd/desktop-native/app/`（123 通过）、`go test -race`（120 通过）、`go vet`、`gofmt` 与 darwin/windows 交叉编译均通过。
+
 ---
 
 ## 3. 未完成

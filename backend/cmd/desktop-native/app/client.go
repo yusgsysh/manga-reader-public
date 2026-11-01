@@ -181,12 +181,23 @@ type apiGalleryItem struct {
 	Uploader  string   `json:"uploader"`
 }
 
+type apiListingNav struct {
+	Prev      string `json:"prev"`
+	Next      string `json:"next"`
+	MinDate   string `json:"min_date"`
+	MaxDate   string `json:"max_date"`
+	RangeMin  int    `json:"range_min"`
+	RangeMax  int    `json:"range_max"`
+	RangeSpan int    `json:"range_span"`
+}
+
 type apiListResponse struct {
 	Page       int              `json:"page"`
 	PageSize   int              `json:"page_size"`
 	Total      int              `json:"total"`
 	TotalPages int              `json:"total_pages"`
 	Results    []apiGalleryItem `json:"results"`
+	Nav        *apiListingNav   `json:"nav"`
 }
 
 func (c *Client) List(ctx context.Context, path string, page int, query url.Values) (apiListResponse, error) {

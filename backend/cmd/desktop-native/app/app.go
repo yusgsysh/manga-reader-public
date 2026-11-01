@@ -95,10 +95,17 @@ type App struct {
 	lists     map[string]*listState
 	details   map[int64]*detailState
 	downloads Downloads
-	// listForCard is the list whose grid is being built, with the window
-	// height, so a card can tell whether it is near the visible end.
-	listForCard *listState
-	cardWindowH float32
+	// sidebarCollapsed folds the navigation rail to its icons.
+	sidebarCollapsed bool
+	// The home page's popups: the card tag list (one at a time), the
+	// advanced-search panel and its draft, and the browse-position panel with
+	// the date it is editing.
+	tagOpen     bool
+	tagOpenID   int64
+	filterOpen  bool
+	filterDraft listFilters
+	jumpOpen    bool
+	jumpDate    time.Time
 	// tags is the tag-rule page state; rules colour and order tags anywhere.
 	tags TagSettings
 	// translations is the EhTagTranslation database, shared by every page.
@@ -205,6 +212,14 @@ type listState struct {
 	err    string
 	query  string
 	loadID int
+	// filters and nav are what the page asked for beyond the endpoint itself:
+	// the advanced-search choices and the browse-position (date/quick jump).
+	// Both apply to the browse lists, and both reset the list when they change.
+	filters listFilters
+	nav     listNav
+	// navInfo is the listing navigation the last page reported: the date range
+	// the browse-position panel offers.
+	navInfo *apiListingNav
 	// refreshed is when the last automatic refresh of a browsable list began;
 	// zero until the first. refreshing guards against a second round while one
 	// is in flight.
@@ -547,44 +562,11 @@ func isListPath(p string) bool {
 	return false
 }
 
-func (a *App) sidebar(c *ui.Context, t *ui.Theme) {
-	nav := a.selected
-	ui.Column(c).Width(220).Shrink(0).Background(t.Surface).Children(func() {
-		ui.Row(c).Padding(18, 16, 14, 16).AlignItems(ui.Center).Gap(10).Children(func() {
-			sidebarMark(c)
-			ui.Column(c).Gap(0).Grow(1).Children(func() {
-				ui.Text(c, "Manga Reader").Bold().FontSize(14).SingleLine()
-				ui.Text(c, i18n.T("Native")).FontSize(10).TextColor(t.TextMuted).SingleLine()
-			})
-		})
-		ui.Divider(c)
-		ui.Sidebar(c, &nav, func() {
-			ui.SidebarSection(c, i18n.T("Browse"), nil, func() {
-				ui.SidebarItem(c, "/", iconSVG[iconHome], i18n.T("Home"))
-				ui.SidebarItem(c, "/watched", iconSVG[iconWatched], i18n.T("Watched"))
-				ui.SidebarItem(c, "/popular", iconSVG[iconPopular], i18n.T("Popular"))
-				ui.SidebarItem(c, "/search", iconSVG[iconSearch], i18n.T("Search"))
-			})
-			ui.SidebarSection(c, i18n.T("My"), nil, func() {
-				ui.SidebarItem(c, "/bookshelf", iconSVG[iconBookshelf], i18n.T("Bookshelf"))
-				ui.SidebarItem(c, "/recently-read", iconSVG[iconRecent], i18n.T("Recently read"))
-				ui.SidebarItem(c, "/downloads", iconSVG[iconDownloads], i18n.T("Downloads"))
-			})
-			ui.SidebarSection(c, i18n.T("Manage"), nil, func() {
-				ui.SidebarItem(c, "/tag-settings", iconSVG[iconTags], i18n.T("Tag settings"))
-				ui.SidebarItem(c, "/settings", iconSVG[iconSettings], i18n.T("Settings"))
-			})
-		}).Grow(1).OnChange(func() {
-			a.router.Push(nav)
-		})
-	})
-}
-
 func (a *App) route(c *ui.Context, r *ui.Route) {
 	switch {
 	case r.Match("/"):
 		r.Title(i18n.T("Home"))
-		a.listPage(c, "/", i18n.T("Home"), i18n.T("Latest galleries"), kindHome)
+		a.listPage(c, "/", i18n.T("Latest"), "", kindHome)
 	case r.Match("/watched"):
 		r.Title(i18n.T("Watched"))
 		a.listPage(c, "/watched", i18n.T("Watched"), i18n.T("Watched galleries"), kindWatched)
@@ -659,9 +641,10 @@ func (a *App) startListLoad(s *listState) {
 	s.loadID++
 	lid := s.loadID
 	page, kind, query := s.page, s.kind, s.query
+	filters, nav := s.filters, s.nav
 
 	go func() {
-		items, total, pageSize, err := a.fetchList(kind, page, query)
+		items, total, pageSize, navInfo, err := a.fetchList(kind, page, query, filters, nav)
 		a.update(func() {
 			if s.loadID != lid {
 				return
@@ -687,6 +670,9 @@ func (a *App) startListLoad(s *listState) {
 			s.pageSize = pageSize
 			s.lastLen = len(items)
 			s.loaded = true
+			if navInfo != nil {
+				s.navInfo = navInfo
+			}
 		})
 	}()
 }
@@ -830,8 +816,9 @@ func (a *App) refreshList(s *listState) {
 	s.loadID++
 	lid := s.loadID
 	kind, query := s.kind, s.query
+	filters, nav := s.filters, s.nav
 	go func() {
-		items, total, pageSize, err := a.fetchList(kind, 0, query)
+		items, total, pageSize, navInfo, err := a.fetchList(kind, 0, query, filters, nav)
 		a.update(func() {
 			if s.loadID != lid {
 				return
@@ -848,6 +835,9 @@ func (a *App) refreshList(s *listState) {
 			s.total = total
 			s.pageSize = pageSize
 			s.lastLen = len(items)
+			if navInfo != nil {
+				s.navInfo = navInfo
+			}
 			s.loaded = true
 			s.err = ""
 		})
@@ -949,29 +939,29 @@ func (a *App) hasMore(s *listState) bool {
 	return s.pageSize > 0 && s.lastLen >= s.pageSize
 }
 
-func (a *App) fetchList(kind listKind, page int, query string) ([]Gallery, int, int, error) {
+func (a *App) fetchList(kind listKind, page int, query string, filters listFilters, nav listNav) ([]Gallery, int, int, *apiListingNav, error) {
 	ctx := context.Background()
 	switch kind {
 	case kindHome:
-		r, err := a.client.List(ctx, "/api/galleries", page, nil)
-		return a.mapItems(r.Results), r.Total, r.PageSize, err
+		r, err := a.client.List(ctx, "/api/galleries", page, filters.values(nav))
+		return a.mapItems(r.Results), r.Total, r.PageSize, r.Nav, err
 	case kindWatched:
-		r, err := a.client.List(ctx, "/api/watched", page, nil)
-		return a.mapItems(r.Results), r.Total, r.PageSize, err
+		r, err := a.client.List(ctx, "/api/watched", page, filters.values(nav))
+		return a.mapItems(r.Results), r.Total, r.PageSize, r.Nav, err
 	case kindPopular:
 		r, err := a.client.List(ctx, "/api/popular", page, nil)
-		return a.mapItems(r.Results), r.Total, r.PageSize, err
+		return a.mapItems(r.Results), r.Total, r.PageSize, r.Nav, err
 	case kindSearch:
 		r, err := a.client.List(ctx, "/api/search", page, url.Values{"q": []string{query}})
-		return a.mapItems(r.Results), r.Total, r.PageSize, err
+		return a.mapItems(r.Results), r.Total, r.PageSize, r.Nav, err
 	case kindBookshelf:
 		r, err := a.client.Bookshelf(ctx, page)
-		return a.mapShelf(r.Results), r.Total, r.PageSize, err
+		return a.mapShelf(r.Results), r.Total, r.PageSize, nil, err
 	case kindRecent:
 		r, err := a.client.RecentlyRead(ctx, page)
-		return a.mapShelf(r.Results), r.Total, r.PageSize, err
+		return a.mapShelf(r.Results), r.Total, r.PageSize, nil, err
 	default:
-		return nil, 0, 0, errors.New(i18n.T("Unknown list kind"))
+		return nil, 0, 0, nil, errors.New(i18n.T("Unknown list kind"))
 	}
 }
 
@@ -1005,6 +995,8 @@ func (a *App) mapItems(items []apiGalleryItem) []Gallery {
 			Rating:       it.Rating,
 			Tags:         tags,
 			CoverURL:     a.client.ThumbnailURL(cover),
+			Posted:       it.Posted,
+			Language:     languageCode(tags),
 		})
 	}
 	for i := range out {
@@ -1051,7 +1043,6 @@ func listSummary(subtitle string, s *listState) string {
 }
 
 func (a *App) listPage(c *ui.Context, path, title, subtitle string, kind listKind) {
-	t := c.Theme()
 	s := a.listFor(path, kind)
 	a.ensureList(s)
 	// A page left open keeps itself current: refresh the first page in the
@@ -1059,33 +1050,58 @@ func (a *App) listPage(c *ui.Context, path, title, subtitle string, kind listKin
 	if kind.browsable() {
 		a.scheduleRefresh(c, s)
 	}
+	if kind == kindHome {
+		a.homePage(c, s)
+		return
+	}
 
-	ui.Column(c).Fill().Padding(pagePadY, pagePadX).Gap(16).Children(func() {
+	// The header sits 20 points above the grid, as main's PageHeader's mb-5.
+	ui.Column(c).Fill().Padding(pagePadY, pagePadX).Gap(20).Children(func() {
 		pageHeader(c, title, listSummary(subtitle, s), listIcon(kind))
-
-		switch {
-		case s.loading && len(s.items) == 0:
-			ui.Column(c).Fill().Center().Gap(10).Children(func() {
-				pageLoading(c, i18n.T("Loading…"))
-				ui.Text(c, i18n.T("Loading…")).FontSize(12).TextColor(t.TextMuted)
-			})
-		case s.err != "" && len(s.items) == 0:
-			a.errorBlock(c, s.err, func() { a.reloadList(s) })
-		case s.loaded && len(s.items) == 0:
-			a.emptyPage(c, i18n.T("No results"), i18n.T("Try another keyword or try again later"), "")
-		default:
-			a.listForCard = s
-			_, a.cardWindowH = c.Size()
-			ui.GridView(c, s.grid, len(s.items), 190, listCellHeightFor(c), func(i int) {
-				a.galleryCard(c, s.items[i])
-			}).Grow(1).Clip()
-			a.listForCard = nil
-			if s.atEnd {
-				a.loadMore(s)
-			}
-			a.listFooter(c, s)
-		}
+		a.listBody(c, s)
 	})
+}
+
+// listBody is the part of a list page under its header: the loader, the
+// failure with its retry, the empty note, or the grid and its footer.
+func (a *App) listBody(c *ui.Context, s *listState) {
+	t := c.Theme()
+	switch {
+	case s.loading && len(s.items) == 0:
+		ui.Column(c).Fill().Center().Gap(10).Children(func() {
+			pageLoading(c, i18n.T("Loading…"))
+			ui.Text(c, i18n.T("Loading…")).FontSize(12).TextColor(t.TextMuted)
+		})
+	case s.err != "" && len(s.items) == 0:
+		a.errorBlock(c, s.err, func() { a.reloadList(s) })
+	case s.loaded && len(s.items) == 0:
+		a.emptyPage(c, i18n.T("No results"), i18n.T("Try another keyword or try again later"), "")
+	default:
+		a.listGrid(c, s)
+		a.listFooter(c, s)
+	}
+}
+
+// listGrid draws the list's virtualized card grid. It hangs the grid
+// listGridInset past the page's padding so the cells' own padding lands the
+// covers on the page edge while the cards keep main's 20-point gap (see
+// listGridInset); each cell therefore draws its card inset by the rest.
+func (a *App) listGrid(c *ui.Context, s *listState) {
+	w, _ := c.Size()
+	cols := listColumns(w)
+	ui.GridView(c, s.grid, len(s.items), listGridMinWidth(w, a.railWidth()), listCellHeightFor(c, a.railWidth()), func(i int) {
+		// The last row being built means the scrolled list has reached the
+		// items it already has: ask for the next page. A cell built early
+		// says nothing, so an idle page does not page through the whole
+		// listing on its own (the grid only builds what is near the view).
+		if i >= len(s.items)-cols {
+			s.atEnd = true
+		}
+		a.galleryCard(c, s.items[i])
+	}).Grow(1).Clip().MarginX(-listGridInset)
+	if s.atEnd {
+		a.loadMore(s)
+	}
 }
 
 // listFooter is the row under a list: a spinner while the next page loads,
@@ -1116,101 +1132,201 @@ func (a *App) listFooter(c *ui.Context, s *listState) {
 	}
 }
 
-// galleryCard draws one gallery. Cards are built lazily by the grid, so this
-// doubles as the "is the list near its end" probe: the scroll offset derived
-// from the cell gives the item the grid is building, and the tail marks the
-// last page it shows.
+// galleryCard draws one gallery in a list grid.
 func (a *App) galleryCard(c *ui.Context, g Gallery) {
 	t := c.Theme()
-	cover := a.images.Get(g.CoverURL)
-	if cover == nil {
-		cover = a.covers.Get(int(g.ID))
-	}
-
-	cell := ui.Column(c).Gap(9).Focusable()
-	// A cell laid out past the bottom of the grid scrolled view is the last
-	// item the grid built: the visible range ends there, so a cell in the last
-	// few rows means the list is at its end.
-	if s := a.listForCard; s != nil && a.cardWindowH > 0 {
-		if b := cell.Bounds(); b.H > 0 && b.Y > a.cardWindowH-2*listCellHeightFor(c) {
-			s.atEnd = true
-		}
-	}
+	cell := ui.Column(c).Gap(0).PaddingX(listGridInset - 2).Focusable()
+	hovered := cell.Hovered()
 	cell.Children(func() {
-		loading := a.images.Loading(g.CoverURL)
-		// One cover frame for every state: it keeps the artwork on the same
-		// rounded card and gives the card the same height whatever loads.
-		box := ui.Box(c).AspectRatio(3.0/4.0).Radius(coverRadius).Clip().
-			Background(t.SurfaceHover).Shadow(0, 6, 16, 0, shadowInk(t))
-		coverFailed := a.images.Err(g.CoverURL) != ""
-		box.Children(func() {
-			switch {
-			case cover != nil && !loading:
-				ui.Image(c, cover).Fill().Fit(ui.Cover).Absolute()
-				coverProgress(c, g)
-				coverRating(c, g)
-			case cover != nil:
-				// A gradient stands in while the real cover downloads; the
-				// indicator turns over it so the card says it is still coming.
-				ui.Image(c, cover).Fill().Fit(ui.Cover).Absolute()
-				ui.Column(c).Fill().Center().Absolute().Children(func() {
-					imageLoadingCenter(c, i18n.T("Loading cover…"))
-				})
-				coverProgress(c, g)
-				coverRating(c, g)
-			case coverFailed:
-				// A failed cover says so and offers its own retry; the rest of
-				// the card still opens the gallery.
-				box.Label(i18n.T("Cover failed to load")).Center()
-				ui.Column(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, i18n.T("Cover failed to load")).FontSize(11).TextColor(t.TextMuted)
-					if ui.Button(c, i18n.T("Retry")).Clicked() {
-						a.images.Retry(g.CoverURL)
-					}
-				})
-			default:
-				box.Center()
-				imageLoadingCenter(c, i18n.T("Loading cover…"))
-			}
-		})
-		ui.Column(c).Gap(3).Children(func() {
-			ui.Text(c, displayTitle(g)).FontSize(14).FontWeight(550).SingleLine()
+		a.coverBox(c, g, hovered)
+		ui.Column(c).Gap(6).Padding(8, 0, 0, 0).Children(func() {
+			ui.Text(c, displayTitle(g)).FontSize(13).FontWeight(500).
+				FixedLineHeight(20).MaxLines(2).MinHeight(40)
 			if !g.HasMetadata() {
 				// The reading record (or the shelf entry) is there but its
-				// metadata never arrived: say so, once, in place of the
-				// category/page line an empty card would leave as " · 0 pages".
-				ui.Text(c, i18n.T("Details unavailable")).FontSize(11).TextColor(t.TextMuted).SingleLine()
+				// metadata never arrived: say so in place of the category and
+				// page line an empty card would leave as " · 0 pages".
+				ui.Text(c, i18n.T("Details unavailable")).FontSize(12).TextColor(t.TextMuted).SingleLine()
 				return
 			}
-			var meta string
-			switch {
-			case g.Reading != nil && g.Reading.Completed:
-				// 读完了 stays visible: the shelf should say so, not silently
-				// look like page 1 of a fresh gallery.
-				meta = fmt.Sprintf(i18n.T("%s · Finished · %d pages"), g.Category, g.Pages)
-			case g.Reading != nil && g.Reading.CurrentPage > 0:
-				meta = fmt.Sprintf(i18n.T("%s · Page %d"), g.Category, g.Reading.CurrentPage+1)
-			default:
-				meta = fmt.Sprintf(i18n.T("%s · %d pages"), g.Category, g.Pages)
-			}
-			ui.Text(c, meta).FontSize(12).TextColor(t.TextMuted).SingleLine()
-			if len(g.Tags) > 0 {
-				// Two chips at most: the card is small, and the colours are
-				// what matter at a glance.
-				ui.Row(c).Gap(4).Wrap().Children(func() {
-					for i, tag := range a.sortedTags(g.Tags) {
-						if i == 2 {
-							break
-						}
-						a.tagChip(c, tag.Namespace, tag.Name)
-					}
-				})
+			a.cardMeta(c, g)
+			if posted := postedText(g.Posted); posted != "" {
+				ui.Text(c, posted).FontSize(12).FixedLineHeight(16).TextColor(postedColor(t)).
+					FillWidth().TextAlign(ui.End).SingleLine()
 			}
 		})
 	})
 	if cell.Clicked() {
 		a.router.Push(fmt.Sprintf("/gallery/%d/%s", g.ID, g.Token))
 	}
+}
+
+// cardMeta is the line under a card's title, as main's GalleryCard has it:
+// the category chip at the left, the language code and the page count at the
+// right.
+func (a *App) cardMeta(c *ui.Context, g Gallery) {
+	t := c.Theme()
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+		categoryChip(c, g)
+		ui.Box(c).Grow(1)
+		if g.Language != "" || g.Pages > 0 {
+			ui.Row(c).Gap(4).AlignItems(ui.Center).Shrink(0).Children(func() {
+				if g.Language != "" {
+					ui.Text(c, strings.ToUpper(g.Language)).FontSize(12).
+						FixedLineHeight(16).TextColor(t.TextMuted).SingleLine()
+				}
+				if g.Pages > 0 {
+					ui.Textf(c, "%dp", g.Pages).FontSize(12).FixedLineHeight(16).TextColor(t.TextMuted).SingleLine()
+				}
+			})
+		}
+	})
+}
+
+// postedColor is the faint tone main gives a card's posting date: its
+// text-kumo-inactive token, lighter than the muted meta line.
+func postedColor(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return t.TextMuted.Alpha(0.6)
+	}
+	return t.TextMuted.Alpha(0.35)
+}
+
+// coverBox draws a card's cover: a 3:4 picture in a 12-point frame, with the
+// reading progress, rating, tag button and its popover over it. It is shared
+// by the list grid and the home page's continue-reading row, which differs
+// only in its width (the parent sets it).
+func (a *App) coverBox(c *ui.Context, g Gallery, hovered bool) {
+	t := c.Theme()
+	cover := a.images.Get(g.CoverURL)
+	if cover == nil {
+		cover = a.covers.Get(int(g.ID))
+	}
+	// One cover frame for every state: it keeps the artwork on the same
+	// rounded card and gives the card the same height whatever loads.
+	box := ui.Box(c).AspectRatio(3.0/4.0).FillWidth().Radius(coverRadius).Clip().
+		Background(t.SurfaceHover).Border(1, t.Border.Alpha(0.7))
+	if hovered {
+		// Main lifts the cover two points and puts a shadow under it as the
+		// pointer rests on the card.
+		box.Translate(0, -2).Shadow(0, 10, 15, 0, ui.RGBA(0, 0, 0, 0.15))
+	}
+	loading := a.images.Loading(g.CoverURL)
+	coverFailed := a.images.Err(g.CoverURL) != ""
+	box.Children(func() {
+		switch {
+		case cover != nil && !loading:
+			ui.Image(c, cover).Fill().Fit(ui.Cover).Absolute()
+			coverProgress(c, g)
+			coverRating(c, g)
+		case cover != nil:
+			// A gradient stands in while the real cover downloads; the
+			// indicator turns over it so the card says it is still coming.
+			ui.Image(c, cover).Fill().Fit(ui.Cover).Absolute()
+			ui.Column(c).Fill().Center().Absolute().Children(func() {
+				imageLoadingCenter(c, i18n.T("Loading cover…"))
+			})
+			coverProgress(c, g)
+			coverRating(c, g)
+		case coverFailed:
+			// A failed cover says so and offers its own retry; the rest of
+			// the card still opens the gallery.
+			box.Label(i18n.T("Cover failed to load")).Center()
+			ui.Column(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, i18n.T("Cover failed to load")).FontSize(11).TextColor(t.TextMuted)
+				if ui.Button(c, i18n.T("Retry")).Clicked() {
+					a.images.Retry(g.CoverURL)
+				}
+			})
+		default:
+			box.Center()
+			imageLoadingCenter(c, i18n.T("Loading cover…"))
+		}
+		a.coverTags(c, g)
+	})
+}
+
+// cardTagNamespaces hides the namespaces main's card popover leaves out:
+// language shows as a code, and group/artist add little at a glance.
+func cardTags(tags []apiTag) []apiTag {
+	out := make([]apiTag, 0, len(tags))
+	for _, tag := range tags {
+		switch tag.Namespace {
+		case "language", "group", "artist":
+			continue
+		}
+		out = append(out, tag)
+	}
+	return out
+}
+
+// coverTags is the round tag button main puts in a cover's bottom corner,
+// and the popover that lists the gallery's tags. It sits over the card, so
+// it must not be reached when the card is not hovered — a press on it is a
+// press on the button, not on the card.
+func (a *App) coverTags(c *ui.Context, g Gallery) {
+	tags := cardTags(g.Tags)
+	if len(tags) == 0 {
+		return
+	}
+	t := c.Theme()
+	btn := ui.Box(c).Size(28, 28).Radius(999).Center().Shrink(0).
+		Absolute().Bottom(8).Right(8).Cursor(ui.CursorPointer).
+		Background(ui.RGBA(0, 0, 0, 0.45)).Border(1, ui.RGBA(255, 255, 255, 0.25)).
+		Focusable().Label(i18n.T("View tags")).Tooltip(i18n.T("View tags"))
+	if btn.Hovered() {
+		btn.Background(ui.RGBA(0, 0, 0, 0.6))
+	}
+	btn.Children(func() {
+		ui.Icon(c, tagSVG).Size(14, 14).TextColor(ui.Hex("#ffffff"))
+	})
+	if btn.Clicked() {
+		if a.tagOpen && a.tagOpenID == g.ID {
+			a.tagOpen = false
+		} else {
+			a.tagOpen, a.tagOpenID = true, g.ID
+		}
+	}
+	if !a.tagOpen || a.tagOpenID != g.ID {
+		return
+	}
+	ui.PopoverBase(c, btn, &a.tagOpen, func(panel ui.Element) {
+		panel.AttachTo(btn, ui.AnchorTopEnd, ui.AnchorBottomEnd).
+			Margin(0, 0, 6, 0).Padding(8).MaxWidth(240).Radius(12).
+			Background(t.Background).Border(1, t.Border).
+			Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.18))
+		panel.Children(func() {
+			ui.Row(c).Gap(4).Wrap().Children(func() {
+				for _, tag := range a.sortedTags(tags) {
+					a.cardTagChip(c, tag.Namespace, tag.Name)
+				}
+			})
+		})
+	})
+}
+
+// cardTagChip is one tag in a card's popover: 11-point text, coloured by the
+// tag rule when there is one.
+func (a *App) cardTagChip(c *ui.Context, namespace, name string) {
+	t := c.Theme()
+	label := a.tagLabel(namespace, name)
+	rule := a.tagRule(tagChipText(namespace, name))
+	bg, fg := t.SurfaceHover, t.Text
+	if rule != nil {
+		bg, fg = tagActionColor(rule.Action), ui.Hex("#ffffff")
+	}
+	ui.Box(c).Padding(1, 6).Radius(6).Background(bg).Shrink(0).Children(func() {
+		ui.Text(c, label).FontSize(11).TextColor(fg).SingleLine()
+	})
+}
+
+// tagLabel is a tag as the interface shows it: the translation when the
+// database has one, else the source name.
+func (a *App) tagLabel(namespace, name string) string {
+	if tr := a.translations.Lookup(namespace, name); tr != "" && tr != name {
+		return tr
+	}
+	return tagChipText(namespace, name)
 }
 
 // HasMetadata reports whether the gallery can describe itself: a title, a
@@ -1276,15 +1392,7 @@ func (a *App) searchPage(c *ui.Context) {
 		case s.loaded && len(s.items) == 0:
 			a.emptyPage(c, i18n.T("No results"), i18n.T("Try a different keyword"), "")
 		default:
-			a.listForCard = s
-			_, a.cardWindowH = c.Size()
-			ui.GridView(c, s.grid, len(s.items), 190, listCellHeightFor(c), func(i int) {
-				a.galleryCard(c, s.items[i])
-			}).Grow(1).Clip()
-			a.listForCard = nil
-			if s.atEnd {
-				a.loadMore(s)
-			}
+			a.listGrid(c, s)
 			a.listFooter(c, s)
 		}
 	})

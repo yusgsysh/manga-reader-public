@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strings"
+
 	"manga-reader/cmd/desktop-native/app/i18n"
 )
 
@@ -19,7 +21,14 @@ type Gallery struct {
 	Rating       float64
 	Tags         []apiTag
 	CoverURL     string
-	Reading      *ReadingProgress
+	// Posted is the API's posting time; the card shows it under its meta
+	// line, as main's GalleryCard does.
+	Posted string
+	// Language is the short code of the gallery's language:* tag ("zh", "jp",
+	// …), empty when it has none. Main derives it once per card; the list
+	// derives it once per item.
+	Language string
+	Reading  *ReadingProgress
 }
 
 // NextPage is the page a "continue reading" button should open: the saved
@@ -70,4 +79,35 @@ func categoryLabel(code string) string {
 	default:
 		return code
 	}
+}
+
+// languageCodes maps ExHentai's language:* tag names to the short codes the
+// cards show, as main's lib/language.ts does.
+var languageCodes = map[string]string{
+	"chinese": "zh", "japanese": "jp", "english": "en", "korean": "ko",
+	"spanish": "es", "french": "fr", "german": "de", "italian": "it",
+	"portuguese": "pt", "russian": "ru", "thai": "th", "vietnamese": "vi",
+	"indonesian": "id", "dutch": "nl", "polish": "pl", "hungarian": "hu",
+	"arabic": "ar", "czech": "cs", "greek": "el", "hebrew": "he",
+	"hindi": "hi", "ukrainian": "uk", "romanian": "ro", "turkish": "tr",
+	"catalan": "ca", "croatian": "hr",
+}
+
+// languageCode is the short code of the first language:* tag, empty when the
+// gallery has none. An unknown language keeps its own name, as main does.
+func languageCode(tags []apiTag) string {
+	for _, tag := range tags {
+		if tag.Namespace != "language" {
+			continue
+		}
+		name := strings.ToLower(strings.TrimSpace(tag.Name))
+		if name == "" {
+			continue
+		}
+		if code, ok := languageCodes[name]; ok {
+			return code
+		}
+		return name
+	}
+	return ""
 }
