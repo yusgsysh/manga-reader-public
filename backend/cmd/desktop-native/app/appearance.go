@@ -139,6 +139,9 @@ var calendarSVG = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg
 // star with a smaller one at its shoulder.
 var sparkleSVG = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M10 3.5 11.7 8.3 16.5 10 11.7 11.7 10 16.5 8.3 11.7 3.5 10 8.3 8.3 10 3.5z"/><path d="M17.5 13.5 18.5 16 21 17l-2.5 1-1 2.5-1-2.5L14 17l2.5-1 1-2.5z"/></svg>`))
 
+// chevronRightSVG is the continue row's page button.
+var chevronRightSVG = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>`))
+
 // tagSVG is the tag mark on a card's cover button.
 var tagSVG = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" stroke="none"><path d="M3.5 4.5h7l9.5 9.5-7 7-9.5-9.5zM8.2 9.2a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg>`))
 
