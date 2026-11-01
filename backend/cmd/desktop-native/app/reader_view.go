@@ -79,24 +79,14 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 // backgroundColor does.
 func readerPaper(r *Reader) ui.Color {
 	if r.settings.dark {
-		return ui.RGB(16, 16, 18)
+		return ui.RGB(28, 28, 30)
 	}
-	return ui.RGB(246, 246, 247)
+	return ui.RGB(255, 255, 255)
 }
 
 // readerMuted is secondary text on the reader's paper.
 func readerMuted(r *Reader) ui.Color {
-	if r.settings.dark {
-		return ui.RGB(150, 150, 156)
-	}
-	return ui.RGB(120, 120, 126)
-}
-
-// readerOverlaySurface is the glass the overlay's panels are made of, which
-// the reader draws itself: a dark pane over the page in either paper, so the
-// interface reads over a white or a black page alike.
-func readerOverlaySurface(alpha float32) ui.Color {
-	return ui.RGBA(18, 18, 20, alpha)
+	return readerLookOf(r).muted
 }
 
 // readerStageView draws the pages and takes the gestures that turn them.
@@ -174,16 +164,17 @@ func (a *App) readerHint(c *ui.Context, r *Reader) {
 	if !r.loaded || len(r.pages) == 0 {
 		return
 	}
+	look := readerLookOf(r)
 	// The line takes no press, and no room: it lies over the pages rather
 	// than beside them, so the stage keeps the whole window and a tap at the
 	// bottom of the page is still a tap on the page.
-	ui.Row(c).FillWidth().Absolute().Bottom(8).Left(0).Justify(ui.Center).PassThrough().
+	ui.Row(c).FillWidth().Absolute().Bottom(10).Left(0).Justify(ui.Center).PassThrough().
 		Children(func() {
-			ui.Box(c).Padding(3, 10).Radius(999).Background(ui.RGBA(0, 0, 0, 0.52)).
-				Children(func() {
-					ui.Text(c, a.readerCountText(r, true)).FontSize(11).
-						TextColor(ui.RGB(255, 255, 255))
-				})
+			ui.Box(c).Padding(4, 10).Radius(999).Background(look.glass).
+				Shadow(0, 2, 10, 0, look.shadow).PassThrough().Children(func() {
+				ui.Text(c, a.readerCountText(r, true)).FontSize(11).
+					TextColor(look.muted)
+			})
 		})
 }
 

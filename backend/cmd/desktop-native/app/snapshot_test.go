@@ -44,11 +44,18 @@ func TestSnapshots(t *testing.T) {
 	}
 	navSettle(tt)
 	waitText(t, tt, "第 1 / 3 页")
-	// The page alone first, then the overlay with its controls, then the
-	// settings sheet and the menu over it.
+	// The page alone first, then the boot guide, then the overlay with its
+	// controls, then the settings sheet and the menu over it.
 	a.update(func() { a.closeOverlay(&a.reader) })
 	tt.Frame()
 	savePNG(t, tt, "reader")
+	a.update(func() {
+		a.reader.overlay = true
+		a.reader.guide = true
+		a.markActivity()
+	})
+	tt.Frame()
+	savePNG(t, tt, "reader-guide")
 	showReaderOverlay(t, a, tt)
 	savePNG(t, tt, "reader-overlay")
 	showReaderPanel(t, a, tt, panelSettings)
@@ -58,6 +65,13 @@ func TestSnapshots(t *testing.T) {
 	showReaderPanel(t, a, tt, panelPages)
 	savePNG(t, tt, "reader-pages")
 	showReaderPanel(t, a, tt, panelMenu)
+	a.update(func() {
+		a.reader.panel = panelNone
+		a.reader.seekPreview = 1
+	})
+	tt.Frame()
+	savePNG(t, tt, "reader-seek-preview")
+	a.update(func() { a.reader.seekPreview = -1 })
 
 	// Back to the app for the search snapshot: the reader's menu holds the
 	// way out, and the app's own search is outside the reader.
@@ -210,7 +224,8 @@ func TestReaderZoomSnapshot(t *testing.T) {
 }
 
 // TestReaderDarkSnapshot shows the black paper with the page shadow and the
-// hint pill, which have to stay readable without a dark app theme.
+// hint pill, which have to stay readable without a dark app theme, and the
+// overlay's cards on it.
 func TestReaderDarkSnapshot(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.router.Push("/reader/1/tok1")
@@ -222,6 +237,12 @@ func TestReaderDarkSnapshot(t *testing.T) {
 	})
 	tt.Frame()
 	savePNG(t, tt, "reader-dark")
+	showReaderOverlay(t, a, tt)
+	savePNG(t, tt, "reader-dark-overlay")
+	showReaderPanel(t, a, tt, panelSettings)
+	savePNG(t, tt, "reader-dark-settings")
+	showReaderPanel(t, a, tt, panelMenu)
+	savePNG(t, tt, "reader-dark-menu")
 }
 
 // TestReaderNarrowSnapshot shows the dock at the smallest window, where its
@@ -234,6 +255,10 @@ func TestReaderNarrowSnapshot(t *testing.T) {
 	tt.SetSize(960, 700)
 	showReaderOverlay(t, a, tt)
 	savePNG(t, tt, "reader-narrow")
+	showReaderPanel(t, a, tt, panelSettings)
+	savePNG(t, tt, "reader-narrow-settings")
+	showReaderPanel(t, a, tt, panelPages)
+	savePNG(t, tt, "reader-narrow-pages")
 }
 
 // TestReaderFavoritesSnapshot shows kept pages in the menu, where the cells

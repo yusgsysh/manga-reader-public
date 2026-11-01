@@ -9,179 +9,251 @@ import (
 	"manga-reader/cmd/desktop-native/app/i18n"
 )
 
-// The overlay is comimi's controls: a centre hint, the dock along the bottom
-// with the seek bar and the toggles, and whatever panel is open over it.
+// The overlay is comimi's controls: floating glass cards over the page rather
+// than a bar across it. The pill at the top left holds the title and opens the
+// menu, chevrons at the sides turn the page, and the dock at the bottom carries
+// the seek bar, auto page turn, the page mode, the view and the settings. A
+// tap on the page shows or hides all of it.
 
 // readerOverlay draws the overlay over the page.
 func (a *App) readerOverlay(c *ui.Context, r *Reader) {
-	// A dark pane dims the page under the controls, so the interface reads
-	// over a white or a black page alike. A press on it that misses the
-	// controls puts the overlay away, as tapping the middle does; so the pane
-	// lets the pointer through to the stage under it, which is what tells a
-	// press on the middle from one on the controls, and what the wheel
-	// reaches to zoom.
-	ui.Box(c).Fill().Absolute().PassThrough().Background(readerOverlaySurface(0.34)).
-		Children(func() {
-			a.readerOverlayTop(c, r)
-			switch {
-			case r.panel.isMenu():
-				a.readerMenu(c, r)
-			case r.panel == panelSettings:
-				a.readerSettingsPanel(c, r)
-			default:
-				a.readerCenterHint(c, r)
-				a.readerDock(c, r)
-			}
-		})
+	look := readerLookOf(r)
+	// The menu and the settings are cards of their own; the pill stays for the
+	// settings so the title and the way to the menu never move.
+	if !r.panel.isMenu() {
+		a.readerPill(c, r)
+	}
+	a.readerSideArrows(c, r, look)
+	if r.panel == panelNone {
+		a.readerCenterHint(c, r)
+	}
+	a.readerDock(c, r)
+	// Panels come last so they cover the chevrons they reach, as comimi's
+	// settings card does.
+	if r.panel.isMenu() {
+		a.readerMenu(c, r)
+	}
+	if r.panel == panelSettings {
+		a.readerSettingsPanel(c, r)
+	}
 }
 
-// readerOverlayTop is the bar the overlay opens with: back to the gallery, the
-// gallery's title and where in it, and the menu and settings toggles.
-func (a *App) readerOverlayTop(c *ui.Context, r *Reader) {
-	ui.Row(c).FillWidth().Absolute().Top(0).Left(0).Padding(10, 14).Gap(8).
-		AlignItems(ui.Center).Children(func() {
-		if ui.Button(c, "←").Label(i18n.T("Back to the gallery")).Width(36).Clicked() {
-			a.leaveReader(r)
-		}
-		ui.Column(c).Gap(1).Grow(1).Children(func() {
-			ui.Text(c, r.title).Bold().FontSize(13).SingleLine().
-				TextColor(readerOverlayInk())
-			count := a.readerCountText(r, true)
+// readerPill is the floating title card at the top left: the menu button, the
+// gallery's title, and a press anywhere on it opens the menu.
+func (a *App) readerPill(c *ui.Context, r *Reader) {
+	look := readerLookOf(r)
+	w, _ := c.Size()
+	inset := readerInset(w)
+	width := minFloat(500, w-2*inset)
+	if width < 240 {
+		width = maxFloat(w-2*inset, 200)
+	}
+	pill := readerGlassCard(c, look, 16).Width(width).Height(62).
+		Absolute().Top(inset).Left(inset).Clip()
+	pill.Children(func() {
+		ui.Row(c).Fill().Padding(0, 13).Gap(13).AlignItems(ui.Center).Children(func() {
+			a.readerIconButton(c, look, readerIconMenu, i18n.T("Reader menu"),
+				34, 18, look.muted, func() {
+					a.openPanel(r, panelMenu)
+				})
+			title := ui.Box(c).Grow(1).Height(34).Focusable().
+				Label(i18n.T("Reader menu")).Tooltip(i18n.T("Reader menu"))
+			title.HandleInput(func(ev ui.InputEvent) bool {
+				if ev.Kind != ui.InputPointerDown {
+					return false
+				}
+				a.markActivity()
+				a.openPanel(r, panelMenu)
+				return true
+			})
+			title.Children(func() {
+				ui.Text(c, r.title).FontSize(15).FontWeight(700).TextColor(look.fg).
+					SingleLine().Grow(1)
+			})
 			if r.offline {
-				count = i18n.Sprintf(i18n.T("%s · offline"), count)
+				ui.Box(c).Padding(2, 8).Radius(999).Shrink(0).
+					Background(look.surface2).Children(func() {
+					ui.Text(c, i18n.T("Offline")).FontSize(11).FontWeight(700).
+						TextColor(look.muted)
+				})
 			}
-			ui.Text(c, count).FontSize(11).
-				TextColor(readerOverlayMuted())
-		})
-		if r.panel == panelSettings {
-			if ui.Button(c, i18n.T("Close")).Label(i18n.T("Close settings")).Clicked() {
-				a.closeOverlay(r)
-			}
-		} else if ui.Button(c, i18n.T("Settings")).Label(i18n.T("Reader settings")).
-			Clicked() {
-			a.togglePanel(r, panelSettings)
-		}
-		if ui.Button(c, i18n.T("Menu")).Label(i18n.T("Reader menu")).
-			Disabled(r.panel.isMenu()).Clicked() {
-			a.openPanel(r, panelMenu)
-		}
-	})
-}
-
-// readerOverlayMuted is secondary text on the overlay's pane.
-func readerOverlayMuted() ui.Color { return ui.RGBA(235, 235, 240, 0.62) }
-
-// dismissOverlaySoon puts the overlay away just after a press that missed its
-// controls: the release that press started reaches no control, so the overlay
-// goes without waiting for another tap.
-func (a *App) dismissOverlaySoon(r *Reader) {
-	armed := time.Now()
-	time.AfterFunc(50*time.Millisecond, func() {
-		a.update(func() {
-			if &a.reader != r || !r.overlay || r.panel != panelNone {
-				return
-			}
-			// A press that hit a control marks activity after this one: the
-			// dismissal only stands while nothing else has been touched.
-			if a.overlayActivity.After(armed) {
-				return
-			}
-			a.closeOverlay(r)
+			a.readerIconButton(c, look, readerIconBack, i18n.T("Back to the gallery"),
+				34, 18, look.muted, func() {
+					a.leaveReader(r)
+				})
 		})
 	})
 }
 
-// readerOverlayInk is text on the overlay's pane.
-func readerOverlayInk() ui.Color { return ui.RGB(242, 242, 246) }
+// readerSideArrows puts comimi's chevrons at the middle of either edge. They
+// are hidden while auto page turn runs, as the library hides them.
+func (a *App) readerSideArrows(c *ui.Context, r *Reader, look readerLook) {
+	if r.auto || !r.loaded || len(r.pages) == 0 {
+		return
+	}
+	w, h := c.Size()
+	inset := readerInset(w)
+	size := float32(46)
+	top := (h - size) / 2
+	draw := func(left bool, mark *ui.SVG, label string, enabled bool, run func()) {
+		x := inset
+		if !left {
+			x = w - inset - size
+		}
+		bg := look.glass
+		color := look.muted
+		if !enabled {
+			bg = look.glass
+			color = look.soft
+		}
+		btn := ui.Box(c).Size(size, size).Radius(16).Center().Background(bg).
+			Shadow(0, 4, 18, 0, look.shadow).
+			Absolute().Top(top).Left(x).Focusable().Label(label).Tooltip(label)
+		if enabled {
+			btn.HandleInput(func(ev ui.InputEvent) bool {
+				if ev.Kind != ui.InputPointerDown {
+					return false
+				}
+				a.markActivity()
+				run()
+				return true
+			})
+			if btn.Hovered() {
+				color = look.fg
+			}
+		}
+		btn.Children(func() {
+			ui.Icon(c, mark).Size(20, 20).TextColor(color)
+		})
+	}
+	labelFor := func(dir pageGroupPlacement) string {
+		if dir == groupNext {
+			return i18n.T("Next page")
+		}
+		return i18n.T("Previous page")
+	}
+	leftDir := a.sideDirection(sideLeft)
+	rightDir := a.sideDirection(sideRight)
+	draw(true, readerIconPrev, labelFor(leftDir),
+		a.readerCanTurn(leftDir), func() {
+			a.moveFromSide(r, sideLeft)
+		})
+	draw(false, readerIconNext, labelFor(rightDir),
+		a.readerCanTurn(rightDir), func() {
+			a.moveFromSide(r, sideRight)
+		})
+}
 
-// readerCenterHint is what the overlay says in the middle of the page: first
-// the direction the pages move, then what a tap does, as comimi's boot guide
-// gives way to the message that closes the overlay.
+// sideDirection is which way a turn from one edge of the page goes: the left
+// side is back in a left-to-right read and on in a right-to-left one.
+func (a *App) sideDirection(side pageGroupSide) pageGroupPlacement {
+	if (side == sideRight) != a.reader.settings.rtl {
+		return groupNext
+	}
+	return groupPrevious
+}
+
+// readerCenterHint is the card in the middle of the page: the direction guide
+// while the reader is new, then the line that says how to put the controls
+// away. It takes no press, so a tap on it is a tap on the page.
 func (a *App) readerCenterHint(c *ui.Context, r *Reader) {
-	// The hint takes no press: it covers the page, and a tap on it is a tap
-	// on the page, which is what puts the overlay away.
-	ui.Column(c).Fill().Justify(ui.Center).AlignItems(ui.Center).Gap(10).
+	look := readerLookOf(r)
+	ui.Column(c).Fill().Absolute().Justify(ui.Center).AlignItems(ui.Center).Gap(10).
 		PassThrough().Children(func() {
 		if r.guide {
-			arrow, label := "→", i18n.T("Pages move to the left")
+			arrow, direction := readerIconNext, i18n.T("Pages move to the left")
 			if r.settings.rtl {
-				arrow, label = "←", i18n.T("Pages move to the right")
+				arrow, direction = readerIconPrev, i18n.T("Pages move to the right")
 			}
-			ui.Text(c, arrow).FontSize(44).TextColor(readerOverlayInk()).PassThrough()
-			ui.Text(c, label).FontSize(12).TextColor(readerOverlayMuted()).PassThrough()
+			ui.Box(c).Size(96, 96).Radius(16).Background(look.glass).
+				Shadow(0, 4, 18, 0, look.shadow).PassThrough().Children(func() {
+				ui.Column(c).Fill().Center().Gap(8).PassThrough().Children(func() {
+					ui.Icon(c, arrow).Size(30, 30).TextColor(look.muted).PassThrough()
+					ui.Text(c, i18n.T("Page direction")).FontSize(12).
+						TextColor(look.muted).PassThrough()
+				})
+			})
+			ui.Text(c, direction).FontSize(12).TextColor(look.soft).PassThrough()
 			return
 		}
-		ui.Text(c, i18n.T("Click the middle of the page to hide this")).FontSize(12).
-			TextColor(readerOverlayMuted()).PassThrough()
+		ui.Box(c).Padding(6, 12).Radius(8).Background(look.glass).
+			Shadow(0, 4, 18, 0, look.shadow).PassThrough().Children(func() {
+			ui.Text(c, i18n.T("Click the middle of the page to hide this")).FontSize(12).
+				TextColor(look.muted).PassThrough()
+		})
 	})
 }
 
-// readerDock is the bar along the bottom of the overlay: the seek bar, the page
-// count, auto page turn, the page mode, the view and the settings.
+// readerDock is the floating bar along the bottom: the page count and the seek
+// bar, then auto page turn, the zoom, the page mode, the view and settings.
 func (a *App) readerDock(c *ui.Context, r *Reader) {
-	// Absolute, not only Bottom: an element placed this way is hit where it
-	// is drawn, and a column merely pinned to the bottom would take presses
-	// at the top of the window instead.
-	ui.Column(c).FillWidth().Absolute().Bottom(0).Left(0).Padding(10, 14, 12, 14).Gap(8).
-		Children(func() {
-			if r.auto {
-				a.autoProgressLine(c, r)
+	look := readerLookOf(r)
+	w, _ := c.Size()
+	inset := readerInset(w)
+	padX := float32(24)
+	if w < 720 {
+		padX = 14
+	}
+	dock := ui.Column(c).Width(w-2*inset).Absolute().Bottom(inset).Left(inset).
+		Padding(18, padX).Radius(20).Gap(12).Background(look.glass).
+		Shadow(0, 6, 24, 0, look.shadow)
+	dock.Children(func() {
+		if r.auto {
+			a.autoProgressLine(c, r, look)
+		}
+		a.readerSeek(c, r, look)
+		ui.Row(c).FillWidth().Gap(12).AlignItems(ui.Center).Children(func() {
+			a.readerAutoButton(c, r, look)
+			ui.Box(c).Grow(1)
+			if w >= 620 {
+				a.readerZoomControls(c, r, look)
 			}
-			a.readerSeek(c, r)
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				a.readerAutoButton(c, r)
-				ui.Text(c, a.readerCountText(r, false)).FontSize(12).
-					TextColor(readerOverlayMuted())
-				ui.Box(c).Grow(1)
-				a.readerZoomControls(c, r)
-				a.readerPageModeButtons(c, r)
-				if ui.Button(c, a.viewLabel()).Label(i18n.T("Switch view")).Clicked() {
-					a.cycleView()
-				}
-				if ui.Button(c, i18n.T("Settings")).Label(i18n.T("Reader settings")).
-					Clicked() {
+			a.readerPageModeButtons(c, r, look)
+			a.readerViewSwitch(c, r, look)
+			a.readerIconButton(c, look, readerIconGear, i18n.T("Settings"),
+				24, 18, look.muted, func() {
 					a.togglePanel(r, panelSettings)
-				}
-			})
+				})
 		})
+	})
 }
 
 // readerAutoButton toggles auto page turn.
-func (a *App) readerAutoButton(c *ui.Context, r *Reader) {
-	label := i18n.T("Auto page turn")
-	mark := "▶"
+func (a *App) readerAutoButton(c *ui.Context, r *Reader, look readerLook) {
+	label, mark := i18n.T("Auto page turn"), readerIconPlay
 	if r.auto {
-		label = i18n.T("Stop auto page turn")
-		mark = "❚❚"
+		label, mark = i18n.T("Stop auto page turn"), readerIconPause
 	}
-	if ui.Button(c, mark+i18n.T(" Auto")).Label(label).Clicked() {
+	a.readerIconButton(c, look, mark, label, 24, 20, look.muted, func() {
 		a.setAuto(r, !r.auto)
-	}
+	})
 }
 
 // autoProgressLine is how long the page up under auto page turn has left: a
 // line across the top of the dock, drawn from the frame clock so it keeps up
-// without a timer of its own. It spans the seek bar's width, so the wait reads
-// as time against the whole gallery rather than a stray bar beside a button.
-func (a *App) autoProgressLine(c *ui.Context, r *Reader) {
+// without a timer of its own.
+func (a *App) autoProgressLine(c *ui.Context, r *Reader, look readerLook) {
 	if r.autoSince.IsZero() {
 		return
 	}
 	w := a.dockWidth(c)
 	interval := time.Duration(r.settings.autoInterval()) * time.Millisecond
 	progress := clampFloat(float32(time.Since(r.autoSince))/float32(interval), 0, 1)
-	track := ui.Box(c).FillWidth().Height(2).Radius(1).
-		Background(ui.RGBA(255, 255, 255, 0.16))
+	track := ui.Box(c).FillWidth().Height(4).Radius(2).Background(look.line)
 	track.Children(func() {
-		ui.Box(c).Height(2).Radius(1).Width(w * progress).
-			Background(ui.RGBA(235, 235, 240, 0.72))
+		ui.Box(c).Height(4).Radius(2).Width(w * progress).Background(look.muted)
 	})
 }
 
-// dockWidth is the width the seek bar spans.
+// dockWidth is the width the dock's content spans inside its padding.
 func (a *App) dockWidth(c *ui.Context) float32 {
 	w, _ := c.Size()
-	return w - 28
+	inset := readerInset(w)
+	padX := float32(24)
+	if w < 720 {
+		padX = 14
+	}
+	return w - 2*inset - 2*padX
 }
 
 // seekHover moves the seek bar's preview to the page under x.
@@ -214,9 +286,9 @@ func (a *App) seekTo(r *Reader, x, w float32) {
 	a.goToPage(r, int(ratio*float32(total-1)+0.5))
 }
 
-// readerSeek is the seek bar: the position and the track, with the preview of
-// the page a pointer hovers over above it. A press or a drag goes to that page.
-func (a *App) readerSeek(c *ui.Context, r *Reader) {
+// readerSeek is the seek bar: the page count, comimi's rounded track with the
+// reader's place filled in, and the preview of the page a pointer hovers over.
+func (a *App) readerSeek(c *ui.Context, r *Reader, look readerLook) {
 	total := len(r.pages)
 	first := pageGroupFirst(a.shownGroup())
 	frac := float32(0)
@@ -224,79 +296,108 @@ func (a *App) readerSeek(c *ui.Context, r *Reader) {
 		frac = float32(first) / float32(total-1)
 	}
 	w := a.dockWidth(c)
-	track := ui.Box(c).FillWidth().Height(18)
-	// Reading the pointer in the frame is what gives the bar a frame for
-	// every move over it: an element that only takes pointer events is told
-	// of none while the button is not held.
-	px, _, over := trackPointer(c, track)
-	if over {
-		a.seekHover(r, px, w)
-	}
-	track.HandleInput(func(ev ui.InputEvent) bool {
-		if ev.Kind != ui.InputPointerDown {
-			return false
-		}
-		a.markActivity()
-		a.seekTo(r, ev.X, w)
-		return true
-	})
-	track.Children(func() {
-		// The track, and the fill to where the reader is. Left to right the
-		// fill grows from the left; right to left from the right, so the far
-		// side is always the page further on.
-		ui.Box(c).FillWidth().Height(3).Absolute().Top(8).Left(0).
-			Background(ui.RGBA(255, 255, 255, 0.22))
-		// A page list still streaming shows how much of the bar is real: the
-		// seek bar can only land on pages that have arrived, so the light
-		// stretch says where the readable part ends.
-		if !r.complete && r.total > 0 {
-			stream := clampFloat(float32(r.partial)/float32(r.total), 0, 1)
-			streamBox := ui.Box(c).Absolute().Top(8).Height(3).Width(w * stream).
-				Background(ui.RGBA(255, 255, 255, 0.34))
-			if r.settings.rtl {
-				streamBox.Left(w - w*stream)
-			} else {
-				streamBox.Left(0)
+	ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, a.readerCountText(r, false)).FontSize(12).FontWeight(700).
+			TextColor(look.fg).Shrink(0).SingleLine()
+		track := ui.Box(c).Height(18).Grow(1).Focusable().
+			Label(i18n.T("Seek")).Tooltip(i18n.T("Seek"))
+		// The bar is painted from the box it is given, so its fill and knob
+		// follow the exact width the layout settled on. The width it painted
+		// last frame is also what a press measures against.
+		barW := ui.Local(track, "seekWidth", func() float32 { return 0 })
+		width := func() float32 {
+			if *barW > 0 {
+				return *barW
 			}
+			// Before the bar has painted once: the dock's content less the
+			// room the page count takes.
+			return maxFloat(w-80, 80)
 		}
-		fill := ui.Box(c).Absolute().Top(8).Height(3).Width(w * frac).
-			Background(ui.RGBA(255, 255, 255, 0.92))
-		if r.settings.rtl {
-			fill.Left(w - w*frac)
-		} else {
-			fill.Left(0)
+		// Reading the pointer in the frame is what gives the bar a frame for
+		// every move over it: an element that only takes pointer events is told
+		// of none while the button is not held.
+		px, _, over := trackPointer(c, track)
+		if over {
+			a.seekHover(r, px, width())
 		}
-		// The preview is a child of the bar, not of the dock, so it rises
-		// above the seek bar. Drawn beside the bar it would hang over the
-		// dock's buttons, which the pointer has to reach while scrubbing.
-		if r.seekPreview >= 0 && r.seekPreview < total {
-			a.readerSeekPreview(c, r, w)
-		}
+		track.HandleInput(func(ev ui.InputEvent) bool {
+			if ev.Kind != ui.InputPointerDown {
+				return false
+			}
+			a.markActivity()
+			a.seekTo(r, ev.X, width())
+			return true
+		})
+		track.Draw(func(p *ui.Painter, box ui.Rect) {
+			*barW = box.W
+			if box.W <= 0 {
+				return
+			}
+			mid := box.Y + box.H/2
+			bar := ui.Rect{X: box.X, Y: mid - 4, W: box.W, H: 8}
+			p.Fill(bar, look.line, 999)
+			// A page list still streaming shows how much of the bar is real.
+			if !r.complete && r.total > 0 {
+				stream := clampFloat(float32(r.partial)/float32(r.total), 0, 1)
+				sr := ui.Rect{X: box.X, Y: mid - 4, W: box.W * stream, H: 8}
+				if r.settings.rtl {
+					sr.X = box.X + box.W - sr.W
+				}
+				p.Fill(sr, look.surface2, 999)
+			}
+			fill := ui.Rect{X: box.X, Y: mid - 4, W: box.W * frac, H: 8}
+			if r.settings.rtl {
+				fill.X = box.X + box.W - fill.W
+			}
+			if fill.W > 0 {
+				p.Fill(fill, look.muted, 999)
+			}
+			knobFrac := frac
+			if r.settings.rtl {
+				knobFrac = 1 - frac
+			}
+			kx := box.X + knobFrac*box.W - 9
+			kx = clampFloat(kx, box.X, box.X+box.W-18)
+			knob := ui.Rect{X: kx, Y: mid - 9, W: 18, H: 18}
+			p.Shadow(knob, 999, 0, 1, 4, 0, look.shadow)
+			p.Fill(knob, look.muted, 999)
+		})
+		track.Children(func() {
+			if r.seekPreview >= 0 && r.seekPreview < total {
+				a.readerSeekPreview(c, r, look, width())
+			}
+		})
 	})
 }
 
 // readerSeekPreview draws the page the seek bar hovers over: its picture and
 // the number the turn would land on, above the bar and the pointer. Its bottom
 // clears the bar's own height so it never reaches the dock's button row.
-func (a *App) readerSeekPreview(c *ui.Context, r *Reader, w float32) {
+func (a *App) readerSeekPreview(c *ui.Context, r *Reader, look readerLook, w float32) {
 	total := len(r.pages)
 	g := a.pageIndexesFor(r.seekPreview, total)
 	x := float32(r.seekPreview) / float32(maxInt(total-1, 1))
 	if r.settings.rtl {
 		x = 1 - x
 	}
-	left := clampFloat(x*w-48, 0, maxFloat(w-96, 0))
-	ui.Column(c).Width(96).Gap(4).AlignItems(ui.Center).
-		Absolute().Left(left).Bottom(26).Children(func() {
-		ui.Box(c).Width(96).Height(128).Radius(6).Clip().
-			Background(ui.RGBA(0, 0, 0, 0.55)).Children(func() {
-			ui.Row(c).Fill().Children(func() {
-				for _, page := range g.indexes {
-					a.seekThumb(c, page, len(g.indexes) > 1)
-				}
-			})
+	cardW := float32(80*len(g.indexes) + 4*maxInt(len(g.indexes)-1, 0))
+	left := clampFloat(x*w-cardW/2, 0, maxFloat(w-cardW, 0))
+	ui.Column(c).Width(cardW).Gap(6).AlignItems(ui.Center).
+		Absolute().Left(left).Bottom(32).Children(func() {
+		ui.Row(c).Gap(4).Children(func() {
+			for _, page := range g.indexes {
+				ui.Box(c).Width(80).Height(113).Radius(6).Clip().
+					Background(look.surface2).
+					Shadow(0, 4, 12, 0, look.shadow).Children(func() {
+					a.seekThumb(c, page, false)
+				})
+			}
 		})
-		ui.Text(c, pageGroupText(g)).FontSize(11).TextColor(ui.RGB(255, 255, 255))
+		ui.Box(c).Padding(4, 10).Radius(8).Background(look.glass).
+			Shadow(0, 4, 12, 0, look.shadow).Children(func() {
+			ui.Text(c, pageGroupText(g)).FontSize(12).FontWeight(600).
+				TextColor(look.fg)
+		})
 	})
 }
 
@@ -313,21 +414,35 @@ func (a *App) seekThumb(c *ui.Context, page int, grow bool) {
 	}
 }
 
-// readerZoomControls zoom out, say the current zoom (a click resets it) and
-// zoom in, so a mouse without a gesture can reach the same place a pinch can.
-// They stay on the dock at 100% rather than appearing with the first zoom, so
-// the percentages are where a reader looks for them.
-func (a *App) readerZoomControls(c *ui.Context, r *Reader) {
-	if ui.Button(c, "−").Label(i18n.T("Zoom out")).Width(30).Clicked() {
-		a.zoomBy(r, 1/(1+zoomStep))
-	}
-	percent := fmt.Sprintf("%d%%", int(r.zoom*100+0.5))
-	if ui.Button(c, percent).Label(i18n.T("Reset zoom")).Clicked() {
-		a.resetZoom(r)
-	}
-	if ui.Button(c, "+").Label(i18n.T("Zoom in")).Width(30).Clicked() {
-		a.zoomBy(r, 1+zoomStep)
-	}
+// readerZoomControls are a small segmented group: zoom out, the percentage
+// (which resets), and zoom in.
+func (a *App) readerZoomControls(c *ui.Context, r *Reader, look readerLook) {
+	group := ui.Row(c).Height(36).Radius(12).Background(look.surface2).Padding(3).Gap(1)
+	group.Children(func() {
+		a.readerIconButton(c, look, readerIconMinus, i18n.T("Zoom out"),
+			26, 14, look.muted, func() {
+				a.zoomBy(r, 1/(1+zoomStep))
+			})
+		percent := fmt.Sprintf("%d%%", int(r.zoom*100+0.5))
+		label := i18n.T("Reset zoom")
+		btn := ui.Box(c).Height(30).MinWidth(46).Center().Focusable().Label(percent).
+			Tooltip(label)
+		btn.HandleInput(func(ev ui.InputEvent) bool {
+			if ev.Kind != ui.InputPointerDown {
+				return false
+			}
+			a.markActivity()
+			a.resetZoom(r)
+			return true
+		})
+		btn.Children(func() {
+			ui.Text(c, percent).FontSize(12).FontWeight(700).TextColor(look.fg)
+		})
+		a.readerIconButton(c, look, readerIconPlus, i18n.T("Zoom in"),
+			26, 14, look.muted, func() {
+				a.zoomBy(r, 1+zoomStep)
+			})
+	})
 }
 
 // zoomBy zooms about the middle of the page, where a button-driven zoom
@@ -361,30 +476,46 @@ func (a *App) readerZoomBadge(c *ui.Context, r *Reader) {
 	if r.zoom <= 1.001 {
 		return
 	}
+	look := readerLookOf(r)
 	label := fmt.Sprintf("%d%%", int(r.zoom*100+0.5))
 	ui.Row(c).FillWidth().Absolute().Top(14).Left(0).Justify(ui.Center).Children(func() {
 		if ui.Button(c, label).Label(i18n.T("Reset zoom")).
-			Background(readerOverlaySurface(0.82)).
-			TextColor(readerOverlayInk()).Border(1, ui.RGBA(255, 255, 255, 0.18)).
+			Background(look.glass).TextColor(look.fg).
+			Border(1, look.line).Shadow(0, 4, 18, 0, look.shadow).
 			Clicked() {
 			a.resetZoom(r)
 		}
 	})
 }
 
-// readerPageModeButtons switch between one page and a spread.
-func (a *App) readerPageModeButtons(c *ui.Context, r *Reader) {
-	a.readerChoice(c, i18n.T("Single page"), !r.settings.double, func() {
-		a.setSpread(r, false)
+// readerPageModeButtons switch between one page and a spread, as comimi's
+// two-column page-mode switch does.
+func (a *App) readerPageModeButtons(c *ui.Context, r *Reader, look readerLook) {
+	readerSegments(c, look, func() {
+		a.readerSegmentButton(c, look, 42, 36, readerIconSingle, i18n.T("Single page"),
+			!r.settings.double, func() { a.setSpread(r, false) })
+		a.readerSegmentButton(c, look, 42, 36, readerIconSpread, i18n.T("Double page"),
+			r.settings.double, func() { a.setSpread(r, true) })
 	})
-	a.readerChoice(c, i18n.T("Double page"), r.settings.double, func() {
-		a.setSpread(r, true)
+}
+
+// readerViewSwitch is the inline/full-screen pair beside the page mode.
+func (a *App) readerViewSwitch(c *ui.Context, r *Reader, look readerLook) {
+	readerSegments(c, look, func() {
+		full := a.isFullscreen()
+		a.readerSegmentButton(c, look, 42, 36, readerIconWindow, i18n.T("Standard view"),
+			!full, func() {
+				if full {
+					a.exitFullscreen()
+				}
+			})
+		a.readerSegmentButton(c, look, 42, 36, readerIconExpand, i18n.T("Full screen"),
+			full, func() {
+				if !full {
+					a.toggleFullscreen()
+				}
+			})
 	})
-	if r.settings.double && !r.narrow {
-		a.readerChoice(c, i18n.T("Cover"), r.settings.hasCover, func() {
-			a.setCover(r, !r.settings.hasCover)
-		})
-	}
 }
 
 // setSpread turns the page mode, keeping the shown pair together: switching to
@@ -426,19 +557,6 @@ func (a *App) setCover(r *Reader, on bool) {
 	}
 }
 
-// viewLabel names what the dock's view switch will do: enter full screen, or
-// leave it. Naming the action rather than the current view keeps the button
-// from reading as a statement of where the reader already is.
-func (a *App) viewLabel() string {
-	if a.isFullscreen() {
-		return i18n.T("Exit full screen")
-	}
-	return i18n.T("Full screen")
-}
-
-// cycleView flips the window between full screen and its window.
-func (a *App) cycleView() { a.toggleFullscreen() }
-
 // toggleFavorite keeps a page or lets it go, as comimi's long-press favorite
 // does, and says so.
 func (a *App) toggleFavorite(r *Reader, page int) {
@@ -471,23 +589,26 @@ func (r *Reader) favoritePages() []int {
 	return pages
 }
 
-// readerToast is the notification over everything else, briefly. Nothing in it
-// takes the pointer, so a tap through it still reaches the page.
+// readerToast is the notification over the page, briefly, as comimi's centred
+// pill. Nothing in it takes the pointer, so a tap through it still reaches the
+// page.
 func (a *App) readerToast(c *ui.Context, r *Reader) {
-	bg := ui.RGBA(30, 30, 34, 0.92)
+	look := readerLookOf(r)
+	bg := look.muted
+	fg := look.white
 	switch r.toastKind {
 	case toneSuccess:
-		bg = ui.RGBA(22, 92, 54, 0.94)
+		bg = ui.RGB(34, 122, 72)
 	case toneError:
-		bg = ui.RGBA(110, 30, 34, 0.94)
+		bg = ui.RGB(150, 48, 54)
 	}
-	ui.Box(c).FillWidth().Absolute().Top(64).Left(0).Justify(ui.Center).
-		Children(func() {
-			ui.Box(c).Padding(8, 14).Radius(999).Background(bg).
-				HandleInput(func(ui.InputEvent) bool { return true }).Children(func() {
-				ui.Text(c, r.toast).FontSize(12).TextColor(ui.RGB(255, 255, 255))
-			})
+	ui.Box(c).FillWidth().Absolute().Bottom(140).Left(0).Justify(ui.Center).
+		PassThrough().Children(func() {
+		ui.Box(c).Padding(6, 14).Radius(999).Background(bg).
+			Shadow(0, 4, 18, 0, look.shadow).PassThrough().Children(func() {
+			ui.Text(c, r.toast).FontSize(12).FontWeight(700).TextColor(fg).PassThrough()
 		})
+	})
 }
 
 // trackPointer is the pointer's position over el and whether it is over it,
