@@ -221,3 +221,28 @@ func TestReaderEscapeGivesBackOneLayer(t *testing.T) {
 		return a.router.Path() != "/reader/1/tok1"
 	})
 }
+
+// TestReaderArrowsFollowReadingDirection covers the side chevrons: they turn
+// the page like a tap on that edge, so in a right-to-left read the left arrow
+// goes on and the right one goes back.
+func TestReaderArrowsFollowReadingDirection(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.router.Push("/reader/1/tok1")
+	navSettle(tt)
+	waitText(t, tt, "第 1 / 3 页")
+	showReaderOverlay(t, a, tt)
+
+	if err := tt.Click("下一页"); err != nil {
+		t.Fatalf("click the left arrow: %v", err)
+	}
+	if a.reader.page != 1 {
+		t.Fatalf("page = %d after the left arrow in rtl, want 1", a.reader.page)
+	}
+	showReaderOverlay(t, a, tt)
+	if err := tt.Click("上一页"); err != nil {
+		t.Fatalf("click the right arrow: %v", err)
+	}
+	if a.reader.page != 0 {
+		t.Fatalf("page = %d after the right arrow in rtl, want 0", a.reader.page)
+	}
+}

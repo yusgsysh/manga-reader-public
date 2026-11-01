@@ -997,6 +997,13 @@ func TestReaderTapZones(t *testing.T) {
 	// A new gallery opens with the overlay up; a tap in the middle puts it
 	// away, leaving only the page and its count.
 	a.update(func() { a.reader.overlay = true })
+	tt.Frame()
+	// A press on the dock's own surface is not a tap on the page: it leaves
+	// the overlay up rather than falling through to the stage.
+	tt.ClickAt(640, 795)
+	if !a.reader.overlay {
+		t.Fatal("a press on the dock put the overlay away")
+	}
 	tt.ClickAt(640, 400)
 	if a.reader.overlay {
 		t.Fatal("a tap in the middle left the overlay up")
@@ -1087,11 +1094,15 @@ func TestReaderSeekAndPageList(t *testing.T) {
 	navSettle(tt)
 	waitText(t, tt, "第 1 / 3 页")
 
-	// The seek bar spans the dock's width, and right to left the far side of
-	// it is the first page, so its other end is the last. The overlay is
+	// The seek bar spans the dock's content, and right to left the far side
+	// of it is the first page, so its other end is the last. The overlay is
 	// brought back up for it: it hides itself while idle.
 	showReaderOverlay(t, a, tt)
-	tt.ClickAt(20, 790)
+	if bar, ok := tt.Find("进度"); ok {
+		tt.ClickAt(bar.X+2, bar.Y+bar.H/2)
+	} else {
+		t.Fatal("the seek bar is missing from the dock")
+	}
 	waitText(t, tt, "第 3 / 3 页")
 
 	// The page list's field jumps by number.
