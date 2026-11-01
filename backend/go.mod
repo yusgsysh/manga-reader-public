@@ -1,18 +1,17 @@
 module manga-reader
 
-go 1.27.1
+go 1.27.3
 
 require (
 	entgo.io/ent v0.14.6
 	github.com/PuerkitoBio/goquery v1.13.0
-	github.com/egoist/mygo v0.6.2
+	github.com/egoist/mygo v0.7.4
 	github.com/gen2brain/webp v0.6.4
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/minio/minio-go/v7 v7.3.0
 	github.com/prometheus/client_golang v1.25.0
-	golang.org/x/crypto v0.57.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/text v0.43.0
 	modernc.org/sqlite v1.59.0
@@ -90,6 +89,7 @@ require (
 	go.mongodb.org/mongo-driver/v2 v2.9.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/arch v0.31.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
