@@ -10,27 +10,34 @@ import (
 // own look in reader_*.go; it is a full-window stage, not a page.
 
 const (
-	// pagePadX/pagePadY frame a page's content against the window edge.
-	pagePadX float32 = 28
-	pagePadY float32 = 24
+	// pagePadX/pagePadY frame a page's content against the window edge, as
+	// main's app-container does at desktop widths (px-8, py-8).
+	pagePadX float32 = 32
+	pagePadY float32 = 32
 
 	// cardRadius rounds a panel on the page; coverRadius rounds a picture.
 	cardRadius  float32 = 14
-	coverRadius float32 = 11
+	coverRadius float32 = 12
 
 	// listCellHeight is the least room a card in a list grid gets: cover plus
-	// its three lines of text. The grid lays rows out with a fixed height, so
-	// a narrow window (wider cells, taller 3:4 covers) gets more than this
-	// (see listCellHeightFor).
+	// its text (title, meta, posted). The grid lays rows out with a fixed
+	// height, so a narrow window (wider cells, taller 3:4 covers) gets more
+	// than this (see listCellHeightFor).
 	listCellHeight float32 = 336
 
-	// sidebarWidth matches the column the sidebar takes.
-	sidebarWidth float32 = 220
-	// listCardText is the room under a card's cover: gap, title, meta, tags.
-	listCardText float32 = 82
-	// listCardMinWidth is the grid's minWidth, so the column count here
-	// matches the one GridView works out from the same width.
-	listCardMinWidth float32 = 190
+	// sidebarWidth matches the column the sidebar takes: main's expanded
+	// 15rem rail.
+	sidebarWidth float32 = 240
+	// listCardText is the room under a card's cover, as main's GalleryCard
+	// stacks it: 8 above the two-line title, 40 for the title, 6, the meta
+	// line, 6, the posted line.
+	listCardText float32 = 96
+	// listGap is the space between cards in the grid (main's 20px at desktop
+	// widths). The grid view spaces cells by the theme's own gap, so the
+	// list draws the rest as padding around each cell (see listGridInset).
+	listGap float32 = 20
+	// listViewGap is GridView's own cell gap at the default theme spacing.
+	listViewGap float32 = 8
 )
 
 // navIcon is the mark beside a sidebar item, drawn as a line icon so it takes
@@ -63,49 +70,145 @@ var iconSVG = map[navIcon]*ui.SVG{
 	iconSettings:  ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9"/><circle cx="16.5" cy="7" r="2.2"/><path d="M4 12h3"/><circle cx="10" cy="12" r="2.2"/><path d="M4 17h11"/><circle cx="18" cy="17" r="2.2"/></svg>`)),
 }
 
+// listColumns is main's .gallery-grid breakpoints, counted on the window:
+// 2 columns under 480, 3 under 768, 4 under 1024, 5 under 1440, 6 under 1920,
+// 7 from there up. Counting on the window (not the content) keeps the native
+// grid changing at the same sizes as the web frontend.
+func listColumns(windowWidth float32) int {
+	switch {
+	case windowWidth < 480:
+		return 2
+	case windowWidth < 768:
+		return 3
+	case windowWidth < 1024:
+		return 4
+	case windowWidth < 1440:
+		return 5
+	case windowWidth < 1920:
+		return 6
+	default:
+		return 7
+	}
+}
+
+// listGridInset is the horizontal room a list cell leaves around its card.
+// GridView spaces its cells by the theme's gap (8 at default spacing), and
+// main spaces cards by 20; the cell draws the difference as padding on each
+// side, while the grid itself hangs 6 past the page's padding so the covers
+// still start at the page edge. The cell's own 2-point border takes the last
+// 4 of the 12 inset, leaving the cover at main's column width.
+const listGridInset float32 = (listGap - listViewGap) / 2
+
+// listCellWidth is the cover's width at this window size, as main's 1fr
+// columns work it out from the content width and the grid's gap.
+func listCellWidth(windowWidth, rail float32) float32 {
+	cols := float32(listColumns(windowWidth))
+	content := windowWidth - rail - 2*pagePadX
+	return (content - listGap*(cols-1)) / cols
+}
+
 // listCellHeightFor is the row height a list grid needs at this window size:
 // a fixed height cannot follow the 3:4 cover as the cells widen in a narrow
-// window, and a card taller than its row would paint over the row below.
-func listCellHeightFor(c *ui.Context) float32 {
+// window, and a card taller than its row would paint over the row below. The
+// 12 extra points are the vertical half of the gap that the cell leaves
+// (GridView's own row padding accounts for the other 8).
+func listCellHeightFor(c *ui.Context, rail float32) float32 {
 	w, _ := c.Size()
-	gap := c.Theme().Space(2)
-	content := w - sidebarWidth - 2*pagePadX
-	cols := max(1, int((content+gap)/(listCardMinWidth+gap)))
-	cellW := (content - gap*float32(cols-1)) / float32(cols)
-	return max(listCellHeight, cellW*4.0/3.0+listCardText)
+	cellW := listCellWidth(w, rail)
+	return max(listCellHeight, cellW*4.0/3.0+listCardText+listGridInset*2)
+}
+
+// listGridMinWidth is the minWidth GridView needs to lay out main's column
+// count at this window size. The grid hangs listGridInset past each edge, so
+// its rows are 12 points wider than the page content.
+func listGridMinWidth(windowWidth, rail float32) float32 {
+	cols := float32(listColumns(windowWidth))
+	return (windowWidth-rail-2*pagePadX+listGap)/cols - listViewGap
 }
 
 // starSVG is the rating mark: a filled five-point star.
 var starSVG = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9L12 2.6z"/></svg>`))
 
-// sidebarMark is the tile beside the app name: the book mark, in the accent
-// colour, sized to sit with the 15 pt title.
-func sidebarMark(c *ui.Context) {
-	t := c.Theme()
-	ui.Box(c).Size(28, 28).Radius(8).Center().Background(t.Accent).Shrink(0).Children(func() {
-		ui.Icon(c, bookSVG).Size(17, 17).TextColor(t.AccentText)
-	})
-}
+// filterSVG is the advanced-search mark in a page header.
+var filterSVG = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5h17l-6.5 7.5V20l-4-2v-5.5L3.5 5z"/></svg>`))
+
+// calendarSVG is the browse-position mark in a page header.
+var calendarSVG = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17"/><path d="M8 3v4M16 3v4"/></svg>`))
+
+// sparkleSVG is the latest-list mark main puts beside "最新": a four-point
+// star with a smaller one at its shoulder.
+var sparkleSVG = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M10 3.5 11.7 8.3 16.5 10 11.7 11.7 10 16.5 8.3 11.7 3.5 10 8.3 8.3 10 3.5z"/><path d="M17.5 13.5 18.5 16 21 17l-2.5 1-1 2.5-1-2.5L14 17l2.5-1 1-2.5z"/></svg>`))
+
+// tagSVG is the tag mark on a card's cover button.
+var tagSVG = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" stroke="none"><path d="M3.5 4.5h7l9.5 9.5-7 7-9.5-9.5zM8.2 9.2a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg>`))
 
 // pageHeader is the title block every page starts with: an accent tile with
 // the page's mark, its name, and a muted line saying what the page holds. It
-// follows main's PageHeader: a 20 pt title rather than a poster headline, so
-// the gallery covers stay the loudest thing on the page.
+// follows main's PageHeader: a 36-point tile and a 16-point title rather than
+// a poster headline, so the gallery covers stay the loudest thing on the page.
 func pageHeader(c *ui.Context, title, subtitle string, mark *ui.SVG) {
 	t := c.Theme()
 	ui.Row(c).AlignItems(ui.Center).Gap(12).Shrink(0).Children(func() {
 		if mark != nil {
-			ui.Box(c).Size(38, 38).Radius(11).Center().Shrink(0).
+			ui.Box(c).Size(36, 36).Radius(12).Center().Shrink(0).
 				Background(t.Accent.Alpha(0.12)).Children(func() {
-				ui.Icon(c, mark).Size(21, 21).TextColor(t.Accent)
+				ui.Icon(c, mark).Size(20, 20).TextColor(t.Accent)
 			})
 		}
 		ui.Column(c).Gap(1).Children(func() {
-			ui.Text(c, title).FontSize(20).FontWeight(600).SingleLine()
+			ui.Text(c, title).FontSize(16).FontWeight(600).SingleLine()
 			if subtitle != "" {
 				ui.Text(c, subtitle).FontSize(13).TextColor(t.TextMuted).SingleLine()
 			}
 		})
+	})
+}
+
+// sectionHeader is main's Section header: a 13-point semibold title and an
+// optional accent link at the right, above the section's content.
+func sectionHeader(c *ui.Context, title, action string, run func()) {
+	t := c.Theme()
+	ui.Row(c).AlignItems(ui.Center).Gap(8).Shrink(0).Children(func() {
+		ui.Text(c, title).FontSize(13).FontWeight(600).FixedLineHeight(16).Grow(1).SingleLine()
+		if action != "" {
+			link := ui.Text(c, action).FontSize(12).FontWeight(500).TextColor(t.Accent)
+			link.Cursor(ui.CursorPointer)
+			if run != nil && link.Clicked() {
+				run()
+			}
+		}
+	})
+}
+
+// iconAction is the quiet 32-point icon button main puts at the end of a
+// page's header (advanced search, browse position). active gives it main's
+// pressed look: an accent-tinted square with the accent mark.
+func iconAction(c *ui.Context, mark *ui.SVG, label string, active bool) ui.Element {
+	t := c.Theme()
+	color := t.TextMuted
+	btn := ui.Box(c).Size(32, 32).Radius(8).Center().Shrink(0).
+		Background(ui.Transparent).Focusable().Tooltip(label).Label(label)
+	switch {
+	case active:
+		btn.Background(t.Accent.Alpha(0.12))
+		color = t.Accent
+	case btn.Hovered():
+		btn.Background(t.SurfaceHover)
+	}
+	if btn.Focused() && !active {
+		color = t.Text
+	}
+	btn.Children(func() {
+		ui.Icon(c, mark).Size(16, 16).TextColor(color)
+	})
+	return btn
+}
+
+// chip is a small pill label, as main's Chip and CategoryChip: 12-point
+// medium text in 2×8 padding, fully rounded.
+func chip(c *ui.Context, label string, bg, fg ui.Color) {
+	ui.Box(c).Radius(999).Padding(2, 8).Background(bg).Shrink(0).Children(func() {
+		ui.Text(c, label).FontSize(12).FontWeight(500).FixedLineHeight(16).TextColor(fg).SingleLine()
 	})
 }
 
@@ -134,8 +237,7 @@ func categoryChip(c *ui.Context, g Gallery) {
 	if g.Category == "" {
 		return
 	}
-	ink := ui.Hex("#ffffff")
-	ui.Badge(c, g.Category).Background(categoryColor(g.CategoryCode)).TextColor(ink)
+	chip(c, g.Category, categoryColor(g.CategoryCode), ui.Hex("#ffffff"))
 }
 
 // categoryColor is ExHentai's category colour for the API's code, falling
@@ -185,17 +287,17 @@ func surfaceCard(c *ui.Context, fn func()) {
 		Background(t.Surface).Border(1, t.Border).Children(fn)
 }
 
-// coverRating is the rating badge in a cover's top corner: a dark pill that
-// stays readable over any artwork, as main's card has.
+// coverRating is the rating in a cover's top corner: the star and the score
+// in white text, as main's card overlays them (its text shadow has no native
+// counterpart, so the chip is on the artwork alone).
 func coverRating(c *ui.Context, g Gallery) {
 	if g.Rating <= 0 {
 		return
 	}
-	ui.Box(c).Absolute().Top(8).Right(8).Radius(999).Padding(3, 7).
-		Background(ui.RGBA(0, 0, 0, 0.5)).Children(func() {
-		ui.Row(c).AlignItems(ui.Center).Gap(3).Children(func() {
-			ui.Icon(c, starSVG).Size(11, 11).TextColor(ui.Hex("#fbbf24"))
-			ui.Textf(c, "%.1f", g.Rating).FontSize(10).FontWeight(600).TextColor(ui.Hex("#ffffff"))
+	ui.Box(c).Absolute().Top(0).Right(0).Padding(4, 8).Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(2).Children(func() {
+			ui.Icon(c, starSVG).Size(12, 12).TextColor(ui.Hex("#fbbf24"))
+			ui.Textf(c, "%.1f", g.Rating).FontSize(11).FontWeight(500).TextColor(ui.Hex("#ffffff"))
 		})
 	})
 }
@@ -239,13 +341,16 @@ func readProgress(g Gallery) float32 {
 }
 
 // coverProgress draws the thin line across the bottom of a cover that says
-// how far the gallery has been read. Box must already be clipped so the line
+// how far the gallery has been read: main's card puts a solid accent line on
+// a translucent accent track. Box must already be clipped so the line
 // follows the picture's rounded corners.
 func coverProgress(c *ui.Context, g Gallery) {
 	if readProgress(g) <= 0 {
 		return
 	}
 	t := c.Theme()
-	ui.Box(c).Height(3).WidthPercent(readProgress(g) * 100).Background(t.Accent).
-		Absolute().Left(0).Bottom(0)
+	ui.Box(c).Height(4).FillWidth().Background(t.Accent.Alpha(0.3)).
+		Absolute().Left(0).Bottom(0).Children(func() {
+		ui.Box(c).Height(4).WidthPercent(readProgress(g) * 100).Background(t.Accent)
+	})
 }

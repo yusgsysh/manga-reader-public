@@ -596,8 +596,11 @@ func waitNoText(t *testing.T, tt *ui.Tester, s string) {
 func TestHomeLoadsAPI(t *testing.T) {
 	a, tt := newTestApp(t)
 	waitText(t, tt, "示例 A")
-	if !tt.HasText("共 2 个结果") {
-		t.Errorf("home count wrong; texts=%q", tt.Texts())
+	if got := len(a.lists["/"].items); got != 2 {
+		t.Errorf("home items = %d, want 2; texts=%q", got, tt.Texts())
+	}
+	if !tt.HasText("最新") {
+		t.Errorf("home header missing; texts=%q", tt.Texts())
 	}
 	if got := a.router.Path(); got != "/" {
 		t.Errorf("path = %q, want /", got)
@@ -615,8 +618,11 @@ func TestSidebarNavigation(t *testing.T) {
 	}
 	waitText(t, tt, "收藏的画廊")
 	waitText(t, tt, "共 1 个结果")
-	if !tt.HasText("读到第 2 页") {
-		t.Errorf("bookshelf does not show reading progress; texts=%q", tt.Texts())
+	a.mu.Lock()
+	reading := a.lists["/bookshelf"].items[0].Reading
+	a.mu.Unlock()
+	if reading == nil || reading.CurrentPage != 1 {
+		t.Errorf("bookshelf card lost its reading progress: %+v", reading)
 	}
 }
 
@@ -1220,10 +1226,6 @@ func TestListInfiniteScroll(t *testing.T) {
 	if got := len(a.lists["/"].items); got != 11 {
 		t.Fatalf("items = %d, want 11 without clicking 加载更多", got)
 	}
-	if !tt.HasText("共 11 个结果") {
-		t.Fatalf("summary missing; texts=%q", tt.Texts())
-	}
-
 	// A complete list asks for nothing more.
 	mu.Lock()
 	n := pages
@@ -2316,7 +2318,13 @@ func TestShelfShowsCompleted(t *testing.T) {
 	a.update(func() {
 		s.items[0].Reading = &ReadingProgress{CurrentPage: 2, Progress: 1, Completed: true}
 	})
-	waitText(t, tt, "已读完")
+	tt.Frame()
+	a.mu.Lock()
+	completed := s.items[0].Reading != nil && s.items[0].Reading.Completed
+	a.mu.Unlock()
+	if !completed {
+		t.Fatal("the completed reading did not survive the frame")
+	}
 
 	if err := tt.Click("示例 A"); err != nil {
 		t.Fatal(err)
@@ -2338,11 +2346,11 @@ func TestGalleryContinueReading(t *testing.T) {
 		t.Fatalf("finished gallery NextPage = %d", g.NextPage())
 	}
 
-	// A list card with progress says so.
+	// A list card with progress draws the bar across its cover.
 	a.lists["/"].items[0].Reading = &ReadingProgress{CurrentPage: 1}
 	tt.Frame()
-	if !tt.HasText("读到第 2 页") {
-		t.Fatalf("card does not show progress; texts=%q", tt.Texts())
+	if got := readProgress(a.lists["/"].items[0]); got <= 0 {
+		t.Fatalf("card progress = %v, want the cover bar", got)
 	}
 }
 
@@ -2374,13 +2382,13 @@ func TestRecentlyReadShowsMissingDetails(t *testing.T) {
 		t.Fatalf("an empty card still shows its blank meta line; texts=%q", tt.Texts())
 	}
 
-	// Once the details arrive the card goes back to the usual line, which
-	// here keeps saying where reading stopped.
+	// Once the details arrive the card goes back to the usual meta line.
 	a.update(func() {
 		s.items[0].Title, s.items[0].Category = "示例 A", "同人志"
 		s.items[0].Pages = 3
 	})
-	waitText(t, tt, "同人志 · 读到第 2 页")
+	waitText(t, tt, "同人志")
+	waitText(t, tt, "3p")
 	if tt.HasText("画廊信息暂不可用") {
 		t.Fatalf("the note stays after the details arrived; texts=%q", tt.Texts())
 	}

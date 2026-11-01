@@ -239,7 +239,7 @@ func TestReaderReopensWhereItStopped(t *testing.T) {
 	tt.Frame()
 	// The list was loaded before the visit: it keeps its items and refreshes
 	// in the background, and the refresh must not drop the page just read.
-	waitText(t, tt, "最新画廊")
+	waitText(t, tt, "最新")
 	// Force the refresh the stale timer would run (the test does not wait
 	// minutes), and wait for the new first page to land.
 	a.update(func() { a.refreshList(a.lists["/"]) })
