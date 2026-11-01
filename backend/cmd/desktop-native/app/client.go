@@ -220,29 +220,37 @@ type apiTag struct {
 	Name      string `json:"name"`
 }
 
+// apiGalleryDetail is the shape of main's /details endpoints: the gallery's
+// full metadata, including the fields only the scraped detail page carries
+// (language, translation, favourites and torrents).
 type apiGalleryDetail struct {
-	ID          int64    `json:"id"`
-	Token       string   `json:"token"`
-	Title       string   `json:"title"`
-	TitleJPN    string   `json:"title_jpn"`
-	Category    string   `json:"category"`
-	Thumbnail   string   `json:"thumbnail"`
-	Cover       string   `json:"cover"`
-	PageCount   int      `json:"page_count"`
-	Rating      float64  `json:"rating"`
-	RatingCount int      `json:"rating_count"`
-	Uploader    string   `json:"uploader"`
-	PostedAt    string   `json:"posted_at"`
-	Tags        []apiTag `json:"tags"`
-	FileSize    string   `json:"file_size"`
-	Expunged    bool     `json:"expunged"`
+	ID           int64    `json:"id"`
+	Token        string   `json:"token"`
+	Title        string   `json:"title"`
+	TitleJPN     string   `json:"title_jpn"`
+	Category     string   `json:"category"`
+	Thumbnail    string   `json:"thumbnail"`
+	Cover        string   `json:"cover"`
+	PageCount    int      `json:"page_count"`
+	Rating       float64  `json:"rating"`
+	RatingCount  int      `json:"rating_count"`
+	Uploader     string   `json:"uploader"`
+	Posted       string   `json:"posted"`
+	PostedAt     string   `json:"posted_at"`
+	Tags         []apiTag `json:"tags"`
+	FileSize     string   `json:"file_size"`
+	Expunged     bool     `json:"expunged"`
+	Language     string   `json:"language"`
+	Translated   bool     `json:"translated"`
+	Favorited    int      `json:"favorited"`
+	TorrentCount int      `json:"torrent_count"`
 }
 
 func (c *Client) Gallery(ctx context.Context, id int64, token string) (apiGalleryDetail, error) {
 	var out apiGalleryDetail
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	err := c.do(ctx, http.MethodGet, fmt.Sprintf("/api/gallery/%d/%s", id, url.PathEscape(token)), nil, nil, &out)
+	err := c.do(ctx, http.MethodGet, fmt.Sprintf("/api/gallery/%d/%s/details", id, url.PathEscape(token)), nil, nil, &out)
 	return out, err
 }
 
@@ -250,7 +258,7 @@ func (c *Client) CachedGallery(ctx context.Context, id int64, token string) (api
 	var out apiGalleryDetail
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	err := c.do(ctx, http.MethodGet, fmt.Sprintf("/api/gallery-cache/%d/%s", id, url.PathEscape(token)), nil, nil, &out)
+	err := c.do(ctx, http.MethodGet, fmt.Sprintf("/api/gallery-cache/%d/%s/details", id, url.PathEscape(token)), nil, nil, &out)
 	return out, err
 }
 
@@ -576,6 +584,41 @@ func (c *Client) Torrents(ctx context.Context, id int64, token string) ([]Torren
 		})
 	}
 	return items, nil
+}
+
+// TorrentInfo is one torrent's expanded Information view: the tracker's
+// numbers and the uploader's comment.
+type TorrentInfo struct {
+	Posted       string
+	Seeds        int
+	Uploader     string
+	Dlers        int
+	Size         string
+	Completes    int
+	Comments     string
+	Personalized bool
+}
+
+type apiTorrentInfo struct {
+	Posted       string `json:"posted"`
+	Seeds        int    `json:"seeds"`
+	Uploader     string `json:"uploader"`
+	Dlers        int    `json:"dlers"`
+	Size         string `json:"size"`
+	Completes    int    `json:"completes"`
+	Comments     string `json:"comments"`
+	Personalized bool   `json:"personalized"`
+}
+
+// TorrentInfo reads one torrent's Information view (scraped live).
+func (c *Client) TorrentInfo(ctx context.Context, id int64, token, gtid string) (TorrentInfo, error) {
+	var out apiTorrentInfo
+	path := fmt.Sprintf("/api/gallery/%d/%s/torrents/%s/info",
+		id, url.PathEscape(token), url.PathEscape(gtid))
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	err := c.do(ctx, http.MethodGet, path, nil, nil, &out)
+	return TorrentInfo(out), err
 }
 
 // DownloadTorrent saves a gallery's .torrent file to path.

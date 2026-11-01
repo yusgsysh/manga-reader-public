@@ -318,15 +318,6 @@ func settingsSection(c *ui.Context, title string, fn func()) {
 	})
 }
 
-// shadowInk is the colour under a lifted picture: dark but faint by day, and
-// a little deeper in the dark theme where the background is already black.
-func shadowInk(t *ui.Theme) ui.Color {
-	if t.Dark {
-		return ui.RGBA(0, 0, 0, 0.55)
-	}
-	return ui.RGBA(15, 23, 42, 0.16)
-}
-
 // readProgress is how much of a gallery has been read, 0 when it has not been
 // opened. It is the fraction of the cover's width the progress line fills.
 func readProgress(g Gallery) float32 {

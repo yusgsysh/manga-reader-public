@@ -35,7 +35,7 @@ func TestFormattedMessagesKeepTheirVerbs(t *testing.T) {
 	SetLanguage(language.Chinese)
 	defer SetLanguage(language.Chinese)
 	got := Tf("Continue (page %d)", 3)
-	if got != "继续阅读（第 3 页）" {
+	if got != "继续阅读 · 第 3 页" {
 		t.Fatalf("continue = %q", got)
 	}
 	got = Tf("%s · %d pages", "漫画", 12)

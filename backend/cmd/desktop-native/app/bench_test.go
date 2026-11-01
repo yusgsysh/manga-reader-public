@@ -63,7 +63,7 @@ func bigGalleryServer(tb testing.TB, galleries, pages int) *httptest.Server {
 	mux.HandleFunc("/api/recently-read", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"page": 0, "page_size": 25, "total": 0, "results": []any{}})
 	})
-	mux.HandleFunc("/api/gallery/1/tok1", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/gallery/1/tok1/details", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{
 			"id": 1, "token": "tok1", "title": "示例画廊 1", "category": "manga",
 			"thumbnail": "https://img.example/1.jpg", "page_count": pages,

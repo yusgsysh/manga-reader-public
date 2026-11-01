@@ -20,7 +20,7 @@ func slowListServer(t *testing.T, savedPage int) *httptest.Server {
 		writeJSON(w, map[string]any{"page": 0, "page_size": 25, "total": 1,
 			"results": []map[string]any{galleryItem(1, "tok1", "慢画廊", "manga", 5)}})
 	})
-	mux.HandleFunc("/api/gallery/1/tok1", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/gallery/1/tok1/details", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, galleryDetail(1, "慢画廊", 5))
 	})
 	mux.HandleFunc("/api/gallery/1/tok1/pages", func(w http.ResponseWriter, r *http.Request) {
@@ -99,8 +99,8 @@ func TestReaderResumesSavedProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "继续阅读（第 4 页）")
-	if err := tt.Click("继续阅读（第 4 页）"); err != nil {
+	waitText(t, tt, "继续阅读 · 第 4 页")
+	if err := tt.Click("继续阅读 · 第 4 页"); err != nil {
 		t.Fatal(err)
 	}
 	navSettle(tt)

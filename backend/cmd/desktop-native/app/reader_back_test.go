@@ -46,7 +46,7 @@ func TestReaderBackLeavesTheGallery(t *testing.T) {
 
 	// The gallery's Back then leaves for the list the visit started at: with
 	// the reader pushing its gallery, this was another pushed gallery.
-	if err := tt.Click("← 返回"); err != nil {
+	if err := tt.Click("返回"); err != nil {
 		t.Fatal(err)
 	}
 	navSettle(tt)
