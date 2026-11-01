@@ -123,7 +123,9 @@ func (n listNav) active() bool {
 }
 
 // homePage is main's HomePage: the continue-reading row on top (whenever
-// there is one), then the latest galleries under their own header.
+// there is one), then the latest galleries under their own header. The whole
+// page is one scrolling feed, so the row scrolls away as it does on the web
+// page instead of staying pinned above the grid.
 func (a *App) homePage(c *ui.Context, s *listState) {
 	// The row and the reading-history page show the same list, fetched once:
 	// reading a gallery in the reader updates both through mergeListReading.
@@ -131,19 +133,83 @@ func (a *App) homePage(c *ui.Context, s *listState) {
 	a.ensureList(recent)
 	a.scheduleRefresh(c, recent)
 
-	ui.Column(c).Fill().Padding(pagePadY, pagePadX).Gap(32).Children(func() {
+	if len(s.items) == 0 {
+		// Nothing to feed yet: the header and the loader (or the empty note)
+		// still scroll, so the first page lands in the same layout.
+		ui.Scroll(c).Fill().Children(func() {
+			ui.Column(c).FillWidth().Padding(pagePadY, pagePadX).Gap(32).Children(func() {
+				a.homeHeader(c, s, recent)
+				a.listBody(c, s)
+			})
+		})
+		return
+	}
+
+	w, _ := c.Size()
+	cols := listColumns(w)
+	cardRows := (len(s.items) + cols - 1) / cols
+	rows := 1 + cardRows
+	footer := s.loading || s.err != ""
+	if footer {
+		rows++
+	}
+	a.homeFeed.Key = func(r int) any {
+		switch {
+		case r == 0:
+			return "home-header"
+		case r <= cardRows:
+			return s.items[(r-1)*cols].ID
+		default:
+			return "home-footer"
+		}
+	}
+	ui.List(c, &a.homeFeed, rows, func(r int) {
+		switch {
+		case r == 0:
+			a.homeHeader(c, s, recent)
+		case r <= cardRows:
+			a.homeCardRow(c, s, r-1, cols)
+		default:
+			a.listFooter(c, s)
+		}
+	}).Fill().Padding(pagePadY, pagePadX).GapY(listGap)
+	if s.atEnd {
+		a.loadMore(s)
+	}
+}
+
+// homeHeader is the top of the feed: the continue row and the latest header.
+func (a *App) homeHeader(c *ui.Context, s *listState, recent *listState) {
+	ui.Column(c).Gap(32).Children(func() {
 		if items := recentItems(recent, 12); len(items) > 0 {
 			ui.Column(c).Gap(12).Children(func() {
 				sectionHeader(c, i18n.T("Continue reading"), i18n.T("View all"), func() {
 					a.router.Push("/recently-read")
 				})
-				a.continueRow(c, items)
+				a.continueStrip(c, items)
 			})
 		}
-		ui.Column(c).Gap(20).Grow(1).MinHeight(0).Children(func() {
-			a.latestHeader(c, s)
-			a.listBody(c, s)
-		})
+		a.latestHeader(c, s)
+	})
+}
+
+// homeCardRow is one row of the feed: main's columns, with the last row's
+// empty places kept so the cards stay as wide as the others.
+func (a *App) homeCardRow(c *ui.Context, s *listState, row, cols int) {
+	start := row * cols
+	end := min(start+cols, len(s.items))
+	if end == len(s.items) {
+		// The last row being built means the feed has reached the items it
+		// already has: ask for the next page, as the grid's last row does.
+		s.atEnd = true
+	}
+	ui.Row(c).Gap(listGap).AlignItems(ui.Start).Children(func() {
+		for i := start; i < end; i++ {
+			a.flowCard(c, s.items[i])
+		}
+		for i := end; i < start+cols; i++ {
+			ui.Box(c).Grow(1).Basis(0)
+		}
 	})
 }
 
@@ -155,27 +221,54 @@ func recentItems(s *listState, n int) []Gallery {
 	return s.items[:n]
 }
 
-// continueRow is main's strip of recently read galleries: 144-point cards in
-// a horizontal scroller, 16 apart.
-func (a *App) continueRow(c *ui.Context, items []Gallery) {
-	ui.ScrollHorizontal(c).Shrink(0).Children(func() {
-		ui.Row(c).Gap(16).PaddingX(4).Padding(0, 0, 8, 0).Children(func() {
-			for _, g := range items {
-				cell := ui.Column(c).Width(144).Shrink(0).Gap(0).Focusable()
-				hovered := cell.Hovered()
-				cell.Children(func() {
-					a.coverBox(c, g, hovered)
-					ui.Column(c).Gap(6).Padding(8, 0, 0, 0).Children(func() {
-						ui.Text(c, displayTitle(g)).FontSize(13).FontWeight(500).
-							FixedLineHeight(20).MaxLines(2).MinHeight(40)
-						a.cardMeta(c, g)
+// continueStrip is main's strip of recently read galleries: 144-point cards
+// in a horizontal scroller, 16 apart, with a page button at its right edge
+// and no scrollbar.
+func (a *App) continueStrip(c *ui.Context, items []Gallery) {
+	t := c.Theme()
+	ui.Box(c).Shrink(0).Children(func() {
+		strip := ui.ScrollHorizontal(c).TrackScroll(&a.continueScroll).Scrollbars(false)
+		strip.Children(func() {
+			ui.Row(c).Gap(16).PaddingX(4).Padding(0, 0, 8, 0).Children(func() {
+				for _, g := range items {
+					cell := ui.Column(c).Width(144).Shrink(0).Gap(0).Focusable()
+					hovered := cell.Hovered()
+					cell.Children(func() {
+						a.coverBox(c, g, hovered)
+						ui.Column(c).Gap(6).Padding(8, 0, 0, 0).Children(func() {
+							ui.Text(c, displayTitle(g)).FontSize(13).FontWeight(500).
+								FixedLineHeight(20).MaxLines(2).MinHeight(40)
+							a.cardMeta(c, g)
+						})
 					})
-				})
-				if cell.Clicked() {
-					a.router.Push(fmt.Sprintf("/gallery/%d/%s", g.ID, g.Token))
+					if cell.Clicked() {
+						a.router.Push(fmt.Sprintf("/gallery/%d/%s", g.ID, g.Token))
+					}
 				}
-			}
+			})
 		})
+		// The page button appears only while the strip has more to its
+		// right, over the covers' lower half as a carousel's arrow.
+		if a.continueScroll.MaxX > a.continueScroll.X+1 {
+			btn := ui.Box(c).Size(32, 32).Radius(999).Center().Shrink(0).
+				Absolute().Right(0).Top(80).Cursor(ui.CursorPointer).
+				Background(t.Background).Border(1, t.Border).
+				Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, 0.18)).
+				Focusable().Label(i18n.T("Next page")).Tooltip(i18n.T("Next page"))
+			if btn.Hovered() {
+				btn.Background(t.SurfaceHover)
+			}
+			btn.Children(func() {
+				ui.Icon(c, chevronRightSVG).Size(16, 16).TextColor(t.TextMuted)
+			})
+			if btn.Clicked() {
+				step := strip.Bounds().W - 144
+				if step < 480 {
+					step = 480
+				}
+				a.continueScroll.ScrollTo(a.continueScroll.X+step, 0, ui.Smooth)
+			}
+		}
 	})
 }
 

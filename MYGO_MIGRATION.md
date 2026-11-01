@@ -254,6 +254,15 @@
 - [x] 快照 `home`、`home-dark`、`home-narrow` 自动覆盖新首页（深色、窄窗列数与行高）。
 - [x] 验证：`go test ./cmd/desktop-native/app/`（123 通过）、`go test -race`（120 通过）、`go vet`、`gofmt` 与 darwin/windows 交叉编译均通过。
 
+### 2.11 首页整页滚动与继续阅读翻页
+
+- [x] 首页改为单一 `ui.List` 纵向 feed：第 0 行是「继续阅读 + 最新标题」，其后是卡片行。继续阅读和标题随页面上滑，不再固定在网格上方；滚到下方时整页（含两段标题）一起滚走。
+- [x] 继续阅读横向条去掉滚动条（`Scrollbars(false)`，滚轮/触控板横向仍可用），右缘加一枚 32 DIP 圆形「>」翻页按钮：按「视口宽 − 一张卡片」翻一屏，滚到最右自动隐藏；用 `ScrollState` 记录/驱动位置。
+- [x] 删除列表底部的「加载更多」按钮；保留滚动触底自动翻页，以及加载中/失败重试的行。
+- [x] 卡片行按 `main` 的 20 DIP 间距分栏（不再依赖 GridView 的 8 DIP 间隙补偿）；末行补占位格，卡片宽度与上面各页一致。
+- [x] 测试新增 `TestContinueRowPagesWithButton`（翻页按钮确实移动横向位置）、`TestHomeHeaderScrollsAway`（标题随页面滚走、无「加载更多」）；`TestListKeepsItemsWhenReturning` 改为比较列表状态指针（首页不再使用 GridView）。
+- [x] 验证：`go test ./cmd/desktop-native/app/`（125 通过）、`go test -race`（122 通过）、`go vet`、`gofmt` 均通过；虚拟化仍成立（100 / 5000 画廊滚动帧约 10 ms）。
+
 ---
 
 ## 3. 未完成

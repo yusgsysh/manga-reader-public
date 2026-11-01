@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -206,5 +207,79 @@ func TestIdleHomeDoesNotPageThrough(t *testing.T) {
 	mu.Unlock()
 	if extra > 0 {
 		t.Fatalf("the page fetched %d later pages while idle", extra)
+	}
+}
+
+// TestContinueRowPagesWithButton checks the strip's page button: it moves the
+// row by a screenful, and the scrollbar itself is not shown.
+func TestContinueRowPagesWithButton(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	for i := 0; i < 200; i++ {
+		tt.Frame()
+		if r := a.lists["/recently-read"]; r != nil && r.loaded {
+			break
+		}
+	}
+	a.update(func() {
+		r := a.lists["/recently-read"]
+		base := append([]Gallery(nil), a.lists["/"].items...)
+		for i := 0; i < 11; i++ {
+			g := base[i%len(base)]
+			g.ID, g.Title = int64(400+i), fmt.Sprintf("继续阅读 %d", i+1)
+			r.items = append(r.items, g)
+		}
+	})
+	tt.Frame()
+	tt.Frame()
+
+	a.mu.Lock()
+	before, maxX := a.continueScroll.X, a.continueScroll.MaxX
+	a.mu.Unlock()
+	if maxX <= 0 {
+		t.Fatal("the strip does not overflow, so there is nothing to page")
+	}
+	if _, ok := tt.Find("下一页"); !ok {
+		t.Fatalf("the page button is missing; texts=%q", tt.Texts())
+	}
+	if err := tt.Click("下一页"); err != nil {
+		t.Fatalf("page the strip: %v", err)
+	}
+	tt.Frame()
+	tt.Frame()
+	a.mu.Lock()
+	after := a.continueScroll.X
+	a.mu.Unlock()
+	if after <= before {
+		t.Fatalf("continue X = %v after the page button, want more than %v", after, before)
+	}
+}
+
+// TestHomeHeaderScrollsAway checks that the continue row and the latest
+// header are part of the page's scroll, not pinned above it.
+func TestHomeHeaderScrollsAway(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	a.update(func() {
+		s := a.lists["/"]
+		base := append([]Gallery(nil), s.items...)
+		for i := 0; i < 22; i++ {
+			g := base[i%len(base)]
+			g.ID, g.Title = int64(500+i), fmt.Sprintf("画廊 %d", i+1)
+			s.items = append(s.items, g)
+		}
+	})
+	tt.Frame()
+	if _, ok := tt.Find("最新"); !ok {
+		t.Fatalf("the latest header is missing; texts=%q", tt.Texts())
+	}
+	if tt.HasText("加载更多") {
+		t.Fatalf("the load-more button is still there; texts=%q", tt.Texts())
+	}
+
+	tt.Scroll(640, 400, 0, 520)
+	tt.Frame()
+	if r, ok := tt.Find("最新"); ok && r.Y+r.H > 0 {
+		t.Fatalf("the latest header stayed at y=%v after scrolling", r.Y)
 	}
 }

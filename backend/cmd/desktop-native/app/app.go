@@ -92,9 +92,15 @@ type App struct {
 	cacheMaxBusy  bool
 	cacheMaxErr   string
 
-	lists     map[string]*listState
-	details   map[int64]*detailState
-	downloads Downloads
+	lists   map[string]*listState
+	details map[int64]*detailState
+	// homeFeed is the home page's whole scrolling feed: the continue row
+	// and the header, then rows of cards, so what is above scrolls away as
+	// it does on the web page. continueScroll tracks its strip sideways for
+	// the row's page button.
+	homeFeed       ui.ListState
+	continueScroll ui.ScrollState
+	downloads      Downloads
 	// sidebarCollapsed folds the navigation rail to its icons.
 	sidebarCollapsed bool
 	// The home page's popups: the card tag list (one at a time), the
@@ -1104,8 +1110,9 @@ func (a *App) listGrid(c *ui.Context, s *listState) {
 	}
 }
 
-// listFooter is the row under a list: a spinner while the next page loads,
-// a retry when it failed, or nothing once the list is complete.
+// listFooter is the row under a list: a spinner while the next page loads or
+// a retry when it failed. A list that has more asks for it as its last row is
+// built, so there is no button to press.
 func (a *App) listFooter(c *ui.Context, s *listState) {
 	t := c.Theme()
 	switch {
@@ -1121,21 +1128,25 @@ func (a *App) listFooter(c *ui.Context, s *listState) {
 				a.startListLoad(s)
 			}
 		})
-	case a.hasMore(s):
-		// The grid asks for the next page as the user nears the end; the
-		// button stays for a deliberate click.
-		ui.Row(c).Center().Children(func() {
-			if ui.Button(c, i18n.T("Load more")).Clicked() {
-				a.loadMore(s)
-			}
-		})
 	}
 }
 
 // galleryCard draws one gallery in a list grid.
 func (a *App) galleryCard(c *ui.Context, g Gallery) {
-	t := c.Theme()
 	cell := ui.Column(c).Gap(0).PaddingX(listGridInset - 2).Focusable()
+	a.cardContent(c, cell, g)
+}
+
+// flowCard is the same card inside the home page's scrolling feed, where the
+// row divides its width between the columns instead of the grid's own gap.
+func (a *App) flowCard(c *ui.Context, g Gallery) {
+	cell := ui.Column(c).Gap(0).Grow(1).Basis(0).Focusable()
+	a.cardContent(c, cell, g)
+}
+
+// cardContent fills a card cell, whichever grid or feed row holds it.
+func (a *App) cardContent(c *ui.Context, cell ui.Element, g Gallery) {
+	t := c.Theme()
 	hovered := cell.Hovered()
 	cell.Children(func() {
 		a.coverBox(c, g, hovered)

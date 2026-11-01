@@ -55,7 +55,7 @@ func TestListKeepsItemsWhenReturning(t *testing.T) {
 	if home == nil || len(home.items) == 0 {
 		t.Fatal("home list did not load")
 	}
-	grid, items := home.grid, len(home.items)
+	items := len(home.items)
 
 	if err := tt.Click("画廊 01"); err != nil {
 		t.Fatalf("click gallery: %v", err)
@@ -71,11 +71,8 @@ func TestListKeepsItemsWhenReturning(t *testing.T) {
 	navSettle(tt)
 
 	back := a.lists["/"]
-	if back == nil {
+	if back == nil || back != home {
 		t.Fatal("home list state was dropped on return")
-	}
-	if back.grid != grid {
-		t.Error("returning built a new grid state, so the scroll position is lost")
 	}
 	if len(back.items) != items {
 		t.Errorf("returning kept %d items, want %d: the list reloaded", len(back.items), items)
