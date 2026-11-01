@@ -20,7 +20,7 @@ func manyGalleries(t *testing.T, n int) *httptest.Server {
 	mux.HandleFunc("/api/galleries", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"page": 0, "page_size": 25, "total": n, "results": all})
 	})
-	mux.HandleFunc("/api/gallery/1/tok1", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/gallery/1/tok1/details", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, galleryDetail(1, "画廊 01", 5))
 	})
 	mux.HandleFunc("/api/gallery/1/tok1/pages", func(w http.ResponseWriter, r *http.Request) {
@@ -63,7 +63,7 @@ func TestListKeepsItemsWhenReturning(t *testing.T) {
 	navSettle(tt)
 	waitText(t, tt, "开始阅读")
 
-	if err := tt.Click("← 返回"); err != nil {
+	if err := tt.Click("返回"); err != nil {
 		if err2 := tt.Click("首页"); err2 != nil {
 			t.Fatalf("no way back: %v / %v", err, err2)
 		}

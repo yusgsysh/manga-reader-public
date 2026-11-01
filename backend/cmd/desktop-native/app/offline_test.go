@@ -21,10 +21,10 @@ func offlineServer(t *testing.T) (*httptest.Server, *int, *int) {
 		writeJSON(w, map[string]any{"page": 0, "page_size": 25, "total": 1,
 			"results": []map[string]any{galleryItem(1, "tok1", "离线画廊", "manga", 3)}})
 	})
-	mux.HandleFunc("/api/gallery/1/tok1", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/gallery/1/tok1/details", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, galleryDetail(1, "离线画廊", 3))
 	})
-	mux.HandleFunc("/api/gallery-cache/1/tok1", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/gallery-cache/1/tok1/details", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, galleryDetail(1, "离线画廊", 3))
 	})
 	stream := func(w http.ResponseWriter, r *http.Request) {

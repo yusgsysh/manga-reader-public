@@ -33,7 +33,7 @@ func newSlotServer(t *testing.T, pageCount, listed int, hold int, release <-chan
 		writeJSON(w, map[string]any{"page": 0, "page_size": 25, "total": 1,
 			"results": []map[string]any{galleryItem(1, "tok1", "分页画廊", "manga", pageCount)}})
 	})
-	mux.HandleFunc("/api/gallery/1/tok1", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/gallery/1/tok1/details", func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		s.detail++
 		s.mu.Unlock()
@@ -260,8 +260,8 @@ func TestReaderReopensWhereItStopped(t *testing.T) {
 	// progress is asked for again in the background: the button offers the
 	// page just read from this app's own record even before that lands.
 	// (A plain "Start reading" here would be the very bug this covers.)
-	waitText(t, tt, "继续阅读（第 4 页）")
-	if err := tt.Click("继续阅读（第 4 页）"); err != nil {
+	waitText(t, tt, "继续阅读 · 第 4 页")
+	if err := tt.Click("继续阅读 · 第 4 页"); err != nil {
 		t.Fatal(err)
 	}
 	navSettle(tt)

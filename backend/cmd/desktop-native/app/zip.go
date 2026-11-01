@@ -12,7 +12,6 @@ import (
 	"unicode"
 
 	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/ui"
 
 	"manga-reader/cmd/desktop-native/app/i18n"
 )
@@ -143,41 +142,4 @@ var pickSavePath = func(parent *mygo.Window, dir, name string) (string, error) {
 		Filters:     []mygo.FileFilter{{Name: "ZIP 压缩包", Extensions: []string{"zip"}}},
 	}
 	return mygo.Dialog.Save(opts)
-}
-
-// detailDownloadsBlock is the detail page's download section: the offline copy
-// button plus a ZIP export once the job has completed.
-func (a *App) detailDownloadsBlock(c *ui.Context, s *detailState) {
-	t := c.Theme()
-	status := ""
-	for _, j := range a.downloads.items {
-		if j.ID == s.downloadJob {
-			status = j.Status
-		}
-	}
-
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-		label := i18n.T("Download")
-		if s.downloadBusy {
-			label = i18n.T("Creating the job…")
-		}
-		if s.downloadJob != "" {
-			label = i18n.T("View download")
-		}
-		if ui.Button(c, label).Disabled(s.downloadBusy).Clicked() {
-			if s.downloadJob != "" {
-				a.router.Push("/downloads")
-			} else {
-				a.startDownload(c, s)
-			}
-		}
-		if s.downloadJob != "" && status == "completed" {
-			if ui.Button(c, i18n.T("Export ZIP")).Disabled(a.zipBusy[s.downloadJob]).Clicked() {
-				a.saveZip(PrefillJob{ID: s.downloadJob, GalleryID: s.id, Title: s.g.Title})
-			}
-		}
-	})
-	if s.downloadErr != "" {
-		ui.Text(c, s.downloadErr).FontSize(11).TextColor(t.Danger)
-	}
 }

@@ -242,6 +242,15 @@ type detailState struct {
 	g                      Gallery
 	tags                   []apiTag
 	uploader, posted, size string
+	// language, translated, favorited, ratingCount and torrentCount are the
+	// detail-only fields main's page shows beside the title and in the meta
+	// grid. torrentCountKnown separates an unknown count from zero.
+	language               string
+	translated             bool
+	favorited, ratingCount int
+	torrentCount           int
+	torrentCountKnown      bool
+	offline                bool
 	loading, loaded        bool
 	err                    string
 	loadID                 int
@@ -250,13 +259,11 @@ type detailState struct {
 	loadedAt time.Time
 
 	inBookshelf bool
-	shelfKnown  bool
 	busy        bool
 
-	// thumbGrid scrolls the detail page's page-thumbnail grid; thumbSel is
-	// the cell the keyboard has moved to.
-	thumbGrid *ui.GridState
-	thumbSel  int
+	// thumbPage is the page of the thumbnail grid on show: main lists the
+	// pages 20 at a time under the gallery rather than one long scroll.
+	thumbPage int
 
 	// reading is the saved page, loaded with the bookshelf status, which
 	// the grid marks as where reading stopped.
@@ -271,9 +278,9 @@ type detailState struct {
 	downloadErr  string
 	downloadJob  string
 
-	// torrents, loaded the first time the user asks for them.
+	// torrents is the dialog's list, fetched live each time it opens.
 	torrents     torrentsState
-	showTorrents bool
+	torrentsOpen bool
 }
 
 // newRouter builds the window's router with no page transition. Every page is
@@ -1467,7 +1474,7 @@ func (a *App) startDetailLoad(s *detailState, withMeta bool) {
 					if s.loadID != lid {
 						return
 					}
-					a.applyDetail(s, d)
+					a.applyDetail(s, d, false)
 					s.loaded = true
 				})
 			}
@@ -1491,7 +1498,11 @@ func (a *App) startDetailLoad(s *detailState, withMeta bool) {
 				s.loading = false
 				if !s.loaded {
 					s.err = err.Error()
+					return
 				}
+				// The cached copy is all there is: the page says it is
+				// offline data, as main does when the live query fails.
+				s.offline = true
 			})
 			return
 		}
@@ -1501,11 +1512,12 @@ func (a *App) startDetailLoad(s *detailState, withMeta bool) {
 				return
 			}
 			s.loading = false
-			a.applyDetail(s, d)
+			a.applyDetail(s, d, true)
 			s.loaded = true
+			s.offline = false
 			s.loadedAt = time.Now()
 			if shelfErr == nil {
-				s.inBookshelf, s.shelfKnown = inShelf, true
+				s.inBookshelf = inShelf
 			}
 		})
 	}()
@@ -1541,7 +1553,9 @@ func (a *App) refreshDetailReading(s *detailState) {
 
 // applyDetail copies a gallery's metadata into the detail page. The reading
 // progress comes from Progress, not from the metadata, and is left alone.
-func (a *App) applyDetail(s *detailState, d apiGalleryDetail) {
+// live says the answer came from the source rather than the offline cache:
+// only then is the torrent count known (the cached details do not keep it).
+func (a *App) applyDetail(s *detailState, d apiGalleryDetail, live bool) {
 	reading, readingKnown := s.reading, s.readingKnown
 	g := a.galleryFromDetail(d)
 	if readingKnown {
@@ -1550,8 +1564,21 @@ func (a *App) applyDetail(s *detailState, d apiGalleryDetail) {
 	s.g = g
 	s.tags = d.Tags
 	s.uploader = d.Uploader
-	s.posted = d.PostedAt
+	switch {
+	case d.Posted != "":
+		s.posted = d.Posted
+	default:
+		s.posted = d.PostedAt
+	}
 	s.size = d.FileSize
+	s.language = d.Language
+	s.translated = d.Translated
+	s.favorited = d.Favorited
+	s.ratingCount = d.RatingCount
+	if live {
+		s.torrentCount = d.TorrentCount
+		s.torrentCountKnown = true
+	}
 	s.reading, s.readingKnown = reading, readingKnown
 }
 
@@ -1594,216 +1621,6 @@ func (a *App) galleryFromDetail(d apiGalleryDetail) Gallery {
 	}
 }
 
-func (a *App) galleryPage(c *ui.Context, id int64, token string) {
-	s := a.ensureDetail(id, token)
-	// Rules colour the tags, so load them with the page.
-	a.ensureTagSettings()
-	t := c.Theme()
-
-	if s.loading && !s.loaded {
-		ui.Column(c).Fill().Center().Gap(10).Children(func() {
-			pageLoading(c, i18n.T("Loading gallery…"))
-			ui.Text(c, i18n.T("Loading gallery…")).FontSize(12).TextColor(t.TextMuted)
-		})
-		return
-	}
-	if s.err != "" && !s.loaded {
-		a.errorBlock(c, s.err, func() { a.retryDetail(s) })
-		return
-	}
-
-	g := s.g
-	cover := a.images.Get(g.CoverURL)
-	if cover == nil {
-		cover = a.covers.Get(int(g.ID))
-	}
-
-	// The page the reader would open at: the saved progress, and the page
-	// this app saved in the gallery, which the backend's progress row can
-	// lag behind.
-	page, finished := s.reading, finishedReading(g.Reading)
-	if known, ok := a.knownReading(g.ID); ok && known.CurrentPage > page {
-		page, finished = known.CurrentPage, known.Completed
-	}
-	label := i18n.T("Start reading")
-	if g.Pages > 0 && page >= g.Pages-1 {
-		label = i18n.T("Read again")
-	} else if finished {
-		label = i18n.T("Read again")
-	} else if page > 0 {
-		label = fmt.Sprintf(i18n.T("Continue (page %d)"), page+1)
-	}
-
-	ui.Scroll(c).Fill().Children(func() {
-		ui.Column(c).Padding(pagePadY, pagePadX).Gap(22).MaxWidth(1120).Children(func() {
-			// The way back is a quiet control; the gallery itself is the
-			// page's headline.
-			ui.Row(c).Children(func() {
-				if ui.Button(c, i18n.T("← Back")).Clicked() {
-					a.router.Back()
-				}
-			})
-
-			ui.Row(c).Gap(28).AlignItems(ui.Start).Children(func() {
-				box := ui.Box(c).Size(220, 293).Radius(coverRadius).Clip().
-					Background(t.SurfaceHover).Border(1, t.Border).
-					Shadow(0, 10, 24, 0, shadowInk(t))
-				box.Children(func() {
-					if cover != nil {
-						ui.Image(c, cover).Fill().Fit(ui.Cover).Absolute()
-					}
-					if a.images.Loading(g.CoverURL) {
-						ui.Column(c).Fill().Center().Absolute().Children(func() {
-							imageLoadingCenter(c, i18n.T("Loading cover…"))
-						})
-					}
-					coverProgress(c, g)
-				})
-
-				ui.Column(c).Gap(18).Grow(1).Children(func() {
-					ui.Column(c).Gap(4).Children(func() {
-						ui.Text(c, displayTitle(g)).FontSize(26).FontWeight(650)
-						if g.TitleJPN != "" && g.TitleJPN != g.Title {
-							ui.Text(c, g.TitleJPN).FontSize(14).TextColor(t.TextMuted)
-						}
-					})
-
-					ui.Row(c).Gap(14).Wrap().AlignItems(ui.Center).Children(func() {
-						categoryChip(c, g)
-						if g.Rating > 0 {
-							ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
-								ui.Icon(c, starSVG).Size(14, 14).TextColor(t.Warning)
-								ui.Textf(c, "%.1f", g.Rating).FontSize(13).FontWeight(600)
-							})
-						}
-						ui.Text(c, i18n.Tf("%d pages", g.Pages)).FontSize(13).TextColor(t.TextMuted)
-					})
-
-					ui.Row(c).Gap(8).Wrap().AlignItems(ui.Center).Children(func() {
-						if ui.PrimaryButton(c, label).Clicked() {
-							a.readerStart = -1
-							a.router.Push(fmt.Sprintf("/reader/%d/%s", g.ID, g.Token))
-						}
-						shelfLabel := i18n.T("Add to bookshelf")
-						if s.inBookshelf {
-							shelfLabel = i18n.T("Remove from bookshelf")
-						}
-						if ui.Button(c, shelfLabel).Disabled(s.busy).Clicked() {
-							a.toggleBookshelf(s)
-						}
-						a.detailDownloadsBlock(c, s)
-					})
-					if !s.shelfKnown {
-						ui.Text(c, i18n.T("Bookshelf state is unavailable")).FontSize(11).TextColor(t.TextMuted)
-					}
-
-					ui.Divider(c)
-					ui.Row(c).Gap(32).AlignItems(ui.Start).Children(func() {
-						ui.Column(c).Gap(6).Grow(1).Children(func() {
-							if s.uploader != "" {
-								ui.Textf(c, i18n.T("Uploader: %s"), s.uploader).FontSize(12).TextColor(t.TextMuted)
-							}
-							if s.posted != "" {
-								ui.Textf(c, i18n.T("Posted: %s"), s.posted).FontSize(12).TextColor(t.TextMuted)
-							}
-						})
-						ui.Column(c).Gap(6).Grow(1).Children(func() {
-							if s.size != "" {
-								ui.Textf(c, i18n.T("Size: %s"), s.size).FontSize(12).TextColor(t.TextMuted)
-							}
-							if g.Rating > 0 {
-								ui.Textf(c, i18n.T("Rating: %.1f"), g.Rating).FontSize(12).TextColor(t.TextMuted)
-							}
-						})
-					})
-				})
-			})
-
-			if len(s.tags) > 0 {
-				ui.Column(c).Gap(10).Children(func() {
-					sectionTitle(c, i18n.T("Tags"), "")
-					ui.Row(c).Gap(6).Wrap().Children(func() {
-						for _, tag := range a.sortedTags(s.tags) {
-							a.tagChip(c, tag.Namespace, tag.Name)
-						}
-					})
-				})
-			}
-
-			ui.Divider(c)
-			a.torrentsBlock(c, s)
-			ui.Divider(c)
-			a.pageThumbGrid(c, g, s)
-		})
-	})
-}
-
-// pageThumbGrid draws the detail page's page thumbnails, one per page, in a
-// virtualized grid that fetches only the cells on screen. A click opens the
-// reader at that page.
-func (a *App) pageThumbGrid(c *ui.Context, g Gallery, s *detailState) {
-	t := c.Theme()
-	note := ""
-	if g.Pages > 0 {
-		note = i18n.Tf("%d pages · click to jump", g.Pages)
-	}
-	sectionTitle(c, i18n.T("Page thumbnails"), note)
-	if g.Pages <= 0 {
-		ui.Text(c, i18n.T("Page count unknown; open the reader to see the pages.")).FontSize(12).TextColor(t.TextMuted)
-		return
-	}
-
-	// The page the reader would open at, marked in the grid: the saved
-	// progress, so the grid says where reading stopped.
-	marked := -1
-	if s.readingKnown && s.reading >= 0 && s.reading < g.Pages {
-		marked = s.reading
-	}
-	if s.thumbGrid == nil {
-		s.thumbSel = -1
-		s.thumbGrid = &ui.GridState{
-			Selected: &s.thumbSel,
-			Key:      func(i int) any { return i },
-			Label:    func(i int) string { return fmt.Sprintf(i18n.T("Page %d"), i+1) },
-		}
-	}
-	ui.GridView(c, s.thumbGrid, g.Pages, 120, 190, func(i int) {
-		cell := ui.Column(c).Gap(4).Focusable().Label(fmt.Sprintf(i18n.T("Page %d"), i+1))
-		cell.Children(func() {
-			url := a.client.PageThumbnailURL(g.ID, g.Token, i)
-			thumb := a.pageThumbs.Get(url)
-			// The marked page wears its ring on the picture, not around the
-			// page number, so every cell keeps the same text baseline.
-			frame := ui.Box(c).AspectRatio(200.0/282.0).Radius(8).Clip().
-				Border(2, ui.Transparent)
-			if i == marked {
-				frame.Border(2, t.Accent)
-			}
-			frame.Children(func() {
-				switch {
-				case thumb != nil:
-					ui.Image(c, thumb).Fill().Fit(ui.Cover).Absolute()
-				case a.pageThumbs.Err(url) != "":
-					// A failed thumbnail offers its retry in place.
-					frame.Center().Background(t.SurfaceHover).
-						Label(i18n.Tf("Thumbnail for page %d failed to load, click to retry", i+1))
-					ui.Text(c, i18n.T("Failed to load")).FontSize(11).TextColor(t.Danger)
-				default:
-					frame.Center().Background(t.SurfaceHover)
-					imageLoadingCenter(c, i18n.Tf("Loading thumbnail for page %d…", i+1))
-				}
-			})
-			if a.pageThumbs.Err(url) != "" && frame.Clicked() {
-				a.pageThumbs.Retry(url)
-			}
-			ui.Textf(c, "%d", i+1).FontSize(11).TextColor(t.TextMuted)
-		})
-		if cell.Clicked() {
-			a.openReaderAt(g.ID, g.Token, i)
-		}
-	}).Height(420).Clip()
-}
-
 // openReaderAt opens the reader showing page (0-based), whatever page the
 // saved progress would have resumed.
 func (a *App) openReaderAt(id int64, token string, page int) {
@@ -1830,7 +1647,7 @@ func (a *App) toggleBookshelf(s *detailState) {
 		a.update(func() {
 			s.busy = false
 			if err == nil {
-				s.inBookshelf, s.shelfKnown = add, true
+				s.inBookshelf = add
 			}
 		})
 	}()

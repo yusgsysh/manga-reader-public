@@ -70,8 +70,9 @@
 - [x] 书架：`GET /api/bookshelf`，显示阅读进度（读到第 N 页）。
 - [x] 最近阅读：`GET /api/recently-read`。
 - [x] 分页：每页 25 条，列表底部「加载更多」；刷新按钮重置列表。
-- [x] 画廊详情：在线 `/api/gallery/:id/:token` 失败时回退 `/api/gallery-cache/...`。
-- [x] 详情字段：标题、日文标题、分类、页数、评分、上传者、发布日期、大小、标签、封面。
+- [x] 画廊详情：在线 `/api/gallery/:id/:token/details` 失败时回退 `/api/gallery-cache/:id/:token/details`（与 main 的 `useGalleryDetail` 一致）。
+- [x] 详情字段：标题、日文标题、分类、页数、评分与票数、上传者、上传时间、语言/已翻译、文件大小、收藏数、标签、封面、种子数。
+- [x] 详情页版式对齐 main 的 `GalleryDetailPage`：220×293 封面（16 圆角 + 1px 描边 + 阴影）、返回幽灵按钮、标题/概要/操作行、两列元数据、按命名空间分组并带翻译的标签、每页 20 张的缩略图分页、种子下载弹窗。
 - [x] 加入/移出书架：`POST/DELETE /api/bookshelf/:id/:token`，状态查询 `/status`。
 - [x] 书架状态未知时显示提示，不阻塞其他内容。
 
@@ -152,7 +153,7 @@
 | `GALLERY_LIST_STALE_TIME = 2min` / `SEARCH_STALE_TIME = 5min` | `listStale()`：列表 2min、搜索 5min | 回到列表若仍新鲜则直接显示、滚动位置保留；`reloadList` 也不再先清空列表 |
 | `useReaderData` + `PageUrlStore` + 槽位漫画对象 | `Reader.total/pages` 槽位、`partial`、`applyStart`、`ensureSlots`/`trimSlots` | 见上 |
 | `useReadingProgressSync`（800ms 防抖、离开时 flush、先写缓存） | 600ms 防抖、`flushProgressNow`、`rememberReading` | 已有防抖与离开补写，新增本地进度缓存 |
-| 缩略图队列（`THUMBNAIL_CONCURRENCY = 5`） | 详情页缩略图网格虚拟化 + `ImageStore` 并发下载 | 两者策略不同（原生端按可见格构建），效果等价 |
+| 缩略图队列（`THUMBNAIL_CONCURRENCY = 5`） | 详情页每页 20 张缩略图 + `ImageStore` 并发下载 | 与 main 的 `PageThumbnailGrid` 相同：一次请求当前页的格子，翻页按钮切换 |
 
 
 ### 2.5 图片管线

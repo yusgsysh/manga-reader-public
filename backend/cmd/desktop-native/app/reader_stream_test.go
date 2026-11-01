@@ -106,7 +106,7 @@ func TestReaderShowsStreamedPages(t *testing.T) {
 		writeJSON(w, map[string]any{"page": 0, "page_size": 25, "total": 1,
 			"results": []map[string]any{galleryItem(1, "tok1", "慢画廊", "manga", total)}})
 	})
-	mux.HandleFunc("/api/gallery/1/tok1", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/gallery/1/tok1/details", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"id": 1, "token": "tok1", "title": "慢画廊",
 			"category": "manga", "page_count": total,
 			"tags": []map[string]string{{"namespace": "female", "name": "yuri"}}})
@@ -186,7 +186,7 @@ func TestReaderFailureDoesNotLoop(t *testing.T) {
 		writeJSON(w, map[string]any{"page": 0, "page_size": 25, "total": 1,
 			"results": []map[string]any{galleryItem(1, "tok1", "坏画廊", "manga", 5)}})
 	})
-	mux.HandleFunc("/api/gallery/1/tok1", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/gallery/1/tok1/details", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"id": 1, "token": "tok1", "title": "坏画廊",
 			"category": "manga", "page_count": 5,
 			"tags": []map[string]string{{"namespace": "female", "name": "yuri"}}})

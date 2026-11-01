@@ -100,13 +100,14 @@ func newFakeServerWithHooks(t *testing.T, onImage func(r *http.Request)) *httpte
 
 	detail := map[string]any{
 		"id": 1, "token": "tok1", "title": "示例 A", "title_jpn": "サンプル A",
-		"category": "doujinshi", "thumbnail": "https://img.example/1.jpg",
+		"category": "doujinshi", "cover": "https://img.example/1.jpg",
 		"page_count": 3, "rating": 4.5, "rating_count": 10, "uploader": "tester",
-		"posted_at": "2026-01-02", "file_size": "1 MB",
+		"posted": "2026-01-02", "file_size": "1 MB",
+		"language": "Chinese", "translated": true, "favorited": 3, "torrent_count": 1,
 		"tags": []map[string]string{{"namespace": "female", "name": "yuri"}},
 	}
-	mux.HandleFunc("/api/gallery/1/tok1", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, detail) })
-	mux.HandleFunc("/api/gallery-cache/1/tok1", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, detail) })
+	mux.HandleFunc("/api/gallery/1/tok1/details", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, detail) })
+	mux.HandleFunc("/api/gallery-cache/1/tok1/details", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, detail) })
 	mux.HandleFunc("/api/gallery/1/tok1/pages", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		flusher, _ := w.(http.Flusher)
@@ -125,6 +126,13 @@ func newFakeServerWithHooks(t *testing.T, onImage func(r *http.Request)) *httpte
 				"posted": "2026-10-02 06:30", "seeds": 8, "peers": 4,
 				"downloads": 12, "uploader": "Konazumi"},
 		}})
+	})
+	mux.HandleFunc("/api/gallery/1/tok1/torrents/2250081/info", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{
+			"posted": "2026-10-02 06:30", "seeds": 8, "uploader": "Konazumi",
+			"dlers": 4, "size": "42.13 MiB", "completes": 12,
+			"comments": "Scanned by Konazumi.", "personalized": false,
+		})
 	})
 	mux.HandleFunc("/api/gallery/1/tok1/torrents/2250081/download", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("variant") != "redistributable" {
@@ -373,8 +381,8 @@ func newFakeServerWithHooks(t *testing.T, onImage func(r *http.Request)) *httpte
 		"id": 2, "token": "tok2", "title": "示例 B", "category": "manga",
 		"page_count": 4, "tags": []map[string]string{{"namespace": "tag", "name": "full color"}},
 	}
-	mux.HandleFunc("/api/gallery/2/tok2", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, detail2) })
-	mux.HandleFunc("/api/gallery-cache/2/tok2", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, detail2) })
+	mux.HandleFunc("/api/gallery/2/tok2/details", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, detail2) })
+	mux.HandleFunc("/api/gallery-cache/2/tok2/details", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, detail2) })
 	pages2 := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		fmt.Fprintln(w, `{"type":"meta","total":4}`)
@@ -490,7 +498,7 @@ func TestPagesAppearWithoutTransition(t *testing.T) {
 	// thing that can hold them back, and it holds back the whole page, not
 	// the position of the controls on it.
 	waitText(t, tt, "开始阅读")
-	for _, label := range []string{"← 返回", "开始阅读"} {
+	for _, label := range []string{"返回", "开始阅读"} {
 		if _, ok := tt.Find(label); !ok {
 			t.Fatalf("%q is missing once the gallery has loaded; texts=%q", label, tt.Texts())
 		}
@@ -638,7 +646,7 @@ func TestGalleryToReader(t *testing.T) {
 		t.Fatalf("path after gallery click = %q", got)
 	}
 	waitText(t, tt, "开始阅读")
-	if !tt.HasText("female:yuri") {
+	if !tt.HasText("yuri") || !tt.HasText("female") {
 		t.Errorf("gallery tags missing; texts=%q", tt.Texts())
 	}
 
@@ -720,10 +728,9 @@ func TestReaderPreloadsNearbyPages(t *testing.T) {
 	}
 }
 
-// TestThumbnailMarksSavedPage covers the grid's mark: the page the reader
-// would open at carries a border, so the detail page says where reading
-// stopped.
-func TestThumbnailMarksSavedPage(t *testing.T) {
+// TestThumbnailTracksSavedPage covers the saved page the detail page works
+// out: the reading progress and the page its button would open agree.
+func TestThumbnailTracksSavedPage(t *testing.T) {
 	savedPage.Lock()
 	savedPage.n = 2
 	savedPage.Unlock()
@@ -739,7 +746,7 @@ func TestThumbnailMarksSavedPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "共 3 页 · 点击跳转")
+	waitText(t, tt, "共 3 页")
 
 	// The saved page arrives in the background; the frame reads it under the
 	// app's lock, so the test waits for it the same way.
@@ -757,7 +764,7 @@ func TestThumbnailMarksSavedPage(t *testing.T) {
 	if reading != 2 {
 		t.Fatalf("reading = %d, want page 2", reading)
 	}
-	// The grid's mark is the page the button would open.
+	// The button opens the page the progress saved.
 	if next >= 0 && next != reading {
 		t.Fatalf("button offers page %d, grid marks %d", next+1, reading+1)
 	}
@@ -796,7 +803,7 @@ func TestThumbnailFailureRetries(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "共 3 页 · 点击跳转")
+	waitText(t, tt, "共 3 页")
 	waitText(t, tt, "加载失败")
 
 	mu.Lock()
@@ -904,7 +911,7 @@ func TestDetailThumbnailGridJumpsToPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "共 3 页 · 点击跳转")
+	waitText(t, tt, "共 3 页")
 
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
@@ -932,6 +939,42 @@ func TestDetailThumbnailGridJumpsToPage(t *testing.T) {
 		t.Fatalf("path after thumbnail click = %q", p)
 	}
 	waitText(t, tt, "2 / 3 页")
+}
+
+// TestDetailThumbnailPager covers the gallery page's paged thumbnail grid:
+// main lists twenty pages at a time, and the pager moves between the pages
+// without fetching a second list.
+func TestDetailThumbnailPager(t *testing.T) {
+	a, tt := newTestApp(t)
+	waitText(t, tt, "示例 A")
+	if err := tt.Click("示例 A"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	waitText(t, tt, "开始阅读")
+	// A tall window, so the pager under a page of thumbnails is on screen.
+	tt.SetSize(1280, 2400)
+	tt.Frame()
+
+	a.update(func() { a.details[1].g.Pages = 25 })
+	tt.Frame()
+	if !tt.HasText("第 1 页") || tt.HasText("第 21 页") {
+		t.Fatalf("first grid page shows the wrong cells; texts=%q", tt.Texts())
+	}
+	if err := tt.Click("下一页"); err != nil {
+		t.Fatalf("click 下一页: %v", err)
+	}
+	tt.Frame()
+	if !tt.HasText("第 21 页") || tt.HasText("第 1 页") {
+		t.Fatalf("second grid page shows the wrong cells; texts=%q", tt.Texts())
+	}
+	if err := tt.Click("上一页"); err != nil {
+		t.Fatalf("click 上一页: %v", err)
+	}
+	tt.Frame()
+	if !tt.HasText("第 1 页") {
+		t.Fatalf("previous page did not return to the first; texts=%q", tt.Texts())
+	}
 }
 
 // TestReaderTapZones covers the reading area's tap zones as comimi splits
@@ -1108,22 +1151,22 @@ func TestDownloadsStartAndPoll(t *testing.T) {
 	navSettle(tt)
 	waitText(t, tt, "开始阅读")
 
-	if err := tt.Click("离线下载"); err != nil {
-		t.Fatalf("click 离线下载: %v", err)
+	if err := tt.Click("下载"); err != nil {
+		t.Fatalf("click 下载: %v", err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		tt.Frame()
-		if tt.HasText("查看下载") {
+		if a.details[1] != nil && a.details[1].downloadJob != "" {
 			break
 		}
 		time.Sleep(2 * time.Millisecond)
 	}
-	if !tt.HasText("查看下载") {
-		t.Fatalf("detail page does not offer 查看下载; texts=%q", tt.Texts())
+	if a.details[1] == nil || a.details[1].downloadJob == "" {
+		t.Fatalf("detail page did not queue a job; texts=%q", tt.Texts())
 	}
-	if err := tt.Click("查看下载"); err != nil {
-		t.Fatalf("click 查看下载: %v", err)
+	if err := tt.Click("下载管理"); err != nil {
+		t.Fatalf("click 下载管理: %v", err)
 	}
 	deadline = time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
@@ -1134,7 +1177,7 @@ func TestDownloadsStartAndPoll(t *testing.T) {
 		time.Sleep(2 * time.Millisecond)
 	}
 	if p := a.router.Path(); p != "/downloads" {
-		t.Fatalf("path after 查看下载 = %q", p)
+		t.Fatalf("path after 下载管理 = %q", p)
 	}
 
 	// The fake backend reports running twice, then completed. The page arms a
@@ -1904,7 +1947,7 @@ func TestTagRuleColoursGalleryChips(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "female:yuri")
+	waitText(t, tt, "yuri")
 
 	rule := a.tagRule("female:yuri")
 	if rule == nil || rule.Action != TagDislike {
@@ -2056,8 +2099,8 @@ func TestGalleryTorrents(t *testing.T) {
 	if a.details[1].torrents.loaded {
 		t.Fatal("torrents loaded before the user asked")
 	}
-	if err := tt.Click("查看种子"); err != nil {
-		t.Fatalf("click 查看种子: %v", err)
+	if err := tt.Click("种子下载 (1)"); err != nil {
+		t.Fatalf("click 种子下载: %v", err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
@@ -2069,6 +2112,18 @@ func TestGalleryTorrents(t *testing.T) {
 	}
 	if !tt.HasText("[Yanje] 示例 A.zip") {
 		t.Fatalf("torrent row missing; texts=%q", tt.Texts())
+	}
+
+	// The row's Information view is fetched the first time it opens.
+	if err := tt.Click("Information"); err != nil {
+		t.Fatalf("click Information: %v", err)
+	}
+	waitText(t, tt, "做种：8")
+	if !tt.HasText("Scanned by Konazumi.") {
+		t.Fatalf("torrent information missing; texts=%q", tt.Texts())
+	}
+	if err := tt.Click("收起详情"); err != nil {
+		t.Fatalf("click 收起详情: %v", err)
 	}
 
 	if err := tt.Click("下载种子"); err != nil {
@@ -2179,7 +2234,7 @@ func TestTagTranslationColoursChips(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "百合 / female:yuri")
+	waitText(t, tt, "百合")
 }
 
 // TestTagTranslationCachedLoad checks Load reads the cached file and parses it
@@ -2330,7 +2385,7 @@ func TestShelfShowsCompleted(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "重读")
+	waitText(t, tt, "重新阅读")
 }
 
 func TestGalleryContinueReading(t *testing.T) {
@@ -2785,7 +2840,7 @@ func TestDownloadToastAndOpen(t *testing.T) {
 	}
 	navSettle(tt)
 	waitText(t, tt, "开始阅读")
-	if err := tt.Click("离线下载"); err != nil {
+	if err := tt.Click("下载"); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
