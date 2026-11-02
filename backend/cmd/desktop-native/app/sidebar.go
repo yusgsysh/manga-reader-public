@@ -85,12 +85,17 @@ func (a *App) navItem(c *ui.Context, path string, mark *ui.SVG, label string) {
 	} else {
 		item.Gap(12).PaddingX(12)
 	}
+	bg := ui.Color{}
 	switch {
 	case selected:
-		item.Background(t.Accent)
+		bg = t.Accent
 	case item.Hovered():
-		item.Background(t.SurfaceHover)
+		bg = t.SurfaceHover
 	}
+	// The pill fades between its states instead of blinking on and off. A
+	// colour animation runs on its own; typing a new page does not wait for
+	// the old one to finish.
+	item.Background(item.AnimateColor("nav-tint", bg, tintFade))
 	if a.sidebarCollapsed {
 		item.Tooltip(label)
 	}
@@ -98,6 +103,8 @@ func (a *App) navItem(c *ui.Context, path string, mark *ui.SVG, label string) {
 	if selected {
 		iconColor, textColor = t.AccentText, t.AccentText
 	}
+	iconColor = item.AnimateColor("nav-icon", iconColor, tintFade)
+	textColor = item.AnimateColor("nav-text", textColor, tintFade)
 	item.Children(func() {
 		ui.Icon(c, mark).Size(20, 20).TextColor(iconColor)
 		if !a.sidebarCollapsed {
@@ -157,16 +164,21 @@ func (a *App) themeCell(c *ui.Context, t *ui.Theme, value string, mark *ui.SVG, 
 	} else {
 		cell.Grow(1).Height(34)
 	}
-	if active {
-		cell.Background(t.Background).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12))
-	} else if cell.Hovered() {
-		cell.Background(t.SurfaceHover)
+	bg := ui.Color{}
+	switch {
+	case active:
+		bg = t.Background
+		cell.Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12))
+	case cell.Hovered():
+		bg = t.SurfaceHover
 	}
+	cell.Background(cell.AnimateColor("theme-tint", bg, tintFade))
 	cell.Children(func() {
 		color := t.TextMuted
 		if active {
 			color = t.Accent
 		}
+		color = cell.AnimateColor("theme-icon", color, tintFade)
 		ui.Icon(c, mark).Size(16, 16).TextColor(color)
 	})
 	if cell.Clicked() && !active {

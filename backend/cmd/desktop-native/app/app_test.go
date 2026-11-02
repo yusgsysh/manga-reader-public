@@ -460,25 +460,27 @@ func newTestApp(t *testing.T) (*App, *ui.Tester) {
 	return a, tt
 }
 
-// navSettle is what navigation used to need: the router's page transition
-// offset a page until it ended, so a click on its controls would miss. Pages
-// appear at once now (newRouter), so it has nothing to wait for; the calls
-// stay, so a transition reintroduced later has one place to settle.
-func navSettle(*ui.Tester) {}
+// navSettle runs the router's fade to its end. The page is already laid out
+// where it will stay, so a click never needs this; a snapshot does, and so
+// does a test that expects the page it left to be gone from the tree.
+func navSettle(tt *ui.Tester) {
+	tt.Advance(pageFade.Duration + 50*time.Millisecond)
+	tt.Frame()
+}
 
-// TestPagesAppearWithoutTransition checks a navigation is not animated: the
-// router switches at once and the next frame is laid out where the page sits,
-// with no offset to wait out before its controls can be hit.
+// TestPagesFadeInPlace checks navigation animates without moving anything: the
+// router crossfades, the new page is in its final layout in the frame it
+// appears, and its controls can be hit while the fade is still running.
 //
 // It does not check that a page's data has arrived by then. The loads run in
 // goroutines, so a page that has not got its data yet says it is loading in a
-// frame of its own; what the test pins down is that nothing animates, which is
-// what used to move a control out from under a click.
-func TestPagesAppearWithoutTransition(t *testing.T) {
+// frame of its own; what the test pins down is that the fade is opacity only,
+// which is what lets a control be clicked at once.
+func TestPagesFadeInPlace(t *testing.T) {
 	a, tt := newTestApp(t)
 	waitText(t, tt, "示例 A")
-	if got := a.router.Transition; got != ui.TransitionNone {
-		t.Fatalf("router transition = %v, want ui.TransitionNone", got)
+	if got := a.router.Transition; got != ui.TransitionFade {
+		t.Fatalf("router transition = %v, want ui.TransitionFade", got)
 	}
 
 	// Into a gallery: the router is on the page in this very frame, and the
@@ -514,16 +516,16 @@ func TestPagesAppearWithoutTransition(t *testing.T) {
 	}
 	waitText(t, tt, "第 1 / 3 页")
 	// The overlay opens with the page and hides itself after a few idle
-	// seconds; while it is up, its controls are there in the page's first
-	// frames, not after a fade.
+	// seconds; while it is up, its controls are in place in the page's first
+	// frames even while the overlay's fade is still running.
 	showReaderOverlay(t, a, tt)
 	if _, ok := tt.Find("阅读器菜单"); !ok {
 		t.Fatalf("reader controls missing in the page's first frames; texts=%q", tt.Texts())
 	}
 
 	// Across pages from the sidebar: the new page's heading is there in the
-	// frame it first shows, not after a fade. The reader hides the sidebar, so
-	// leave it first.
+	// frame it first shows, while the crossfade runs. The reader hides the
+	// sidebar, so leave it first.
 	if err := tt.Click("返回画廊"); err != nil {
 		t.Fatalf("click the reader's back: %v", err)
 	}
@@ -577,7 +579,9 @@ func waitText(t *testing.T, tt *ui.Tester, s string) {
 
 // showReaderOverlay puts the reader's overlay up, with its controls, and
 // renders it: the overlay hides itself after a few idle seconds, and a test
-// that clicks a control needs it to still be there.
+// that clicks a control needs it to still be there. The fade is run to its
+// end so a snapshot shows the controls at full strength; the idle wait is
+// still seconds away.
 func showReaderOverlay(t *testing.T, a *App, tt *ui.Tester) {
 	t.Helper()
 	a.update(func() {
@@ -586,6 +590,7 @@ func showReaderOverlay(t *testing.T, a *App, tt *ui.Tester) {
 		a.reader.guide = false
 		a.markActivity()
 	})
+	tt.Advance(overlayFade + 50*time.Millisecond)
 	tt.Frame()
 }
 

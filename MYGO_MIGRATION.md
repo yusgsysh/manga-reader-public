@@ -46,7 +46,8 @@
 - [x] 图片占位也加动画：封面（列表卡片、详情大图）、页面缩略图、阅读器页面在真实图片下载期间，其占位（渐变图或空盒）上居中叠一个 `loading.Ring`（24 DIP、强调色），即 `app/loading.go` 的 `imageLoadingCenter`；`ImageStore` 新增 `Loading(url)` 查询"正在下载"。新增 3 条英文键已补中文翻译。
 - [x] 重做占位图观感：`gradientBitmap` 由原来的斜向双色混合 + 正弦丝带 + 硬横条改为平滑对角渐变 + 两处低对比柔光 + 轻微暗角，配色换成协调的 12 组暗调（每组渐变两端 + 高光色），角度/柔光位置随种子变化。仍是纯算术逐像素、无高频噪声，冷启动首帧仍 ~91ms（预算 1s）。
 - [x] 去掉刷新按钮、改自动刷新：列表页（首页/订阅/热门/书架/最近阅读）每 45s 后台静默刷新第一页（`scheduleRefresh`/`refreshList`，失败保留旧内容不报错）；下载管理页空闲时每 10s 合并式刷新（`refreshDownloadsIdle`，只追加新任务、不覆盖已轮询的行）。标签设置页与详情页 Torrents 的刷新按钮删除，仅进入时加载一次，不周期刷新。搜索页在输入为空时不再请求 `/api/search`，只显示「输入关键词」提示。
-- [x] 去掉页面间切换动画：原先没给 `ui.Router` 指定过渡方式，落在 mygo 默认的 `TransitionAuto` 上——侧边栏切页整页 150ms 淡入，进入详情/阅读器 250ms 横向滑入（滑动时还要重建离开的整页）。现由 `app.newRouter()` 设为 `ui.TransitionNone`，页面即时出现；`View` 开头再调 `c.DisableAnimations()`，页内状态变化（加载完成、列表项落位、进度条步进）也不做位移/淡入。阅读器骨架加 `Key("reader")` 保持同一元素。`ReduceMotion` 与加载指示（`plugins/loading`，独立时间线）不受影响；测试里 `navSettle` 随之空转，新增 `TestPagesAppearWithoutTransition` 守住「首帧即完整可见」。
+- [x] 页面切换动画：先去掉过场（mygo 默认 150ms 淡入 / 250ms 横向滑入会移动控件并重建离开的整页），改回时选择**原地淡入**：`app.newRouter()` 用 `ui.TransitionFade` + 140ms `pageFade`，页面在首帧就落在最终位置，不滑动、不移动可点击控件，每帧只做合成。`View` 不再调用 `c.DisableAnimations()`，页内元素仍不会自发动画，除非显式给了 `Transition`/`Animate*`。测试与快照由 `navSettle` 推进时间结束淡入；`TestPagesFadeInPlace` 守住「淡入但控件立刻可点」。
+- [x] 控件动效（帧率优先）：封面悬停上浮与卡片按下缩放用 `ui.Element.AnimatePose`，弹簧帧只重绘、不重建视图（`TestCardHoverPaintsWithoutRebuilding` 守住）；侧栏选中项和主题分段控件用 `AnimateColor` 过渡底色；阅读器浮层用 `Key("reader-overlay")` + `overlayTransition()` 原地淡入，`PassThrough` 让控件之间的按压仍落到页面。所有动效都遵守 `ReduceMotion`。
 
 - [x] `.gitignore` 只放行 `backend/cmd/desktop-native/`，旧 Wails 构建目录继续忽略。
 - [x] 本机为旧 Wails 目录加了被忽略的嵌套 `backend/cmd/desktop/go.mod`，避免 `go build ./...` 扫描到 Wails 生成文件。**该文件不在仓库中，新克隆不需要。**
@@ -384,7 +385,7 @@
 - [ ] 性能基准
   - [x] 1000+ 页画廊滚动帧率：`BenchmarkScrollHome` / `BenchmarkScrollThumbnails` 以虚拟化网格渲染 1000 个画廊与 1000 页缩略图，滚动帧成本不随列表长度增长。
   - [x] 常驻内存目标 < 300MB：`TestMemoryUnderTarget` 实测 1000 页缩略图网格仅占 **约 1.4MB 堆**（远低于目标；GPU 路径下纹理另计）。
-  - [x] 滚动帧预算：`TestScrollingStaysUnderBudget` 实测 CPU 软件渲染器平均 **约 7.4ms/帧**（60fps 预算 16.7ms 内）；GPU 路径只会更快。
+  - [x] 滚动帧预算：`TestScrollingStaysUnderBudget` 实测 CPU 软件渲染器平均 **约 7.4ms/帧**（60fps 预算 16.7ms 内）；GPU 路径只会更快。动效加入后滚动基准改在 `ReduceMotion` 下测单帧（否则 Tester 的静止时钟会把悬停弹簧的 20 帧算进一次滚动），封面悬停本身是 painter-only，不产生额外重建帧。
   - [x] 冷启动 < 1s（不含后端首次抓取）：`TestColdStartUnderBudget` 实测首帧 **约 120ms**，列表出现约 146ms。
   - [x] `ImageStore` 淘汰改为真正的 LRU：命中会把条目移到最近使用端（旧实现按加载顺序 FIFO 淘汰，**会淘汰用户正在看的页**）；淘汰与 `Retry` 从 O(n) 扫描改为链表 O(1)，实测淘汰开销比旧实现低约 35%、分配少约 40%。
 - [~] 可访问性

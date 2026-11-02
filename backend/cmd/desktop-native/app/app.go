@@ -283,19 +283,19 @@ type detailState struct {
 	torrentsOpen bool
 }
 
-// newRouter builds the window's router with no page transition. Every page is
-// a list, a gallery or the reader, all a sidebar click or one gallery apart,
-// and both of mygo's defaults read as motion for its own sake: pages across
-// (every sidebar click, and coming back from a gallery to the reader) faded in
-// whole for 150 ms, and going deeper slid 250 ms, rebuilding the page left
-// behind for the slide. A page appears at once instead, as a native app's
-// window replaces its content. Changes inside a page (a load finishing, list
-// rows settling, the reader's progress bar) are instant too, through
-// c.DisableAnimations in View; loading indicators are untouched, as they play
-// timelines of their own rather than animating towards a target.
+// newRouter builds the window's router with a short crossfade between pages.
+// Every page is a list, a gallery or the reader, all a sidebar click or one
+// gallery apart. mygo's default slide is what the fade replaces: it moves the
+// incoming page 250 ms across, rebuilding the outgoing page for the whole
+// slide, and puts its controls somewhere other than where they land. The fade
+// keeps both pages in place for pageFade, which keeps clicks immediate and the
+// work per frame to compositing. Loading indicators play timelines of their
+// own rather than animating towards a target, so the fade does not hold them
+// back.
 func newRouter() *ui.Router {
 	r := ui.NewRouter("/")
-	r.Transition = ui.TransitionNone
+	r.Transition = ui.TransitionFade
+	r.Animation = &pageFade
 	return r
 }
 
@@ -520,11 +520,10 @@ func (a *App) View(c *ui.Context) {
 	// The view is a function of the state, so what changes between frames is
 	// data arriving, not a person moving: a page's loader giving way to its
 	// content, the reader growing a toolbar, a list row appearing, the
-	// progress bar stepping. Those show at once rather than sliding or fading
-	// on their own, and a load finishing never blurs the page it lands on.
-	// Navigating is instant already (newRouter); the desktop's Reduce Motion
-	// preference still applies to anything that does animate.
-	c.DisableAnimations()
+	// progress bar stepping. Those show at once, without an element transition
+	// of their own; only navigation and the reader's chrome fade, and the
+	// controls that say they take a press move. The desktop's Reduce Motion
+	// preference applies to both.
 
 	if a.backend != nil && a.showSetup {
 		a.setupView(c)
@@ -1155,6 +1154,13 @@ func (a *App) flowCard(c *ui.Context, g Gallery) {
 func (a *App) cardContent(c *ui.Context, cell ui.Element, g Gallery) {
 	t := c.Theme()
 	hovered := cell.Hovered()
+	// A card gives under the press. Like the hover lift this is a pose, so
+	// holding the pointer down does not rebuild the page every frame.
+	scale := float32(1)
+	if cell.Pressed() {
+		scale = 0.985
+	}
+	cell.AnimatePose(ui.Pose{Scale: scale}, hoverLift)
 	cell.Children(func() {
 		a.coverBox(c, g, hovered)
 		ui.Column(c).Gap(6).Padding(8, 0, 0, 0).Children(func() {
@@ -1224,11 +1230,16 @@ func (a *App) coverBox(c *ui.Context, g Gallery, hovered bool) {
 	// rounded card and gives the card the same height whatever loads.
 	box := ui.Box(c).AspectRatio(3.0/4.0).FillWidth().Radius(coverRadius).Clip().
 		Background(t.SurfaceHover).Border(1, t.Border.Alpha(0.7))
+	// Main lifts the cover two points as the pointer rests on the card. The
+	// lift is a pose, so the frames of the spring are painted without
+	// rebuilding the grid underneath them; a pointer crossing a row of cards
+	// costs one build per card, not one per frame.
+	lift := float32(0)
 	if hovered {
-		// Main lifts the cover two points and puts a shadow under it as the
-		// pointer rests on the card.
-		box.Translate(0, -2).Shadow(0, 10, 15, 0, ui.RGBA(0, 0, 0, 0.15))
+		lift = -2
+		box.Shadow(0, 10, 15, 0, ui.RGBA(0, 0, 0, 0.15))
 	}
+	box.AnimatePose(ui.Pose{Y: lift}, hoverLift)
 	loading := a.images.Loading(g.CoverURL)
 	coverFailed := a.images.Err(g.CoverURL) != ""
 	box.Children(func() {
