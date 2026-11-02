@@ -149,18 +149,7 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load gallery cache failed: %v", err)})
 		return
 	}
-	metaByRef := make(map[gallerycache.Ref]*model.Gallery, len(entries))
-	for ref, row := range entries {
-		metaByRef[ref] = &model.Gallery{
-			ID:        row.GalleryID,
-			Token:     row.Token,
-			Title:     row.Title,
-			TitleJPN:  row.TitleJpn,
-			Category:  model.GalleryCategory(row.Category),
-			Thumbnail: row.Thumbnail,
-			PageCount: row.PageCount,
-		}
-	}
+	metaByRef := galleryMetaByRef(entries)
 	s.fillShelfMeta(ctx, refs, metaByRef)
 
 	for _, b := range items {
