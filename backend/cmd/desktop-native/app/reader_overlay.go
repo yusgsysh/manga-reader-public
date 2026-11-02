@@ -18,24 +18,32 @@ import (
 // readerOverlay draws the overlay over the page.
 func (a *App) readerOverlay(c *ui.Context, r *Reader) {
 	look := readerLookOf(r)
-	// The menu and the settings are cards of their own; the pill stays for the
-	// settings so the title and the way to the menu never move.
-	if !r.panel.isMenu() {
-		a.readerPill(c, r)
-	}
-	a.readerSideArrows(c, r, look)
-	if r.panel == panelNone {
-		a.readerCenterHint(c, r)
-	}
-	a.readerDock(c, r)
-	// Panels come last so they cover the chevrons they reach, as comimi's
-	// settings card does.
-	if r.panel.isMenu() {
-		a.readerMenu(c, r)
-	}
-	if r.panel == panelSettings {
-		a.readerSettingsPanel(c, r)
-	}
+	// The chrome fades in where it sits, over the page. The frame is
+	// pass-through, so a press between controls is still a press on the page,
+	// and an element transition keeps the fade to compositing rather than
+	// re-laying the dock out on every frame of it.
+	frame := ui.Box(c).Fill().PassThrough().Key("reader-overlay").
+		Transition(overlayTransition())
+	frame.Children(func() {
+		// The menu and the settings are cards of their own; the pill stays for
+		// the settings so the title and the way to the menu never move.
+		if !r.panel.isMenu() {
+			a.readerPill(c, r)
+		}
+		a.readerSideArrows(c, r, look)
+		if r.panel == panelNone {
+			a.readerCenterHint(c, r)
+		}
+		a.readerDock(c, r)
+		// Panels come last so they cover the chevrons they reach, as comimi's
+		// settings card does.
+		if r.panel.isMenu() {
+			a.readerMenu(c, r)
+		}
+		if r.panel == panelSettings {
+			a.readerSettingsPanel(c, r)
+		}
+	})
 }
 
 // readerPill is the floating title card at the top left: the menu button, the

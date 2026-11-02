@@ -108,6 +108,12 @@ func BenchmarkScrollHome(b *testing.B) {
 	defer srv.Close()
 	a := New(NewClient(srv.URL))
 	tt := ui.NewTester(a.View, 1280, 860)
+	// The scroll benchmarks measure the cost of one scroll frame. With the
+	// pointer resting over the grid, the hover spring would keep asking for
+	// frames the Tester's still clock cannot finish, so a scroll would time
+	// twenty frames of a spring rather than the frame being measured. Reduce
+	// Motion settles poses at once, as the instant-motion baseline did.
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
 	waitTextB(b, tt, "示例画廊 1")
 
 	b.ResetTimer()
@@ -123,6 +129,7 @@ func BenchmarkScrollThumbnails(b *testing.B) {
 	defer srv.Close()
 	a := New(NewClient(srv.URL))
 	tt := ui.NewTester(a.View, 1280, 860)
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
 	waitTextB(b, tt, "示例画廊 1")
 	if err := tt.Click("示例画廊 1"); err != nil {
 		b.Fatal(err)

@@ -245,7 +245,10 @@ func TestContinueRowPagesWithButton(t *testing.T) {
 	if err := tt.Click("下一页"); err != nil {
 		t.Fatalf("page the strip: %v", err)
 	}
-	tt.Frame()
+	// The strip glides to its next page now that the app no longer disables
+	// the framework's animations; run the spring out before reading where it
+	// stopped.
+	tt.Advance(600 * time.Millisecond)
 	tt.Frame()
 	a.mu.Lock()
 	after := a.continueScroll.X
