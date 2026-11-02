@@ -49,6 +49,10 @@ func TestReaderZoomControls(t *testing.T) {
 	tt.Frame()
 	a.update(func() { a.closeOverlay(&a.reader) })
 	tt.Frame()
+	// The chrome slides away first; the badge is what is left once it has.
+	waitFor(t, tt, "the reader's chrome to finish closing", func() bool {
+		return a.reader.overlayClosedAt.IsZero()
+	})
 	if !tt.HasText("125%") {
 		t.Fatalf("hidden overlay leaves no zoom badge; texts=%q", tt.Texts())
 	}

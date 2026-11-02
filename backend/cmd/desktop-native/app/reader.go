@@ -95,15 +95,28 @@ type Reader struct {
 
 	// The read, as comimi keeps it: an overlay over the page, a panel inside
 	// it, and the zoom and pan of the shown pages.
-	settings  readerSettings
-	overlay   bool
-	panel     readerPanel
-	guide     bool
-	auto      bool
-	zoom      float32
-	panX      float32
-	panY      float32
-	drag      float32
+	settings readerSettings
+	overlay  bool
+	panel    readerPanel
+	guide    bool
+	auto     bool
+	zoom     float32
+	panX     float32
+	panY     float32
+	drag     float32
+	// overlayAt is when the overlay last came up, and overlayClosedAt when it
+	// last went away: the chrome slides and fades between the two, and the
+	// cards stay built until the closing motion has run (see chromeMotion).
+	overlayAt       time.Time
+	overlayClosedAt time.Time
+	// snapping is a drag easing back to rest after a release, from dragFrom
+	// at dragAt, rather than cutting to the place it started. dragStart is
+	// how far the stage was dragged when the current press began, so a press
+	// that catches a snap-back carries on from where the page is.
+	snapping  bool
+	dragFrom  float32
+	dragAt    time.Time
+	dragStart float32
 	fav       map[int]bool
 	toast     string
 	toastKind toastTone
@@ -139,10 +152,13 @@ type Reader struct {
 	longPressPage          int
 
 	// The turn animation: the group drawn sliding out, the time it started,
-	// and the page it lands on when it finishes.
-	turnDir  pageGroupPlacement
-	turnFrom pageGroup
-	turnAt   time.Time
+	// the page it lands on when it finishes, and how far the stage was
+	// dragged when it began, so the slide carries on from the release rather
+	// than restarting at rest.
+	turnDir   pageGroupPlacement
+	turnFrom  pageGroup
+	turnAt    time.Time
+	turnBaseX float32
 
 	// autoSince is when the page up under auto page turn was shown.
 	autoSince time.Time
@@ -170,6 +186,17 @@ type Reader struct {
 func (r *Reader) resetView() {
 	r.zoom = 1
 	r.panX, r.panY = 0, 0
+}
+
+// dragShown is how far the stage is dragged now: the pointer's distance while
+// the page is held, and the eased way back to rest after a release, as
+// comimi's stage transition returns a released drag.
+func (r *Reader) dragShown(now time.Time) float32 {
+	if !r.snapping {
+		return r.drag
+	}
+	progress := clampFloat(float32(now.Sub(r.dragAt))/float32(turnAnimation), 0, 1)
+	return r.dragFrom * (1 - stageEase(progress))
 }
 
 // maxZoom is the largest zoom the reader allows, as comimi's default of 4.
@@ -247,11 +274,16 @@ func (a *App) ensureReader(id int64, token string, offline bool) {
 	r.preloaded = nil
 	r.resetView()
 	r.drag = 0
+	r.dragStart = 0
+	r.snapping = false
+	r.dragFrom = 0
 	// The overlay opens by itself on a new gallery, with the reading
 	// direction guide, as comimi's splash gives way to it (see startGuide).
 	// Its auto-hide clock starts now: an overlay that opened without activity
 	// would be counted as idle since the clock's zero and hide at once.
 	r.overlay = true
+	r.overlayAt = time.Now()
+	r.overlayClosedAt = time.Time{}
 	a.markActivity()
 	r.panel = panelNone
 	r.auto = false
@@ -532,8 +564,12 @@ func (a *App) turnPage(r *Reader, direction pageGroupPlacement, animated bool) b
 		r.turnDir = direction
 		r.turnFrom = a.shownGroup()
 		r.turnAt = time.Now()
+		// Start where the swipe left the page, so a release does not snap
+		// back to rest before the slide sets off.
+		r.turnBaseX = r.drag
 		return true
 	}
+	r.turnBaseX = 0
 	a.commitTurn(r, direction, next)
 	return true
 }
@@ -541,7 +577,11 @@ func (a *App) turnPage(r *Reader, direction pageGroupPlacement, animated bool) b
 // commitTurn lands a turn on group next.
 func (a *App) commitTurn(r *Reader, direction pageGroupPlacement, next pageGroup) {
 	r.turnDir = groupCurrent
+	r.turnBaseX = 0
 	r.drag = 0
+	r.dragStart = 0
+	r.snapping = false
+	r.dragFrom = 0
 	// Land on the first page of the new group, so a spread opened from its
 	// second page shows the same pair.
 	r.page = pageGroupFirst(next)
@@ -549,7 +589,6 @@ func (a *App) commitTurn(r *Reader, direction pageGroupPlacement, next pageGroup
 	a.saveProgress(r)
 }
 
-// finishTurn completes an animated turn once its slide has run.
 // finishTurn completes a turn once its slide has run. A turn is a slide of
 // turnAnimation; the reader asks for the frames that carry it, and it lands
 // when its time is up.
@@ -685,6 +724,30 @@ func (a *App) readerTick(r *Reader) bool {
 		a.finishTurn(r)
 		pending = r.turnDir != groupCurrent
 	}
+	if r.snapping {
+		if time.Since(r.dragAt) >= turnAnimation {
+			r.snapping = false
+			r.drag = 0
+			r.dragFrom = 0
+		} else {
+			pending = true
+		}
+	}
+	// The chrome comes in and goes out over a few frames of its own; the
+	// cards stay built while it goes so the exit is seen, not cut.
+	if r.overlay && time.Since(r.overlayAt) < chromeEnter {
+		pending = true
+	}
+	if !r.overlayClosedAt.IsZero() {
+		if time.Since(r.overlayClosedAt) >= chromeExit {
+			r.overlayClosedAt = time.Time{}
+		} else {
+			pending = true
+		}
+	}
+	if r.toast != "" && time.Since(r.toastAt) < toastPop {
+		pending = true
+	}
 	if r.auto && !r.overlay && r.panel == panelNone && r.loaded && r.turnDir == groupCurrent {
 		interval := time.Duration(r.settings.autoInterval()) * time.Millisecond
 		if !r.autoSince.IsZero() && time.Since(r.autoSince) >= interval {
@@ -705,6 +768,9 @@ func (a *App) readerTick(r *Reader) bool {
 	}
 	if r.overlay && r.panel == panelNone && autoHide {
 		a.closeOverlay(r)
+		// The cards need frames to slide away; the exit check above runs
+		// before this close, on the frame after it.
+		pending = true
 	}
 	// A toast that appeared this frame is shown at least once, then timed.
 	if r.toast != "" && time.Since(r.toastAt) >= toastDuration {
@@ -795,15 +861,31 @@ func (a *App) setAuto(r *Reader, on bool) {
 }
 
 // closeOverlay hides the overlay and the panel in it, as tapping the middle
-// of the page does.
+// of the page does. The cards stay built for chromeExit while they slide away
+// (see readerTick), so closing is a motion rather than a cut.
 func (a *App) closeOverlay(r *Reader) {
+	if !r.overlay {
+		return
+	}
 	r.overlay = false
+	r.overlayClosedAt = time.Now()
 	r.panel = panelNone
+}
+
+// showOverlay brings the overlay up, starting the chrome's entrance only when
+// it was away: opening a panel over a visible overlay leaves it where it is.
+func (a *App) showOverlay(r *Reader) {
+	if !r.overlay {
+		r.overlay = true
+		r.overlayAt = time.Now()
+		r.overlayClosedAt = time.Time{}
+	}
+	a.markActivity()
 }
 
 // openPanel shows the overlay with a panel in it.
 func (a *App) openPanel(r *Reader, p readerPanel) {
-	r.overlay = true
+	a.showOverlay(r)
 	r.panel = p
 	// The page list opens on the page being read, not at its first page: a
 	// long gallery is otherwise a scroll back to where the reader was.

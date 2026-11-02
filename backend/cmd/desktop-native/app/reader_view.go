@@ -66,7 +66,9 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 			a.emptyPage(c, i18n.T("No pages"), i18n.T("This gallery has no readable pages"), "")
 		default:
 			a.readerStageView(c, r)
-			if r.overlay {
+			// The cards stay a moment after the overlay goes so their exit is
+			// seen; the hint comes back once they are gone (see readerTick).
+			if r.overlay || !r.overlayClosedAt.IsZero() {
 				a.readerOverlay(c, r)
 			} else {
 				a.readerZoomBadge(c, r)
@@ -166,8 +168,7 @@ func (a *App) readerGroupView(c *ui.Context, g pageGroup, zoom, panX, panY float
 
 // readerHint is the one line left on the page while the overlay is away: where
 // the reader is, faint at the bottom, as a viewer that keeps out of the way
-// does. While the page list still streams it says how much has arrived, so a
-// big gallery looks like it is loading rather than stuck.
+// does.
 func (a *App) readerHint(c *ui.Context, r *Reader) {
 	if !r.loaded || len(r.pages) == 0 {
 		return
@@ -180,32 +181,20 @@ func (a *App) readerHint(c *ui.Context, r *Reader) {
 		Children(func() {
 			ui.Box(c).Padding(4, 10).Radius(999).Background(look.glass).
 				Shadow(0, 2, 10, 0, look.shadow).PassThrough().Children(func() {
-				ui.Text(c, a.readerCountText(r, true)).FontSize(11).
+				ui.Text(c, a.readerCountText(r)).FontSize(11).
 					TextColor(look.muted)
 			})
 		})
 }
 
-// readerCountText is the page count the hints and the dock show: a spread's
-// range, and how much of a streamed list has arrived (see readerStreamText).
-func (a *App) readerCountText(r *Reader, withStream bool) string {
-	if withStream && !r.complete {
-		return a.readerStreamText(r)
-	}
+// readerCountText is the page count the hint and the dock show: a spread's
+// range, 1-based as pages are counted.
+func (a *App) readerCountText(r *Reader) string {
 	g := a.shownGroup()
 	if a.reader.narrow || !r.settings.double {
 		return i18n.Sprintf(i18n.T("Page %d / %d"), pageGroupFirst(g)+1, len(r.pages))
 	}
 	return i18n.Sprintf(i18n.T("Pages %s / %d"), pageGroupText(g), len(r.pages))
-}
-
-// readerStreamText says how many pages of a still-streaming list have arrived,
-// so a big gallery does not look stuck while upstream scrapes it.
-func (a *App) readerStreamText(r *Reader) string {
-	if r.total > 0 && r.partial < r.total {
-		return i18n.Sprintf(i18n.T("%d / %d pages"), r.partial, r.total)
-	}
-	return a.readerCountText(r, false)
 }
 
 // readerKeys takes the reader's keyboard, as comimi's shortcuts do: arrows and
@@ -263,8 +252,7 @@ func (a *App) readerKeys(c *ui.Context, r *Reader) {
 		if r.overlay {
 			a.closeOverlay(r)
 		} else {
-			a.markActivity()
-			r.overlay = true
+			a.showOverlay(r)
 			r.guide = false
 		}
 	}
@@ -307,6 +295,12 @@ func (a *App) readerInput(r *Reader, ev ui.InputEvent, w, h float32) bool {
 		a.beginLongPress(r, ev.X, ev.Y)
 		r.pressed = true
 		r.moved = false
+		if r.snapping {
+			r.drag = r.dragShown(time.Now())
+			r.snapping = false
+			r.dragFrom = 0
+		}
+		r.dragStart = r.drag
 		r.downX, r.downY = ev.X, ev.Y
 		r.startPanX, r.startPanY = r.panX, r.panY
 		return true
@@ -328,7 +322,7 @@ func (a *App) readerInput(r *Reader, ev ui.InputEvent, w, h float32) bool {
 			r.panX, r.panY = clampPan(r, r.startPanX+dx, r.startPanY+dy, w, h)
 			return true
 		}
-		r.drag = a.constrainDrag(r, dx, dy, w)
+		r.drag = a.constrainDrag(r, r.dragStart+dx, dy, w)
 		return true
 	case ui.InputPointerUp:
 		a.markActivity()
@@ -393,9 +387,8 @@ func (a *App) readerTap(r *Reader, x, w float32) {
 			return
 		}
 		// The middle: show the overlay again, with the guide gone.
-		r.overlay = true
+		a.showOverlay(r)
 		r.guide = false
-		a.markActivity()
 		return
 	}
 	// The overlay is up and the tap missed its controls: put it away.
@@ -403,10 +396,14 @@ func (a *App) readerTap(r *Reader, x, w float32) {
 }
 
 // readerSwipeEnd turns the page when a drag was a swipe: far enough across,
-// mostly across, and not zoomed in, where a drag is a pan instead.
+// mostly across, and not zoomed in, where a drag is a pan instead. A release
+// that is not a turn eases the stage back to rest, as comimi does; a turn
+// starts from where the finger left it.
 func (a *App) readerSwipeEnd(r *Reader, dx, dy float32) {
-	r.drag = 0
+	dx += r.dragStart
+	from := r.drag
 	if r.zoom > 1 || absFloat(dx) <= swipeThreshold || absFloat(dx) <= absFloat(dy) {
+		a.snapDragBack(r, from)
 		return
 	}
 	// Right-to-left: dragging right brings the next page.
@@ -420,7 +417,25 @@ func (a *App) readerSwipeEnd(r *Reader, dx, dy float32) {
 	}
 	// A swipe animates its turn; a key or a click does not, as comimi's
 	// gestures and its buttons differ.
-	a.turnPage(r, dir, true)
+	if a.turnPage(r, dir, true) {
+		r.drag = 0
+		return
+	}
+	a.snapDragBack(r, from)
+}
+
+// snapDragBack eases the stage from a released drag back to rest, rather than
+// cutting there as a still frame would.
+func (a *App) snapDragBack(r *Reader, from float32) {
+	r.drag = 0
+	if from == 0 {
+		r.snapping = false
+		r.dragFrom = 0
+		return
+	}
+	r.dragFrom = from
+	r.dragAt = time.Now()
+	r.snapping = true
 }
 
 // constrainDrag keeps a swipe from pulling the page off into nothing: past the

@@ -119,17 +119,15 @@ func (a *App) readerIconButton(c *ui.Context, look readerLook, mark *ui.SVG, lab
 	return btn
 }
 
-// readerSegmentButton is one half of a two-way switch: the chosen side is a
-// filled tile, the other stays flat until hovered. comimi draws its page mode
-// and view switches this way.
+// readerSegmentButton is one half of a two-way switch: the chosen side takes
+// the switch's indicator, the other stays flat until hovered. comimi draws its
+// page mode and view switches this way.
 func (a *App) readerSegmentButton(c *ui.Context, look readerLook, width, height float32, mark *ui.SVG, label string, selected bool, run func()) {
-	bg := ui.Transparent
 	color := look.muted
 	if selected {
-		bg = look.muted
 		color = look.white
 	}
-	btn := ui.Box(c).Size(width, height).Radius(12).Center().Background(bg).
+	btn := ui.Box(c).Size(width, height).Radius(12).Center().
 		Focusable().Label(label).Tooltip(label)
 	if !selected {
 		btn.HandleInput(func(ev ui.InputEvent) bool {
@@ -151,9 +149,18 @@ func (a *App) readerSegmentButton(c *ui.Context, look readerLook, width, height 
 	})
 }
 
-// readerSegments wraps a pair of segment buttons in comimi's 2-column track.
-func readerSegments(c *ui.Context, look readerLook, fn func()) ui.Element {
-	return ui.Row(c).Width(84).Height(36).Radius(12).Background(look.surface2).Children(fn)
+// readerSegments wraps a pair of segment buttons in comimi's 2-column track,
+// with the chosen tile sliding between the halves as a pose: the renderer
+// carries it without rebuilding the switch.
+func readerSegments(c *ui.Context, look readerLook, selected int, fn func()) ui.Element {
+	row := ui.Row(c).Width(84).Height(36).Radius(12).Background(look.surface2)
+	row.Children(func() {
+		ui.Box(c).Width(42).Height(36).Radius(12).Background(look.muted).
+			Absolute().Top(0).Left(0).
+			AnimatePose(ui.Pose{X: float32(selected) * 42}, ui.Snappy)
+		fn()
+	})
+	return row
 }
 
 // readerLabel is a small muted caption above a group of settings.

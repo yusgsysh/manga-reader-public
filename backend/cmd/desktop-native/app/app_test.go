@@ -586,11 +586,13 @@ func showReaderOverlay(t *testing.T, a *App, tt *ui.Tester) {
 	t.Helper()
 	a.update(func() {
 		a.reader.overlay = true
+		a.reader.overlayAt = time.Now().Add(-chromeEnter)
+		a.reader.overlayClosedAt = time.Time{}
 		a.reader.panel = panelNone
 		a.reader.guide = false
 		a.markActivity()
 	})
-	tt.Advance(overlayFade + 50*time.Millisecond)
+	tt.Advance(chromeEnter + 50*time.Millisecond)
 	tt.Frame()
 }
 

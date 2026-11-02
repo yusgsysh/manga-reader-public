@@ -54,11 +54,16 @@ const (
 func (a *App) stageOf(c *ui.Context) readerStage {
 	w, h := c.Size()
 	r := &a.reader
+	now := time.Now()
+	dragX := r.dragShown(now)
+	if r.turnDir != groupCurrent {
+		dragX = 0 // the turn carries the drag into its slide
+	}
 	st := readerStage{
 		width:  w,
 		height: h,
 		groups: a.pageGroupsToLayOut(),
-		dragX:  r.drag,
+		dragX:  dragX,
 		zoom:   r.zoom,
 		panX:   r.panX,
 		panY:   r.panY,
@@ -66,11 +71,13 @@ func (a *App) stageOf(c *ui.Context) readerStage {
 	if r.turnDir != groupCurrent {
 		// A turn in flight: the group the turn is leaving slides a whole
 		// screen the way the gesture went, over turnAnimation, and the group
-		// arriving follows it in from the other edge.
-		progress := float32(time.Since(r.turnAt)) / float32(turnAnimation)
+		// arriving follows it in from the other edge. The slide starts where
+		// the drag left the stage, so letting go continues the gesture.
+		progress := float32(now.Sub(r.turnAt)) / float32(turnAnimation)
 		if progress > 1 {
 			progress = 1
 		}
+		eased := stageEase(clampFloat(progress, 0, 1))
 		st.turn = true
 		st.turnFrom = r.turnFrom
 		st.turnSide = a.turnSideOf(r.turnDir)
@@ -81,10 +88,12 @@ func (a *App) stageOf(c *ui.Context) readerStage {
 		if st.turnSide == sideRight {
 			to = w
 		}
-		st.turnOutX = to * easeOutCubic(progress)
+		base := r.turnBaseX
+		st.turnOutX = base + (to-base)*eased
 		// The arriving group starts a screen off in the direction the
-		// leaving one is going and slides to rest with it.
-		st.turnInX = -to + st.turnOutX
+		// leaving one is going, from where the drag left it, and slides to
+		// rest with it.
+		st.turnInX = (base - to) * (1 - eased)
 	}
 	return st
 }
@@ -104,12 +113,6 @@ func (a *App) turnSideOf(direction pageGroupPlacement) pageGroupSide {
 		return sideRight
 	}
 	return sideLeft
-}
-
-// easeOutCubic decelerates a slide as it ends.
-func easeOutCubic(t float32) float32 {
-	u := 1 - t
-	return 1 - u*u*u
 }
 
 // pageImage draws one page of a group filling its share of the group's width.

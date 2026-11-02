@@ -18,37 +18,53 @@ import (
 // readerOverlay draws the overlay over the page.
 func (a *App) readerOverlay(c *ui.Context, r *Reader) {
 	look := readerLookOf(r)
-	// The chrome fades in where it sits, over the page. The frame is
-	// pass-through, so a press between controls is still a press on the page,
-	// and an element transition keeps the fade to compositing rather than
-	// re-laying the dock out on every frame of it.
-	frame := ui.Box(c).Fill().PassThrough().Key("reader-overlay").
-		Transition(overlayTransition())
+	// The chrome comes in from its edge and leaves the same way, as comimi's
+	// dock and chevrons do: transform and opacity are worked out from the
+	// clock, so a card is where the pointer sees it while it moves, without
+	// rebuilding what is inside it. While it goes, it takes no press, so a
+	// tap lands on the page underneath it.
+	slide, alpha := chromeMotion(r, time.Now())
+	frame := ui.Box(c).Absolute().Left(0).Top(0).Right(0).Bottom(0).
+		PassThrough().Key("reader-overlay").IgnoreInput(!r.overlay)
 	frame.Children(func() {
 		// The menu and the settings are cards of their own; the pill stays for
 		// the settings so the title and the way to the menu never move.
 		if !r.panel.isMenu() {
-			a.readerPill(c, r)
+			a.readerPill(c, r, slide, alpha)
 		}
-		a.readerSideArrows(c, r, look)
+		a.readerSideArrows(c, r, look, slide, alpha)
 		if r.panel == panelNone {
-			a.readerCenterHint(c, r)
+			a.readerCenterHint(c, r, alpha)
 		}
-		a.readerDock(c, r)
+		a.readerDock(c, r, slide, alpha)
 		// Panels come last so they cover the chevrons they reach, as comimi's
 		// settings card does.
 		if r.panel.isMenu() {
-			a.readerMenu(c, r)
+			a.readerMenu(c, r, slide, alpha)
 		}
 		if r.panel == panelSettings {
-			a.readerSettingsPanel(c, r)
+			a.readerSettingsPanel(c, r, slide, alpha)
 		}
 	})
 }
 
+// chromeMotion is where the overlay's cards are in their entrance or exit:
+// slide is how far toward their edge they still are, 1 at the start of the
+// entrance and 1 at the end of the exit, and alpha is their opacity.
+func chromeMotion(r *Reader, now time.Time) (slide, alpha float32) {
+	if r.overlay {
+		p := clampFloat(float32(now.Sub(r.overlayAt))/float32(chromeEnter), 0, 1)
+		a := clampFloat(float32(now.Sub(r.overlayAt))/float32(chromeFade), 0, 1)
+		return 1 - chromeEase(p), a
+	}
+	p := clampFloat(float32(now.Sub(r.overlayClosedAt))/float32(chromeExit), 0, 1)
+	a := clampFloat(float32(now.Sub(r.overlayClosedAt))/float32(chromeFade), 0, 1)
+	return chromeEase(p), 1 - a
+}
+
 // readerPill is the floating title card at the top left: the menu button, the
 // gallery's title, and a press anywhere on it opens the menu.
-func (a *App) readerPill(c *ui.Context, r *Reader) {
+func (a *App) readerPill(c *ui.Context, r *Reader, slide, alpha float32) {
 	look := readerLookOf(r)
 	w, _ := c.Size()
 	inset := readerInset(w)
@@ -57,7 +73,8 @@ func (a *App) readerPill(c *ui.Context, r *Reader) {
 		width = maxFloat(w-2*inset, 200)
 	}
 	pill := readerGlassCard(c, look, 16).Width(width).Height(62).
-		Absolute().Top(inset).Left(inset).Clip()
+		Absolute().Top(inset).Left(inset).Clip().
+		Translate(0, -slide*chromeSlide).Opacity(alpha)
 	pill.Children(func() {
 		ui.Row(c).Fill().Padding(0, 13).Gap(13).AlignItems(ui.Center).Children(func() {
 			a.readerIconButton(c, look, readerIconMenu, i18n.T("Reader menu"),
@@ -95,7 +112,7 @@ func (a *App) readerPill(c *ui.Context, r *Reader) {
 
 // readerSideArrows puts comimi's chevrons at the middle of either edge. They
 // are hidden while auto page turn runs, as the library hides them.
-func (a *App) readerSideArrows(c *ui.Context, r *Reader, look readerLook) {
+func (a *App) readerSideArrows(c *ui.Context, r *Reader, look readerLook, slide, alpha float32) {
 	if r.auto || !r.loaded || len(r.pages) == 0 {
 		return
 	}
@@ -105,8 +122,10 @@ func (a *App) readerSideArrows(c *ui.Context, r *Reader, look readerLook) {
 	top := (h - size) / 2
 	draw := func(left bool, mark *ui.SVG, label string, enabled bool, run func()) {
 		x := inset
+		away := -slide * chromeSlide
 		if !left {
 			x = w - inset - size
+			away = slide * chromeSlide
 		}
 		bg := look.glass
 		color := look.muted
@@ -116,7 +135,9 @@ func (a *App) readerSideArrows(c *ui.Context, r *Reader, look readerLook) {
 		}
 		btn := ui.Box(c).Size(size, size).Radius(16).Center().Background(bg).
 			Shadow(0, 4, 18, 0, look.shadow).
-			Absolute().Top(top).Left(x).Focusable().Label(label).Tooltip(label)
+			Absolute().Top(top).Left(x).Translate(away, 0).Opacity(alpha).
+			Focusable().Label(label).Tooltip(label)
+		scale := float32(1)
 		if enabled {
 			btn.HandleInput(func(ev ui.InputEvent) bool {
 				if ev.Kind != ui.InputPointerDown {
@@ -128,8 +149,10 @@ func (a *App) readerSideArrows(c *ui.Context, r *Reader, look readerLook) {
 			})
 			if btn.Hovered() {
 				color = look.fg
+				scale = 1.08
 			}
 		}
+		btn.AnimatePose(ui.Pose{Scale: scale}, ui.Snappy)
 		btn.Children(func() {
 			ui.Icon(c, mark).Size(20, 20).TextColor(color)
 		})
@@ -164,10 +187,10 @@ func (a *App) sideDirection(side pageGroupSide) pageGroupPlacement {
 // readerCenterHint is the card in the middle of the page: the direction guide
 // while the reader is new, then the line that says how to put the controls
 // away. It takes no press, so a tap on it is a tap on the page.
-func (a *App) readerCenterHint(c *ui.Context, r *Reader) {
+func (a *App) readerCenterHint(c *ui.Context, r *Reader, alpha float32) {
 	look := readerLookOf(r)
 	ui.Column(c).Fill().Absolute().Justify(ui.Center).AlignItems(ui.Center).Gap(10).
-		PassThrough().Children(func() {
+		Opacity(alpha).PassThrough().Children(func() {
 		if r.guide {
 			arrow, direction := readerIconNext, i18n.T("Pages move to the left")
 			if r.settings.rtl {
@@ -194,7 +217,7 @@ func (a *App) readerCenterHint(c *ui.Context, r *Reader) {
 
 // readerDock is the floating bar along the bottom: the page count and the seek
 // bar, then auto page turn, the zoom, the page mode, the view and settings.
-func (a *App) readerDock(c *ui.Context, r *Reader) {
+func (a *App) readerDock(c *ui.Context, r *Reader, slide, alpha float32) {
 	look := readerLookOf(r)
 	w, _ := c.Size()
 	inset := readerInset(w)
@@ -204,7 +227,8 @@ func (a *App) readerDock(c *ui.Context, r *Reader) {
 	}
 	dock := ui.Column(c).Width(w-2*inset).Absolute().Bottom(inset).Left(inset).
 		Padding(18, padX).Radius(20).Gap(12).Background(look.glass).
-		Shadow(0, 6, 24, 0, look.shadow)
+		Shadow(0, 6, 24, 0, look.shadow).
+		Translate(0, slide*chromeSlide).Opacity(alpha)
 	dock.Children(func() {
 		if r.auto {
 			a.autoProgressLine(c, r, look)
@@ -305,7 +329,7 @@ func (a *App) readerSeek(c *ui.Context, r *Reader, look readerLook) {
 	}
 	w := a.dockWidth(c)
 	ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, a.readerCountText(r, false)).FontSize(12).FontWeight(700).
+		ui.Text(c, a.readerCountText(r)).FontSize(12).FontWeight(700).
 			TextColor(look.fg).Shrink(0).SingleLine()
 		track := ui.Box(c).Height(18).Grow(1).Focusable().
 			Label(i18n.T("Seek")).Tooltip(i18n.T("Seek"))
@@ -371,9 +395,15 @@ func (a *App) readerSeek(c *ui.Context, r *Reader, look readerLook) {
 			if rtl {
 				knobFrac = 1 - frac
 			}
-			kx := box.X + knobFrac*box.W - 9
-			kx = clampFloat(kx, box.X, box.X+box.W-18)
-			knob := ui.Rect{X: kx, Y: mid - 9, W: 18, H: 18}
+			// The knob grows a little under the pointer, as comimi's seek
+			// thumb does.
+			knobSize := float32(18)
+			if over {
+				knobSize = 20.7
+			}
+			kx := box.X + knobFrac*box.W - knobSize/2
+			kx = clampFloat(kx, box.X, box.X+box.W-knobSize)
+			knob := ui.Rect{X: kx, Y: mid - knobSize/2, W: knobSize, H: knobSize}
 			p.Shadow(knob, 999, 0, 1, 4, 0, look.shadow)
 			p.Fill(knob, look.muted, 999)
 		})
@@ -507,7 +537,11 @@ func (a *App) readerZoomBadge(c *ui.Context, r *Reader) {
 // readerPageModeButtons switch between one page and a spread, as comimi's
 // two-column page-mode switch does.
 func (a *App) readerPageModeButtons(c *ui.Context, r *Reader, look readerLook) {
-	readerSegments(c, look, func() {
+	selected := 0
+	if r.settings.double {
+		selected = 1
+	}
+	readerSegments(c, look, selected, func() {
 		a.readerSegmentButton(c, look, 42, 36, readerIconSingle, i18n.T("Single page"),
 			!r.settings.double, func() { a.setSpread(r, false) })
 		a.readerSegmentButton(c, look, 42, 36, readerIconSpread, i18n.T("Double page"),
@@ -517,8 +551,12 @@ func (a *App) readerPageModeButtons(c *ui.Context, r *Reader, look readerLook) {
 
 // readerViewSwitch is the inline/full-screen pair beside the page mode.
 func (a *App) readerViewSwitch(c *ui.Context, r *Reader, look readerLook) {
-	readerSegments(c, look, func() {
-		full := a.isFullscreen()
+	full := a.isFullscreen()
+	selected := 0
+	if full {
+		selected = 1
+	}
+	readerSegments(c, look, selected, func() {
 		a.readerSegmentButton(c, look, 42, 36, readerIconWindow, i18n.T("Standard view"),
 			!full, func() {
 				if full {
@@ -601,8 +639,8 @@ func (r *Reader) favoritePages() []int {
 }
 
 // readerToast is the notification over the page, briefly, as comimi's centred
-// pill. Nothing in it takes the pointer, so a tap through it still reaches the
-// page.
+// pill. It pops in with the same overshoot, and nothing in it takes the
+// pointer, so a tap through it still reaches the page.
 func (a *App) readerToast(c *ui.Context, r *Reader) {
 	look := readerLookOf(r)
 	bg := look.muted
@@ -613,10 +651,19 @@ func (a *App) readerToast(c *ui.Context, r *Reader) {
 	case toneError:
 		bg = ui.RGB(150, 48, 54)
 	}
+	// The pop: small and low, overshooting a little as it arrives, from the
+	// toast's own clock (see toastPop).
+	pop := clampFloat(float32(time.Since(r.toastAt))/float32(toastPop), 0, 1)
+	eased := chromeEase(pop)
+	alpha := pop
+	scaleX := 0.2 + 0.8*eased
+	scaleY := 0.8 + 0.2*eased
 	ui.Box(c).FillWidth().Absolute().Bottom(140).Left(0).Justify(ui.Center).
 		PassThrough().Children(func() {
 		ui.Box(c).Padding(6, 14).Radius(999).Background(bg).
-			Shadow(0, 4, 18, 0, look.shadow).PassThrough().Children(func() {
+			Shadow(0, 4, 18, 0, look.shadow).
+			Translate(0, 6*(1-eased)).Scale(scaleX, scaleY).Opacity(alpha).
+			PassThrough().Children(func() {
 			ui.Text(c, r.toast).FontSize(12).FontWeight(700).TextColor(fg).PassThrough()
 		})
 	})

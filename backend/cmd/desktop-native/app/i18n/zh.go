@@ -221,7 +221,6 @@ var zh = map[string]string{
 	"Loading pages…":                       "正在获取页面列表…",
 	"No pages":                             "没有页面",
 	"This gallery has no readable pages":   "这个画廊没有可读取的页面",
-	"%d / %d pages":                        "已加载 %d / %d 页…",
 	"%d / %d pages downloaded":             "已下载 %d / %d 页",
 	"%d / %d pages downloaded (%d failed)": "已下载 %d / %d 页（%d 失败）",
 	"%d / %d pages · %d%%":                 "%d / %d 页 · %d%%",

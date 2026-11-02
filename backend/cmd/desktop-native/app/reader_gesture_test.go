@@ -257,6 +257,118 @@ func TestReaderLongPressKeepsThePage(t *testing.T) {
 	tt.Release(700, 400)
 }
 
+// TestReaderTurnStartsWhereTheDragLeftIt covers the hand-off from a swipe to
+// its turn: the slide has to carry on from where the finger let go, not snap
+// back to rest and set off again.
+func TestReaderTurnStartsWhereTheDragLeftIt(t *testing.T) {
+	a, tt := openReaderForTest(t)
+	a.update(func() { a.reader.overlay = false })
+
+	tt.Press(400, 400)
+	tt.Move(560, 402)
+	tt.Move(640, 404)
+	base := a.reader.drag
+	if base <= 0 {
+		t.Fatalf("drag = %v, want the stage dragged toward the next page", base)
+	}
+	tt.Release(640, 404)
+	if a.reader.turnDir == groupCurrent {
+		t.Fatal("the swipe did not start a turn")
+	}
+	if a.reader.turnBaseX != base {
+		t.Fatalf("turn base = %v, want the released drag %v", a.reader.turnBaseX, base)
+	}
+
+	// At the first frame of the slide the page is still where the finger
+	// left it; the arriving page waits a window behind. The start is put in
+	// the future so the frame's own clock cannot move it on.
+	a.update(func() { a.reader.turnAt = time.Now().Add(time.Second) })
+	var st readerStage
+	tt = ui.NewTester(func(c *ui.Context) {
+		st = a.stageOf(c)
+		ui.Box(c).Fill()
+	}, 1280, 860)
+	tt.Frame()
+	if absFloat(st.turnOutX-base) > 2 {
+		t.Fatalf("leaving page at x = %v, want the released drag %v", st.turnOutX, base)
+	}
+	if want := base - 1280; absFloat(st.turnInX-want) > 2 {
+		t.Fatalf("arriving page at x = %v, want a window behind the drag %v", st.turnInX, want)
+	}
+}
+
+// TestReaderShortDragEasesBack covers a release that is not a turn: the page
+// eases back to rest instead of cutting there in one frame.
+func TestReaderShortDragEasesBack(t *testing.T) {
+	a, tt := openReaderForTest(t)
+	a.update(func() { a.reader.overlay = false })
+
+	tt.Press(400, 400)
+	tt.Move(420, 401)
+	tt.Release(420, 401)
+	if !a.reader.snapping {
+		t.Fatal("a short drag did not start easing back")
+	}
+	from := a.reader.dragFrom
+	if from <= 0 {
+		t.Fatalf("snap-back start = %v, want the drag it let go of", from)
+	}
+
+	a.update(func() { a.reader.dragAt = time.Now() })
+	if got := a.reader.dragShown(time.Now()); got <= 0 || got > from+1 {
+		t.Fatalf("drag at the start of the snap = %v, want near %v", got, from)
+	}
+	a.update(func() { a.reader.dragAt = time.Now().Add(-turnAnimation) })
+	if got := a.reader.dragShown(time.Now()); absFloat(got) > 1 {
+		t.Fatalf("drag at the end of the snap = %v, want rest", got)
+	}
+
+	// The frame loop keeps going while it eases, then stops with the drag at
+	// rest.
+	a.update(func() { a.reader.dragAt = time.Now().Add(-turnAnimation - time.Millisecond) })
+	if a.readerTick(&a.reader) {
+		t.Fatal("the snap back asked for another frame after it had run")
+	}
+	if a.reader.snapping || a.reader.drag != 0 {
+		t.Fatalf("snapping=%v drag=%v after the snap, want rest", a.reader.snapping, a.reader.drag)
+	}
+}
+
+// TestReaderChromeMovesInAndOut covers the overlay's entrance and exit: the
+// cards start away from their edge and transparent, rest in place, and head
+// back out as they fade when the overlay goes.
+func TestReaderChromeMovesInAndOut(t *testing.T) {
+	now := time.Now()
+	r := Reader{overlay: true, overlayAt: now}
+	if slide, alpha := chromeMotion(&r, now); slide != 1 || alpha != 0 {
+		t.Fatalf("chrome at the start of the entrance = %v/%v, want away and transparent", slide, alpha)
+	}
+	r.overlayAt = now.Add(-chromeEnter / 4)
+	slide, alpha := chromeMotion(&r, now)
+	if slide <= 0 || slide >= 1 || alpha <= 0 || alpha >= 1 {
+		t.Fatalf("chrome part way in = %v/%v, want it coming back and fading in", slide, alpha)
+	}
+	r.overlayAt = now.Add(-chromeEnter)
+	if slide, alpha = chromeMotion(&r, now); slide != 0 || alpha != 1 {
+		t.Fatalf("chrome at rest = %v/%v, want in place and opaque", slide, alpha)
+	}
+
+	r.overlay = false
+	r.overlayClosedAt = now
+	if slide, alpha = chromeMotion(&r, now); slide != 0 || alpha != 1 {
+		t.Fatalf("chrome at the start of the exit = %v/%v, want it still", slide, alpha)
+	}
+	r.overlayClosedAt = now.Add(-chromeExit / 4)
+	slide, alpha = chromeMotion(&r, now)
+	if slide <= 0 || slide >= 1 || alpha <= 0 || alpha >= 1 {
+		t.Fatalf("chrome part way out = %v/%v, want it going out and fading", slide, alpha)
+	}
+	r.overlayClosedAt = now.Add(-chromeExit)
+	if slide, alpha = chromeMotion(&r, now); slide != 1 || alpha != 0 {
+		t.Fatalf("chrome at the end of the exit = %v/%v, want away and transparent", slide, alpha)
+	}
+}
+
 // TestReaderEscapeGivesBackOneLayer covers Escape backing out a layer at a
 // time: the panel, then the overlay, then the reader.
 func TestReaderEscapeGivesBackOneLayer(t *testing.T) {

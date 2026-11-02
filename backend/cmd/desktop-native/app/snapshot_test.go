@@ -26,6 +26,13 @@ func savePNG(t *testing.T, tt *ui.Tester, name string) {
 	}
 }
 
+// closeReaderOverlay closes the overlay and runs its exit to the end, so a
+// snapshot shows the page after the chrome has gone rather than mid-slide.
+func closeReaderOverlay(a *App) {
+	a.closeOverlay(&a.reader)
+	a.reader.overlayClosedAt = time.Now().Add(-chromeExit)
+}
+
 func TestSnapshots(t *testing.T) {
 	a, tt := newTestApp(t)
 
@@ -46,7 +53,7 @@ func TestSnapshots(t *testing.T) {
 	waitText(t, tt, "第 1 / 3 页")
 	// The page alone first, then the boot guide, then the overlay with its
 	// controls, then the settings sheet and the menu over it.
-	a.update(func() { a.closeOverlay(&a.reader) })
+	a.update(func() { closeReaderOverlay(a) })
 	tt.Frame()
 	savePNG(t, tt, "reader")
 	a.update(func() {
@@ -202,7 +209,7 @@ func TestReaderSpreadSnapshot(t *testing.T) {
 		a.reader.settings.hasCover = true
 		a.reader.page = 1
 		a.reader.resetView()
-		a.closeOverlay(&a.reader)
+		closeReaderOverlay(a)
 	})
 	tt.Frame()
 	savePNG(t, tt, "reader-spread")
@@ -217,7 +224,7 @@ func TestReaderZoomSnapshot(t *testing.T) {
 	waitText(t, tt, "第 1 / 3 页")
 	a.update(func() {
 		a.reader.zoom = 2
-		a.closeOverlay(&a.reader)
+		closeReaderOverlay(a)
 	})
 	tt.Frame()
 	savePNG(t, tt, "reader-zoom")
@@ -233,7 +240,7 @@ func TestReaderDarkSnapshot(t *testing.T) {
 	waitText(t, tt, "第 1 / 3 页")
 	a.update(func() {
 		a.reader.settings.dark = true
-		a.closeOverlay(&a.reader)
+		closeReaderOverlay(a)
 	})
 	tt.Frame()
 	savePNG(t, tt, "reader-dark")

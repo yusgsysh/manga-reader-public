@@ -153,11 +153,11 @@ func TestReaderShowsStreamedPages(t *testing.T) {
 	navSettle(tt)
 
 	// The backend has sent three pages and is scraping the rest: the reader
-	// must already be readable, saying how many arrived. Its slots cover the
+	// must already be readable, showing the page it is on. Its slots cover the
 	// gallery's whole count from the start (as main's reader lays out one slot
 	// per page), so the list does not rebuild page by page.
 	waitNoText(t, tt, "正在获取页面列表…")
-	waitText(t, tt, fmt.Sprintf("已加载 3 / %d 页…", total))
+	waitText(t, tt, fmt.Sprintf("第 1 / %d 页", total))
 	if !a.reader.loaded || a.reader.partial != 3 {
 		t.Fatalf("reader loaded=%v partial=%d, want 3 streamed", a.reader.loaded, a.reader.partial)
 	}

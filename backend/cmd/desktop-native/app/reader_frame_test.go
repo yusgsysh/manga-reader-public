@@ -58,10 +58,15 @@ func TestReaderStillStatesWakeAtTheirDeadline(t *testing.T) {
 	}
 	r.auto = false
 
-	// A toast times itself out the same way.
+	// A toast pops in over a few frames, then times itself out: once it has
+	// arrived, the next frame is the one its time is up at.
 	r.toast, r.toastAt = "kept", time.Now()
+	if !a.readerTick(r) {
+		t.Fatal("a toast popping in asked for no frames")
+	}
+	r.toastAt = time.Now().Add(-toastPop)
 	if a.readerTick(r) {
-		t.Fatal("a toast asked for every frame")
+		t.Fatal("a settled toast asked for every frame")
 	}
 	if at, ok := a.readerWakeAt(r); !ok || !at.Equal(r.toastAt.Add(toastDuration)) {
 		t.Fatalf("toast wake = %v (%v), want its end", at, ok)

@@ -32,6 +32,32 @@ func TestReaderSpreadSettingLandsOnThePair(t *testing.T) {
 	}
 }
 
+// TestReaderOverlayFloatsOverThePage covers the overlay being drawn over the
+// stage rather than beside it: sharing the page's layout would shrink the
+// pages and push the pill and the chevrons down into the middle of the window.
+func TestReaderOverlayFloatsOverThePage(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.router.Push("/reader/1/tok1")
+	navSettle(tt)
+	waitText(t, tt, "第 1 / 3 页")
+	showReaderOverlay(t, a, tt)
+
+	pill, ok := tt.Find("阅读器菜单")
+	if !ok {
+		t.Fatalf("the reader's menu button is missing; texts=%q", tt.Texts())
+	}
+	if pill.Y > 100 {
+		t.Fatalf("the pill sits at y = %v, want it at the top of the window", pill.Y)
+	}
+	prev, ok := tt.Find("上一页")
+	if !ok {
+		t.Fatalf("the previous-page chevron is missing; texts=%q", tt.Texts())
+	}
+	if prev.Y < 300 || prev.Y > 600 {
+		t.Fatalf("the chevron sits at y = %v, want it at the window's middle", prev.Y)
+	}
+}
+
 // TestReaderPageListOpensWhereItIs covers the page list opening on the page
 // being read: a long gallery would otherwise start at page one every time.
 func TestReaderPageListOpensWhereItIs(t *testing.T) {
