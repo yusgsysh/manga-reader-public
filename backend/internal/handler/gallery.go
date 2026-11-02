@@ -123,6 +123,16 @@ func galleryFromCache(row *ent.GalleryCache) *model.Gallery {
 	}
 }
 
+// galleryMetaByRef maps the cached rows a list loaded to the gallery model
+// its cards render, keyed by the same ref the list uses.
+func galleryMetaByRef(rows map[gallerycache.Ref]*ent.GalleryCache) map[gallerycache.Ref]*model.Gallery {
+	meta := make(map[gallerycache.Ref]*model.Gallery, len(rows))
+	for ref, row := range rows {
+		meta[ref] = galleryFromCache(row)
+	}
+	return meta
+}
+
 func galleryDetailsFromCache(row *ent.GalleryCache) gin.H {
 	return gin.H{
 		"id":           row.GalleryID,

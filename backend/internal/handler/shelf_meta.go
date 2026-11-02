@@ -26,10 +26,10 @@ import (
 
 const (
 	// galleryMetaFillTimeout bounds one upstream metadata fetch started for a
-	// shelf row. It is longer than a list request would normally wait: the
-	// row stays broken without it, and the fetch also benefits every later
-	// request for the same gallery.
-	galleryMetaFillTimeout = 60 * time.Second
+	// shelf row. With the cap and worker count below, a list waits at most
+	// two batches (60s), inside the desktop client's 90s list timeout; the
+	// fetch also benefits every later request for the same gallery.
+	galleryMetaFillTimeout = 30 * time.Second
 	// galleryMetaFillCap bounds how many fetches one list request starts, so
 	// a history full of old broken rows cannot turn one request into dozens.
 	galleryMetaFillCap = 8
