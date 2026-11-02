@@ -95,7 +95,7 @@ func TestReaderPreloadReleasesPassedPages(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 8 页")
+	waitReaderPage(t, tt, a, 0)
 
 	// The first frame preloads the shown page and four either side of it, as
 	// comimi's page stage does. The window is the store's record of what the

@@ -220,7 +220,6 @@ func benchReaderFrame(b *testing.B, overlay bool) {
 	// the list, as it is for most of a long gallery.
 	a.reader.page = 500
 	a.reader.overlay = overlay
-	a.reader.guide = false
 	a.markActivity()
 	tt.Frame() // settle the first frame at the new state
 	b.ResetTimer()

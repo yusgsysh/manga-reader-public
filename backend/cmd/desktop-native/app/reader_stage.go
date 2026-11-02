@@ -115,10 +115,38 @@ func (a *App) turnSideOf(direction pageGroupPlacement) pageGroupSide {
 	return sideLeft
 }
 
+// pageAlign is where a page's picture sits in its cell when the picture is
+// narrower than the cell: the middle for one page, and the spine side for the
+// pages of a spread, so facing pages meet with no gutter.
+type pageAlign int
+
+const (
+	alignCenter pageAlign = iota
+	alignRight
+	alignLeft
+)
+
+// containRect is where a picture of bw by bh fits inside box, keeping its
+// aspect, aligned as asked across and centred down.
+func containRect(box ui.Rect, bw, bh float32, align pageAlign) ui.Rect {
+	scale := minFloat(box.W/bw, box.H/bh)
+	w, h := bw*scale, bh*scale
+	x := box.X + (box.W-w)/2
+	switch align {
+	case alignRight:
+		x = box.X + box.W - w
+	case alignLeft:
+		x = box.X
+	}
+	return ui.Rect{X: x, Y: box.Y + (box.H-h)/2, W: w, H: h}
+}
+
 // pageImage draws one page of a group filling its share of the group's width.
 // A page without its URL yet says so; one whose picture is still arriving
-// shows its stand-in with the loading mark over it.
-func (a *App) pageImage(c *ui.Context, page int, grow int, zoom, panX, panY float32) {
+// shows its stand-in with the loading mark over it. adorn draws the page's
+// shadow and edge; a spread's pages leave it off so the two meet cleanly at
+// the spine.
+func (a *App) pageImage(c *ui.Context, page int, grow int, zoom, panX, panY float32, align pageAlign, adorn bool) {
 	r := &a.reader
 	if !r.hasPage(page) {
 		a.readerPageMissing(c, page)
@@ -171,13 +199,14 @@ func (a *App) pageImage(c *ui.Context, page int, grow int, zoom, panX, panY floa
 			if bw <= 0 || bh <= 0 {
 				return
 			}
-			scale := minFloat(box.W/float32(bw), box.H/float32(bh))
-			w, h := float32(bw)*scale, float32(bh)*scale
-			x, y := box.X+(box.W-w)/2, box.Y+(box.H-h)/2
-			r := ui.Rect{X: x, Y: y, W: w, H: h}
-			p.Shadow(r, 0, 0, 2, 14, 2, shadow)
+			r := containRect(box, float32(bw), float32(bh), align)
+			if adorn {
+				p.Shadow(r, 0, 0, 2, 14, 2, shadow)
+			}
 			p.Image(bitmap, r, ui.Cover)
-			p.Stroke(r, edge, 0, 1)
+			if adorn {
+				p.Stroke(r, edge, 0, 1)
+			}
 		})
 	}
 	if placeholder {

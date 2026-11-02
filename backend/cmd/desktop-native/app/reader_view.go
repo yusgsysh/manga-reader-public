@@ -42,10 +42,10 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 		a.preloadPages(r)
 	}
 	// Everything that moves on its own asks for the frames it needs: a turn
-	// sliding out, the dock's auto-turn line. The deadlines that only need one
-	// frame (auto page turn, the overlay's auto-hide, a toast, a long press)
-	// are woken by a timer instead, so a page that is not moving costs no
-	// frames at all.
+	// sliding out, the menu dropping in, the dock's auto-turn line. The
+	// deadlines that only need one frame (auto page turn, the overlay's
+	// auto-hide, a long press) are woken by a timer instead, so a page that is
+	// not moving costs no frames at all.
 	if a.readerTick(r) {
 		a.keepFrames()
 	} else if at, ok := a.readerWakeAt(r); ok {
@@ -67,16 +67,12 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 		default:
 			a.readerStageView(c, r)
 			// The cards stay a moment after the overlay goes so their exit is
-			// seen; the hint comes back once they are gone (see readerTick).
+			// seen; the page itself is all that is left once they are gone.
 			if r.overlay || !r.overlayClosedAt.IsZero() {
 				a.readerOverlay(c, r)
 			} else {
 				a.readerZoomBadge(c, r)
-				a.readerHint(c, r)
 			}
-		}
-		if r.toast != "" {
-			a.readerToast(c, r)
 		}
 	})
 }
@@ -149,52 +145,29 @@ func sameGroup(x, y pageGroup) bool {
 
 // readerGroupView draws a group's pages side by side, as they pair up. A
 // spread's pages meet at the spine with no gap between them, the way a book's
-// facing pages do.
+// facing pages do: each picture is aligned to the spine side of its half, as
+// comimi's page stage does, so a page narrower than its half leaves its slack
+// on the outside of the spread rather than in the middle.
 func (a *App) readerGroupView(c *ui.Context, g pageGroup, zoom, panX, panY float32) {
+	spread := len(g.indexes) > 1
 	row := ui.Row(c).Fill()
-	if len(g.indexes) > 1 {
-		row.Gap(readerSpreadGap)
-	}
 	row.Children(func() {
-		for _, page := range g.indexes {
+		for i, page := range g.indexes {
 			grow := 0
-			if len(g.indexes) > 1 {
+			align := alignCenter
+			adorn := true
+			if spread {
 				grow = 1
+				// The first drawn page is the left one whatever the reading
+				// direction; right-to-left only reverses the order earlier.
+				align, adorn = alignRight, false
+				if i > 0 {
+					align = alignLeft
+				}
 			}
-			a.pageImage(c, page, grow, zoom, panX, panY)
+			a.pageImage(c, page, grow, zoom, panX, panY, align, adorn)
 		}
 	})
-}
-
-// readerHint is the one line left on the page while the overlay is away: where
-// the reader is, faint at the bottom, as a viewer that keeps out of the way
-// does.
-func (a *App) readerHint(c *ui.Context, r *Reader) {
-	if !r.loaded || len(r.pages) == 0 {
-		return
-	}
-	look := readerLookOf(r)
-	// The line takes no press, and no room: it lies over the pages rather
-	// than beside them, so the stage keeps the whole window and a tap at the
-	// bottom of the page is still a tap on the page.
-	ui.Row(c).FillWidth().Absolute().Bottom(10).Left(0).Justify(ui.Center).PassThrough().
-		Children(func() {
-			ui.Box(c).Padding(4, 10).Radius(999).Background(look.glass).
-				Shadow(0, 2, 10, 0, look.shadow).PassThrough().Children(func() {
-				ui.Text(c, a.readerCountText(r)).FontSize(11).
-					TextColor(look.muted)
-			})
-		})
-}
-
-// readerCountText is the page count the hint and the dock show: a spread's
-// range, 1-based as pages are counted.
-func (a *App) readerCountText(r *Reader) string {
-	g := a.shownGroup()
-	if a.reader.narrow || !r.settings.double {
-		return i18n.Sprintf(i18n.T("Page %d / %d"), pageGroupFirst(g)+1, len(r.pages))
-	}
-	return i18n.Sprintf(i18n.T("Pages %s / %d"), pageGroupText(g), len(r.pages))
 }
 
 // readerKeys takes the reader's keyboard, as comimi's shortcuts do: arrows and
@@ -253,7 +226,6 @@ func (a *App) readerKeys(c *ui.Context, r *Reader) {
 			a.closeOverlay(r)
 		} else {
 			a.showOverlay(r)
-			r.guide = false
 		}
 	}
 	if c.Shortcut(0, ui.KeyS) {
@@ -386,9 +358,8 @@ func (a *App) readerTap(r *Reader, x, w float32) {
 			}
 			return
 		}
-		// The middle: show the overlay again, with the guide gone.
+		// The middle: show the overlay again.
 		a.showOverlay(r)
-		r.guide = false
 		return
 	}
 	// The overlay is up and the tap missed its controls: put it away.

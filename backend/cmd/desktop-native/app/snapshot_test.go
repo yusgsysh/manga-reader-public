@@ -50,19 +50,12 @@ func TestSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
-	// The page alone first, then the boot guide, then the overlay with its
-	// controls, then the settings sheet and the menu over it.
+	waitReaderPage(t, tt, a, 0)
+	// The page alone first, then the overlay with its controls, then the
+	// settings sheet and the menu over it.
 	a.update(func() { closeReaderOverlay(a) })
 	tt.Frame()
 	savePNG(t, tt, "reader")
-	a.update(func() {
-		a.reader.overlay = true
-		a.reader.guide = true
-		a.markActivity()
-	})
-	tt.Frame()
-	savePNG(t, tt, "reader-guide")
 	showReaderOverlay(t, a, tt)
 	savePNG(t, tt, "reader-overlay")
 	showReaderPanel(t, a, tt, panelSettings)
@@ -203,7 +196,7 @@ func TestReaderSpreadSnapshot(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.router.Push("/reader/1/tok1")
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	a.update(func() {
 		a.reader.settings.double = true
 		a.reader.settings.hasCover = true
@@ -221,7 +214,7 @@ func TestReaderZoomSnapshot(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.router.Push("/reader/1/tok1")
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	a.update(func() {
 		a.reader.zoom = 2
 		closeReaderOverlay(a)
@@ -237,7 +230,7 @@ func TestReaderDarkSnapshot(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.router.Push("/reader/1/tok1")
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	a.update(func() {
 		a.reader.settings.dark = true
 		closeReaderOverlay(a)
@@ -258,7 +251,7 @@ func TestReaderNarrowSnapshot(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.router.Push("/reader/1/tok1")
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	tt.SetSize(960, 700)
 	showReaderOverlay(t, a, tt)
 	savePNG(t, tt, "reader-narrow")
@@ -274,7 +267,7 @@ func TestReaderFavoritesSnapshot(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.router.Push("/reader/1/tok1")
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	a.update(func() {
 		a.reader.fav = map[int]bool{0: true, 2: true}
 	})

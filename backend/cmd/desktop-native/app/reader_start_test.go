@@ -71,7 +71,7 @@ func TestReaderTargetBeatsLateProgress(t *testing.T) {
 	a.router.Push("/reader/1/tok1")
 	navSettle(tt)
 
-	waitText(t, tt, "3 / 5 页")
+	waitReaderPage(t, tt, a, 2)
 	// Let the second half of the stream land, which used to undo the choice.
 	deadline := time.Now().Add(300 * time.Millisecond)
 	for time.Now().Before(deadline) {
@@ -80,9 +80,6 @@ func TestReaderTargetBeatsLateProgress(t *testing.T) {
 	}
 	if got := a.reader.page; got != 2 {
 		t.Fatalf("page after the list finished = %d, want 2 (the start page)", got)
-	}
-	if !tt.HasText("3 / 5 页") {
-		t.Errorf("reader shows %q, want 3 / 5 页", tt.Texts())
 	}
 }
 
@@ -105,5 +102,5 @@ func TestReaderResumesSavedProgress(t *testing.T) {
 	}
 	navSettle(tt)
 
-	waitText(t, tt, "4 / 5 页")
+	waitReaderPage(t, tt, a, 3)
 }

@@ -6,10 +6,11 @@ import (
 )
 
 // TestReaderStillStatesWakeAtTheirDeadline covers what keeps the reader's
-// clock going. Motion (a turn sliding) needs a frame every frame; a still page
-// with a deadline ahead (the overlay hiding, auto page turn's interval, a
-// toast, a long press) needs one frame at that deadline, not one every time
-// the display can show one; and a page with nothing pending needs none at all.
+// clock going. Motion (a turn sliding, the menu dropping in) needs a frame
+// every frame; a still page with a deadline ahead (the overlay hiding, auto
+// page turn's interval, a long press) needs one frame at that deadline, not
+// one every time the display can show one; and a page with nothing pending
+// needs none at all.
 func TestReaderStillStatesWakeAtTheirDeadline(t *testing.T) {
 	a := &App{}
 	r := &a.reader
@@ -58,20 +59,31 @@ func TestReaderStillStatesWakeAtTheirDeadline(t *testing.T) {
 	}
 	r.auto = false
 
-	// A toast pops in over a few frames, then times itself out: once it has
-	// arrived, the next frame is the one its time is up at.
-	r.toast, r.toastAt = "kept", time.Now()
+	// The menu drops in over a few frames, then rests: once it has landed,
+	// nothing asks to be woken for it.
+	r.menuAt = time.Now()
 	if !a.readerTick(r) {
-		t.Fatal("a toast popping in asked for no frames")
+		t.Fatal("the menu dropping in asked for no frames")
 	}
-	r.toastAt = time.Now().Add(-toastPop)
+	r.menuAt = time.Now().Add(-menuEnter)
 	if a.readerTick(r) {
-		t.Fatal("a settled toast asked for every frame")
+		t.Fatal("a settled menu asked for every frame")
 	}
-	if at, ok := a.readerWakeAt(r); !ok || !at.Equal(r.toastAt.Add(toastDuration)) {
-		t.Fatalf("toast wake = %v (%v), want its end", at, ok)
+	if at, ok := a.readerWakeAt(r); ok {
+		t.Fatalf("a settled menu asked to be woken at %v", at)
 	}
-	r.toast = ""
+	// Going back up is motion too.
+	r.menuClosedAt = time.Now()
+	if !a.readerTick(r) {
+		t.Fatal("the menu going away asked for no frames")
+	}
+	r.menuClosedAt = time.Now().Add(-menuExit)
+	if a.readerTick(r) {
+		t.Fatal("a closed menu asked for every frame")
+	}
+	if !r.menuClosedAt.IsZero() {
+		t.Fatal("the menu's exit did not finish")
+	}
 
 	// A held press fires when its delay is up.
 	r.pressed = true
@@ -84,17 +96,6 @@ func TestReaderStillStatesWakeAtTheirDeadline(t *testing.T) {
 	}
 	r.pressed = false
 	r.longPress = time.Time{}
-
-	// The reading direction guide has a timer of its own (startGuide), so it
-	// needs none from the frame loop.
-	r.guide = true
-	if a.readerTick(r) {
-		t.Fatal("the guide asked for every frame")
-	}
-	if at, ok := a.readerWakeAt(r); ok {
-		t.Fatalf("the guide asked to be woken at %v; its timer does that", at)
-	}
-	r.guide = false
 
 	// A turn in flight moves every frame.
 	r.turnDir = groupNext

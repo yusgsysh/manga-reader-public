@@ -30,7 +30,7 @@ func TestReaderHidesSidebarAndLeavesFullScreen(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	if got := a.router.Path(); got != "/reader/1/tok1" {
 		t.Fatalf("path = %q, want the reader", got)
 	}

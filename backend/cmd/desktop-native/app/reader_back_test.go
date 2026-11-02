@@ -29,7 +29,7 @@ func TestReaderBackLeavesTheGallery(t *testing.T) {
 		if got := a.router.Path(); got != "/reader/1/tok1" {
 			t.Fatalf("visit %d: path after 开始阅读 = %q, want /reader/1/tok1", i, got)
 		}
-		waitText(t, tt, "第 1 / 3 页")
+		waitReaderPage(t, tt, a, 0)
 
 		// The reader's overlay opens with the page; its back leaves the
 		// reader. The overlay hides itself after a few idle seconds, so a

@@ -514,7 +514,7 @@ func TestPagesFadeInPlace(t *testing.T) {
 	if got := a.router.Path(); got != "/reader/1/tok1" {
 		t.Fatalf("path after 开始阅读 = %q", got)
 	}
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	// The overlay opens with the page and hides itself after a few idle
 	// seconds; while it is up, its controls are in place in the page's first
 	// frames even while the overlay's fade is still running.
@@ -577,6 +577,16 @@ func waitText(t *testing.T, tt *ui.Tester, s string) {
 	waitFor(t, tt, fmt.Sprintf("%q to show", s), func() bool { return tt.HasText(s) })
 }
 
+// waitReaderPage renders frames until the reader has loaded and is showing
+// page (0-based). The reader keeps its page number out of the view, so a test
+// waits on the state rather than on a label.
+func waitReaderPage(t *testing.T, tt *ui.Tester, a *App, page int) {
+	t.Helper()
+	waitFor(t, tt, fmt.Sprintf("reader page %d", page+1), func() bool {
+		return a.reader.loaded && a.reader.page == page
+	})
+}
+
 // showReaderOverlay puts the reader's overlay up, with its controls, and
 // renders it: the overlay hides itself after a few idle seconds, and a test
 // that clicks a control needs it to still be there. The fade is run to its
@@ -589,17 +599,22 @@ func showReaderOverlay(t *testing.T, a *App, tt *ui.Tester) {
 		a.reader.overlayAt = time.Now().Add(-chromeEnter)
 		a.reader.overlayClosedAt = time.Time{}
 		a.reader.panel = panelNone
-		a.reader.guide = false
 		a.markActivity()
 	})
 	tt.Advance(chromeEnter + 50*time.Millisecond)
 	tt.Frame()
 }
 
-// showReaderPanel opens a reader panel over the overlay and renders it.
+// showReaderPanel opens a reader panel over the overlay and renders it, with
+// the menu's drop run to its end so a snapshot or a click sees it in place.
 func showReaderPanel(t *testing.T, a *App, tt *ui.Tester, p readerPanel) {
 	t.Helper()
-	a.update(func() { a.openPanel(&a.reader, p) })
+	a.update(func() {
+		a.openPanel(&a.reader, p)
+		if p.isMenu() {
+			a.reader.menuAt = time.Now().Add(-menuEnter)
+		}
+	})
 	tt.Frame()
 }
 
@@ -664,7 +679,7 @@ func TestGalleryToReader(t *testing.T) {
 	if got := a.router.Path(); got != "/reader/1/tok1" {
 		t.Fatalf("path after 开始阅读 = %q", got)
 	}
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	// The overlay opens with the page; a tap puts it away, and only then do
 	// the outer thirds turn. Right to left, so the left third goes on.
 	tt.ClickAt(640, 400)
@@ -672,9 +687,9 @@ func TestGalleryToReader(t *testing.T) {
 		t.Fatal("a tap in the middle left the overlay up")
 	}
 	tt.ClickAt(180, 400)
-	waitText(t, tt, "第 2 / 3 页")
+	waitFor(t, tt, "the tap to turn to page 2", func() bool { return a.reader.page == 1 })
 	tt.Key(0, ui.KeyLeft)
-	waitText(t, tt, "第 3 / 3 页")
+	waitFor(t, tt, "the key to turn to page 3", func() bool { return a.reader.page == 2 })
 }
 
 // TestReaderPreloadsNearbyPages checks that opening the reader warms the
@@ -707,7 +722,7 @@ func TestReaderPreloadsNearbyPages(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 
 	want := []string{
 		"https://img.example/page-0.jpg",
@@ -854,7 +869,7 @@ func TestReaderPagingPersistsAcrossGalleries(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 
 	// The overlay's settings sheet holds the direction and the page mode,
 	// as comimi's does.
@@ -885,7 +900,7 @@ func TestReaderPagingPersistsAcrossGalleries(t *testing.T) {
 	waitText(t, tt, "示例 B")
 	a.openReaderAt(2, "tok2", 0)
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 4 页")
+	waitReaderPage(t, tt, a, 0)
 	if a.reader.id != 2 {
 		t.Fatalf("reader is on gallery %d, want 2", a.reader.id)
 	}
@@ -945,7 +960,7 @@ func TestDetailThumbnailGridJumpsToPage(t *testing.T) {
 	if p := a.router.Path(); p != "/reader/1/tok1" {
 		t.Fatalf("path after thumbnail click = %q", p)
 	}
-	waitText(t, tt, "2 / 3 页")
+	waitReaderPage(t, tt, a, 1)
 }
 
 // TestDetailThumbnailPager covers the gallery page's paged thumbnail grid:
@@ -999,10 +1014,10 @@ func TestReaderTapZones(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 
 	// A new gallery opens with the overlay up; a tap in the middle puts it
-	// away, leaving only the page and its count.
+	// away, leaving only the page.
 	a.update(func() { a.reader.overlay = true })
 	tt.Frame()
 	// A press on the dock's own surface is not a tap on the page: it leaves
@@ -1015,16 +1030,15 @@ func TestReaderTapZones(t *testing.T) {
 	if a.reader.overlay {
 		t.Fatal("a tap in the middle left the overlay up")
 	}
-	waitNoText(t, tt, "点击页面中央可隐藏控件")
 
 	// The reader hides the sidebar, so the reading area spans the whole
 	// 1280px window: x=1100 is the right third and x=180 the left third.
 	// Right to left by default, so the left third goes on and the right
 	// third back.
 	tt.ClickAt(180, 400)
-	waitText(t, tt, "第 2 / 3 页")
+	waitFor(t, tt, "the left third to turn on", func() bool { return a.reader.page == 1 })
 	tt.ClickAt(1100, 400)
-	waitText(t, tt, "第 1 / 3 页")
+	waitFor(t, tt, "the right third to turn back", func() bool { return a.reader.page == 0 })
 
 	// The middle brings the overlay back.
 	tt.ClickAt(640, 400)
@@ -1047,7 +1061,7 @@ func TestReaderSwipeTurnsThePage(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	a.update(func() { a.reader.overlay = false })
 
 	// Right to left: dragging right brings the next page, and the turn slides
@@ -1059,7 +1073,9 @@ func TestReaderSwipeTurnsThePage(t *testing.T) {
 	if a.reader.turnDir == groupCurrent {
 		t.Fatal("a swipe did not start a turn")
 	}
-	waitText(t, tt, "第 2 / 3 页")
+	waitFor(t, tt, "the turn to land on the next page", func() bool {
+		return a.reader.page == 1 && a.reader.turnDir == groupCurrent
+	})
 
 	// A drag shorter than the swipe threshold is not a turn.
 	page := a.reader.page
@@ -1099,7 +1115,7 @@ func TestReaderSeekAndPageList(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 
 	// The seek bar spans the dock's content, and right to left the far side
 	// of it is the first page, so its other end is the last. The overlay is
@@ -1110,11 +1126,10 @@ func TestReaderSeekAndPageList(t *testing.T) {
 	} else {
 		t.Fatal("the seek bar is missing from the dock")
 	}
-	waitText(t, tt, "第 3 / 3 页")
+	waitReaderPage(t, tt, a, 2)
 
 	// The page list's field jumps by number.
-	a.update(func() { a.openPanel(&a.reader, panelPages) })
-	tt.Frame()
+	showReaderPanel(t, a, tt, panelPages)
 	if err := tt.Click("页码"); err != nil {
 		t.Fatalf("click page field: %v", err)
 	}
@@ -1122,7 +1137,7 @@ func TestReaderSeekAndPageList(t *testing.T) {
 	if err := tt.Click("跳转"); err != nil {
 		t.Fatalf("click go: %v", err)
 	}
-	waitText(t, tt, "第 2 / 3 页")
+	waitReaderPage(t, tt, a, 1)
 	if a.reader.jump != "" {
 		t.Errorf("page field not cleared: %q", a.reader.jump)
 	}
@@ -1142,13 +1157,13 @@ func TestReaderKeysFollowTheDirection(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 
 	// Right to left: the right arrow goes back, the left arrow on.
 	tt.Key(0, ui.KeyLeft)
-	waitText(t, tt, "第 2 / 3 页")
+	waitReaderPage(t, tt, a, 1)
 	tt.Key(0, ui.KeyRight)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 
 	// P turns the page mode, C the cover, and the settings remember both.
 	tt.Key(0, ui.KeyP)
@@ -1330,7 +1345,7 @@ func TestBackFromReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	// The overlay holds the way back; it hides itself while idle, so bring it
 	// up before clicking it.
 	showReaderOverlay(t, a, tt)
@@ -2327,13 +2342,13 @@ func TestReaderProgressIsBatched(t *testing.T) {
 
 	a.router.Push("/reader/1/tok1")
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 
 	// Two quick turns: only the last page should be reported.
 	tt.Key(0, ui.KeyLeft)
-	waitText(t, tt, "第 2 / 3 页")
+	waitReaderPage(t, tt, a, 1)
 	tt.Key(0, ui.KeyLeft)
-	waitText(t, tt, "第 3 / 3 页")
+	waitReaderPage(t, tt, a, 2)
 
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
@@ -2475,7 +2490,7 @@ func TestReaderDoublePagesAndWheel(t *testing.T) {
 	waitText(t, tt, "示例 A")
 	a.router.Push("/reader/1/tok1")
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	tt.Frame()
 
 	// A spread steps two pages at a time from the key, and the cover stands
@@ -2483,12 +2498,12 @@ func TestReaderDoublePagesAndWheel(t *testing.T) {
 	a.update(func() { a.reader.settings.double = true })
 	tt.Frame()
 	tt.Key(0, ui.KeyLeft) // right to left: the left key goes on
-	waitText(t, tt, "第 2 - 3 / 3 页")
+	waitReaderPage(t, tt, a, 1)
 	if a.reader.page != 1 {
 		t.Fatalf("page = %d, want 1 as the pair's first page", a.reader.page)
 	}
 	tt.Key(0, ui.KeyRight)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 
 	// A wheel notch over the page turns nothing: only ctrl/⌘ zooms.
 	page := a.reader.page
@@ -3366,7 +3381,7 @@ func TestReaderSpreadOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 
 	a.update(func() {
 		a.reader.settings.rtl = true
@@ -3422,7 +3437,7 @@ func TestReaderBypassCacheRetry(t *testing.T) {
 	}
 	navSettle(tt)
 	cache := a.client.PageImageURL("https://img.example/page-0.jpg")
-	waitText(t, tt, "1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	// The store learns of the 502 in its own goroutine: render frames until
 	// its record has the failure, which is what the reader shows.
 	deadline := time.Now().Add(30 * time.Second)

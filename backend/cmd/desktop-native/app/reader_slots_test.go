@@ -132,7 +132,7 @@ func TestReaderSlotsCoverTheGalleryCount(t *testing.T) {
 	openReader(t, a, tt, "开始阅读")
 
 	// Five pages have arrived and the rest is still upstream.
-	waitText(t, tt, fmt.Sprintf("第 1 / %d 页", total))
+	waitReaderPage(t, tt, a, 0)
 	a.mu.Lock()
 	slots, page, pageURL := len(a.reader.pages), a.reader.page, a.reader.pages[0]
 	a.mu.Unlock()
@@ -154,7 +154,7 @@ func TestReaderSlotsCoverTheGalleryCount(t *testing.T) {
 		t.Fatalf("page after one turn = %d, want 1", page)
 	}
 	// The end of the stream settles the list: every slot is filled now.
-	waitText(t, tt, fmt.Sprintf("第 2 / %d 页", total))
+	waitReaderPage(t, tt, a, 1)
 }
 
 // TestReaderShortListEndsAtTheLastPage covers a gallery whose upstream list is
@@ -167,7 +167,7 @@ func TestReaderShortListEndsAtTheLastPage(t *testing.T) {
 	tt := ui.NewTester(a.View, 1280, 860)
 	openReader(t, a, tt, "开始阅读")
 
-	waitText(t, tt, "第 1 / 6 页")
+	waitReaderPage(t, tt, a, 0)
 	a.mu.Lock()
 	slots := len(a.reader.pages)
 	a.mu.Unlock()
@@ -214,13 +214,13 @@ func TestReaderReopensWhereItStopped(t *testing.T) {
 	a := New(NewClient(url))
 	tt := ui.NewTester(a.View, 1280, 860)
 	openReader(t, a, tt, "开始阅读")
-	waitText(t, tt, "第 1 / 10 页")
+	waitReaderPage(t, tt, a, 0)
 
 	for i := 0; i < 3; i++ {
 		tt.Key(0, ui.KeyLeft)
 	}
 	tt.Frame()
-	waitText(t, tt, "第 4 / 10 页")
+	waitReaderPage(t, tt, a, 3)
 	waitFor(t, tt, "the page written", func() bool {
 		for _, p := range srv.savedWrites() {
 			if p == 3 {
@@ -263,7 +263,7 @@ func TestReaderReopensWhereItStopped(t *testing.T) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "4 / 10 页")
+	waitReaderPage(t, tt, a, 3)
 	a.mu.Lock()
 	page := a.reader.page
 	a.mu.Unlock()

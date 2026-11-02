@@ -22,7 +22,7 @@ func openReaderForTest(t *testing.T) (*App, *ui.Tester) {
 		t.Fatal(err)
 	}
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	return a, tt
 }
 
@@ -67,7 +67,6 @@ func TestReaderAutoTurnAdvances(t *testing.T) {
 	if !a.reader.auto {
 		t.Fatal("auto page turn did not start")
 	}
-	waitText(t, tt, "已开始自动播放")
 
 	// The interval has run: the next frame turns the page.
 	a.update(func() { a.reader.autoSince = time.Now().Add(-4 * time.Second) })
@@ -243,7 +242,6 @@ func TestReaderLongPressKeepsThePage(t *testing.T) {
 		t.Fatalf("page 0 not kept; kept=%v", a.reader.fav)
 	}
 	tt.Release(640, 400)
-	waitText(t, tt, "已收藏第 1 页")
 
 	// A drag drops the press before its time runs: the page is not kept.
 	a.update(func() { a.reader.fav = map[int]bool{} })
@@ -369,6 +367,71 @@ func TestReaderChromeMovesInAndOut(t *testing.T) {
 	}
 }
 
+// TestReaderMenuDropsInAndOut covers the menu card's motion: it starts above
+// its place and transparent, lands, and goes back up as it fades when the menu
+// closes.
+func TestReaderMenuDropsInAndOut(t *testing.T) {
+	now := time.Now()
+	r := Reader{menuAt: now}
+	if drop, alpha := menuMotion(&r, now); drop <= 0 || alpha != 0 {
+		t.Fatalf("menu at the start of the entrance = %v/%v, want above and transparent", drop, alpha)
+	}
+	r.menuAt = now.Add(-menuEnter / 4)
+	drop, alpha := menuMotion(&r, now)
+	if drop <= 0 || drop >= menuSlide || alpha <= 0 || alpha >= 1 {
+		t.Fatalf("menu part way in = %v/%v, want it dropping and fading in", drop, alpha)
+	}
+	r.menuAt = now.Add(-menuEnter)
+	if drop, alpha = menuMotion(&r, now); drop != 0 || alpha != 1 {
+		t.Fatalf("menu at rest = %v/%v, want in place and opaque", drop, alpha)
+	}
+
+	r.menuAt = time.Time{}
+	r.menuClosedAt = now
+	if drop, alpha = menuMotion(&r, now); drop != 0 || alpha != 1 {
+		t.Fatalf("menu at the start of the exit = %v/%v, want it still", drop, alpha)
+	}
+	r.menuClosedAt = now.Add(-menuExit / 4)
+	drop, alpha = menuMotion(&r, now)
+	if drop <= 0 || drop >= menuSlide || alpha <= 0 || alpha >= 1 {
+		t.Fatalf("menu part way out = %v/%v, want it going up and fading", drop, alpha)
+	}
+	r.menuClosedAt = now.Add(-menuExit)
+	if drop, alpha = menuMotion(&r, now); drop != menuSlide || alpha != 0 {
+		t.Fatalf("menu at the end of the exit = %v/%v, want above and transparent", drop, alpha)
+	}
+}
+
+// TestReaderMenuStaysForItsExit covers the card being built while it goes:
+// closing the menu must not blink it away before its fall is seen.
+func TestReaderMenuStaysForItsExit(t *testing.T) {
+	a, tt := openReaderForTest(t)
+	showReaderOverlay(t, a, tt)
+	a.update(func() {
+		a.openPanel(&a.reader, panelMenu)
+		a.reader.menuAt = time.Now().Add(-menuEnter)
+	})
+	tt.Frame()
+	if !tt.HasText("页面列表") {
+		t.Fatalf("the menu is missing; texts=%q", tt.Texts())
+	}
+
+	a.update(func() { a.openPanel(&a.reader, panelNone) })
+	tt.Frame()
+	if !tt.HasText("页面列表") {
+		t.Fatal("the menu vanished before its exit ran")
+	}
+
+	a.update(func() { a.reader.menuClosedAt = time.Now().Add(-menuExit) })
+	tt.Frame()
+	if tt.HasText("页面列表") {
+		t.Fatal("the menu stayed after its exit")
+	}
+	if a.reader.menuPanel != panelNone {
+		t.Fatalf("menuPanel = %v after the exit, want none", a.reader.menuPanel)
+	}
+}
+
 // TestReaderEscapeGivesBackOneLayer covers Escape backing out a layer at a
 // time: the panel, then the overlay, then the reader.
 func TestReaderEscapeGivesBackOneLayer(t *testing.T) {
@@ -411,7 +474,7 @@ func TestReaderArrowsFollowReadingDirection(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.router.Push("/reader/1/tok1")
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	showReaderOverlay(t, a, tt)
 
 	if err := tt.Click("下一页"); err != nil {

@@ -157,7 +157,7 @@ func TestReaderShowsStreamedPages(t *testing.T) {
 	// gallery's whole count from the start (as main's reader lays out one slot
 	// per page), so the list does not rebuild page by page.
 	waitNoText(t, tt, "正在获取页面列表…")
-	waitText(t, tt, fmt.Sprintf("第 1 / %d 页", total))
+	waitReaderPage(t, tt, a, 0)
 	if !a.reader.loaded || a.reader.partial != 3 {
 		t.Fatalf("reader loaded=%v partial=%d, want 3 streamed", a.reader.loaded, a.reader.partial)
 	}

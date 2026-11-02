@@ -13,7 +13,7 @@ func TestReaderSpreadSettingLandsOnThePair(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.router.Push("/reader/1/tok1")
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 
 	a.update(func() { a.goToPage(&a.reader, 2) })
 	tt.Frame()
@@ -39,7 +39,7 @@ func TestReaderOverlayFloatsOverThePage(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.router.Push("/reader/1/tok1")
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	showReaderOverlay(t, a, tt)
 
 	pill, ok := tt.Find("阅读器菜单")
@@ -64,7 +64,7 @@ func TestReaderPageListOpensWhereItIs(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.router.Push("/reader/1/tok1")
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 
 	a.update(func() {
 		r := &a.reader
@@ -75,6 +75,7 @@ func TestReaderPageListOpensWhereItIs(t *testing.T) {
 		r.total, r.partial, r.complete, r.loaded = 60, 60, true, true
 		a.goToPage(r, 40)
 		a.openPanel(r, panelPages)
+		r.menuAt = time.Now().Add(-menuEnter)
 	})
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {

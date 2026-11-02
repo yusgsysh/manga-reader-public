@@ -14,7 +14,9 @@ import (
 // card above the dock at the right. Both are made of the same glass as the
 // rest of the overlay.
 
-// readerMenu draws the menu card, with the view of the panel that is open.
+// readerMenu draws the menu card, with the view of the panel that is open. It
+// drops in from under the pill when it opens and goes back up when it closes;
+// while it closes it still draws the view it is leaving.
 func (a *App) readerMenu(c *ui.Context, r *Reader, slide, alpha float32) {
 	look := readerLookOf(r)
 	w, h := c.Size()
@@ -23,13 +25,20 @@ func (a *App) readerMenu(c *ui.Context, r *Reader, slide, alpha float32) {
 	if width < 240 {
 		width = maxFloat(w-2*inset, 200)
 	}
+	shown := r.panel
+	closing := false
+	if !shown.isMenu() {
+		shown, closing = r.menuPanel, true
+	}
+	drop, menuAlpha := menuMotion(r, time.Now())
 	panel := ui.Column(c).Width(width).Absolute().Top(inset).Left(inset).
 		Radius(16).Background(look.glass).Shadow(0, 6, 24, 0, look.shadow).Clip().
-		Translate(0, -slide*chromeSlide).Opacity(alpha)
+		Translate(0, -slide*chromeSlide-drop).Opacity(alpha * menuAlpha).
+		IgnoreInput(closing)
 	panel.Children(func() {
-		a.readerMenuHead(c, r, look)
+		a.readerMenuHead(c, r, look, shown)
 		ui.Box(c).FillWidth().Height(1).Background(look.line)
-		switch r.panel {
+		switch shown {
 		case panelMenu:
 			a.readerMenuHome(c, r, look)
 		case panelPages:
@@ -48,7 +57,7 @@ func (a *App) readerMenu(c *ui.Context, r *Reader, slide, alpha float32) {
 
 // readerMenuHead is the card's first row: the button that collapses the menu
 // (or goes back to it), the gallery's title, or the name of the view.
-func (a *App) readerMenuHead(c *ui.Context, r *Reader, look readerLook) {
+func (a *App) readerMenuHead(c *ui.Context, r *Reader, look readerLook, shown readerPanel) {
 	head := ui.Box(c).FillWidth().Height(62).
 		Focusable().Label(i18n.T("Reader menu")).Tooltip(i18n.T("Reader menu"))
 	head.HandleInput(func(ev ui.InputEvent) bool {
@@ -56,7 +65,7 @@ func (a *App) readerMenuHead(c *ui.Context, r *Reader, look readerLook) {
 			return false
 		}
 		a.markActivity()
-		if r.panel == panelMenu {
+		if shown == panelMenu {
 			a.openPanel(r, panelNone)
 			return true
 		}
@@ -69,13 +78,13 @@ func (a *App) readerMenuHead(c *ui.Context, r *Reader, look readerLook) {
 	head.Children(func() {
 		ui.Row(c).Fill().Padding(0, 13).Gap(13).AlignItems(ui.Center).Children(func() {
 			mark := readerIconClose
-			if r.panel != panelMenu {
+			if shown != panelMenu {
 				mark = readerIconBack
 			}
 			ui.Icon(c, mark).Size(18, 18).TextColor(look.muted).Shrink(0)
 			title := r.title
-			if r.panel != panelMenu {
-				title = a.panelTitle(r)
+			if shown != panelMenu {
+				title = panelTitle(shown)
 			}
 			ui.Text(c, title).FontSize(15).FontWeight(700).TextColor(look.fg).
 				SingleLine().Grow(1)
@@ -96,8 +105,8 @@ func (a *App) readerMenuBody(c *ui.Context, look readerLook, h float32, fn func(
 }
 
 // panelTitle names the open view.
-func (a *App) panelTitle(r *Reader) string {
-	switch r.panel {
+func panelTitle(p readerPanel) string {
+	switch p {
 	case panelPages:
 		return i18n.T("Pages")
 	case panelFavorites:
@@ -163,8 +172,6 @@ func (a *App) readerPageList(c *ui.Context, r *Reader, look readerLook) {
 		if ui.Button(c, i18n.T("Go")).Clicked() {
 			a.jumpTo(r)
 		}
-		ui.Text(c, i18n.Sprintf(i18n.T("%s / %d"), pageGroupText(a.shownGroup()), len(r.pages))).
-			FontSize(11).TextColor(look.muted)
 	})
 	if r.pagesScrollTo >= 0 {
 		const pageListCols = 4
@@ -312,7 +319,6 @@ func (a *App) readerShare(c *ui.Context, r *Reader, look readerLook) {
 	ui.Row(c).Gap(8).Children(func() {
 		if ui.PrimaryButton(c, i18n.T("Copy")).Clicked() {
 			a.copyToClipboard(url)
-			a.notify(r, i18n.T("Copied"), toneSuccess)
 		}
 	})
 	ui.Text(c, i18n.T("The gallery opens at its cover, whatever page the address came from")).
@@ -417,22 +423,12 @@ func (a *App) setDirection(r *Reader, rtl bool) {
 		r.page = first
 		a.saveProgress(r)
 	}
-	if rtl {
-		a.notify(r, i18n.T("Right to left"), toneInfo)
-	} else {
-		a.notify(r, i18n.T("Left to right"), toneInfo)
-	}
 }
 
 // setDark sets the paper the pages sit on.
 func (a *App) setDark(r *Reader, dark bool) {
 	r.settings.dark = dark
 	a.readerSettings = r.settings
-	if dark {
-		a.notify(r, i18n.T("Black background"), toneInfo)
-	} else {
-		a.notify(r, i18n.T("White background"), toneInfo)
-	}
 }
 
 // setAutoInterval sets how long auto page turn leaves a page up.

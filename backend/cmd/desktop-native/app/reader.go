@@ -98,12 +98,18 @@ type Reader struct {
 	settings readerSettings
 	overlay  bool
 	panel    readerPanel
-	guide    bool
-	auto     bool
-	zoom     float32
-	panX     float32
-	panY     float32
-	drag     float32
+	// menuAt is when the menu card last dropped in, and menuClosedAt when it
+	// last went away: the card slides from under the pill and back up, as
+	// comimi's menu panel does. menuPanel is the view it shows while it
+	// closes, after panel has already gone back to none.
+	menuAt       time.Time
+	menuClosedAt time.Time
+	menuPanel    readerPanel
+	auto         bool
+	zoom         float32
+	panX         float32
+	panY         float32
+	drag         float32
 	// overlayAt is when the overlay last came up, and overlayClosedAt when it
 	// last went away: the chrome slides and fades between the two, and the
 	// cards stay built until the closing motion has run (see chromeMotion).
@@ -118,9 +124,6 @@ type Reader struct {
 	dragAt    time.Time
 	dragStart float32
 	fav       map[int]bool
-	toast     string
-	toastKind toastTone
-	toastAt   time.Time
 	// narrow is set when the window is too narrow for a spread, which shows
 	// single pages whatever the setting says.
 	narrow bool
@@ -225,8 +228,6 @@ const (
 	overlayAutoHide = 3 * time.Second
 	// longPressDelay is how long a press on a page takes to favorite it.
 	longPressDelay = 500 * time.Millisecond
-	// toastDuration is how long a notification stays.
-	toastDuration = 1500 * time.Millisecond
 )
 
 // ensureReader starts loading the reader's page list unless it is already
@@ -277,18 +278,20 @@ func (a *App) ensureReader(id int64, token string, offline bool) {
 	r.dragStart = 0
 	r.snapping = false
 	r.dragFrom = 0
-	// The overlay opens by itself on a new gallery, with the reading
-	// direction guide, as comimi's splash gives way to it (see startGuide).
-	// Its auto-hide clock starts now: an overlay that opened without activity
-	// would be counted as idle since the clock's zero and hide at once.
+	// The overlay opens by itself on a new gallery, as comimi's splash gives
+	// way to it. Its auto-hide clock starts now: an overlay that opened
+	// without activity would be counted as idle since the clock's zero and
+	// hide at once.
 	r.overlay = true
 	r.overlayAt = time.Now()
 	r.overlayClosedAt = time.Time{}
 	a.markActivity()
 	r.panel = panelNone
+	r.menuAt = time.Time{}
+	r.menuClosedAt = time.Time{}
+	r.menuPanel = panelNone
 	r.auto = false
 	r.fav = make(map[int]bool)
-	r.toast = ""
 	r.turnDir = groupCurrent
 	r.jump = ""
 	r.seekPreview = -1
@@ -300,24 +303,7 @@ func (a *App) ensureReader(id int64, token string, offline bool) {
 	r.loadID++
 	// The sidebar gives way to the page, and the window follows the reader
 	// into full screen as it does when a manga viewer opens.
-	a.startGuide(r)
 	a.startReaderLoad(r)
-}
-
-// startGuide arms the reading direction guide the overlay opens with: it is
-// shown first, then gives way to the message that tells what a tap does, so a
-// first-time reader learns the one gesture the reader lives on.
-func (a *App) startGuide(r *Reader) {
-	// No gallery to read yet: the guide waits for the pages.
-	r.guide = true
-	time.AfterFunc(2*time.Second, func() {
-		a.update(func() {
-			if &a.reader != r {
-				return
-			}
-			r.guide = false
-		})
-	})
 }
 
 // startReaderLoad streams the reader's page list in. The pages are laid out as
@@ -711,7 +697,7 @@ func (a *App) flushProgressNow(r *Reader) {
 }
 
 // readerTick advances everything that moves on its own: the turn animation,
-// auto page turn, the overlay's auto-hide and the toast. It reports whether
+// the menu's drop, auto page turn and the overlay's auto-hide. It reports whether
 // another frame is needed to carry motion, so the reader can keep its clock
 // going only while something moves; the deadlines that only need one frame
 // are asked for by readerWakeAt.
@@ -745,8 +731,22 @@ func (a *App) readerTick(r *Reader) bool {
 			pending = true
 		}
 	}
-	if r.toast != "" && time.Since(r.toastAt) < toastPop {
-		pending = true
+	// The menu drops in over a few frames and goes back up the same way, and
+	// stays built while it goes so its exit is seen.
+	if !r.menuAt.IsZero() {
+		if time.Since(r.menuAt) >= menuEnter {
+			r.menuAt = time.Time{}
+		} else {
+			pending = true
+		}
+	}
+	if !r.menuClosedAt.IsZero() {
+		if time.Since(r.menuClosedAt) >= menuExit {
+			r.menuClosedAt = time.Time{}
+			r.menuPanel = panelNone
+		} else {
+			pending = true
+		}
 	}
 	if r.auto && !r.overlay && r.panel == panelNone && r.loaded && r.turnDir == groupCurrent {
 		interval := time.Duration(r.settings.autoInterval()) * time.Millisecond
@@ -772,10 +772,6 @@ func (a *App) readerTick(r *Reader) bool {
 		// before this close, on the frame after it.
 		pending = true
 	}
-	// A toast that appeared this frame is shown at least once, then timed.
-	if r.toast != "" && time.Since(r.toastAt) >= toastDuration {
-		r.toast = ""
-	}
 	// A press held on a page becomes a favorite when its time is up.
 	if !r.longPress.IsZero() && r.pressed {
 		a.longPressDue(r)
@@ -784,9 +780,9 @@ func (a *App) readerTick(r *Reader) bool {
 }
 
 // readerWakeAt is when the reader next needs a frame for a deadline rather
-// than for motion: auto page turn's interval, the overlay's auto-hide, the end
-// of a toast, a long press coming due. It reports false when nothing waits, so
-// a still page asks for no frames at all between them.
+// than for motion: auto page turn's interval, the overlay's auto-hide, a long
+// press coming due. It reports false when nothing waits, so a still page asks
+// for no frames at all between them.
 func (a *App) readerWakeAt(r *Reader) (time.Time, bool) {
 	var at time.Time
 	wake := func(t time.Time) {
@@ -802,9 +798,6 @@ func (a *App) readerWakeAt(r *Reader) (time.Time, bool) {
 	}
 	if r.overlay && r.panel == panelNone {
 		wake(a.overlayActivity.Add(overlayAutoHide))
-	}
-	if r.toast != "" {
-		wake(r.toastAt.Add(toastDuration))
 	}
 	if r.pressed && !r.longPress.IsZero() {
 		wake(r.longPress.Add(longPressDelay))
@@ -853,11 +846,6 @@ func (a *App) setAuto(r *Reader, on bool) {
 	}
 	r.auto = on
 	r.autoSince = time.Now()
-	if on {
-		a.notify(r, i18n.T("Auto page turn on"), toneInfo)
-	} else {
-		a.notify(r, i18n.T("Auto page turn off"), toneInfo)
-	}
 }
 
 // closeOverlay hides the overlay and the panel in it, as tapping the middle
@@ -870,6 +858,11 @@ func (a *App) closeOverlay(r *Reader) {
 	r.overlay = false
 	r.overlayClosedAt = time.Now()
 	r.panel = panelNone
+	// The menu goes with the overlay: it is not left to drop out behind a
+	// hidden overlay and show up again later.
+	r.menuAt = time.Time{}
+	r.menuClosedAt = time.Time{}
+	r.menuPanel = panelNone
 }
 
 // showOverlay brings the overlay up, starting the chrome's entrance only when
@@ -885,7 +878,21 @@ func (a *App) showOverlay(r *Reader) {
 
 // openPanel shows the overlay with a panel in it.
 func (a *App) openPanel(r *Reader, p readerPanel) {
+	old := r.panel
 	a.showOverlay(r)
+	// The card drops in when the menu opens, and goes back up when it gives
+	// way to the page or to another panel. Switching between the menu's own
+	// views keeps the card where it is.
+	switch {
+	case p.isMenu() && !old.isMenu():
+		r.menuAt = time.Now()
+		r.menuClosedAt = time.Time{}
+		r.menuPanel = panelNone
+	case !p.isMenu() && old.isMenu():
+		r.menuAt = time.Time{}
+		r.menuClosedAt = time.Now()
+		r.menuPanel = old
+	}
 	r.panel = p
 	// The page list opens on the page being read, not at its first page: a
 	// long gallery is otherwise a scroll back to where the reader was.
@@ -902,22 +909,6 @@ func (a *App) togglePanel(r *Reader, p readerPanel) {
 		return
 	}
 	a.openPanel(r, p)
-}
-
-// toastKind is how a toast reads: neutral, good, or bad.
-type toastTone int
-
-const (
-	toneInfo toastTone = iota
-	toneSuccess
-	toneError
-)
-
-// notify shows a toast over the reader for a moment.
-func (a *App) notify(r *Reader, message string, tone toastTone) {
-	r.toast = message
-	r.toastKind = tone
-	r.toastAt = time.Now()
 }
 
 // leaveReader leaves the reader for the page before it. Leaving saves the page

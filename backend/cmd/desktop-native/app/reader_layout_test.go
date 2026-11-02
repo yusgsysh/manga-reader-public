@@ -3,6 +3,8 @@ package app
 import (
 	"reflect"
 	"testing"
+
+	"github.com/egoist/mygo/ui"
 )
 
 // newLayoutReader returns an app whose reader is set up for layout questions
@@ -179,19 +181,30 @@ func TestPageGroupsToLayOutAtTheEnds(t *testing.T) {
 	}
 }
 
-func TestPageGroupText(t *testing.T) {
-	cases := []struct {
-		g    pageGroup
-		want string
-	}{
-		{pageGroup{indexes: []int{0}}, "1"},
-		{pageGroup{indexes: []int{2, 3}}, "3 - 4"},
-		{pageGroup{indexes: []int{3, 2}}, "3 - 4"},
-		{pageGroup{}, ""},
+// TestSpreadPagesMeetAtTheSpine covers how the pictures of a spread sit in
+// their halves: the left page is pushed right and the right page left, so a
+// page narrower than its half leaves its slack outside the spread and the two
+// meet with no gutter in the middle.
+func TestSpreadPagesMeetAtTheSpine(t *testing.T) {
+	leftCell := ui.Rect{X: 0, Y: 0, W: 500, H: 800}
+	rightCell := ui.Rect{X: 500, Y: 0, W: 500, H: 800}
+	// A page taller than it is wide leaves horizontal slack in each half.
+	left := containRect(leftCell, 800, 1600, alignRight)
+	right := containRect(rightCell, 800, 1600, alignLeft)
+	if left.X+left.W != right.X {
+		t.Fatalf("left page ends at %v, right page starts at %v: a gutter remains",
+			left.X+left.W, right.X)
 	}
-	for _, c := range cases {
-		if got := pageGroupText(c.g); got != c.want {
-			t.Fatalf("text of %v = %q, want %q", c.g.indexes, got, c.want)
-		}
+	if left.Y != right.Y || left.H != right.H {
+		t.Fatalf("the facing pages do not share a height: %v vs %v", left, right)
+	}
+	if left.X <= leftCell.X || right.X+right.W >= rightCell.X+rightCell.W {
+		t.Fatalf("the pages are not pushed to the spine: %v and %v", left, right)
+	}
+
+	// A single page stays in the middle of the stage.
+	mid := containRect(leftCell, 800, 1600, alignCenter)
+	if mid.X != (leftCell.W-mid.W)/2 {
+		t.Fatalf("single page x = %v, want it centred in %v", mid.X, mid.W)
 	}
 }

@@ -28,18 +28,17 @@ func (a *App) readerOverlay(c *ui.Context, r *Reader) {
 		PassThrough().Key("reader-overlay").IgnoreInput(!r.overlay)
 	frame.Children(func() {
 		// The menu and the settings are cards of their own; the pill stays for
-		// the settings so the title and the way to the menu never move.
-		if !r.panel.isMenu() {
+		// the settings so the title and the way to the menu never move, and
+		// stays under the menu while it drops in, so the card growing out of
+		// it leaves no empty corner.
+		if !r.panel.isMenu() || !r.menuAt.IsZero() {
 			a.readerPill(c, r, slide, alpha)
 		}
 		a.readerSideArrows(c, r, look, slide, alpha)
-		if r.panel == panelNone {
-			a.readerCenterHint(c, r, alpha)
-		}
 		a.readerDock(c, r, slide, alpha)
 		// Panels come last so they cover the chevrons they reach, as comimi's
 		// settings card does.
-		if r.panel.isMenu() {
+		if r.panel.isMenu() || !r.menuClosedAt.IsZero() {
 			a.readerMenu(c, r, slide, alpha)
 		}
 		if r.panel == panelSettings {
@@ -60,6 +59,22 @@ func chromeMotion(r *Reader, now time.Time) (slide, alpha float32) {
 	p := clampFloat(float32(now.Sub(r.overlayClosedAt))/float32(chromeExit), 0, 1)
 	a := clampFloat(float32(now.Sub(r.overlayClosedAt))/float32(chromeFade), 0, 1)
 	return chromeEase(p), 1 - a
+}
+
+// menuMotion is where the menu card is in its drop: drop is how far above its
+// place it still is, in DIPs, and alpha is its opacity. Opening, it falls from
+// under the pill with the spring's small overshoot; closing, it goes back up
+// and fades, quicker than it came.
+func menuMotion(r *Reader, now time.Time) (drop, alpha float32) {
+	if !r.menuClosedAt.IsZero() {
+		p := clampFloat(float32(now.Sub(r.menuClosedAt))/float32(menuExit), 0, 1)
+		return menuSlide * chromeEase(p), 1 - p
+	}
+	if !r.menuAt.IsZero() {
+		p := clampFloat(float32(now.Sub(r.menuAt))/float32(menuEnter), 0, 1)
+		return menuSlide * (1 - chromeEase(p)), p
+	}
+	return 0, 1
 }
 
 // readerPill is the floating title card at the top left: the menu button, the
@@ -184,39 +199,8 @@ func (a *App) sideDirection(side pageGroupSide) pageGroupPlacement {
 	return groupPrevious
 }
 
-// readerCenterHint is the card in the middle of the page: the direction guide
-// while the reader is new, then the line that says how to put the controls
-// away. It takes no press, so a tap on it is a tap on the page.
-func (a *App) readerCenterHint(c *ui.Context, r *Reader, alpha float32) {
-	look := readerLookOf(r)
-	ui.Column(c).Fill().Absolute().Justify(ui.Center).AlignItems(ui.Center).Gap(10).
-		Opacity(alpha).PassThrough().Children(func() {
-		if r.guide {
-			arrow, direction := readerIconNext, i18n.T("Pages move to the left")
-			if r.settings.rtl {
-				arrow, direction = readerIconPrev, i18n.T("Pages move to the right")
-			}
-			ui.Box(c).Size(96, 96).Radius(16).Background(look.glass).
-				Shadow(0, 4, 18, 0, look.shadow).PassThrough().Children(func() {
-				ui.Column(c).Fill().Center().Gap(8).PassThrough().Children(func() {
-					ui.Icon(c, arrow).Size(30, 30).TextColor(look.muted).PassThrough()
-					ui.Text(c, i18n.T("Page direction")).FontSize(12).
-						TextColor(look.muted).PassThrough()
-				})
-			})
-			ui.Text(c, direction).FontSize(12).TextColor(look.soft).PassThrough()
-			return
-		}
-		ui.Box(c).Padding(6, 12).Radius(8).Background(look.glass).
-			Shadow(0, 4, 18, 0, look.shadow).PassThrough().Children(func() {
-			ui.Text(c, i18n.T("Click the middle of the page to hide this")).FontSize(12).
-				TextColor(look.muted).PassThrough()
-		})
-	})
-}
-
-// readerDock is the floating bar along the bottom: the page count and the seek
-// bar, then auto page turn, the zoom, the page mode, the view and settings.
+// readerDock is the floating bar along the bottom: the seek bar, then auto
+// page turn, the zoom, the page mode, the view and settings.
 func (a *App) readerDock(c *ui.Context, r *Reader, slide, alpha float32) {
 	look := readerLookOf(r)
 	w, _ := c.Size()
@@ -318,8 +302,8 @@ func (a *App) seekTo(r *Reader, x, w float32) {
 	a.goToPage(r, int(ratio*float32(total-1)+0.5))
 }
 
-// readerSeek is the seek bar: the page count, comimi's rounded track with the
-// reader's place filled in, and the preview of the page a pointer hovers over.
+// readerSeek is the seek bar: comimi's rounded track with the reader's place
+// filled in, and the preview of the page a pointer hovers over.
 func (a *App) readerSeek(c *ui.Context, r *Reader, look readerLook) {
 	total := len(r.pages)
 	first := pageGroupFirst(a.shownGroup())
@@ -329,8 +313,6 @@ func (a *App) readerSeek(c *ui.Context, r *Reader, look readerLook) {
 	}
 	w := a.dockWidth(c)
 	ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, a.readerCountText(r)).FontSize(12).FontWeight(700).
-			TextColor(look.fg).Shrink(0).SingleLine()
 		track := ui.Box(c).Height(18).Grow(1).Focusable().
 			Label(i18n.T("Seek")).Tooltip(i18n.T("Seek"))
 		// The bar is painted from the box it is given, so its fill and knob
@@ -341,9 +323,8 @@ func (a *App) readerSeek(c *ui.Context, r *Reader, look readerLook) {
 			if *barW > 0 {
 				return *barW
 			}
-			// Before the bar has painted once: the dock's content less the
-			// room the page count takes.
-			return maxFloat(w-80, 80)
+			// Before the bar has painted once: the dock's whole content.
+			return maxFloat(w, 80)
 		}
 		// Reading the pointer in the frame is what gives the bar a frame for
 		// every move over it: an element that only takes pointer events is told
@@ -599,26 +580,19 @@ func (a *App) setCover(r *Reader, on bool) {
 	r.settings.hasCover = on
 	a.readerSettings = r.settings
 	r.resetView()
-	if on {
-		a.notify(r, i18n.T("A cover page starts alone"), toneInfo)
-	} else {
-		a.notify(r, i18n.T("No cover page"), toneInfo)
-	}
 }
 
 // toggleFavorite keeps a page or lets it go, as comimi's long-press favorite
-// does, and says so.
+// does.
 func (a *App) toggleFavorite(r *Reader, page int) {
 	if r.fav == nil {
 		r.fav = make(map[int]bool)
 	}
 	if r.fav[page] {
 		delete(r.fav, page)
-		a.notify(r, i18n.T("Removed from favorites"), toneInfo)
 		return
 	}
 	r.fav[page] = true
-	a.notify(r, i18n.Sprintf(i18n.T("Page %d added to favorites"), page+1), toneSuccess)
 }
 
 // favoritePages lists the kept pages, in page order.
@@ -636,37 +610,6 @@ func (r *Reader) favoritePages() []int {
 		}
 	}
 	return pages
-}
-
-// readerToast is the notification over the page, briefly, as comimi's centred
-// pill. It pops in with the same overshoot, and nothing in it takes the
-// pointer, so a tap through it still reaches the page.
-func (a *App) readerToast(c *ui.Context, r *Reader) {
-	look := readerLookOf(r)
-	bg := look.muted
-	fg := look.white
-	switch r.toastKind {
-	case toneSuccess:
-		bg = ui.RGB(34, 122, 72)
-	case toneError:
-		bg = ui.RGB(150, 48, 54)
-	}
-	// The pop: small and low, overshooting a little as it arrives, from the
-	// toast's own clock (see toastPop).
-	pop := clampFloat(float32(time.Since(r.toastAt))/float32(toastPop), 0, 1)
-	eased := chromeEase(pop)
-	alpha := pop
-	scaleX := 0.2 + 0.8*eased
-	scaleY := 0.8 + 0.2*eased
-	ui.Box(c).FillWidth().Absolute().Bottom(140).Left(0).Justify(ui.Center).
-		PassThrough().Children(func() {
-		ui.Box(c).Padding(6, 14).Radius(999).Background(bg).
-			Shadow(0, 4, 18, 0, look.shadow).
-			Translate(0, 6*(1-eased)).Scale(scaleX, scaleY).Opacity(alpha).
-			PassThrough().Children(func() {
-			ui.Text(c, r.toast).FontSize(12).FontWeight(700).TextColor(fg).PassThrough()
-		})
-	})
 }
 
 // trackPointer is the pointer's position over el and whether it is over it,

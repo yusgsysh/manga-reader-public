@@ -40,9 +40,12 @@ const (
 	// chromeSlide is how far a card starts from its place, in DIPs: comimi
 	// moves the dock, the pill and the chevrons 35 points.
 	chromeSlide float32 = 35
-	// toastPop is how long a toast takes to pop in; it then stays for
-	// toastDuration.
-	toastPop = 370 * time.Millisecond
+	// menuEnter and menuExit are how long the menu card takes to drop in from
+	// the pill and to go back up, after comimi's menu panel.
+	menuEnter = 360 * time.Millisecond
+	menuExit  = 240 * time.Millisecond
+	// menuSlide is how far above its place the menu card starts, in DIPs.
+	menuSlide float32 = 16
 )
 
 // chromeEase is comimi's spring, cubic-bezier(.34, 1.56, .64, 1): it settles

@@ -29,11 +29,6 @@ const readerPreloadImages = 4
 // narrow window would be unreadably small.
 const readerSpreadMinWidth float32 = 900
 
-// readerSpreadGap is the gutter between the two pages of a spread, in DIPs.
-// A book's pages meet at the spine, so a spread keeps no gap and reads as one
-// wide sheet rather than two pictures hung apart.
-const readerSpreadGap float32 = 0
-
 // pageGroup is a set of pages shown together: one page, or the pair of a
 // spread, in the visual order they are drawn (right-to-left reverses it).
 type pageGroup struct {
@@ -217,27 +212,6 @@ func (a *App) groupOffsetX(spec pageGroupSpec) int {
 		return 1
 	}
 	return -1
-}
-
-// pageGroupText is the label the toolbar and the previews show for a group: one
-// number, or the range a spread covers, 1-based as pages are counted.
-func pageGroupText(g pageGroup) string {
-	if len(g.indexes) == 0 {
-		return ""
-	}
-	lo, hi := g.indexes[0], g.indexes[0]
-	for _, i := range g.indexes[1:] {
-		if i < lo {
-			lo = i
-		}
-		if i > hi {
-			hi = i
-		}
-	}
-	if lo == hi {
-		return itoa(lo + 1)
-	}
-	return itoa(lo+1) + " - " + itoa(hi+1)
 }
 
 // pageGroupFirst is the lowest page index a group shows.

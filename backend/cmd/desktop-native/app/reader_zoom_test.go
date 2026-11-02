@@ -12,7 +12,7 @@ func TestReaderZoomControls(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.router.Push("/reader/1/tok1")
 	navSettle(tt)
-	waitText(t, tt, "第 1 / 3 页")
+	waitReaderPage(t, tt, a, 0)
 	showReaderOverlay(t, a, tt)
 
 	if err := tt.Click("放大"); err != nil {
