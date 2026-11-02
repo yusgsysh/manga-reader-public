@@ -30,9 +30,9 @@ const readerPreloadImages = 4
 const readerSpreadMinWidth float32 = 900
 
 // readerSpreadGap is the gutter between the two pages of a spread, in DIPs.
-// Without it the pages meet at the spine and read as one wide picture, with
-// only the page shadows hinting where one ends and the other begins.
-const readerSpreadGap float32 = 12
+// A book's pages meet at the spine, so a spread keeps no gap and reads as one
+// wide sheet rather than two pictures hung apart.
+const readerSpreadGap float32 = 0
 
 // pageGroup is a set of pages shown together: one page, or the pair of a
 // spread, in the visual order they are drawn (right-to-left reverses it).

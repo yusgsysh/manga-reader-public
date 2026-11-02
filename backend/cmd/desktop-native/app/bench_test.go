@@ -86,6 +86,18 @@ func bigGalleryServer(tb testing.TB, galleries, pages int) *httptest.Server {
 	mux.HandleFunc("/api/bookshelf/1/tok1/status", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"in_bookshelf": false})
 	})
+	// The reader's page pictures: the benchmark frames draw them, and a
+	// frame that waits on a download would measure the network, not the view.
+	page := func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("url") == "" {
+			http.Error(w, `{"error":"missing url"}`, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(fakeImagePNG)
+	}
+	mux.HandleFunc("/api/image/page", page)
+	mux.HandleFunc("/api/image-cache/page", page)
 	return httptest.NewServer(mux)
 }
 
@@ -165,6 +177,90 @@ func BenchmarkTouchHit(b *testing.B) {
 			s.touchLocked(e)
 			s.mu.Unlock()
 		}
+	}
+}
+
+// BenchmarkReaderFrame renders one frame of the reader on a long gallery, its
+// overlay away and its page still: the path a reader spends most time on. It
+// catches work that grows with the page list, as turning the whole list into
+// proxy URLs every frame did once (see BenchmarkReaderPreloadPages).
+func BenchmarkReaderFrame(b *testing.B) {
+	benchReaderFrame(b, false)
+}
+
+// BenchmarkReaderOverlayFrame renders one frame with the overlay up, whose
+// glass cards, shadows and controls cost more than the page alone.
+func BenchmarkReaderOverlayFrame(b *testing.B) {
+	benchReaderFrame(b, true)
+}
+
+func benchReaderFrame(b *testing.B, overlay bool) {
+	srv := bigGalleryServer(b, 1, 1000)
+	defer srv.Close()
+	a := New(NewClient(srv.URL))
+	tt := ui.NewTester(a.View, 1280, 860)
+	a.router.Push("/reader/1/tok1")
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && !a.reader.loaded {
+		tt.Frame()
+		time.Sleep(time.Millisecond)
+	}
+	if !a.reader.loaded || len(a.reader.pages) != 1000 {
+		b.Fatalf("reader loaded=%v pages=%d, want a 1000-page gallery",
+			a.reader.loaded, len(a.reader.pages))
+	}
+	// Read somewhere in the middle: the preload window is in the middle of
+	// the list, as it is for most of a long gallery.
+	a.reader.page = 500
+	a.reader.overlay = overlay
+	a.reader.guide = false
+	a.markActivity()
+	tt.Frame() // settle the first frame at the new state
+	b.ResetTimer()
+	b.ReportAllocs()
+	for b.Loop() {
+		tt.Frame()
+	}
+}
+
+// BenchmarkReaderPreloadPages measures the reader's preload window on a
+// 1000-page gallery. It must cost the window, not the gallery: the window is
+// nine pages regardless of how long the list is.
+func BenchmarkReaderPreloadPages(b *testing.B) {
+	a := New(NewClient("https://backend.example"))
+	a.reader.pages = make([]string, 1000)
+	for i := range a.reader.pages {
+		a.reader.pages[i] = fmt.Sprintf("https://img.example/p%d.jpg", i)
+	}
+	a.reader.page = 500
+	a.reader.loaded = true
+
+	// Seed the window as loaded pictures, so a Get is a cache hit: what is
+	// measured is the window scan, not the network.
+	shown := a.shownGroup()
+	window := map[int]bool{}
+	for _, i := range shown.indexes {
+		window[i] = true
+	}
+	if first, last := pageGroupFirst(shown), pageGroupLast(shown); first >= 0 {
+		for i := 1; i <= readerPreloadImages; i++ {
+			window[last+i] = true
+			window[first-i] = true
+		}
+	}
+	placeholder := a.covers.Get(1)
+	a.pageImages.mu.Lock()
+	for i := range window {
+		e := &imageEntry{url: a.client.PageImageURL(a.reader.pages[i]), bitmap: placeholder}
+		a.pageImages.entries[e.url] = e
+		a.pageImages.touchLocked(e)
+	}
+	a.pageImages.mu.Unlock()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for b.Loop() {
+		a.preloadPages(&a.reader)
 	}
 }
 

@@ -67,6 +67,9 @@ type Reader struct {
 	// settled is set once the stream has ended, and slots are only cut down to
 	// the pages that arrived after that, never while it is still running.
 	settled bool
+	// trimmed is set once trimSlots has cut the settled list, so a frame does
+	// not scan a gallery's whole page list again for a trim that is final.
+	trimmed bool
 
 	loading bool
 	loaded  bool
@@ -143,6 +146,10 @@ type Reader struct {
 
 	// autoSince is when the page up under auto page turn was shown.
 	autoSince time.Time
+	// wakeAt is when keepFrameAt has asked for the next frame, for a deadline
+	// rather than for motion. It keeps a still page from asking for a frame
+	// every time the display can show one while it waits (see readerWakeAt).
+	wakeAt time.Time
 
 	// preloaded is the page URLs the last frame asked the image store for,
 	// so the pages leaving that window can be released.
@@ -312,6 +319,7 @@ func (a *App) startReaderLoad(r *Reader) {
 	r.partial = 0
 	r.complete = false
 	r.settled = false
+	r.trimmed = false
 	r.ensureSlots()
 	lid := r.loadID
 	id, token := r.id, r.token
@@ -451,11 +459,14 @@ func (r *Reader) ensureSlots() {
 
 // trimSlots drops the empty slots past the last page that arrived, once the
 // stream has ended: a gallery whose upstream list is shorter than its count is
-// read, and counted by the toolbar and the bar, as the pages it has.
+// read, and counted by the toolbar and the bar, as the pages it has. The cut
+// is final for the load, so it runs once rather than scanning the list on
+// every frame of a long gallery.
 func (r *Reader) trimSlots() {
-	if !r.settled {
+	if !r.settled || r.trimmed {
 		return
 	}
+	r.trimmed = true
 	last := -1
 	for i, src := range r.pages {
 		if src != "" {
@@ -667,8 +678,9 @@ func (a *App) flushProgressNow(r *Reader) {
 
 // readerTick advances everything that moves on its own: the turn animation,
 // auto page turn, the overlay's auto-hide and the toast. It reports whether
-// another frame is needed, so the reader can keep its clock going only while
-// something is pending.
+// another frame is needed to carry motion, so the reader can keep its clock
+// going only while something moves; the deadlines that only need one frame
+// are asked for by readerWakeAt.
 func (a *App) readerTick(r *Reader) bool {
 	// The overlay's clock is read before anything below can restart it: the
 	// auto-hide counts what came before this frame.
@@ -689,35 +701,88 @@ func (a *App) readerTick(r *Reader) bool {
 				a.setAuto(r, false)
 			}
 		}
-		if r.auto {
-			pending = true
-		}
 	}
-	if r.overlay && r.panel == panelNone {
-		if autoHide {
-			a.closeOverlay(r)
-		} else {
-			pending = true
-		}
+	// The dock's auto-turn line is drawn from the clock, so it moves every
+	// frame it shows; the page under it does not move between turns, and
+	// readerWakeAt asks for the frame at the next one.
+	if r.auto && r.overlay {
+		pending = true
+	}
+	if r.overlay && r.panel == panelNone && autoHide {
+		a.closeOverlay(r)
 	}
 	// A toast that appeared this frame is shown at least once, then timed.
 	if r.toast != "" && time.Since(r.toastAt) >= toastDuration {
 		r.toast = ""
 	}
-	if r.toast != "" {
-		pending = true
-	}
-	if r.guide {
-		pending = true
-	}
 	// A press held on a page becomes a favorite when its time is up.
 	if !r.longPress.IsZero() && r.pressed {
 		a.longPressDue(r)
-		if !r.longPress.IsZero() {
-			pending = true
-		}
 	}
 	return pending
+}
+
+// readerWakeAt is when the reader next needs a frame for a deadline rather
+// than for motion: auto page turn's interval, the overlay's auto-hide, the end
+// of a toast, a long press coming due. It reports false when nothing waits, so
+// a still page asks for no frames at all between them.
+func (a *App) readerWakeAt(r *Reader) (time.Time, bool) {
+	var at time.Time
+	wake := func(t time.Time) {
+		if t.IsZero() {
+			return
+		}
+		if at.IsZero() || t.Before(at) {
+			at = t
+		}
+	}
+	if r.turnDir == groupCurrent && r.auto && !r.overlay && r.panel == panelNone && r.loaded && !r.autoSince.IsZero() {
+		wake(r.autoSince.Add(time.Duration(r.settings.autoInterval()) * time.Millisecond))
+	}
+	if r.overlay && r.panel == panelNone {
+		wake(a.overlayActivity.Add(overlayAutoHide))
+	}
+	if r.toast != "" {
+		wake(r.toastAt.Add(toastDuration))
+	}
+	if r.pressed && !r.longPress.IsZero() {
+		wake(r.longPress.Add(longPressDelay))
+	}
+	return at, !at.IsZero()
+}
+
+// keepFrameAt asks the window for one frame at at, for a deadline the reader
+// is waiting on: a timer wakes the view then, instead of redrawing the same
+// still page every time the display can show one. One wake is armed at a time,
+// and a deadline no earlier than the armed one leaves it alone: the armed wake
+// is early enough to look again and arm the later one. Without a window (tests)
+// the tester builds the frames, as keepFrames.
+func (a *App) keepFrameAt(r *Reader, at time.Time) {
+	if a.win == nil {
+		return
+	}
+	if !at.After(time.Now()) {
+		// Due already but not acted on: render it now, not at a timer's mercy.
+		a.keepFrames()
+		return
+	}
+	if !r.wakeAt.IsZero() && !at.Before(r.wakeAt) {
+		return
+	}
+	r.wakeAt = at
+	time.AfterFunc(time.Until(at), func() {
+		a.mu.Lock()
+		stale := !r.wakeAt.Equal(at)
+		if !stale {
+			r.wakeAt = time.Time{}
+		}
+		win := a.win
+		a.mu.Unlock()
+		if stale || win == nil {
+			return // a later frame re-armed the wake, or the window is gone
+		}
+		win.Update(func() {})
+	})
 }
 
 // setAuto starts or stops auto page turn.

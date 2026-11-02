@@ -119,6 +119,76 @@ func TestReaderTurnSlidesBeforeItLands(t *testing.T) {
 	}
 }
 
+// TestReaderTurnSlidesThePagesAcross covers what the turn paints, not just
+// where it lands: the page being left slides a whole window toward the side
+// the gesture went, with the page arriving behind it following from the other
+// edge. Without it the shown page stood still and the next one, drawn over it,
+// slid away again, so a swipe read as a cut rather than a turn.
+func TestReaderTurnSlidesThePagesAcross(t *testing.T) {
+	const w = 1280
+	cases := []struct {
+		name string
+		rtl  bool
+		dir  pageGroupPlacement
+		side pageGroupSide
+	}{
+		{"left to right, on", false, groupNext, sideLeft},
+		{"left to right, back", false, groupPrevious, sideRight},
+		{"right to left, on", true, groupNext, sideRight},
+		{"right to left, back", true, groupPrevious, sideLeft},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &App{}
+			a.reader.pages = []string{"0", "1", "2", "3"}
+			a.reader.settings.rtl = tc.rtl
+			a.reader.page = 1
+			a.reader.turnDir = tc.dir
+			a.reader.turnFrom = a.shownGroup()
+			a.reader.turnAt = time.Now().Add(-turnAnimation / 2)
+			var st readerStage
+			tt := ui.NewTester(func(c *ui.Context) {
+				st = a.stageOf(c)
+				ui.Box(c).Fill()
+			}, w, 860)
+			tt.Frame()
+
+			if !st.turn || st.turnSide != tc.side {
+				t.Fatalf("turn=%v side=%v, want a turn leaving toward %v", st.turn, st.turnSide, tc.side)
+			}
+			want := 2
+			if tc.dir == groupPrevious {
+				want = 0
+			}
+			if !sameGroup(st.turnIn, pageGroup{indexes: []int{want}}) {
+				t.Fatalf("arriving group = %v, want %v", st.turnIn.indexes, want)
+			}
+			// Halfway: the leaving page has moved toward its side, the
+			// arriving one follows from the other, still a window behind it.
+			if tc.side == sideLeft {
+				if st.turnOutX >= 0 || st.turnInX <= 0 || st.turnInX >= w {
+					t.Fatalf("leaving x=%v arriving x=%v, want the page moving left and the next following from the right",
+						st.turnOutX, st.turnInX)
+				}
+			} else if st.turnOutX <= 0 || st.turnInX >= 0 || st.turnInX <= -w {
+				t.Fatalf("leaving x=%v arriving x=%v, want the page moving right and the next following from the left",
+					st.turnOutX, st.turnInX)
+			}
+			if gap := absFloat(st.turnInX - st.turnOutX); absFloat(gap-w) > 1 {
+				t.Fatalf("the pages are %v apart, want one window (%v)", gap, w)
+			}
+
+			// The slide has run: they have swapped places, ready for the turn
+			// to land on the page now in the middle.
+			a.reader.turnAt = time.Now().Add(-turnAnimation - time.Millisecond)
+			tt.Frame()
+			if st.turnInX != 0 || absFloat(st.turnOutX) != w {
+				t.Fatalf("at the end: leaving x=%v arriving x=%v, want ±%v and 0", st.turnOutX, st.turnInX, w)
+			}
+		})
+	}
+}
+
 // TestReaderPinchZooms covers a pinch: it zooms about the pointer, and it
 // stops at the whole page zooming out, as comimi's pinch does.
 func TestReaderPinchZooms(t *testing.T) {

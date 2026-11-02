@@ -371,31 +371,32 @@ func (a *App) readerSeek(c *ui.Context, r *Reader, look readerLook) {
 }
 
 // readerSeekPreview draws the page the seek bar hovers over: its picture and
-// the number the turn would land on, above the bar and the pointer. Its bottom
-// clears the bar's own height so it never reaches the dock's button row.
+// the number the turn would land on, above the bar and the pointer. The
+// preview shows a single page whatever the page mode, so hovering a spread
+// does not stack two thumbnails. Its bottom clears the bar's own height so it
+// never reaches the dock's button row.
 func (a *App) readerSeekPreview(c *ui.Context, r *Reader, look readerLook, w float32) {
 	total := len(r.pages)
-	g := a.pageIndexesFor(r.seekPreview, total)
-	x := float32(r.seekPreview) / float32(maxInt(total-1, 1))
+	page := r.seekPreview
+	if page < 0 || page >= total {
+		return
+	}
+	x := float32(page) / float32(maxInt(total-1, 1))
 	if r.settings.rtl {
 		x = 1 - x
 	}
-	cardW := float32(80*len(g.indexes) + 4*maxInt(len(g.indexes)-1, 0))
+	cardW := float32(80)
 	left := clampFloat(x*w-cardW/2, 0, maxFloat(w-cardW, 0))
 	ui.Column(c).Width(cardW).Gap(6).AlignItems(ui.Center).
 		Absolute().Left(left).Bottom(32).Children(func() {
-		ui.Row(c).Gap(4).Children(func() {
-			for _, page := range g.indexes {
-				ui.Box(c).Width(80).Height(113).Radius(6).Clip().
-					Background(look.surface2).
-					Shadow(0, 4, 12, 0, look.shadow).Children(func() {
-					a.seekThumb(c, page, false)
-				})
-			}
+		ui.Box(c).Width(80).Height(113).Radius(6).Clip().
+			Background(look.surface2).
+			Shadow(0, 4, 12, 0, look.shadow).Children(func() {
+			a.seekThumb(c, page, false)
 		})
 		ui.Box(c).Padding(4, 10).Radius(8).Background(look.glass).
 			Shadow(0, 4, 12, 0, look.shadow).Children(func() {
-			ui.Text(c, pageGroupText(g)).FontSize(12).FontWeight(600).
+			ui.Text(c, itoa(page+1)).FontSize(12).FontWeight(600).
 				TextColor(look.fg)
 		})
 	})
@@ -533,11 +534,6 @@ func (a *App) setSpread(r *Reader, on bool) {
 			r.page = first
 			a.saveProgress(r)
 		}
-	}
-	if on {
-		a.notify(r, i18n.T("Double page"), toneInfo)
-	} else {
-		a.notify(r, i18n.T("Single page"), toneInfo)
 	}
 }
 
