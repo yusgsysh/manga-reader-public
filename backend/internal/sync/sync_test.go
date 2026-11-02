@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	stdsync "sync"
 	"testing"
 	"time"
 
@@ -412,6 +413,47 @@ func TestPushRequiresToken(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("disabled at run time = %d, want 404", w.Code)
 	}
+}
+
+// TestHostTokenTogglesWhileRequestsRun covers the settings page switching
+// peer acceptance on and off while requests are in flight. Run under -race,
+// it guards the lock around Service.hostToken.
+func TestHostTokenTogglesWhileRequestsRun(t *testing.T) {
+	plain := NewService(newTestClient(t), Options{})
+	router := newTestRouter(plain)
+
+	body := []byte(`{"cursor":0,"snapshot":true,"changes":[]}`)
+	var wg stdsync.WaitGroup
+	stop := make(chan struct{})
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				plain.SetHostToken("token")
+				plain.SetHostToken("")
+			}
+		}
+	}()
+
+	for i := 0; i < 200; i++ {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/sync/push", bytes.NewReader(body))
+		// A wrong token never reaches the handler: the test exercises only
+		// requireToken's read, which must not race with SetHostToken.
+		req.Header.Set(headerToken, "wrong")
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized && w.Code != http.StatusNotFound {
+			close(stop)
+			wg.Wait()
+			t.Fatalf("request %d = %d, want 401 or 404", i, w.Code)
+		}
+	}
+	close(stop)
+	wg.Wait()
 }
 
 func TestConfigRoundTripMasksToken(t *testing.T) {

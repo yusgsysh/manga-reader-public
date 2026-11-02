@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	stdsync "sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -31,10 +32,14 @@ const (
 // Service wires the sync protocol endpoints, the change hub and the sync
 // engine onto an ent client.
 type Service struct {
-	client    *ent.Client
-	hub       *Hub
+	client *ent.Client
+	hub    *Hub
+	engine *Engine
+
+	// tokenMu guards hostToken: the desktop settings page turns peer
+	// acceptance on and off while the server answers requests.
+	tokenMu   stdsync.RWMutex
 	hostToken string
-	engine    *Engine
 }
 
 // Options configures a Service.
@@ -62,9 +67,10 @@ func (s *Service) Hub() *Hub { return s.hub }
 // RunEngine runs the sync client engine until ctx is cancelled.
 func (s *Service) RunEngine(ctx context.Context) { s.engine.Run(ctx) }
 
-// RegisterRoutes mounts sync endpoints on the given router. Peer-facing
-// routes are only registered when a host token is configured; without one
-// they 404 like any unknown path.
+// RegisterRoutes mounts sync endpoints on the given router. The peer-facing
+// routes are always mounted and read the token per request, so the desktop
+// settings page can turn accepting peers on and off without re-registering
+// anything. With no token configured they answer 404 like an unknown path.
 func (s *Service) RegisterRoutes(r gin.IRouter) {
 	r.GET("/api/events/changes", s.handleLocalEvents)
 	r.GET("/api/sync/config", s.handleConfigGet)
@@ -79,20 +85,21 @@ func (s *Service) RegisterRoutes(r gin.IRouter) {
 
 // SetHostToken enables or replaces the peer-facing endpoints' token at run
 // time: the desktop settings page lets the user turn sync on without
-// restarting the app. Empty disables accepting peers. Safe for concurrent
-// requests; a running push finishes with the token it read.
+// restarting the app. Empty disables accepting peers. It is safe to call
+// while requests are in flight; each request reads the token once.
 func (s *Service) SetHostToken(token string) {
+	s.tokenMu.Lock()
 	s.hostToken = token
+	s.tokenMu.Unlock()
 }
-
-// HostToken reports the peer-facing token, or "".
-func (s *Service) HostToken() string { return s.hostToken }
 
 func (s *Service) requireToken() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Read per request: SetHostToken turns accepting peers on and off
 		// while the server is up, so the token cannot be captured here.
+		s.tokenMu.RLock()
 		want := []byte(s.hostToken)
+		s.tokenMu.RUnlock()
 		// No token configured: this instance does not accept peers.
 		if len(want) == 0 {
 			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "sync is not enabled on this host"})
