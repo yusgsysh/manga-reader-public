@@ -47,7 +47,7 @@
 - [x] 重做占位图观感：`gradientBitmap` 由原来的斜向双色混合 + 正弦丝带 + 硬横条改为平滑对角渐变 + 两处低对比柔光 + 轻微暗角，配色换成协调的 12 组暗调（每组渐变两端 + 高光色），角度/柔光位置随种子变化。仍是纯算术逐像素、无高频噪声，冷启动首帧仍 ~91ms（预算 1s）。
 - [x] 去掉刷新按钮、改自动刷新：列表页（首页/订阅/热门/书架/最近阅读）每 45s 后台静默刷新第一页（`scheduleRefresh`/`refreshList`，失败保留旧内容不报错）；下载管理页空闲时每 10s 合并式刷新（`refreshDownloadsIdle`，只追加新任务、不覆盖已轮询的行）。标签设置页与详情页 Torrents 的刷新按钮删除，仅进入时加载一次，不周期刷新。搜索页在输入为空时不再请求 `/api/search`，只显示「输入关键词」提示。
 - [x] 页面切换动画：先去掉过场（mygo 默认 150ms 淡入 / 250ms 横向滑入会移动控件并重建离开的整页），改回时选择**原地淡入**：`app.newRouter()` 用 `ui.TransitionFade` + 140ms `pageFade`，页面在首帧就落在最终位置，不滑动、不移动可点击控件，每帧只做合成。`View` 不再调用 `c.DisableAnimations()`，页内元素仍不会自发动画，除非显式给了 `Transition`/`Animate*`。测试与快照由 `navSettle` 推进时间结束淡入；`TestPagesFadeInPlace` 守住「淡入但控件立刻可点」。
-- [x] 控件动效（帧率优先）：封面悬停上浮与卡片按下缩放用 `ui.Element.AnimatePose`，弹簧帧只重绘、不重建视图（`TestCardHoverPaintsWithoutRebuilding` 守住）；侧栏选中项和主题分段控件用 `AnimateColor` 过渡底色；阅读器浮层用 `Key("reader-overlay")` + `overlayTransition()` 原地淡入，`PassThrough` 让控件之间的按压仍落到页面。所有动效都遵守 `ReduceMotion`。
+- [x] 控件动效（帧率优先）：封面悬停上浮与卡片按下缩放用 `ui.Element.AnimatePose`，弹簧帧只重绘、不重建视图（`TestCardHoverPaintsWithoutRebuilding` 守住）；侧栏选中项和主题分段控件用 `AnimateColor` 过渡底色；阅读器浮层按 comimi 的 dock/chevron 动效处理：顶部胶囊、底部 dock、两侧箭头分别从各自边缘滑入 35 DIP 并淡入，收起时反向滑出淡出（`chromeMotion`，420 ms / 260 ms，`chromeEase` 为 comimi 的 `cubic-bezier(.34,1.56,.64,1)` 弹簧）；翻页分段控件的选中块用 `AnimatePose` 在 42 DIP 两格间滑动；`PassThrough` 让控件之间的按压仍落到页面，收起过程中 `IgnoreInput` 不拦截页面点击。所有动效都遵守 `ReduceMotion`。
 
 - [x] `.gitignore` 只放行 `backend/cmd/desktop-native/`，旧 Wails 构建目录继续忽略。
 - [x] 本机为旧 Wails 目录加了被忽略的嵌套 `backend/cmd/desktop/go.mod`，避免 `go build ./...` 扫描到 Wails 生成文件。**该文件不在仓库中，新克隆不需要。**
@@ -124,7 +124,7 @@
 **交互**（对照 comimi `viewer-renderer.ts` / `manga-viewer-core.ts`）
 
 - 点击分区：左右各 30%（`tapZoneEdge`）翻页，中间显示/隐藏控件；控件在时点中间收起。
-- 滑动翻页：横向位移超过 40 DIP（`swipeThreshold`）才翻，滑动 180 ms 滑出动画（`turnAnimation`），不足阈值回弹；到首/末页有阻尼抵抗。
+- 滑动翻页：横向位移超过 40 DIP（`swipeThreshold`）才翻，滑动 180 ms 滑出动画（`turnAnimation`，CSS `ease` 曲线）；翻页从松手时的位移继续滑，不先弹回原点；不足阈值或到首/末页时用同一时长缓出回弹（`snapDragBack`），到首/末页还有阻尼抵抗。
 - 缩放：Ctrl/⌘ + 滚轮按 1.25 倍步进（`zoomStep`），双指捏合以指针为中心缩放；范围 1–4 倍（`minZoom`/`maxZoom`），平移夹在页面边界内（`clampPan`）。**普通滚轮不再翻页**（旧的滚轮翻页模式已删除）。
 - 长按 500 ms（`longPressDelay`）收藏当前页，移动超过 `dragSlop` 取消。
 - 键盘：`←/→`、空格/Shift+空格、`A` 自动翻页、`P` 跨页、`C` 封面、`F` 全屏、`N` 退出全屏、`M` 菜单、`S` 设置、`O` 控件、`Esc` 逐层退出（面板 → 控件 → 阅读器）。

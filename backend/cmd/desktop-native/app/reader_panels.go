@@ -15,7 +15,7 @@ import (
 // rest of the overlay.
 
 // readerMenu draws the menu card, with the view of the panel that is open.
-func (a *App) readerMenu(c *ui.Context, r *Reader) {
+func (a *App) readerMenu(c *ui.Context, r *Reader, slide, alpha float32) {
 	look := readerLookOf(r)
 	w, h := c.Size()
 	inset := readerInset(w)
@@ -24,7 +24,8 @@ func (a *App) readerMenu(c *ui.Context, r *Reader) {
 		width = maxFloat(w-2*inset, 200)
 	}
 	panel := ui.Column(c).Width(width).Absolute().Top(inset).Left(inset).
-		Radius(16).Background(look.glass).Shadow(0, 6, 24, 0, look.shadow).Clip()
+		Radius(16).Background(look.glass).Shadow(0, 6, 24, 0, look.shadow).Clip().
+		Translate(0, -slide*chromeSlide).Opacity(alpha)
 	panel.Children(func() {
 		a.readerMenuHead(c, r, look)
 		ui.Box(c).FillWidth().Height(1).Background(look.line)
@@ -330,7 +331,7 @@ func (a *App) readerAbout(c *ui.Context, r *Reader, look readerLook) {
 // readerSettingsPanel is the settings card: the reading direction, the page
 // mode, the background and how often auto page turn moves on. It floats above
 // the dock at the right, as comimi's panel does.
-func (a *App) readerSettingsPanel(c *ui.Context, r *Reader) {
+func (a *App) readerSettingsPanel(c *ui.Context, r *Reader, slide, alpha float32) {
 	look := readerLookOf(r)
 	w, h := c.Size()
 	inset := readerInset(w)
@@ -344,7 +345,8 @@ func (a *App) readerSettingsPanel(c *ui.Context, r *Reader) {
 	}
 	panel := ui.Column(c).Width(width).MaxHeight(maxH).
 		Absolute().Right(inset).Bottom(inset+122).Radius(20).
-		Background(look.glassStrong).Shadow(0, 6, 24, 0, look.shadow).Clip()
+		Background(look.glassStrong).Shadow(0, 6, 24, 0, look.shadow).Clip().
+		Translate(0, slide*chromeSlide*0.5).Opacity(alpha)
 	panel.Children(func() {
 		ui.Row(c).FillWidth().Padding(18, 20, 8, 20).Gap(12).AlignItems(ui.Center).
 			Children(func() {

@@ -12,7 +12,9 @@ import (
 // travels. Hover lift and press scale are poses, which the renderer plays
 // without rebuilding the view (see ui.Element.AnimatePose); only the frame the
 // pointer moved in builds, the rest are paint-only. A navigation tint fades
-// between its states instead of switching in one frame.
+// between its states instead of switching in one frame. The reader's floating
+// chrome is the exception that slides: it comes in from its edge and goes back
+// out (chromeEnter), as comimi's dock and chevrons do.
 //
 // The desktop's Reduce Motion preference still wins: mygo completes poses,
 // transitions and colours at once, and keeps the fades in place.
@@ -28,21 +30,66 @@ var (
 )
 
 const (
-	// overlayFade is how the reader's floating chrome appears over the page.
-	overlayFade = 150 * time.Millisecond
+	// chromeEnter, chromeExit and chromeFade are how the reader's floating
+	// cards come in and go out, after comimi's controls dock and chevrons:
+	// they slide a short way from their edge over a spring and fade on the
+	// way. The exit is quicker, as closing a menu should be.
+	chromeEnter = 420 * time.Millisecond
+	chromeExit  = 260 * time.Millisecond
+	chromeFade  = 200 * time.Millisecond
+	// chromeSlide is how far a card starts from its place, in DIPs: comimi
+	// moves the dock, the pill and the chevrons 35 points.
+	chromeSlide float32 = 35
+	// toastPop is how long a toast takes to pop in; it then stays for
+	// toastDuration.
+	toastPop = 370 * time.Millisecond
 )
 
-// overlayEnter is where the reader's overlay comes from: transparent in its
-// own place, so the controls are where they will stay while they fade in.
-var overlayEnter = ui.Motion{Opacity: 0}
+// chromeEase is comimi's spring, cubic-bezier(.34, 1.56, .64, 1): it settles
+// with the small overshoot that makes a card look placed rather than stopped.
+func chromeEase(t float32) float32 {
+	return cubicBezierEase(t, 0.34, 1.56, 0.64, 1)
+}
 
-// overlayTransition fades the reader's chrome in place. It animates colours
-// only on later changes, so opening a panel does not move the chrome around.
-func overlayTransition() ui.ElementTransition {
-	return ui.ElementTransition{
-		Duration: overlayFade,
-		Ease:     ui.EaseOut,
-		Colors:   true,
-		Enter:    &overlayEnter,
+// stageEase is CSS's ease, cubic-bezier(.25, .1, .25, 1), which comimi's page
+// stage uses for a turn and for a drag returning to rest.
+func stageEase(t float32) float32 {
+	return cubicBezierEase(t, 0.25, 0.1, 0.25, 1)
+}
+
+// cubicBezierEase solves a CSS cubic-bezier timing function at x = t and
+// returns its y. Newton's method finds the curve's parameter, as a browser
+// does; t outside 0..1 is at the ends.
+func cubicBezierEase(t, x1, y1, x2, y2 float32) float32 {
+	if t <= 0 {
+		return 0
 	}
+	if t >= 1 {
+		return 1
+	}
+	u := t
+	for i := 0; i < 6; i++ {
+		dx := bezierAt(u, x1, x2) - t
+		if absFloat(dx) < 0.0001 {
+			break
+		}
+		slope := bezierSlope(u, x1, x2)
+		if slope == 0 {
+			break
+		}
+		u = clampFloat(u-dx/slope, 0, 1)
+	}
+	return bezierAt(u, y1, y2)
+}
+
+// bezierAt is one axis of a cubic Bezier with its ends at 0 and 1.
+func bezierAt(u, p1, p2 float32) float32 {
+	v := 1 - u
+	return 3*v*v*u*p1 + 3*v*u*u*p2 + u*u*u
+}
+
+// bezierSlope is the derivative of bezierAt with respect to u.
+func bezierSlope(u, p1, p2 float32) float32 {
+	v := 1 - u
+	return 3*v*v*p1 + 6*v*u*(p2-p1) + 3*u*u*(1-p2)
 }
