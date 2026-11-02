@@ -42,9 +42,14 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 		a.preloadPages(r)
 	}
 	// Everything that moves on its own asks for the frames it needs: a turn
-	// sliding out, auto page turn, the overlay's auto-hide, a toast.
+	// sliding out, the dock's auto-turn line. The deadlines that only need one
+	// frame (auto page turn, the overlay's auto-hide, a toast, a long press)
+	// are woken by a timer instead, so a page that is not moving costs no
+	// frames at all.
 	if a.readerTick(r) {
 		a.keepFrames()
+	} else if at, ok := a.readerWakeAt(r); ok {
+		a.keepFrameAt(r, at)
 	}
 
 	bg := readerPaper(r)
@@ -101,9 +106,12 @@ func (a *App) readerStageView(c *ui.Context, r *Reader) {
 		// group alone is zoomed, with the neighbours waiting off screen.
 		for _, spec := range st.groups {
 			offset := float32(a.groupOffsetX(spec)) * st.width
-			if st.offsets != nil {
-				if x, ok := st.offsets[spec.placement]; ok {
-					offset = x
+			if st.turn {
+				switch {
+				case sameGroup(spec.pages, st.turnFrom):
+					offset = st.turnOutX
+				case sameGroup(spec.pages, st.turnIn):
+					offset = st.turnInX
 				}
 			}
 			offset += st.dragX
@@ -137,9 +145,9 @@ func sameGroup(x, y pageGroup) bool {
 	return true
 }
 
-// readerGroupView draws a group's pages side by side, as they pair up, with a
-// gutter between the two pages of a spread so they read as facing pages rather
-// than one continuous image.
+// readerGroupView draws a group's pages side by side, as they pair up. A
+// spread's pages meet at the spine with no gap between them, the way a book's
+// facing pages do.
 func (a *App) readerGroupView(c *ui.Context, g pageGroup, zoom, panX, panY float32) {
 	row := ui.Row(c).Fill()
 	if len(g.indexes) > 1 {

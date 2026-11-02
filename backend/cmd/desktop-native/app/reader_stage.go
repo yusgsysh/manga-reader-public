@@ -28,15 +28,18 @@ type readerStage struct {
 	panX float32
 	panY float32
 	// turn, when set, is the group sliding out and how far it has gone.
-	turn     bool
-	turnX    float32
+	turn bool
+	// turnOutX and turnInX are how far the group being turned away from and
+	// the group arriving behind it have moved, in DIPs. They are matched to
+	// the groups by their pages rather than by placement, so a page the
+	// stream moves under a running turn still names the right one.
+	turnOutX float32
+	turnInX  float32
 	turnSide pageGroupSide
 	// turnFrom is the group being turned away from, and turnIn the group
 	// arriving behind it.
 	turnFrom pageGroup
 	turnIn   pageGroup
-	// offsets overrides groupOffsetX while a turn runs, in DIPs.
-	offsets map[pageGroupPlacement]float32
 }
 
 // pageGroupSide is the side a turn leaves toward.
@@ -72,28 +75,18 @@ func (a *App) stageOf(c *ui.Context) readerStage {
 		st.turnFrom = r.turnFrom
 		st.turnSide = a.turnSideOf(r.turnDir)
 		st.turnIn = a.adjacentGroup(r.turnDir)
-		to := w
+		// The leaving group goes toward the side the gesture went: left is
+		// negative across the window, right positive.
+		to := float32(-w)
 		if st.turnSide == sideRight {
-			to = -w
+			to = w
 		}
-		st.turnX = to * easeOutCubic(progress)
+		st.turnOutX = to * easeOutCubic(progress)
 		// The arriving group starts a screen off in the direction the
 		// leaving one is going and slides to rest with it.
-		arrive := -to + st.turnX
-		st.offsets = map[pageGroupPlacement]float32{
-			r.turnDir:           st.turnX,
-			opposite(r.turnDir): arrive,
-		}
+		st.turnInX = -to + st.turnOutX
 	}
 	return st
-}
-
-// opposite is the placement a turn in direction comes from.
-func opposite(direction pageGroupPlacement) pageGroupPlacement {
-	if direction == groupNext {
-		return groupPrevious
-	}
-	return groupNext
 }
 
 // turnSideOf is the side a turn in direction leaves toward: the next group is
@@ -286,22 +279,23 @@ func (a *App) readerPageButtons(c *ui.Context, page int, url string) {
 // through quickly would otherwise keep every page it passed downloading behind
 // the page on screen. Release leaves loaded pages and failures alone, so
 // turning back to a page finds it, or its retry.
+//
+// Only the window is looked at: this runs every frame, and a gallery runs to
+// thousands of pages, so turning the whole list into proxy URLs here cost more
+// than the page it was preloading (see BenchmarkReaderPreloadPages).
 func (a *App) preloadPages(r *Reader) {
-	urls := make([]string, len(r.pages))
-	for i, src := range r.pages {
-		if src == "" {
-			continue // a slot the stream has not filled yet
-		}
-		urls[i] = a.client.PageImageURL(src)
-	}
 	shown := a.shownGroup()
 	keep := make(map[string]bool, 2*readerPreloadImages+len(shown.indexes))
 	warm := func(i int) {
-		if i < 0 || i >= len(urls) || urls[i] == "" || keep[urls[i]] {
+		if !r.hasPage(i) {
+			return // past the list, or a slot the stream has not filled yet
+		}
+		url := a.client.PageImageURL(r.pages[i])
+		if url == "" || keep[url] {
 			return
 		}
-		keep[urls[i]] = true
-		a.pageImages.Get(urls[i])
+		keep[url] = true
+		a.pageImages.Get(url)
 	}
 	// The shown pages first, then outwards from them.
 	for _, i := range shown.indexes {
