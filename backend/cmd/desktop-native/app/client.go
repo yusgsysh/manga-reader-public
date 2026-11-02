@@ -578,10 +578,7 @@ func (c *Client) Torrents(ctx context.Context, id int64, token string) ([]Torren
 	}
 	items := make([]Torrent, 0, len(out.Torrents))
 	for _, t := range out.Torrents {
-		items = append(items, Torrent{
-			GTID: t.GTID, Name: t.Name, Size: t.Size, Posted: t.Posted,
-			Seeds: t.Seeds, Peers: t.Peers, Downloads: t.Downloads, Uploader: t.Uploader,
-		})
+		items = append(items, Torrent(t))
 	}
 	return items, nil
 }
@@ -753,14 +750,6 @@ func (c *Client) LivePageImageURL(source string) string {
 		return ""
 	}
 	return c.BaseURL() + "/api/image/page" + "?url=" + url.QueryEscape(source)
-}
-
-// LiveThumbnailURL is the cover thumbnail's live proxy endpoint.
-func (c *Client) LiveThumbnailURL(source string) string {
-	if source == "" {
-		return ""
-	}
-	return c.BaseURL() + "/api/image/thumbnail" + "?url=" + url.QueryEscape(source)
 }
 
 func (c *Client) PageThumbnailURL(id int64, token string, index int) string {

@@ -217,40 +217,6 @@ func (a *App) removeTagRule(tag string) {
 	a.saveTagRules()
 }
 
-// toggleTagRule flips a tag between liked, disliked and neutral, which the
-// gallery page's tag chips call.
-func (a *App) toggleTagRule(tag string) {
-	s := &a.tags
-	cur := a.tagRule(tag)
-	for _, r := range s.rules {
-		if r.Tag == strings.ToLower(tag) {
-			cur = &r
-		}
-	}
-	next := TagLike
-	if cur != nil {
-		switch cur.Action {
-		case TagLike:
-			next = TagDislike
-		default:
-			next = ""
-		}
-	}
-
-	kept := make([]TagRule, 0, len(s.rules)+1)
-	for _, r := range s.rules {
-		if r.Tag != strings.ToLower(tag) {
-			kept = append(kept, r)
-		}
-	}
-	if next != "" {
-		kept = append(kept, TagRule{Tag: strings.ToLower(tag), Action: next, Weight: defaultTagWeight(next)})
-	}
-	sort.Slice(kept, func(i, j int) bool { return kept[i].Tag < kept[j].Tag })
-	s.rules = kept
-	a.saveTagRules()
-}
-
 // syncTagSettings runs the three-way merge with the source's My Tags. Tags
 // both sides changed come back as conflicts; the dialog the page shows
 // resolves them one by one, and then the sync runs again with those answers.
@@ -411,22 +377,6 @@ func tagActionColor(action TagAction) ui.Color {
 		return ui.Hex("#FF6666")
 	}
 	return ui.Hex("#3377FF")
-}
-
-// tagChip draws one tag, coloured and ordered by its rule, with its
-// translation when the database knows one.
-func (a *App) tagChip(c *ui.Context, namespace, name string) {
-	tag := tagChipText(namespace, name)
-	label := tag
-	if tr := a.translations.Lookup(namespace, name); tr != "" && tr != name {
-		label = tr + " / " + tag
-	}
-	rule := a.tagRule(tag)
-	if rule == nil {
-		ui.Badge(c, label)
-		return
-	}
-	ui.Badge(c, label).Background(tagActionColor(rule.Action)).TextColor(ui.Hex("#f1f1f1"))
 }
 
 // sortedTags orders a gallery's tags likes first, then dislikes, then the

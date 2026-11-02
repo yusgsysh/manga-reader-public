@@ -109,16 +109,6 @@ func Sprintf(format string, values ...any) string {
 	return sprintf(format, values...)
 }
 
-// Has reports whether key has a translation in lang, for tests that guard
-// coverage.
-func Has(lang, key string) bool {
-	if lang != "zh" {
-		return true
-	}
-	_, ok := zh[key]
-	return ok
-}
-
 // Missing lists the keys of one language with no translation yet.
 func Missing(keys []string) []string {
 	var out []string

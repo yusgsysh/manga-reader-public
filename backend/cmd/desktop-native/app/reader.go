@@ -172,9 +172,6 @@ func (r *Reader) resetView() {
 	r.panX, r.panY = 0, 0
 }
 
-// shown reports the page count the reader can read now.
-func (r *Reader) shown() int { return len(r.pages) }
-
 // maxZoom is the largest zoom the reader allows, as comimi's default of 4.
 const maxZoom float32 = 4
 
@@ -201,8 +198,6 @@ const (
 	overlayAutoHide = 3 * time.Second
 	// longPressDelay is how long a press on a page takes to favorite it.
 	longPressDelay = 500 * time.Millisecond
-	// longPressSlop is how far a press may wander and still count.
-	longPressSlop float32 = 10
 	// toastDuration is how long a notification stays.
 	toastDuration = 1500 * time.Millisecond
 )

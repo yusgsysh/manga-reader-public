@@ -27,7 +27,8 @@ func formatPosted(posted string, now time.Time) string {
 	}
 	if postedDateOnly.MatchString(trimmed) {
 		var year, month, day int
-		fmt.Sscanf(trimmed, "%d-%d-%d", &year, &month, &day)
+		// The regexp above already guarantees the three-number shape.
+		_, _ = fmt.Sscanf(trimmed, "%d-%d-%d", &year, &month, &day)
 		return fmt.Sprintf("%d/%d/%d", year, month, day)
 	}
 	m := postedDateTime.FindStringSubmatch(trimmed)

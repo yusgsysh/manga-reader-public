@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -84,11 +85,13 @@ func TestIsNotFound(t *testing.T) {
 		want bool
 	}{
 		{"nil", nil, false},
+		{"fs.ErrNotExist", fs.ErrNotExist, true},
+		{"wrapped fs", fmt.Errorf("cache get: %w", fs.ErrNotExist), true},
 		{"nosuchkey", minio.ErrorResponse{Code: "NoSuchKey"}, true},
 		{"nosuchbucket", minio.ErrorResponse{Code: "NoSuchBucket"}, true},
 		{"notfound", minio.ErrorResponse{Code: "NotFound"}, true},
 		{"other", minio.ErrorResponse{Code: "AccessDenied"}, false},
-		{"wrapped nosuchkey", fmt.Errorf("minio stat object: %w", minio.ErrorResponse{Code: "NoSuchKey"}), true},
+		{"wrapped minio", fmt.Errorf("minio stat object: %w", minio.ErrorResponse{Code: "NoSuchKey"}), true},
 		{"plain", errors.New("boom"), false},
 	}
 	for _, tt := range tests {

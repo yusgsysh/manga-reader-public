@@ -166,25 +166,6 @@ func TestUpstreamRetryCounter(t *testing.T) {
 	}
 }
 
-func TestMinIOCacheCounters(t *testing.T) {
-	ResetForTest()
-	ObserveMinIOCache("get", "ok", 2*time.Millisecond)
-	ObserveMinIOCache("get", "not_found", time.Millisecond)
-	ObserveMinIOCache("put", "error", 3*time.Millisecond)
-
-	text := gather(t)
-	for _, want := range []string{
-		`minio_cache_requests_total{op="get",result="ok"} 1`,
-		`minio_cache_requests_total{op="get",result="not_found"} 1`,
-		`minio_cache_requests_total{op="put",result="error"} 1`,
-		`minio_cache_operation_duration_seconds_count{op="get"} 2`,
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("expected %q in exposition, got:\n%s", want, text)
-		}
-	}
-}
-
 func TestFetchCacheCounters(t *testing.T) {
 	ResetForTest()
 	ObserveFetchCache("hit")

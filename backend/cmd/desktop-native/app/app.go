@@ -418,22 +418,7 @@ func (a *App) adoptBackendLocked(baseURL string) {
 	a.cacheErr = ""
 }
 
-// update runs fn on the main thread with the app lock held. Background loads
-// use it so they never race the frame being built.
-// toast asks for a toast from any goroutine. View adds it while it builds
-// the next frame: ui.Context.AddToast touches state the frame owns, so
-// calling it from a load goroutine races the renderer.
-func (a *App) toast(t ui.Toast) {
-	a.mu.Lock()
-	a.toasts = append(a.toasts, t)
-	win := a.win
-	a.mu.Unlock()
-	if win != nil {
-		win.Update(func() {})
-	}
-}
-
-// toastLocked is toast for a caller holding a.mu, as update's callback does.
+// toastLocked asks for a toast for a caller holding a.mu, as update's callback does.
 func (a *App) toastLocked(t ui.Toast) {
 	a.toasts = append(a.toasts, t)
 	if a.win != nil {
@@ -454,6 +439,8 @@ func (a *App) flushToasts(c *ui.Context) {
 	}
 }
 
+// update runs fn on the main thread with the app lock held. Background loads
+// use it so they never race the frame being built.
 func (a *App) update(fn func()) {
 	run := func() {
 		a.mu.Lock()
@@ -1599,12 +1586,7 @@ func (a *App) applyDetail(s *detailState, d apiGalleryDetail, live bool) {
 // had not updated yet). The detail page's button and the reader both take their
 // page from it.
 func (a *App) applyDetailReading(s *detailState, r apiReading) {
-	progress := ReadingProgress{
-		CurrentPage: r.CurrentPage,
-		Progress:    r.Progress,
-		Completed:   r.Completed,
-		UpdatedAt:   r.UpdatedAt,
-	}
+	progress := ReadingProgress(r)
 	if known, ok := a.knownReading(s.id); ok && known.CurrentPage > progress.CurrentPage {
 		progress = known
 		progress.UpdatedAt = r.UpdatedAt
