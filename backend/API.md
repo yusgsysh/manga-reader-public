@@ -1409,10 +1409,10 @@ Cache-Control: no-store
 curl -X PUT http://localhost:8080/api/sync/config -H 'Content-Type: application/json' \
   -d '{"enabled":true,"server_url":"http://server:8080","token":"my-secret"}'
 
-# 公网服务端（Basic Auth 后）：请求本身与 server_url 均带凭据
-curl -u admin:你的口令 -X PUT https://manga.09270721.xyz/api/sync/config \
+# 另一台桌面端：两端填写相同 token，server_url 指向对端地址
+curl -X PUT http://server:8080/api/sync/config \
   -H 'Content-Type: application/json' \
-  -d '{"enabled":true,"server_url":"https://admin:你的口令@manga.09270721.xyz","token":"my-secret"}'
+  -d '{"enabled":true,"server_url":"http://server:8080","token":"my-secret"}'
 
 # 手动推 + 拉
 curl -X POST http://server:8080/api/sync/push \
@@ -1423,38 +1423,13 @@ curl -X POST http://server:8080/api/sync/push \
 curl -N http://server:8080/api/sync/events -H 'X-Sync-Token: my-secret'
 ```
 
-> 公网服务端若在反向代理层开启 HTTP Basic Auth（见根 README「公网部署」），在 `server_url` 内嵌 Basic 凭据即可通过：`https://user:pass@server.example.com`，例如 `https://admin:你的口令@manga.09270721.xyz`（口令含 `@`、`:` 时需 URL 编码）。Go 客户端会自动携带 `Authorization` 头，它与 `X-Sync-Token` 相互独立、需同时提供；同步错误信息（`last_error`）不会包含该口令。
+> 同步端点只使用 `X-Sync-Token` 认证；旧服务端入口的 HTTP Basic Auth 已随 Web 端一起删除。
 
 **Error Responses:** `400` 配置无效（如 `server_url` 缺少 http/https、请求体非法）、`401` 令牌不匹配、`404` 宿主端点未启用。
 
 ---
 
-### 29. Metrics（Prometheus）
-
-`GET /metrics` — Prometheus 文本格式（`Content-Type: text/plain; version=0.0.4`），在 Basic Auth 中间件之后（公网需带凭据）。指标实现见 `backend/internal/metrics`（包私有 registry，`promhttp` 暴露）。
-
-缓存命中率相关计数器（完整指标列表见根 README「可观测性」）：
-
-| 指标 | 标签 | 说明 |
-|------|------|------|
-| `image_cache_requests_total` | `kind` = page_image / thumbnail / sprite，`result` = hit / miss | MinIO 图片缓存（`/api/image-cache/*`）查找 |
-| `gallery_cache_requests_total` | `kind` = gallery / details / pages / page_thumb，`result` = hit / miss | `gallery_cache` 读通端点（`/api/gallery-cache/*`）与页面缩略图索引解析 |
-
-计数口径：每次缓存 `Get` 查找计一次（hit 或 miss，读取错误不计）；gallery 缓存按端点实际命中条件判定（details 需已抓取详情、pages 需有页面列表）；sprite 的外层预检与 singleflight 内复检各计一次；离线兜底（书架）与批量装载（最近阅读）不计入。
-
-Hit rate 不存 gauge，用 PromQL 计算：
-
-```promql
-sum(rate(image_cache_requests_total{result="hit"}[5m]))
-  /
-sum(rate(image_cache_requests_total[5m]))
-```
-
-**Error Responses:** `401` Basic Auth 凭据缺失或错误。
-
----
-
-### 30. Tag Settings（标签喜好）
+### 29. Tag Settings（标签喜好）
 
 标签喜好用于在前端把标签标成蓝色（喜欢）或红色（不喜欢），语义对齐 ExHentai 的 My Tags 高亮。数据存于 `tag_preference` 表，一行一个标签（`namespace:name`），**本应用内只影响显示与排序、不过滤列表**；同步到源站后，源站自身会按其原生语义过滤（不喜欢 = Hidden）。
 

@@ -18,15 +18,14 @@
 - **本地数据**：SQLite 与图片缓存默认放在用户配置/缓存目录
 - **首次设置**：缺少 Cookies 时显示引导界面，保存后启动后端；设置页可查看路径/缓存占用、设置缓存上限、清空缓存、重新配置 Cookies
 - **单实例 + 访问令牌**：重复启动聚焦已有窗口；内嵌后端要求每次启动的随机令牌
-- **数据同步**：两台设备互相填写对方地址与相同令牌即可（设置页 → 数据同步）；本机「接受同步」把令牌写入 config.json 并即时生效
+- **数据同步**：设置页配置另一台设备的地址与令牌即可双向同步书架、阅读进度与离线缓存；本机「接受同步」把令牌写入 config.json 并即时生效
 - **离线下载**：详情页一键排队，`/downloads` 显示任务状态、进度、失败页数，可取消/删除，完成后「离线阅读」或导出 ZIP
 - **种子**：详情页按需加载 torrents 列表，可保存 `.torrent` 文件
 - **标签设置**：喜欢/不喜欢 + 权重规则，列表卡片与详情页标签按规则着色排序并显示中文翻译，支持与源站 My Tags 三路合并同步（冲突逐个选择保留本地或源站）
-- **数据同步**：设置页配置另一台设备的地址与令牌即可双向同步书架、阅读进度与离线缓存；本机也可开启「接受同步」让对端连入（令牌运行时生效，无需重启）
 - **自定义翻译**：把 EhTagTranslation 没有的词条写进 `my-tag-translations.json`，可导入/导出（JSON，`namespace:tag → 名称`），叠加显示在数据库之上
 - 无后端时显示错误页与「重试」，不会空白或崩溃
 
-暂未实现：逐条冲突选择、数据同步、三平台打包。
+暂未实现：macOS 签名/公证、Linux `.deb`/AppImage、Windows 安装包与自动更新。
 
 ## 运行
 
@@ -39,7 +38,7 @@ go run ./cmd/desktop-native
 
 首次启动会显示「首次设置」界面，粘贴 ExHentai 的 Cookie 请求头即可。应用会：
 
-1. 把 Cookie 写入 `~/.config/manga-reader/config.json`（macOS 为 `~/Library/Application Support/manga-reader/config.json`，权限 0600）
+1. 把 Cookie 写入系统钥匙串（`secret-tool` / macOS `security`）；没有可用钥匙串时写入 `~/.config/manga-reader/config.json`（macOS 为 `~/Library/Application Support/manga-reader/config.json`，权限 0600）
 2. 在 `127.0.0.1` 随机端口启动内嵌后端
 3. 把 SQLite 放在用户配置目录、图片缓存放在用户缓存目录
 
@@ -49,10 +48,11 @@ go run ./cmd/desktop-native
 - `MANGA_READER_CACHE_DIR`：图片缓存目录（默认用户缓存目录）
 - `MANGA_READER_CACHE_MAX_BYTES`：图片缓存上限（字节，`0` 表示不限制；默认 2 GiB）
 - `MANGA_READER_SYNC_TOKEN`：启用同步端点
+- `MANGA_READER_LANGUAGE`：界面语言标签（目前翻译为 `zh-CN`，默认跟随系统）
 - `MANGA_READER_DEV_TOOLS=true`：启用 `/api/dev/*`
 - `MANGA_READER_IMAGE_CACHE=false`：关闭本地图片缓存代理，退回 `/api/image/*` 直连上游（连外部后端且对方没配 MinIO 时用）
 
-「设置」页的主题可在「跟随系统 / 浅色 / 深色」间切换（写入 `config.json`，启动时应用；`MANGA_READER_APPEARANCE` 可覆盖）。「设置」页会显示后端地址、配置文件、数据库、缓存目录与缓存占用，可设置缓存上限（MB，`0` 为不限）、一键清空缓存、重新配置 Cookies。缓存超过上限时，写入会触发后台清理，删除最久未使用的图片直到回落。
+「设置」页的主题可在「跟随系统 / 浅色 / 深色」间切换（写入 `config.json`，启动时应用；`MANGA_READER_APPEARANCE` 可覆盖）。「设置」页会显示后端地址、配置文件、数据库、缓存目录与缓存占用，可设置缓存上限（MB，`0` 为不限）、一键清空缓存、重新配置 Cookies。缓存超过上限时，写入会触发后台清理，删除最久未修改的图片直到回落。
 
 进程内后端只监听 `127.0.0.1`，并要求一个每次启动随机生成的访问令牌（UI 客户端与图片请求都会携带），本机其他进程无法直接访问。应用是单实例的：再次启动不会另起后端，而是聚焦已有窗口（通过配置目录下的 `instance.sock` 通信）。
 
@@ -60,12 +60,6 @@ go run ./cmd/desktop-native
 
 ```bash
 MANGA_READER_API=http://127.0.0.1:8080 go run ./cmd/desktop-native
-```
-
-如果后端开了 Basic Auth，可以把凭据写进 URL：
-
-```bash
-MANGA_READER_API=http://user:pass@127.0.0.1:8080 go run ./cmd/desktop-native
 ```
 
 ## 代码结构
@@ -174,7 +168,9 @@ go test ./cmd/desktop-native/app -run 'TestMemoryUnderTarget|TestScrollingStaysU
 
 ## 下一步
 
-1. **页面缩略图**：解析 `/pages` 的 sprite 坐标，在详情页做虚拟化缩略图网格。
-2. **离线缓存预取**：详情页触发 prefill，UI 显示下载进度。
-3. **标签设置 / 翻译 / 同步**：按现有后端能力逐项迁移。
-4. **打包**：macOS、Linux、Windows 三平台的 mygo 打包与签名。
+1. **macOS 签名与公证**：产出 `.app` 并完成 Developer ID 签名/公证。
+2. **Linux 安装包**：在 tarball + 手动安装说明之外补 `.deb`/AppImage。
+3. **Windows 安装包**：产出 `.exe` 安装程序。
+4. **自动更新**（可选）。
+
+详见 [`MYGO_MIGRATION.md`](../../../MYGO_MIGRATION.md) 的 M10。
