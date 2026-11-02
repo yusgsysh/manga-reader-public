@@ -1,7 +1,7 @@
 name: Native desktop
 
 # Tests and builds the mygo desktop app for macOS, Linux and Windows on every
-# push, and attaches the binaries to a GitHub release when a v* tag is pushed.
+# push, and attaches the binaries to a Forgejo release when a v* tag is pushed.
 #
 # Nothing here needs a GUI toolkit at build time: mygo loads GTK 3 and
 # WebKitGTK at run time with purego (dlopen), and the app itself draws
@@ -175,9 +175,33 @@ jobs:
 
           # Pack into a file outside the staged dir, so the archive never
           # includes itself while it is being written.
+          #
+          # The command belongs to the host: zip is not on a Windows runner's
+          # Git Bash (there is no zip.exe there), and no runner is promised
+          # zip on macOS either, so the Windows and macOS archives use what
+          # each platform ships.
           if [[ "${{ matrix.archive }}" == "zip" ]]; then
             ARCHIVE="${ARCHIVE_BASE}.zip"
-            (cd "$STAGE" && zip -qr "$STAGE/$ARCHIVE" . -x "$ARCHIVE")
+            if [[ "${{ runner.os }}" == "Windows" ]]; then
+              # Compress-Archive ships with the runner, and Windows' own
+              # Explorer opens what it writes. -Force quotes the paths for
+              # PowerShell (the temp path holds no quote); the -Path wildcard
+              # skips dotfiles, which the binary, the docs and the icon are
+              # not.
+              ZIP_DIR="${STAGE//\'/\'\'}"
+              ZIP_OUT="${STAGE//\'/\'\'}/$ARCHIVE"
+              powershell -NoProfile -NonInteractive -Command \
+                "Compress-Archive -Path '${ZIP_DIR}/*' -DestinationPath '${ZIP_OUT}' -Force"
+            else
+              # ditto is the macOS archiver: it keeps the resource forks and
+              # permissions and stamps the archive with them.
+              ZIP_DIR="${STAGE//\'/\'\'}"
+              ZIP_OUT="${STAGE//\'/\'\'}/$ARCHIVE"
+              # A list of what landed in the archive shows in the log, so a
+              # release's contents are visible without downloading it.
+              ditto -c -k --sequesterRsrc --keepParent "$ZIP_DIR" "$ZIP_OUT"
+              unzip -l "$ZIP_OUT"
+            fi
           else
             ARCHIVE="${ARCHIVE_BASE}.tar.gz"
             tar -czf "$STAGE/$ARCHIVE" -C "$STAGE" \
@@ -218,19 +242,35 @@ jobs:
 
       - name: Create the release
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Forgejo exports GITHUB_TOKEN to every step. RELEASE_TOKEN
+          # overrides it when the automatic token cannot publish releases.
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           set -euo pipefail
           ls -lh artifacts
+          TOKEN="${RELEASE_TOKEN:-${GITHUB_TOKEN:-}}"
+          if [[ -z "$TOKEN" ]]; then
+            echo "no release token: set secrets.RELEASE_TOKEN or the runner's GITHUB_TOKEN" >&2
+            exit 1
+          fi
+          API="${{ github.server_url }}/api/v1/repos/${{ github.repository }}"
+          AUTH="Authorization: token ${TOKEN}"
           # Notes are generated from the commits since the previous tag; the
           # migration TODO is a development document, not release copy.
           PREV="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
-          TITLE="Manga Reader ${GITHUB_REF_NAME}"
           if [[ -n "$PREV" ]]; then
-            gh release create "${GITHUB_REF_NAME}" artifacts/* \
-              --title "$TITLE" --generate-notes \
-              --notes-start-tag "$PREV" --verify-tag
+            BODY="$(git log --pretty=format:'- %s (%h)' "${PREV}..${GITHUB_REF_NAME}")"
           else
-            gh release create "${GITHUB_REF_NAME}" artifacts/* \
-              --title "$TITLE" --generate-notes --verify-tag
+            BODY="$(git log --pretty=format:'- %s (%h)' "${GITHUB_REF_NAME}")"
           fi
+          PAYLOAD="$(python3 -c 'import json,sys; print(json.dumps({"tag_name":sys.argv[1],"name":"Manga Reader "+sys.argv[1],"body":sys.argv[2]}))' "${GITHUB_REF_NAME}" "$BODY")"
+          # Create the release, or reuse the one a re-run already created.
+          if ! RESPONSE="$(curl -fsS -X POST -H "$AUTH" -H 'Content-Type: application/json' -d "$PAYLOAD" "$API/releases")"; then
+            RESPONSE="$(curl -fsS -H "$AUTH" "$API/releases/tags/${GITHUB_REF_NAME}")"
+          fi
+          RELEASE_ID="$(printf '%s' "$RESPONSE" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+          for f in artifacts/*; do
+            curl -fsS -X POST -H "$AUTH" \
+              -F "attachment=@${f}" \
+              "$API/releases/${RELEASE_ID}/assets?name=$(basename "$f")"
+          done
