@@ -328,6 +328,13 @@ func (a *App) readerSeek(c *ui.Context, r *Reader, look readerLook) {
 			a.seekTo(r, ev.X, width())
 			return true
 		})
+		// The frame is built under the app's lock, but mygo paints this box
+		// after View returns, while the page stream still writes what it has
+		// arrived at. Snapshot the stream's state for the paint callback so it
+		// reads one consistent frame instead of racing the load goroutine.
+		streaming := !r.complete && r.total > 0
+		streamPartial, streamTotal := r.partial, r.total
+		rtl := r.settings.rtl
 		track.Draw(func(p *ui.Painter, box ui.Rect) {
 			*barW = box.W
 			if box.W <= 0 {
@@ -337,23 +344,23 @@ func (a *App) readerSeek(c *ui.Context, r *Reader, look readerLook) {
 			bar := ui.Rect{X: box.X, Y: mid - 4, W: box.W, H: 8}
 			p.Fill(bar, look.line, 999)
 			// A page list still streaming shows how much of the bar is real.
-			if !r.complete && r.total > 0 {
-				stream := clampFloat(float32(r.partial)/float32(r.total), 0, 1)
+			if streaming {
+				stream := clampFloat(float32(streamPartial)/float32(streamTotal), 0, 1)
 				sr := ui.Rect{X: box.X, Y: mid - 4, W: box.W * stream, H: 8}
-				if r.settings.rtl {
+				if rtl {
 					sr.X = box.X + box.W - sr.W
 				}
 				p.Fill(sr, look.surface2, 999)
 			}
 			fill := ui.Rect{X: box.X, Y: mid - 4, W: box.W * frac, H: 8}
-			if r.settings.rtl {
+			if rtl {
 				fill.X = box.X + box.W - fill.W
 			}
 			if fill.W > 0 {
 				p.Fill(fill, look.muted, 999)
 			}
 			knobFrac := frac
-			if r.settings.rtl {
+			if rtl {
 				knobFrac = 1 - frac
 			}
 			kx := box.X + knobFrac*box.W - 9
