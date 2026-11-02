@@ -369,31 +369,6 @@ func TestCacheKey_SameURLAlwaysSameKey(t *testing.T) {
 	}
 }
 
-// ==================== MinIOConfig Tests ====================
-
-func TestMinIOConfig_IsValid(t *testing.T) {
-	tests := []struct {
-		name   string
-		config cache.MinIOConfig
-		valid  bool
-	}{
-		{"complete", cache.MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", SecretKey: "secret", Bucket: "bucket"}, true},
-		{"missing endpoint", cache.MinIOConfig{AccessKey: "key", SecretKey: "secret", Bucket: "bucket"}, false},
-		{"missing access key", cache.MinIOConfig{Endpoint: "minio:9000", SecretKey: "secret", Bucket: "bucket"}, false},
-		{"missing secret key", cache.MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", Bucket: "bucket"}, false},
-		{"missing bucket", cache.MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", SecretKey: "secret"}, false},
-		{"all empty", cache.MinIOConfig{}, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.config.IsValid(); got != tt.valid {
-				t.Errorf("IsValid() = %v, want %v", got, tt.valid)
-			}
-		})
-	}
-}
-
 // ==================== SSRF Boundary Tests ====================
 
 func TestValidatePageURL_DomainBoundary(t *testing.T) {

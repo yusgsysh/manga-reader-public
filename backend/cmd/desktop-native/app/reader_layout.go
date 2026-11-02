@@ -321,14 +321,3 @@ const (
 	autoTurnMin = 3
 	autoTurnMax = 30
 )
-
-// normalizeReaderSettings clamps what a stale or hand-edited value could hold.
-func normalizeReaderSettings(s readerSettings) readerSettings {
-	if s.autoIntervalMS < 3000 {
-		s.autoIntervalMS = 5000
-	}
-	if s.autoIntervalMS > 30000 {
-		s.autoIntervalMS = 30000
-	}
-	return s
-}

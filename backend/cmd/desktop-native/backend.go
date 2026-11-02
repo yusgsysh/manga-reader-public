@@ -77,7 +77,7 @@ func (b *embeddedBackend) Start(cookie string) (string, error) {
 	cookie = strings.TrimSpace(cookie)
 	cfg := config.ParseCookieString(cookie)
 	if !cfg.IsValid() {
-		return "", fmt.Errorf("Cookies 不完整：至少需要 ipb_member_id 和 ipb_pass_hash")
+		return "", fmt.Errorf("cookie 不完整：至少需要 ipb_member_id 和 ipb_pass_hash")
 	}
 
 	if b.server != nil {

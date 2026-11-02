@@ -75,24 +75,13 @@ var (
 
 	imageCacheRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "image_cache_requests_total",
-		Help: "MinIO read-through image cache lookups by object kind and result.",
+		Help: "Read-through image cache lookups by object kind and result.",
 	}, []string{"kind", "result"})
 
 	galleryCacheRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "gallery_cache_requests_total",
 		Help: "Gallery metadata cache lookups by kind and result.",
 	}, []string{"kind", "result"})
-
-	minioCacheRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "minio_cache_requests_total",
-		Help: "MinIO cache operations by operation and result (ok, not_found, error).",
-	}, []string{"op", "result"})
-
-	minioCacheDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "minio_cache_operation_duration_seconds",
-		Help:    "MinIO cache operation latency from call start to completion, by operation.",
-		Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5},
-	}, []string{"op"})
 
 	httpRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "http_requests_total",
@@ -139,8 +128,6 @@ func init() {
 		fetchCacheEntries,
 		imageCacheRequests,
 		galleryCacheRequests,
-		minioCacheRequests,
-		minioCacheDuration,
 		httpRequestsTotal,
 		httpRequestDuration,
 		memBudgetReserved,
@@ -326,13 +313,6 @@ func ObserveUpstreamRetry(endpoint, reason string) {
 	retriesTotal.WithLabelValues(endpoint, reason).Inc()
 }
 
-// ObserveMinIOCache records one MinIO cache operation. result is "ok",
-// "not_found" or "error"; elapsed is the full operation duration.
-func ObserveMinIOCache(op, result string, elapsed time.Duration) {
-	minioCacheRequests.WithLabelValues(op, result).Inc()
-	minioCacheDuration.WithLabelValues(op).Observe(elapsed.Seconds())
-}
-
 // ObserveFetchCache records a shared-fetch cache lookup. result is one of
 // "hit", "miss", "coalesced".
 func ObserveFetchCache(result string) {
@@ -344,9 +324,8 @@ func SetFetchCacheEntries(n int) {
 	fetchCacheEntries.Set(float64(n))
 }
 
-// ObserveImageCache records a MinIO read-through image cache lookup. kind is
-// one of "page_image", "thumbnail", "sprite", "page_crop"; result is "hit" or
-// "miss".
+// ObserveImageCache records a read-through image cache lookup. kind is one of
+// "page_image", "thumbnail", "sprite", "page_crop"; result is "hit" or "miss".
 func ObserveImageCache(kind, result string) {
 	imageCacheRequests.WithLabelValues(kind, result).Inc()
 }
@@ -394,8 +373,6 @@ func ResetForTest() {
 	fetchCacheEntries.Set(0)
 	imageCacheRequests.Reset()
 	galleryCacheRequests.Reset()
-	minioCacheRequests.Reset()
-	minioCacheDuration.Reset()
 	httpRequestsTotal.Reset()
 	httpRequestDuration.Reset()
 	memBudgetReserved.Set(0)

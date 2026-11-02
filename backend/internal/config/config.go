@@ -11,7 +11,6 @@ type Config struct {
 	Port        string
 	Database    DatabaseConfig
 	Cookie      CookieConfig
-	MinIO       MinIOConfig
 	LogLevel    string
 	Environment string
 	// SyncToken enables the peer-facing sync endpoints when non-empty
@@ -65,19 +64,6 @@ func (c CookieConfig) IsValid() bool {
 	return c.IpbMemberID != "" && c.IpbPassHash != ""
 }
 
-type MinIOConfig struct {
-	Endpoint  string
-	AccessKey string
-	SecretKey string
-	Bucket    string
-	UseSSL    bool
-	Region    string
-}
-
-func (c MinIOConfig) IsValid() bool {
-	return c.Endpoint != "" && c.AccessKey != "" && c.SecretKey != "" && c.Bucket != ""
-}
-
 func Load() (*Config, error) {
 	dbDSN := getEnv("MANGA_READER_DB_DSN", "")
 	if dbDSN == "" {
@@ -100,14 +86,6 @@ func Load() (*Config, error) {
 			IpbPassHash: getEnv("EHENTAI_COOKIE_IPB_PASS_HASH", ""),
 			Igneous:     getEnv("EHENTAI_COOKIE_IGNEOUS", ""),
 			SK:          getEnv("EHENTAI_COOKIE_SK", ""),
-		},
-		MinIO: MinIOConfig{
-			Endpoint:  getEnv("MINIO_ENDPOINT", ""),
-			AccessKey: getEnv("MINIO_ACCESS_KEY", ""),
-			SecretKey: getEnv("MINIO_SECRET_KEY", ""),
-			Bucket:    getEnv("MINIO_BUCKET", ""),
-			UseSSL:    parseBoolEnv("MINIO_USE_SSL", false),
-			Region:    getEnv("MINIO_REGION", ""),
 		},
 	}
 

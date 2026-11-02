@@ -421,28 +421,6 @@ func httpGetBytes(target string, timeout time.Duration) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 }
 
-// SetCustomPath names the user's own translations file and re-applies it to
-// the loaded tables.
-func (db *TagTranslationDB) SetCustomPath(path string) {
-	db.mu.Lock()
-	db.customPath = path
-	if db.loaded {
-		db.reloadCustomLocked()
-	}
-	db.mu.Unlock()
-}
-
-// SetCustom installs the user's own translations as given (as the settings
-// of a test do) and re-applies them.
-func (db *TagTranslationDB) SetCustom(entries customTranslationsFile) {
-	db.mu.Lock()
-	db.custom = entries.normalised()
-	if db.loaded {
-		db.reloadCustomLocked()
-	}
-	db.mu.Unlock()
-}
-
 // CustomPath is the user's own translations file, or "".
 func (db *TagTranslationDB) CustomPath() string {
 	db.mu.RLock()
