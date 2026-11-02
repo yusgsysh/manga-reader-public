@@ -64,14 +64,20 @@ func KeyringAvailable() bool {
 func keyringSave(cookie string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		return keyringRun("security", "add-generic-password", "-U",
-			"-s", keyringService, "-a", keyringAccount, "-w", cookie)
+		// -w with no value makes security(1) read the password from stdin
+		// instead of exposing it in the process's argv.
+		return keyringRunInput("security", cookie, "add-generic-password", "-U",
+			"-s", keyringService, "-a", keyringAccount, "-w")
 	case "linux":
 		if _, err := exec.LookPath("secret-tool"); err != nil {
 			return ErrKeyringUnavailable
 		}
-		return keyringRun("secret-tool", "store", "--label="+keyringService,
-			"service", keyringService, "account", keyringAccount, cookie)
+		// secret-tool takes attribute/value pairs on the command line and
+		// reads the secret itself from stdin; a trailing secret argument is
+		// rejected as an unpaired attribute.
+		return keyringRunInput("secret-tool", cookie, "store",
+			"--label="+keyringService,
+			"service", keyringService, "account", keyringAccount)
 	default:
 		return ErrKeyringUnavailable
 	}
@@ -137,6 +143,19 @@ func keyringRun(name string, args ...string) error {
 	return nil
 }
 
+// keyringRunInput runs a store command with the secret on stdin, keeping it
+// out of argv (which other users can read through ps).
+func keyringRunInput(name, input string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdin = strings.NewReader(input)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	if err := runWithTimeout(cmd); err != nil {
+		return wrapKeyringErr(err)
+	}
+	return nil
+}
+
 // keyringOutput runs a store command and returns its stdout.
 func keyringOutput(name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
@@ -161,7 +180,8 @@ func runWithTimeout(cmd *exec.Cmd) error {
 		return err
 	case <-time.After(keyringTimeout):
 		_ = cmd.Process.Kill()
-		<-done
+		// Reap the killed process; its exit status is no longer useful.
+		<-done //nolint:errcheck // draining the reaped process's error
 		return ErrKeyringUnavailable
 	}
 }

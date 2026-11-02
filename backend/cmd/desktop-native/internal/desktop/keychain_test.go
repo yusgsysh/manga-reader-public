@@ -18,13 +18,29 @@ func withFakeKeyring(t *testing.T) {
 	}
 	dir := t.TempDir()
 	store := filepath.Join(dir, "store")
-	// secret-tool: "store ... <value>" reads the value from argv[last];
-	// "lookup ..." prints it; "clear ..." empties it.
+	// secret-tool: "store ..." reads the secret from stdin and requires the
+	// remaining arguments to be attribute/value pairs; "lookup ..." prints
+	// it; "clear ..." empties it. The fake rejects a secret in argv so a
+	// regression to the old command line fails the test.
 	script := filepath.Join(dir, "secret-tool")
 	code := `#!/bin/sh
 S="` + store + `"
+case " $* " in
+  *"cookie-value"*|*"ipb_"*|*"manga-reader-keyring-probe"*)
+    echo "secret leaked into argv" >&2; exit 3;;
+esac
 case "$1" in
-  store) shift 6; printf '%s' "$1" > "$S";;
+  store)
+    shift
+    n=0
+    for a in "$@"; do
+      case "$a" in --label=*) ;; *) n=$((n+1));; esac
+    done
+    if [ $((n % 2)) -ne 0 ]; then
+      echo "store attributes are not pairs: $*" >&2; exit 2
+    fi
+    cat > "$S"
+    ;;
   lookup) [ -f "$S" ] && cat "$S";;
   clear) rm -f "$S";;
 esac
