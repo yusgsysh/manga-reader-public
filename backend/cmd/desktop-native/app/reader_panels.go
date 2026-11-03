@@ -21,10 +21,7 @@ func (a *App) readerMenu(c *ui.Context, r *Reader, slide, alpha float32) {
 	look := readerLookOf(r)
 	w, h := c.Size()
 	inset := readerInset(w)
-	width := minFloat(500, w-2*inset)
-	if width < 240 {
-		width = maxFloat(w-2*inset, 200)
-	}
+	width, _, _ := readerTopCards(c, w)
 	shown := r.panel
 	closing := false
 	if !shown.isMenu() {

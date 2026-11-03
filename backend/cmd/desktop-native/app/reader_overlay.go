@@ -11,9 +11,10 @@ import (
 
 // The overlay is comimi's controls: floating glass cards over the page rather
 // than a bar across it. The pill at the top left holds the title and opens the
-// menu, chevrons at the sides turn the page, and the dock at the bottom carries
-// the seek bar, auto page turn, the page mode, the view and the settings. A
-// tap on the page shows or hides all of it.
+// menu, the card at the top right goes back to the gallery, chevrons at the
+// sides turn the page, and the dock at the bottom carries the seek bar, auto
+// page turn, the page mode, the view and the settings. A tap on the page shows
+// or hides all of it.
 
 // readerOverlay draws the overlay over the page.
 func (a *App) readerOverlay(c *ui.Context, r *Reader) {
@@ -34,6 +35,7 @@ func (a *App) readerOverlay(c *ui.Context, r *Reader) {
 		if !r.panel.isMenu() || !r.menuAt.IsZero() {
 			a.readerPill(c, r, slide, alpha)
 		}
+		a.readerBack(c, r, slide, alpha)
 		a.readerSideArrows(c, r, look, slide, alpha)
 		a.readerDock(c, r, slide, alpha)
 		// Panels come last so they cover the chevrons they reach, as comimi's
@@ -77,17 +79,53 @@ func menuMotion(r *Reader, now time.Time) (drop, alpha float32) {
 	return 0, 1
 }
 
+// The top row's cards, as comimi's pill and its way out: the title on the
+// left and the back button on the right. Their sizes are worked out together
+// so the two never meet, however long the title or the button's name is.
+const (
+	readerPillHeight float32 = 62
+	readerBackSize   float32 = 46
+	readerBackIcon   float32 = 18
+	readerBackPad    float32 = 14
+	readerBackGap    float32 = 8
+	readerBackFont   float32 = 14
+	// readerTopGap is the space between the title pill and the back card.
+	readerTopGap float32 = 12
+	// readerBackLabelMin is the narrowest window that still shows the back
+	// card's label. Below it the arrow alone keeps the title its room.
+	readerBackLabelMin float32 = 640
+)
+
+// readerTopCards returns the title pill's width and the back card's, and
+// whether the back card shows its label. The pill stops before the card, so
+// the two share the top row without overlapping on a narrow window.
+func readerTopCards(c *ui.Context, w float32) (pillW, backW float32, label bool) {
+	label = w >= readerBackLabelMin
+	backW = readerBackSize
+	if label {
+		tw, _ := c.MeasureText(0, ui.Span{
+			Text: i18n.T("Back to the gallery"), Size: readerBackFont, Weight: 600,
+		})
+		// A little slack keeps the measured line from being ellipsized by
+		// a rounding difference between measuring and drawing it.
+		backW = readerBackIcon + readerBackGap + tw + 2*readerBackPad + 2
+	}
+	inset := readerInset(w)
+	pillW = minFloat(500, w-2*inset-backW-readerTopGap)
+	if pillW < 200 {
+		pillW = maxFloat(w-2*inset-backW-readerTopGap, 160)
+	}
+	return pillW, backW, label
+}
+
 // readerPill is the floating title card at the top left: the menu button, the
 // gallery's title, and a press anywhere on it opens the menu.
 func (a *App) readerPill(c *ui.Context, r *Reader, slide, alpha float32) {
 	look := readerLookOf(r)
 	w, _ := c.Size()
 	inset := readerInset(w)
-	width := minFloat(500, w-2*inset)
-	if width < 240 {
-		width = maxFloat(w-2*inset, 200)
-	}
-	pill := readerGlassCard(c, look, 16).Width(width).Height(62).
+	width, _, _ := readerTopCards(c, w)
+	pill := readerGlassCard(c, look, 16).Width(width).Height(readerPillHeight).
 		Absolute().Top(inset).Left(inset).Clip().
 		Translate(0, -slide*chromeSlide).Opacity(alpha)
 	pill.Children(func() {
@@ -107,8 +145,13 @@ func (a *App) readerPill(c *ui.Context, r *Reader, slide, alpha float32) {
 				return true
 			})
 			title.Children(func() {
-				ui.Text(c, r.title).FontSize(15).FontWeight(700).TextColor(look.fg).
-					SingleLine().Grow(1)
+				// The row centres the line in the pill; a stretched text
+				// element would sit its glyphs at the top of the box, a
+				// few points above the menu button beside it.
+				ui.Row(c).Fill().AlignItems(ui.Center).Children(func() {
+					ui.Text(c, r.title).FontSize(15).FontWeight(700).TextColor(look.fg).
+						SingleLine().FixedLineHeight(21).Grow(1).MinWidth(0)
+				})
 			})
 			if r.offline {
 				ui.Box(c).Padding(2, 8).Radius(999).Shrink(0).
@@ -117,10 +160,43 @@ func (a *App) readerPill(c *ui.Context, r *Reader, slide, alpha float32) {
 						TextColor(look.muted)
 				})
 			}
-			a.readerIconButton(c, look, readerIconBack, i18n.T("Back to the gallery"),
-				34, 18, look.muted, func() {
-					a.leaveReader(r)
-				})
+		})
+	})
+}
+
+// readerBack is the floating way out at the top right. It has a card of its
+// own rather than riding in the title pill, so a long title cannot push it
+// around or wrap under it; a narrow window keeps the arrow alone and leaves
+// the label to the tooltip and the screen reader.
+func (a *App) readerBack(c *ui.Context, r *Reader, slide, alpha float32) {
+	look := readerLookOf(r)
+	w, _ := c.Size()
+	inset := readerInset(w)
+	_, width, label := readerTopCards(c, w)
+	top := inset + (readerPillHeight-readerBackSize)/2
+	btn := readerGlassCard(c, look, 16).Width(width).Height(readerBackSize).
+		Padding(0, readerBackPad).Absolute().Top(top).Right(inset).
+		Translate(slide*chromeSlide, 0).Opacity(alpha).
+		Focusable().Label(i18n.T("Back to the gallery")).
+		Tooltip(i18n.T("Back to the gallery"))
+	btn.HandleInput(func(ev ui.InputEvent) bool {
+		if ev.Kind != ui.InputPointerDown {
+			return false
+		}
+		a.markActivity()
+		a.leaveReader(r)
+		return true
+	})
+	if btn.Hovered() {
+		btn.Background(look.surface2)
+	}
+	btn.Children(func() {
+		ui.Row(c).Fill().Justify(ui.Center).AlignItems(ui.Center).Gap(readerBackGap).Children(func() {
+			ui.Icon(c, readerIconBack).Size(readerBackIcon, readerBackIcon).TextColor(look.muted)
+			if label {
+				ui.Text(c, i18n.T("Back to the gallery")).FontSize(readerBackFont).
+					FontWeight(600).TextColor(look.fg).SingleLine().FixedLineHeight(21)
+			}
 		})
 	})
 }
