@@ -31,6 +31,7 @@ func (a *App) readerPage(c *ui.Context, id int64, token string, offline bool) {
 		a.readerStart = -1
 		if r.hasPage(r.startPage) {
 			r.page = r.startPage
+			r.startApplied = true
 			r.resetView()
 			a.saveProgress(r)
 		}

@@ -92,6 +92,13 @@ type Reader struct {
 	// target is applied, so a late load result cannot override it with the
 	// saved page.
 	startPage int
+	// startApplied is set once the reader has opened at startPage or at the
+	// saved page, or the person has turned one first. Each page of a
+	// streaming list runs applyStart, and the opening page must not be
+	// re-applied over a turn, or over a read that began before the saved
+	// page arrived: that read as the page blinking back to where the visit
+	// began.
+	startApplied bool
 
 	// The read, as comimi keeps it: an overlay over the page, a panel inside
 	// it, and the zoom and pan of the shown pages.
@@ -249,6 +256,7 @@ func (a *App) ensureReader(id int64, token string, offline bool) {
 	r.started = false
 	r.page = 0
 	r.startPage = -1
+	r.startApplied = false
 	r.pages = nil
 	// The gallery's own count is what the reader plans with, as main's
 	// authoritative total is: the detail page answers from cache first, and
@@ -326,6 +334,7 @@ func (a *App) startReaderLoad(r *Reader) {
 		r.startPage = a.readerStart
 		r.saved, r.savedSet = 0, false
 	}
+	r.startApplied = false
 	// partial is how many pages the view already shows. Until the backend
 	// sends the first one, the reader waits; after that it stays readable
 	// while the rest arrives.
@@ -421,6 +430,11 @@ func (a *App) startReaderLoad(r *Reader) {
 // wrote, else the backend's row), as soon as that page has arrived. A saved
 // page past what the gallery turned out to have opens the last one.
 func (r *Reader) applyStart() {
+	if r.startApplied {
+		// It has opened where it was asked to; pages that stream in after
+		// that must not reopen it over a turn the person has made since.
+		return
+	}
 	n := len(r.pages)
 	if n == 0 {
 		return
@@ -455,6 +469,7 @@ func (r *Reader) applyStart() {
 		r.page = want
 		r.resetView()
 	}
+	r.startApplied = true
 }
 
 // ensureSlots pads the page list with empty slots up to the gallery's count,
@@ -562,6 +577,9 @@ func (a *App) turnPage(r *Reader, direction pageGroupPlacement, animated bool) b
 
 // commitTurn lands a turn on group next.
 func (a *App) commitTurn(r *Reader, direction pageGroupPlacement, next pageGroup) {
+	// The person chose where to read; a page that streams in afterwards must
+	// not open the reader somewhere else (see applyStart).
+	r.startApplied = true
 	r.turnDir = groupCurrent
 	r.turnBaseX = 0
 	r.drag = 0
@@ -614,6 +632,9 @@ func (a *App) goToPage(r *Reader, page int) {
 	if page == r.page {
 		return
 	}
+	// A jump chooses where to read, as a turn does: the opening page must
+	// not be re-applied over it when the rest of the list arrives.
+	r.startApplied = true
 	r.page = page
 	r.resetView()
 	r.drag = 0

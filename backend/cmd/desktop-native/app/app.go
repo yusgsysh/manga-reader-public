@@ -497,6 +497,9 @@ func (a *App) View(c *ui.Context) {
 	// everything every frame ever asked for, and a page the reader once
 	// ordered would never be released.
 	a.pageImages.BeginFrame()
+	// The placeholders work the same way: the pages a spread draws must stay
+	// even when the frame asks for more of them than the cache holds.
+	a.pageCache.BeginFrame()
 	a.inView = true
 	defer func() { a.inView = false }()
 	a.syncTagRulesLocked()

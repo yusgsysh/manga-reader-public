@@ -164,7 +164,7 @@
 - [x] 下载失败 30 秒后再次请求时重试。
 - [x] 与 API 客户端共享 Basic Auth。
 - [x] 封面占位图（24 种渐变），避免首帧空白。
-- [x] 页面占位图（按页生成，最多缓存 4 张）。
+- [x] 页面占位图（按页生成，最多缓存 4 张；一帧正在画的页不参与淘汰，跨页一屏 6 页也不会被反复重建）。
 
 ### 2.6 测试与文档
 
@@ -234,12 +234,13 @@
 - [x] **页面一览/收藏布局修复**：此前单元格用 `FillWidth()` 作为 Grid 的直接子项，会把最后一格撑满剩余列、缩略图被拉成横条；改为让 Grid 拉伸普通 Box，收藏页同样改为图片盒 + 页码 + 右上角移除按钮，缩略图恢复竖版。
 - [x] **页面一览打开即定位**：打开页面一览时把滚动位置设到当前页所在行（5 列、行高 142 DIP），上千页的画廊不用再从第 1 页滚起。
 - [x] **流式进度**：页面列表还在流式到达时，进度条先画一段浅色「已到达」范围，再画当前位置；可拖动的位置仍在已到达的页面内。
+- [x] **阅读不闪**：页面占位渐变跟上 `ImageStore` 的做法，用 `PageCache.BeginFrame` 记下本帧正在画的页，淘汰时跳过它们——跨页一屏画 6 页、缓存只有 4 张，原来每帧丢掉两张再重建，占位图在渐变和空盒之间来回闪；页面列表流式到达时 `applyStart` 只在打开阅读器时生效一次，之后翻页不会被新到的页拉回起点（`startApplied`）。
 - [x] **自动翻页的剩余时间**：原来 120 DIP 的小进度条挤在「自动」按钮旁边，改为 dock 顶部横跨整条进度条宽度的细线，按帧时钟推进。
 - [x] **文案与提示**：缩略图与缩放提示从裸文字改为深色药丸，白纸/彩页上都可读；全屏按钮改为动作文案（「全屏」/「退出全屏」），不再显示当前视图「窗口」。
 - [x] **精简提示与菜单动画**：移除所有页码读数（控件隐藏时的页码药丸、dock 左侧与页面一览顶部的页数/页码）、首次翻页方向引导、页中央「点击隐藏控件」提示，以及阅读器内所有 toast（自动播放、收藏、封面、方向、背景、复制）；菜单卡片（三个横杠）改为从标题栏上方落下、收起时向上淡出，沿用 comimi 的弹簧曲线。
 - [x] 快照新增 `reader-spread`（跨页中缝）、`reader-zoom`（200% 药丸）、`reader-dark`（黑纸）、`reader-narrow`（960×700 dock）、`reader-pages`（页面一览）、`reader-favorites`（收藏格）。
-- [x] 测试新增 `TestReaderZoomControls`（dock 缩放、百分比重置、键盘、隐藏控件后的药丸）、`TestReaderSpreadSettingLandsOnThePair`（设置页切双页落在同一对）、`TestReaderPageListOpensWhereItIs`（长画廊打开页面一览定位当前页）、`TestSpreadPagesMeetAtTheSpine`（跨页贴中缝的几何）、`TestReaderMenuDropsInAndOut` / `TestReaderMenuStaysForItsExit`（菜单展开、收起与退出期间仍绘制）。
-- [x] 验证：`go test ./...`（746 通过）、`go test -race ./cmd/desktop-native/...`（177 通过）、`go vet ./cmd/desktop-native/...`、`gofmt` 均通过。
+- [x] 测试新增 `TestReaderZoomControls`（dock 缩放、百分比重置、键盘、隐藏控件后的药丸）、`TestReaderSpreadSettingLandsOnThePair`（设置页切双页落在同一对）、`TestReaderPageListOpensWhereItIs`（长画廊打开页面一览定位当前页）、`TestSpreadPagesMeetAtTheSpine`（跨页贴中缝的几何）、`TestReaderMenuDropsInAndOut` / `TestReaderMenuStaysForItsExit`（菜单展开、收起与退出期间仍绘制）、`TestPageCacheKeepsPlaceholdersTheFrameDraws` / `TestReaderSpreadKeepsItsPlaceholders`（跨页一屏 6 页的占位图不被淘汰、不重建）、`TestReaderKeepsATurnWhileTheListStreams` / `TestReaderDoesNotJumpToLateSavedProgress`（流式到达不会把翻页或已开始阅读的人拉回起点）。
+- [x] 验证：`go test ./...`（750 通过）、`go test -race ./cmd/desktop-native/...`（181 通过）、`go vet ./cmd/desktop-native/...`、`gofmt` 均通过。
 
 ### 2.10 首页一比一对齐 main 的 TS 前端
 

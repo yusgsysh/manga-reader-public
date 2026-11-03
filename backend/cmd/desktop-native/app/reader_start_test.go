@@ -83,6 +83,85 @@ func TestReaderTargetBeatsLateProgress(t *testing.T) {
 	}
 }
 
+// TestReaderKeepsATurnWhileTheListStreams covers reading on while a long
+// gallery's page list is still arriving. The page the reader opened at was
+// applied again on every page that streamed in, so a turn made in the middle
+// of the stream was pulled back to the opening page, which read as the reader
+// blinking back to where the visit began.
+func TestReaderKeepsATurnWhileTheListStreams(t *testing.T) {
+	const total = 40
+	release := make(chan struct{})
+	_, url := newSlotServer(t, total, total, 4, release,
+		map[string]any{"current_page": 3})
+	a := New(NewClient(url))
+	a.rememberReading(1, ReadingProgress{CurrentPage: 3})
+	tt := ui.NewTester(a.View, 1280, 860)
+	openReader(t, a, tt, "继续阅读 · 第 4 页")
+
+	// The saved page has streamed in and opened the reader; the rest of the
+	// list is still upstream. Turn on while it is.
+	waitReaderPage(t, tt, a, 3)
+	tt.Key(0, ui.KeyLeft)
+	tt.Frame()
+	waitReaderPage(t, tt, a, 4)
+
+	// Let the rest of the stream arrive: the reader must stay on the page the
+	// person turned to.
+	close(release)
+	var settled bool
+	var page int
+	waitFor(t, tt, "the stream to finish", func() bool {
+		a.update(func() { settled, page = a.reader.settled, a.reader.page })
+		return settled
+	})
+	if page != 4 {
+		t.Fatalf("page after the list finished = %d, want 4 (the turn)", page)
+	}
+}
+
+// TestReaderDoesNotJumpToLateSavedProgress covers the saved page the backend
+// reports only when the list ends. A person who has begun reading from the
+// first page must not be pulled to it by the stream's last frame, which is
+// the same blink as a turn being undone.
+func TestReaderDoesNotJumpToLateSavedProgress(t *testing.T) {
+	const total = 40
+	release := make(chan struct{})
+	_, url := newSlotServer(t, total, total, 4, release,
+		map[string]any{"current_page": 30})
+	a := New(NewClient(url))
+	tt := ui.NewTester(a.View, 1280, 860)
+	// Visit the gallery so the reader knows how many slots to lay out, then
+	// open the reader itself: the detail page's button would ask for its own
+	// resumed page, and the point here is a reader that starts at the first
+	// page and only learns the saved page when the stream ends.
+	waitText(t, tt, "分页画廊")
+	if err := tt.Click("分页画廊"); err != nil {
+		t.Fatal(err)
+	}
+	navSettle(tt)
+	a.router.Push("/reader/1/tok1")
+	navSettle(tt)
+
+	// Read on while the saved page is still only upstream.
+	waitReaderPage(t, tt, a, 0)
+	for i := 0; i < 4; i++ {
+		tt.Key(0, ui.KeyLeft)
+	}
+	tt.Frame()
+	waitReaderPage(t, tt, a, 4)
+
+	close(release)
+	var settled bool
+	var page int
+	waitFor(t, tt, "the stream to finish", func() bool {
+		a.update(func() { settled, page = a.reader.settled, a.reader.page })
+		return settled
+	})
+	if page != 4 {
+		t.Fatalf("page after the list finished = %d, want 4 (where the read got to)", page)
+	}
+}
+
 // TestReaderResumesSavedProgress is the other side: with no target, the saved
 // page is what the reader opens at.
 func TestReaderResumesSavedProgress(t *testing.T) {

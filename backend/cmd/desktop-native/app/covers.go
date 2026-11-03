@@ -71,7 +71,13 @@ type PageCache struct {
 	max     int
 	// pending marks the placeholders being painted in the background.
 	pending map[[2]int]bool
-	win     *mygo.Window
+	// wanted are the pages the frame being built draws (see BeginFrame):
+	// eviction leaves them alone. A spread draws three groups of two pages,
+	// six in all, more than the cache holds, so insertion order alone dropped
+	// the page on screen and rebuilt its gradient on the next frame, over and
+	// over.
+	wanted map[[2]int]bool
+	win    *mygo.Window
 }
 
 func NewPageCache(max int) *PageCache {
@@ -81,10 +87,24 @@ func NewPageCache(max int) *PageCache {
 	return &PageCache{entries: make(map[[2]int]*ui.Bitmap), max: max}
 }
 
+// BeginFrame starts the frame the view is building: from here on, the pages it
+// asks Get for are the ones it draws. Eviction leaves them alone even when the
+// cache is over its limit, as a spread lays out more pages than it holds; the
+// next frame starts the set again, so placeholders the reader left can still be
+// dropped.
+func (p *PageCache) BeginFrame() {
+	p.mu.Lock()
+	p.wanted = make(map[[2]int]bool, 8)
+	p.mu.Unlock()
+}
+
 func (p *PageCache) Get(galleryID, page int) *ui.Bitmap {
 	key := [2]int{galleryID, page}
 
 	p.mu.Lock()
+	if p.wanted != nil {
+		p.wanted[key] = true
+	}
 	if b, ok := p.entries[key]; ok {
 		p.mu.Unlock()
 		return b
@@ -111,18 +131,35 @@ func (p *PageCache) build(key [2]int) {
 	if _, ok := p.entries[key]; !ok {
 		p.entries[key] = b
 		p.order = append(p.order, key)
-		for len(p.order) > p.max {
-			oldest := p.order[0]
-			p.order = p.order[1:]
-			delete(p.entries, oldest)
-		}
 	}
+	p.evictLocked()
 	win := p.win
 	p.mu.Unlock()
 
 	if win != nil {
 		win.Update(func() {})
 	}
+}
+
+// evictLocked drops the oldest placeholders until the cache is within its
+// limit, leaving the pages the frame being built draws alone: a spread's six
+// pages outnumber the four the cache holds, and evicting one of them would
+// show its plain stand-in for the frame the gradient is painted again, which
+// is the blink between placeholder and picture. The order keeps the kept keys
+// so a page that stops being drawn is the first to go.
+func (p *PageCache) evictLocked() {
+	if len(p.entries) <= p.max {
+		return
+	}
+	kept := p.order[:0]
+	for _, key := range p.order {
+		if len(p.entries) > p.max && !p.wanted[key] {
+			delete(p.entries, key)
+			continue
+		}
+		kept = append(kept, key)
+	}
+	p.order = kept
 }
 
 // SetWindow lets the cache ask for a frame once a placeholder is ready.
