@@ -110,9 +110,9 @@ func TestBasicAuthFailClosed(t *testing.T) {
 			"MANGA_READER_BASIC_AUTH_ENABLED": "true",
 			"MANGA_READER_BASIC_AUTH_FILE":    writeBasicAuthFile(t, "", 0o644),
 		}},
-		{"htpasswd file not world-readable", map[string]string{
+		{"htpasswd file writable by group/others", map[string]string{
 			"MANGA_READER_BASIC_AUTH_ENABLED": "true",
-			"MANGA_READER_BASIC_AUTH_FILE":    writeBasicAuthFile(t, "admin:$apr1$x$y\n", 0o600),
+			"MANGA_READER_BASIC_AUTH_FILE":    writeBasicAuthFile(t, "admin:$apr1$x$y\n", 0o666),
 		}},
 		{"password file missing", map[string]string{
 			"MANGA_READER_BASIC_AUTH_ENABLED":       "true",

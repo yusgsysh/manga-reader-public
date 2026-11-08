@@ -3,8 +3,8 @@
 # Build (context must be the repository root):
 #   docker build -t manga-reader .
 #
-# Run:
-#   docker run -d -p 5173:8080 --env-file .env manga-reader
+# Run (bind to loopback; ENVIRONMENT=production requires Basic Auth in .env):
+#   docker run -d -p 127.0.0.1:5173:8080 --env-file .env manga-reader
 #
 # Stages:
 #   frontend   Bun builds the Vite production bundle
@@ -51,7 +51,7 @@ COPY --from=frontend /app/dist ./internal/web/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/manga-reader .
 
 # ---- Runtime stage ----
-FROM alpine:latest
+FROM alpine:3.22
 
 # CA certificates for HTTPS requests to ExHentai, tzdata for time handling
 RUN apk add --no-cache ca-certificates tzdata \
@@ -65,6 +65,8 @@ RUN mkdir -p /app/data && chown -R appuser:appuser /app
 USER appuser
 
 ENV EHENTAI_PORT=:8080
+# Production mode: the backend refuses to start without Basic Auth.
+ENV ENVIRONMENT=production
 ENV MANGA_READER_DB_PATH=/app/data/manga-reader.db
 
 # Go heap soft limit: keeps RSS near ~160MiB by making GC run harder as the
@@ -75,5 +77,9 @@ ENV GOMEMLIMIT=160MiB
 VOLUME ["/app/data"]
 
 EXPOSE 8080
+
+# /healthz is deliberately exempt from Basic Auth so this works with auth on.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
 
 ENTRYPOINT ["/app/manga-reader"]

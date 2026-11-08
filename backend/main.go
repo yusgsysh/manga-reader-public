@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -24,9 +25,58 @@ import (
 	"manga-reader/internal/web"
 )
 
-func CORSMiddleware() gin.HandlerFunc {
+// corsOriginSet returns extra origins (comma-separated
+// MANGA_READER_CORS_ORIGINS) that may call the API cross-origin. The SPA is
+// served same-origin and dev uses Vite's proxy, so the default is empty.
+func corsOriginSet() map[string]struct{} {
+	set := make(map[string]struct{})
+	for _, origin := range strings.Split(os.Getenv("MANGA_READER_CORS_ORIGINS"), ",") {
+		if origin = strings.TrimSpace(origin); origin != "" {
+			set[origin] = struct{}{}
+		}
+	}
+	// `bun dev` runs Vite on :5173 and calls the API on :8080 cross-origin.
+	// Production stays locked down and requires an explicit allowlist.
+	if strings.ToLower(strings.TrimSpace(os.Getenv("ENVIRONMENT"))) != "production" {
+		set["http://localhost:5173"] = struct{}{}
+		set["http://127.0.0.1:5173"] = struct{}{}
+	}
+	return set
+}
+
+// sameOrigin reports whether origin (scheme://host[:port]) targets host.
+func sameOrigin(origin, host string) bool {
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	return strings.EqualFold(u.Host, host)
+}
+
+func splitCSV(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+func originAllowed(origin, host string, extra map[string]struct{}) bool {
+	if _, ok := extra[origin]; ok {
+		return true
+	}
+	return sameOrigin(origin, host)
+}
+
+func CORSMiddleware(extra map[string]struct{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		if origin := c.GetHeader("Origin"); origin != "" && originAllowed(origin, c.Request.Host, extra) {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Access-Control-Allow-Credentials", "true")
+			c.Header("Vary", "Origin")
+		}
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
 
@@ -35,6 +85,31 @@ func CORSMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		c.Next()
+	}
+}
+
+// csrfGuard rejects state-changing requests that a browser marks as
+// cross-site. Basic Auth credentials are attached automatically to
+// same-origin subrequests, so without this a malicious page could POST to
+// /api/reading-progress/cleanup and wipe the user's history. Requests with no
+// Origin/Sec-Fetch-Site header (curl, the Go desktop client) are allowed.
+func csrfGuard(extra map[string]struct{}) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		switch c.Request.Method {
+		case http.MethodGet, http.MethodHead, http.MethodOptions:
+			c.Next()
+			return
+		}
+		if origin := c.GetHeader("Origin"); origin != "" {
+			if !originAllowed(origin, c.Request.Host, extra) {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "cross-origin request rejected"})
+				return
+			}
+		} else if site := c.GetHeader("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "cross-site request rejected"})
+			return
+		}
 		c.Next()
 	}
 }
@@ -121,25 +196,19 @@ func run() error {
 	}
 	defer db.Close()
 
-	syncSvc := synclib.NewService(db.Client, synclib.Options{HostToken: cfg.SyncToken})
+	syncSvc := synclib.NewService(db.Client, synclib.Options{
+		HostToken:             cfg.SyncToken,
+		DisableInactiveOutbox: true,
+	})
 	if cfg.SyncToken != "" {
 		logger.Info("sync host enabled")
 	}
 
-	// Startup sweep of cache rows orphaned by the last run; moved after
-	// syncSvc exists so removals propagate as tombstones to the peer.
-	if cacheKeys, cleanErr := db.CleanupGalleryCache(context.Background()); cleanErr != nil {
-		logger.Warn("gallery cache startup cleanup failed", "error", cleanErr)
-	} else if len(cacheKeys) > 0 {
-		logger.Info("gallery cache startup cleanup", "deleted", len(cacheKeys))
-		syncKeys := make([]synclib.Key, len(cacheKeys))
-		for i, k := range cacheKeys {
-			syncKeys[i] = synclib.Key{GalleryID: k.GalleryID, Token: k.Token}
-		}
-		if recErr := syncSvc.RecordDeletes(context.Background(), synclib.EntityGalleryCache, syncKeys); recErr != nil {
-			logger.Warn("record sync cache cleanup failed", "error", recErr)
-		}
-	}
+	// No startup sweep of gallery_cache: the read-through cache deliberately
+	// holds galleries the user only browsed, so deleting everything not on the
+	// shelf/history on every restart wiped the offline cache and replicated
+	// tombstones to the peer. Explicit cleanup (bookshelf removal / history
+	// purge) still runs and propagates deletions.
 
 	handlerCfg := handler.Config{
 		Client:   client,
@@ -180,12 +249,22 @@ func run() error {
 	// land in http_requests_total; with gin.Default() the Recovery would sit
 	// outside metrics and unwind past its recording code, hiding every panic.
 	r := gin.New()
+	// Trust client-supplied X-Forwarded-For only when the operator names the
+	// reverse-proxy CIDRs. Gin trusts everything by default, which lets a
+	// client rotate X-Forwarded-For and defeat the Basic Auth rate limiter.
+	if err := r.SetTrustedProxies(splitCSV(os.Getenv("MANGA_READER_TRUSTED_PROXIES"))); err != nil {
+		logger.Error("invalid MANGA_READER_TRUSTED_PROXIES", "error", err)
+		return err
+	}
+	corsOrigins := corsOriginSet()
+
 	// Outermost app middleware: counts every request including auth failures.
 	r.Use(metrics.GinMiddleware())
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
-	r.Use(CORSMiddleware())
+	r.Use(CORSMiddleware(corsOrigins))
 	r.Use(securityHeadersMiddleware())
+	r.Use(csrfGuard(corsOrigins))
 	r.Use(basicauth.Middleware(cfg.BasicAuth))
 
 	if cfg.BasicAuth.Enabled {
@@ -212,8 +291,9 @@ func run() error {
 		logger.Warn("no embedded frontend in this binary; serving the API only")
 	}
 
+	// Accept ":8080", "8080" and "127.0.0.1:8080" (or "[::1]:8080").
 	port := cfg.Port
-	if port[0] != ':' {
+	if !strings.Contains(port, ":") {
 		port = ":" + port
 	}
 

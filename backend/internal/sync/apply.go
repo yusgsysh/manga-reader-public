@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/bookshelf"
@@ -50,6 +51,17 @@ func ApplyChanges(ctx context.Context, client *ent.Client, changes []Change) (ap
 }
 
 func applyChange(ctx context.Context, client *ent.Client, ch Change) (bool, error) {
+	// A peer with a clock ahead of ours would otherwise win every future LWW
+	// comparison and could permanently revert the user's newer local edits.
+	// Clamp incoming timestamps to (approximately) now.
+	if ch.Row != nil {
+		ch.Row.UpdatedAt = clampFutureTimestamp(ch.Row.UpdatedAt)
+		ch.Row.CreatedAt = clampFutureTimestamp(ch.Row.CreatedAt)
+	}
+	if ch.DeletedAt != nil {
+		t := clampFutureTimestamp(*ch.DeletedAt)
+		ch.DeletedAt = &t
+	}
 	switch ch.Entity {
 	case EntityReadingProgress:
 		return applyReadingProgress(ctx, client, ch)
@@ -62,6 +74,18 @@ func applyChange(ctx context.Context, client *ent.Client, ch Change) (bool, erro
 		// tables this instance does not know about yet.
 		return false, nil
 	}
+}
+
+// clampFutureTimestamp caps a peer timestamp at now (plus a small tolerance
+// for legitimate clock jitter between machines).
+func clampFutureTimestamp(t time.Time) time.Time {
+	if t.IsZero() {
+		return t
+	}
+	if limit := time.Now().UTC().Add(time.Second); t.After(limit) {
+		return limit
+	}
+	return t
 }
 
 // applyGalleryCache merges a replicated cache row. The gate is the same

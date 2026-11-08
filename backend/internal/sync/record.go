@@ -25,7 +25,7 @@ func (s *Service) RecordDelete(ctx context.Context, entity string, galleryID int
 // RecordDeletes appends tombstones for a batch of removed records and emits a
 // single notification (used by retention purges).
 func (s *Service) RecordDeletes(ctx context.Context, entity string, keys []Key) error {
-	if len(keys) == 0 {
+	if len(keys) == 0 || !s.recordEnabled() {
 		return nil
 	}
 	builders := make([]*ent.SyncChangeCreate, 0, len(keys))
@@ -45,6 +45,9 @@ func (s *Service) RecordDeletes(ctx context.Context, entity string, keys []Key) 
 }
 
 func (s *Service) record(ctx context.Context, entity, op string, galleryID int64, token string) error {
+	if !s.recordEnabled() {
+		return nil
+	}
 	if _, err := s.client.SyncChange.Create().
 		SetEntity(entity).
 		SetGalleryID(galleryID).

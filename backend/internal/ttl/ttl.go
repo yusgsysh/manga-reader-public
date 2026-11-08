@@ -21,15 +21,17 @@ const (
 	ImageImmutableHTTP = 365 * 24 * time.Hour
 )
 
-// PublicMaxAge renders a "public, max-age=<seconds>" Cache-Control value.
-func PublicMaxAge(d time.Duration) string {
-	return "public, max-age=" + seconds(d)
+// PrivateMaxAge renders a "private, max-age=<seconds>" Cache-Control value.
+// Image responses sit behind Basic Auth, so a shared cache must not store
+// and re-serve them to another client.
+func PrivateMaxAge(d time.Duration) string {
+	return "private, max-age=" + seconds(d)
 }
 
-// PublicImmutableMaxAge renders a "public, max-age=<seconds>, immutable"
+// PrivateImmutableMaxAge renders a "private, max-age=<seconds>, immutable"
 // Cache-Control value.
-func PublicImmutableMaxAge(d time.Duration) string {
-	return "public, max-age=" + seconds(d) + ", immutable"
+func PrivateImmutableMaxAge(d time.Duration) string {
+	return "private, max-age=" + seconds(d) + ", immutable"
 }
 
 func seconds(d time.Duration) string {

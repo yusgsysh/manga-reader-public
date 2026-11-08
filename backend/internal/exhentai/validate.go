@@ -134,6 +134,45 @@ func validatePageURL(rawURL string) error {
 	return nil
 }
 
+// allowedUpstreamSuffixes covers every host this client legitimately talks
+// to: gallery pages (exhentai/e-hentai), cover thumbnails (ehgt.org) and the
+// image CDN (hath.network and its subdomains).
+var allowedUpstreamSuffixes = []string{
+	"exhentai.org",
+	"e-hentai.org",
+	"ehgt.org",
+	"hath.network",
+}
+
+// validateUpstreamURL is the redirect/fetch guard for requests the backend
+// makes on the user's behalf. It keeps a 30x from an allowlisted host from
+// becoming an SSRF primitive against localhost or a metadata service.
+func validateUpstreamURL(rawURL string) error {
+	if rawURL == "" {
+		return fmt.Errorf("missing url")
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid url")
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("unsupported URL scheme: %s", u.Scheme)
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "" {
+		return fmt.Errorf("invalid url: missing host")
+	}
+	if isBlockedInternalHost(host) {
+		return fmt.Errorf("unsupported URL: internal address not allowed")
+	}
+	for _, allowed := range allowedUpstreamSuffixes {
+		if host == allowed || strings.HasSuffix(host, "."+allowed) {
+			return nil
+		}
+	}
+	return fmt.Errorf("unsupported URL: domain not allowed")
+}
+
 func isBlockedInternalHost(host string) bool {
 	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
 		return true

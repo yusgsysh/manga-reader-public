@@ -1,4 +1,9 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
+// Production builds default to same-origin /api/* (the Docker build also sets
+// VITE_API_BASE_URL="" explicitly). The bare `bun dev` server has no proxy,
+// so development keeps the local backend as its default.
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ??
+  (import.meta.env.DEV ? "http://localhost:8080" : "");
 
 export class ApiRequestError extends Error {
   status: number;

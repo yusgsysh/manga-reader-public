@@ -77,6 +77,7 @@ func (s *Server) handleTagSettingsGet(c *gin.Context) {
 // lowercased, weight-defaulted and deduplicated (last occurrence wins) before
 // persisting, so the stored set always matches what the UI would render.
 func (s *Server) handleTagSettingsPut(c *gin.Context) {
+	limitRequestBody(c, 1<<20)
 	var body struct {
 		Tags []tagSettingsPutEntry `json:"tags"`
 	}

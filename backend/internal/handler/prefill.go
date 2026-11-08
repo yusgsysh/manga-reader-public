@@ -317,6 +317,10 @@ func (m *prefillManager) processPages(s *Server, ctx context.Context, run *prefi
 			run.fetched++
 		default:
 			run.failed++
+			// A failed cache write is just as terminal as a fetch error: count
+			// it so a MinIO outage aborts the job instead of grinding through
+			// every remaining page.
+			consecutiveFails++
 			if len(run.errs) < prefillMaxErrors {
 				run.errs = append(run.errs, model.PrefillItemError{
 					Index: i,

@@ -2,7 +2,9 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -322,7 +324,10 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 		ConflictResolution string `json:"conflict_resolution"`
 	}
 	// An empty body means confirm_deletes=false; only reject malformed JSON.
-	if err := c.ShouldBindJSON(&body); err != nil && !strings.Contains(err.Error(), "EOF") {
+	// Match io.EOF structurally: "unexpected EOF" (a truncated body) must not
+	// be mistaken for an intentional empty request.
+	limitRequestBody(c, 1<<20)
+	if err := c.ShouldBindJSON(&body); err != nil && !errors.Is(err, io.EOF) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
 		return
 	}

@@ -37,6 +37,14 @@ const (
 	// maxTrackedClients bounds the limiter table; beyond it idle entries are
 	// swept instead of growing forever.
 	maxTrackedClients = 8192
+
+	// authCacheTTL short-circuits repeated successful Basic Auth checks so
+	// bcrypt/md5-crypt is not paid on every image and SSE request. A rotated
+	// credential takes effect within this window.
+	authCacheTTL = 30 * time.Second
+	// maxAuthCacheEntries bounds the success cache; it is cleared wholesale
+	// when full, which only costs a few extra hash verifications.
+	maxAuthCacheEntries = 1024
 )
 
 // Middleware returns the Basic Auth handler. A disabled config yields a
@@ -75,26 +83,75 @@ func Middleware(cfg config.BasicAuthConfig) gin.HandlerFunc {
 type verifier struct {
 	username string
 	password string
-	// file is a world-readable htpasswd file, re-read per request so a
-	// rotated secret takes effect without a restart.
+	// file is only used as a fallback when hashes was not preloaded (tests
+	// construct the config directly).
 	file string
+	// hashes is the htpasswd content parsed once at startup.
+	hashes map[string]string
+
+	mu    sync.Mutex
+	cache map[string]time.Time
 }
 
 func newVerifier(cfg config.BasicAuthConfig) *verifier {
-	return &verifier{username: cfg.Username, password: cfg.Password, file: cfg.File}
+	return &verifier{
+		username: cfg.Username,
+		password: cfg.Password,
+		file:     cfg.File,
+		hashes:   cfg.Hashes,
+		cache:    make(map[string]time.Time),
+	}
 }
 
 func (v *verifier) verify(user, pass string) bool {
-	if v.file == "" {
+	key := user + "\x00" + pass
+	if v.cacheHit(key) {
+		return true
+	}
+	ok := v.verifyUncached(user, pass)
+	if ok {
+		v.remember(key)
+	}
+	return ok
+}
+
+func (v *verifier) verifyUncached(user, pass string) bool {
+	if v.file == "" && len(v.hashes) == 0 {
 		userOK := subtle.ConstantTimeCompare([]byte(v.username), []byte(user)) == 1
 		passOK := subtle.ConstantTimeCompare([]byte(v.password), []byte(pass)) == 1
 		return userOK && passOK
 	}
-	hash, ok := lookup(v.file, user)
+	hash, ok := v.hashes[user]
+	if !ok && v.file != "" {
+		hash, ok = lookup(v.file, user)
+	}
 	if !ok {
 		return false
 	}
 	return verifyHash(hash, pass)
+}
+
+func (v *verifier) cacheHit(key string) bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	expiry, ok := v.cache[key]
+	if !ok {
+		return false
+	}
+	if time.Now().After(expiry) {
+		delete(v.cache, key)
+		return false
+	}
+	return true
+}
+
+func (v *verifier) remember(key string) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if len(v.cache) >= maxAuthCacheEntries {
+		clear(v.cache)
+	}
+	v.cache[key] = time.Now().Add(authCacheTTL)
 }
 
 // lookup finds the htpasswd entry for user. Missing/unreadable files simply
@@ -147,6 +204,14 @@ func (l *limiter) allow(key string) bool {
 
 	if len(l.clients) > maxTrackedClients {
 		l.sweep(now)
+		// A fast flood can create more non-idle buckets than the cap within
+		// the sweep window; evict arbitrary entries so the map stays bounded.
+		for key := range l.clients {
+			if len(l.clients) <= maxTrackedClients {
+				break
+			}
+			delete(l.clients, key)
+		}
 	}
 
 	b := l.clients[key]

@@ -9,6 +9,13 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   REGISTRY: git.09270721.xyz
 
@@ -217,6 +224,8 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
 
         shell: bash
         run: |
@@ -224,10 +233,26 @@ jobs:
 
           echo "Deploying to ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}"
 
-          sshpass -p "$DEPLOY_PASSWORD" \
-            ssh \
-              -o StrictHostKeyChecking=accept-new \
-              -o ConnectTimeout=10 \
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          SSH_OPTS=(-o ConnectTimeout=10)
+          if [ -n "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            SSH_OPTS+=(-o StrictHostKeyChecking=yes)
+          else
+            SSH_OPTS+=(-o StrictHostKeyChecking=accept-new)
+          fi
+
+          if [ -n "${DEPLOY_SSH_KEY:-}" ]; then
+            ( umask 077; printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key )
+            SSH=(ssh -i ~/.ssh/deploy_key "${SSH_OPTS[@]}")
+          else
+            # Password fallback: pass the secret via the environment instead
+            # of argv, where any local process could read it.
+            SSH=(sshpass -e ssh "${SSH_OPTS[@]}")
+          fi
+
+          SSHPASS="${DEPLOY_PASSWORD:-}" "${SSH[@]}" \
               "${DEPLOY_USER}@${DEPLOY_HOST}" \
               "
                 set -e

@@ -8,13 +8,17 @@
 #   systemctl daemon-reload
 [Container]
 Image=ghcr.io/yusgsysh/manga-reader:latest
-# 对外发布端口（原 frontend 的 5173 入口）
-PublishPort=5173:8080
+# 对外发布端口（原 frontend 的 5173 入口）。
+# 默认仅绑定回环：公网访问请显式改为 0.0.0.0:5173:8080，并置于 HTTPS 反向代理之后。
+PublishPort=127.0.0.1:5173:8080
 # 全量配置（EHENTAI_COOKIE、同步令牌、数据库驱动、Basic Auth 等）
 # 注意：键名必须是 EnvironmentFile=（EnvFile= 非法键，quadlet 会跳过整个 unit）
 # 该值经 podman --env-file 注入：每行须为 KEY=VALUE，且 $ 不做展开
 # HTTP_PROXY/HTTPS_PROXY/NO_PROXY 也在该文件中配置，出站经代理（见 .env.example）
 EnvironmentFile=/root/manga-reader-public/.env
+Environment=ENVIRONMENT=production
+# 容器内监听所有接口；宿主侧由 PublishPort=127.0.0.1 限制。
+Environment=EHENTAI_PORT=:8080
 Environment=MANGA_READER_DB_PATH=/app/data/manga-reader.db
 
 # HTTP Basic Auth（Gin 层；生产置于 HTTPS 之后）
@@ -28,8 +32,14 @@ Environment=MANGA_READER_DB_PATH=/app/data/manga-reader.db
 
 # 数据卷：以 podman volume ls 实际名称为准
 Volume=manga-reader-public_backend_data:/app/data
-AutoUpdate=registry
 NoNewPrivileges=true
+DropCapability=all
+PidsLimit=512
+Memory=512M
+HealthCmd=wget -qO- http://127.0.0.1:8080/healthz || exit 1
+HealthInterval=30s
+HealthRetries=3
+HealthStartPeriod=10s
 PodmanArgs=--log-opt max-size=10m --log-opt max-file=3
 
 [Service]

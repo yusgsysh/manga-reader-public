@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -35,6 +36,23 @@ type Service struct {
 	hub       *Hub
 	hostToken string
 	engine    *Engine
+	// clientActive mirrors ClientConfig.Active(); the outbox is only written
+	// when this instance can actually exchange changes with a peer.
+	clientActive atomic.Bool
+	// disableInactiveOutbox makes record() a no-op when no peer is
+	// configured. Production opts in; unit tests that exercise the outbox
+	// mechanism directly leave it off.
+	disableInactiveOutbox bool
+}
+
+// recordEnabled reports whether an outbox row is useful: either this instance
+// serves sync peers, or it is configured as a sync client. Without this guard
+// a single-instance deployment appends a row on every page turn forever.
+func (s *Service) recordEnabled() bool {
+	if s.hostToken != "" || s.clientActive.Load() {
+		return true
+	}
+	return !s.disableInactiveOutbox
 }
 
 // Options configures a Service.
@@ -43,14 +61,19 @@ type Options struct {
 	// /api/sync/events) when non-empty. Empty means this instance does not
 	// accept sync peers.
 	HostToken string
+	// DisableInactiveOutbox stops appending outbox rows when neither a host
+	// token nor a client peer is configured, so a single-instance deployment
+	// does not grow sync_change forever.
+	DisableInactiveOutbox bool
 }
 
 // NewService builds a Service. The engine must be started with RunEngine.
 func NewService(client *ent.Client, opts Options) *Service {
 	s := &Service{
-		client:    client,
-		hub:       NewHub(),
-		hostToken: opts.HostToken,
+		client:                client,
+		hub:                   NewHub(),
+		hostToken:             opts.HostToken,
+		disableInactiveOutbox: opts.DisableInactiveOutbox,
 	}
 	s.engine = newEngine(s)
 	return s
@@ -252,6 +275,7 @@ func (s *Service) handleConfigGet(c *gin.Context) {
 }
 
 func (s *Service) handleConfigPut(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
 	var in ConfigUpdate
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 
@@ -35,9 +36,12 @@ func ScrapePageImageURL(ctx context.Context, client *http.Client, pageURL string
 		return "", "", &httpStatusError{code: resp.StatusCode}
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxImageBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDocBytes))
 	if err != nil {
 		return "", "", err
+	}
+	if len(body) == maxDocBytes {
+		return "", "", fmt.Errorf("upstream page exceeds %d bytes", maxDocBytes)
 	}
 
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
@@ -140,6 +144,10 @@ func ProxyImageStream(ctx context.Context, client *http.Client, imgURL string) (
 		metrics.ObserveClassification(metrics.Endpoint(imgURL), metrics.OutcomeHTTPError, resp.StatusCode)
 		return nil, &httpStatusError{code: resp.StatusCode}
 	}
+	if resp.ContentLength > MaxImageBytes {
+		resp.Body.Close()
+		return nil, ErrImageTooLarge
+	}
 
 	probe := make([]byte, 512)
 	n, err := io.ReadFull(resp.Body, probe)
@@ -151,12 +159,18 @@ func ProxyImageStream(ctx context.Context, client *http.Client, imgURL string) (
 		return nil, err
 	}
 
+	contentType, err := safeImageContentType(resp.Header.Get("Content-Type"), probe[:n])
+	if err != nil {
+		resp.Body.Close()
+		return nil, err
+	}
+
 	return &ImageStream{
 		Body: &imageBody{
 			Reader: io.MultiReader(bytes.NewReader(probe[:n]), resp.Body),
 			Closer: resp.Body,
 		},
-		ContentType: resp.Header.Get("Content-Type"),
+		ContentType: contentType,
 		Size:        resp.ContentLength,
 	}, nil
 }
@@ -207,10 +221,44 @@ func ProxyImage(ctx context.Context, client *http.Client, imgURL string) (data [
 		return nil, "", &httpStatusError{code: resp.StatusCode}
 	}
 
-	contentType = resp.Header.Get("Content-Type")
-	data, err = io.ReadAll(io.LimitReader(resp.Body, MaxImageBytes))
+	data, err = io.ReadAll(io.LimitReader(resp.Body, MaxImageBytes+1))
+	if err != nil {
+		return nil, "", err
+	}
+	if len(data) > MaxImageBytes {
+		return nil, "", ErrImageTooLarge
+	}
+	contentType, err = safeImageContentType(resp.Header.Get("Content-Type"), data)
 	if err != nil {
 		return nil, "", err
 	}
 	return data, contentType, nil
+}
+
+// safeImageContentType rejects content types that could be rendered as HTML
+// or script from the app's own origin (the image proxy has no CSP), and
+// prefers the sniffed type when upstream mislabels an image.
+func safeImageContentType(upstream string, sniff []byte) (string, error) {
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(upstream, ";")[0]))
+	detected := http.DetectContentType(sniff)
+	if isDangerousContentType(mediaType) || isDangerousContentType(detected) {
+		return "", fmt.Errorf("upstream returned non-image content type %q", upstream)
+	}
+	if strings.HasPrefix(mediaType, "image/") {
+		return upstream, nil
+	}
+	if strings.HasPrefix(detected, "image/") {
+		return detected, nil
+	}
+	return "", fmt.Errorf("upstream returned non-image content type %q", upstream)
+}
+
+func isDangerousContentType(mediaType string) bool {
+	switch strings.ToLower(strings.TrimSpace(mediaType)) {
+	case "text/html", "application/xhtml+xml", "image/svg+xml",
+		"application/javascript", "text/javascript", "application/xml", "text/xml":
+		return true
+	default:
+		return false
+	}
 }

@@ -32,8 +32,12 @@ const galleryPagesHardCap = 10 * time.Minute
 
 // maxListingPage bounds upstream listing pagination: a cold request for page N
 // walks N sequential upstream fetches, so unbounded page numbers would let one
-// request hammer the upstream for hours.
-const maxListingPage = 200
+// request hammer the upstream for hours. 50 pages is already ~1250 results.
+const maxListingPage = 50
+
+// cachedPageCountProbeTTL throttles the stale-while-revalidate page-count
+// probe: without it every cached page view hit ExHentai once.
+const cachedPageCountProbeTTL = time.Hour
 
 // maxDBPage bounds DB-offset pagination so page*pageSize cannot overflow int.
 const maxDBPage = 1_000_000
@@ -893,8 +897,11 @@ func (s *Server) handleCachedGalleryPages(c *gin.Context) {
 		}
 		// Serve immediately, then verify the upstream page count in the
 		// background (stale-while-revalidate): a gallery that gained or lost
-		// pages is replaced without blocking the hit.
-		go s.verifyCachedPageCount(id, token, len(row.Pages))
+		// pages is replaced without blocking the hit. Probe at most once per
+		// TTL so browsing does not translate into an upstream request per view.
+		if row.PagesFetchedAt == nil || time.Since(*row.PagesFetchedAt) > cachedPageCountProbeTTL {
+			go s.verifyCachedPageCount(id, token, len(row.Pages))
+		}
 		return
 	}
 
@@ -1056,8 +1063,10 @@ func (s *Server) handlePageImage(c *gin.Context) {
 	if stream.ContentType != "" {
 		c.Header("Content-Type", stream.ContentType)
 	}
+	// ProxyImageStream already rejects an upstream Content-Length above the
+	// cap; clamp again defensively and never let a bogus length lift it.
 	limit := int64(exhentai.MaxImageBytes)
-	if stream.Size > 0 {
+	if stream.Size > 0 && stream.Size <= limit {
 		c.Header("Content-Length", strconv.FormatInt(stream.Size, 10))
 		limit = stream.Size
 	}

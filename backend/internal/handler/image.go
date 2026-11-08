@@ -29,8 +29,8 @@ const (
 )
 
 var (
-	thumbnailCacheControl = ttl.PublicMaxAge(ttl.ImageThumbnailHTTP)
-	cacheControlHeader    = ttl.PublicImmutableMaxAge(ttl.ImageImmutableHTTP)
+	thumbnailCacheControl = ttl.PrivateMaxAge(ttl.ImageThumbnailHTTP)
+	cacheControlHeader    = ttl.PrivateImmutableMaxAge(ttl.ImageImmutableHTTP)
 )
 
 type imageResult struct {

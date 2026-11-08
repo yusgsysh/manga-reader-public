@@ -106,6 +106,7 @@ func (s *Service) LoadClientConfig(ctx context.Context) (ClientConfig, error) {
 	cfg.Enabled = enabled
 	cfg.ServerURL = strings.TrimRight(strings.TrimSpace(urlRaw), "/")
 	cfg.Token = strings.TrimSpace(tokenRaw)
+	s.clientActive.Store(cfg.Active())
 	return cfg, nil
 }
 
@@ -164,6 +165,7 @@ func (s *Service) SaveClientConfig(ctx context.Context, in ConfigUpdate) (Client
 			return current, err
 		}
 	}
+	s.clientActive.Store(current.Active())
 	s.engine.Reload()
 	return current, nil
 }

@@ -84,6 +84,12 @@ backend/
    EHENTAI_COOKIE_IPB_PASS_HASH=xxx
    ```
 
+   并设置 Basic Auth 口令（`.env.example` 中留空；生产模式未设置时后端拒绝启动）：
+
+   ```env
+   MANGA_READER_BASIC_AUTH_PASSWORD=your-strong-password
+   ```
+
 2. 启动服务（单镜像：Gin API + 内嵌前端由 GitHub Actions 构建推送到 `ghcr.io/yusgsysh/manga-reader`，compose 直接拉取，仓库内无 `build:` 配置）。GHCR 包为私有时先登录（PAT 需 `read:packages`）：
 
    ```bash
@@ -111,10 +117,10 @@ backend/
 
 ## 公网部署（HTTPS + HTTP Basic Authentication）
 
-开发环境 Basic Auth **默认关闭**（`MANGA_READER_BASIC_AUTH_ENABLED=false`），`bun dev`、`go run .`、Playwright、单元测试、桌面端均不受影响。公网部署必须显式开启，并满足：
+开发环境（`ENVIRONMENT` 未设置时默认为 `development`）Basic Auth **默认关闭**，`bun dev`、`go run .`、Playwright、单元测试、桌面端均不受影响。Docker 镜像 / compose / quadlet 显式设置 `ENVIRONMENT=production`：此时若未开启 Basic Auth，后端**拒绝启动**（fail closed）。公网部署必须显式开启，并满足：
 
 - **HTTPS 必须在 Basic Auth 之前**：Basic Auth 只是 `base64(user:pass)`，不是加密。TLS 由前置层（云负载均衡 / Caddy / 前置 nginx）提供，同时负责 HTTP :80 → HTTPS :443 跳转；HSTS 也由该层配置，确认域名永久 HTTPS 后再开启。
-- **应用端口不暴露公网**：容器 `:8080`、PostgreSQL `:5432`、MinIO `:9000/:9001` 不发布到公网，只在 Docker 内网通信；compose 的 `5173:8080` 可按需改成 `127.0.0.1:5173:8080`，公网只经过带 TLS 的前置反代。
+- **应用端口不暴露公网**：容器 `:8080`、PostgreSQL `:5432`、MinIO `:9000/:9001` 不发布到公网，只在 Docker 内网通信；compose 与 quadlet 默认发布到 `127.0.0.1:5173:8080`，公网只经过带 TLS 的前置反代。确实需要局域网直连时才改成 `0.0.0.0:5173:8080`。
 - **保护范围**：`/`、静态资源、`/api/*`（含 SSE `/api/sync/events`、`/api/events/changes`、图片代理、Prefill、ZIP）、`/metrics`（Prometheus 指标，见「可观测性」）全部经 Basic Auth；仅 `/healthz` 豁免（`{"status":"ok"}`，无 Cookie / 令牌 / 配置信息）。认证失败返回 `401` + `WWW-Authenticate: Basic realm="Manga Reader"`，由浏览器处理——前端没有、也不需要登录页。
 
 认证、静态资源与 API 同在一个 Gin 进程内（前端在构建时 `//go:embed` 进二进制），因此没有反代层在中间消费 `Authorization`。
@@ -141,7 +147,7 @@ docker compose up -d   # 环境变量变化会重建容器
    ```bash
    mkdir -p secrets
    htpasswd -nm admin > secrets/manga_reader.htpasswd   # 交互输入口令
-   chmod 644 secrets/manga_reader.htpasswd              # 进程用户需可读
+   chmod 600 secrets/manga_reader.htpasswd              # 进程用户需可读；组/其他不可写
    ```
 
    ```env
@@ -158,7 +164,7 @@ docker compose up -d   # 环境变量变化会重建容器
 - **哈希格式**：apr1（`$1$` / `$apr1$`，`htpasswd -m`/`-n`）与 bcrypt（`$2$`，`htpasswd -B`）均可校验；`$5$`/`$6$`（sha-crypt）不支持，会被当作验证失败（锁死而非降级）。htpasswd 文件每次请求重新读取，轮换口令无需重启。
 - `.env` 中的 `$` 需写成 `$$`（compose 变量插值）。
 - **限流**：Basic Auth 开启时按来源 IP 限 50 req/s（突发 200，超限 `429` + `Retry-After`），作为基础防洪水/防爆破；需要更强防爆破时在前置防火墙 / fail2ban 封禁。切勿因此放松口令强度。计数键取自 `ClientIP()`（优先 `X-Forwarded-For`）：部署在反代之后时请让前置正确传该头，否则所有请求会共享同一个限流桶。
-- **桌面端同步**：同步端点同样受 Basic Auth 保护。桌面端在设置页的服务器地址内嵌凭据即可：`https://user:pass@server.example.com`（Go HTTP 客户端自动携带 `Authorization`）；本仓库部署实例即 `https://admin:你的口令@manga.09270721.xyz`（口令含 `@`、`:` 时需 URL 编码）。Basic 用户名/口令与 `MANGA_READER_SYNC_TOKEN` 是两套独立凭据，需同时正确（见 `backend/API.md` 28）。
+- **桌面端同步**：同步端点同样受 Basic Auth 保护。桌面端在设置页的服务器地址内嵌凭据即可：`https://user:$PASSWORD@server.example.com`（Go HTTP 客户端自动携带 `Authorization`）；本仓库部署实例即 `https://admin:$PASSWORD@server.example.com`（口令含 `@`、`:` 时需 URL 编码）。Basic 用户名/口令与 `MANGA_READER_SYNC_TOKEN` 是两套独立凭据，需同时正确（见 `backend/API.md` 28）。
 - **安全 Header** 由 Gin 统一添加：`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`；刻意不加 CSP（避免破坏 React、SSE、图片代理）。
 
 ### 验证
@@ -232,7 +238,7 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `EHENTAI_COOKIE_IPB_PASS_HASH` | 可选* | - | 单独设置方式 |
 | `EHENTAI_COOKIE_IGNEOUS` | 否 | - | 仅 ExHentai 需要 |
 | `EHENTAI_COOKIE_SK` | 否 | - | 可选 |
-| `EHENTAI_PORT` | 否 | `8080` | 后端监听端口 |
+| `EHENTAI_PORT` | 否 | `127.0.0.1:8080` | 后端监听地址；裸跑默认仅回环，容器内由镜像/compose 覆盖为 `:8080` |
 | `MANGA_READER_DB_DRIVER` | 否 | `sqlite` | 数据库类型：`sqlite` 或 `postgres` |
 | `MANGA_READER_DB_PATH` | 否 | `data/manga-reader.db` | SQLite 路径（Docker 内 `/app/data/manga-reader.db`） |
 | `MANGA_READER_DB_DSN` | 否 | - | PostgreSQL 连接串（`postgres` 驱动时必填） |
@@ -308,7 +314,7 @@ Schema 文件：
 - `internal/ent/schema/prefill_job.go` — 离线下载任务模型
 - `internal/ent/schema/gallery_cache.go` — 画廊缓存模型
 
-后端默认监听 `:8080`，完整 API 文档见 `backend/API.md`。
+后端默认监听 `127.0.0.1:8080`（仅回环；容器内为 `:8080`），完整 API 文档见 `backend/API.md`。
 
 ### 图片代理与缓存
 
@@ -431,7 +437,7 @@ curl -X POST http://localhost:8080/api/reading-progress/cleanup?days=0
 多实例双向同步**阅读进度、书架与画廊缓存**（settings 不同步），所有连接由桌面端主动发起（NAT 友好）：
 
 - **服务端**：设置 `MANGA_READER_SYNC_TOKEN` 启用宿主端点，写入的数据进 outbox。
-- **桌面端 / 客户端**：设置页「数据同步」填服务端地址 + 同一令牌并启用（配置存 `sync_state` 表）。服务端在 Basic Auth 之后时，地址内嵌凭据：`https://admin:你的口令@manga.09270721.xyz`。
+- **桌面端 / 客户端**：设置页「数据同步」填服务端地址 + 同一令牌并启用（配置存 `sync_state` 表）。服务端在 Basic Auth 之后时，地址内嵌凭据：`https://admin:$PASSWORD@server.example.com`。
 - 双方通过 `POST /api/sync/push` 推送 + 拉取，`GET /api/sync/events` SSE 监听对端新变更（写后 2s 去抖推送，心跳 25s，断线退避 1s→60s，60s 轮询兜底）。
 - 合并规则：按行 LWW（`updated_at` 新者胜），删除用 tombstone；首次连接返回全量快照；更换 `server_url` 会自动重置同步游标与引导标记，对新对端重新全量（`gallery_cache` 行在 LWW 胜出时按字段合并，空值不覆盖，镜像本地 upsert 语义）。
 - 桌面端本地通过 `GET /api/events/changes` SSE 通知前端刷新（Gin 直接写出长连接，无中间代理缓冲；`WriteTimeout` 刻意未设置以支持长流）。
@@ -445,9 +451,9 @@ curl -X PUT http://localhost:8080/api/sync/config -H 'Content-Type: application/
   -d '{"enabled":true,"server_url":"http://server:8080","token":"my-secret"}'
 
 # 桌面端配置（公网 Basic Auth 之后：请求本身与 server_url 均带凭据）
-curl -u admin:你的口令 -X PUT https://manga.09270721.xyz/api/sync/config \
+curl -u admin:$PASSWORD -X PUT https://manga.09270721.xyz/api/sync/config \
   -H 'Content-Type: application/json' \
-  -d '{"enabled":true,"server_url":"https://admin:你的口令@manga.09270721.xyz","token":"my-secret"}'
+  -d '{"enabled":true,"server_url":"https://admin:$PASSWORD@server.example.com","token":"my-secret"}'
 
 curl http://localhost:8080/api/sync/status
 ```

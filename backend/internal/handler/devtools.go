@@ -52,6 +52,7 @@ func (s *Server) handleDevUpstreamDownGet(c *gin.Context) {
 
 // handleDevUpstreamDownPut toggles the simulated-outage state at runtime.
 func (s *Server) handleDevUpstreamDownPut(c *gin.Context) {
+	limitRequestBody(c, 64<<10)
 	var body struct {
 		Down bool `json:"down"`
 	}

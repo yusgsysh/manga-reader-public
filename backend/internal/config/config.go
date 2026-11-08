@@ -35,9 +35,13 @@ type BasicAuthConfig struct {
 	// Username/Password hold the single environment-provided user.
 	Username string
 	Password string
-	// File is a world-readable htpasswd file; empty when the credentials
-	// came from the environment.
+	// File is the htpasswd path; empty when the credentials came from the
+	// environment. It is kept for logging/diagnostics.
 	File string
+	// Hashes is the parsed htpasswd content, loaded once at startup so the
+	// credential file does not have to be world-readable and every request
+	// does not re-read it from disk.
+	Hashes map[string]string
 }
 
 // DatabaseConfig selects the database backend. Driver defaults to "sqlite";
@@ -85,14 +89,19 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{
-		Port: getEnv("EHENTAI_PORT", ":8080"),
+		// Default to loopback: a bare `go run`/binary must not expose the app
+		// on every interface. Containers explicitly set EHENTAI_PORT=:8080.
+		Port: getEnv("EHENTAI_PORT", "127.0.0.1:8080"),
 		Database: DatabaseConfig{
 			Driver: strings.ToLower(strings.TrimSpace(getEnv("MANGA_READER_DB_DRIVER", "sqlite"))),
 			Path:   getEnv("MANGA_READER_DB_PATH", "data/manga-reader.db"),
 			DSN:    dbDSN,
 		},
-		LogLevel:    getEnv("LOG_LEVEL", "warn"),
-		Environment: getEnv("ENVIRONMENT", "production"),
+		LogLevel: getEnv("LOG_LEVEL", "warn"),
+		// Default to development so a bare `go run` is usable; every shipped
+		// deployment manifest sets ENVIRONMENT=production explicitly, where
+		// Basic Auth becomes mandatory (see the check below).
+		Environment: getEnv("ENVIRONMENT", "development"),
 		DevTools:    parseBoolEnv("MANGA_READER_DEV_TOOLS", false),
 		SyncToken:   getEnv("MANGA_READER_SYNC_TOKEN", ""),
 		Cookie: CookieConfig{
@@ -120,6 +129,13 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg.BasicAuth = basicAuth
+
+	// Fail closed: a production instance that is reachable without
+	// credentials is the documented footgun (the old default was auth off +
+	// a port published on every interface). Development runs stay convenient.
+	if cfg.Environment == "production" && !cfg.BasicAuth.Enabled {
+		return nil, fmt.Errorf("MANGA_READER_BASIC_AUTH_ENABLED must be true when ENVIRONMENT=production")
+	}
 
 	if !cfg.Cookie.IsValid() {
 		return nil, fmt.Errorf("missing required cookies: set EHENTAI_COOKIE or EHENTAI_COOKIE_IPB_MEMBER_ID + EHENTAI_COOKIE_IPB_PASS_HASH")
@@ -164,10 +180,22 @@ func loadBasicAuth() (BasicAuthConfig, error) {
 		if st.Size() == 0 {
 			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_FILE is empty: %s", file)
 		}
-		if st.Mode().Perm()&0o004 == 0 {
-			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_FILE must be world-readable (chmod 644): %s", file)
+		// Least privilege: reject a credential file that group/other can
+		// modify. Readability is proven by os.ReadFile below; the process UID
+		// only needs read access (0400/0600/0644 are all fine).
+		if st.Mode().Perm()&0o022 != 0 {
+			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_FILE must not be writable by group or others (chmod 0400/0600/0644): %s", file)
+		}
+		data, err := os.ReadFile(file)
+		if err != nil {
+			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_FILE not readable: %s", file)
+		}
+		hashes := parseHtpasswd(data)
+		if len(hashes) == 0 {
+			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_FILE has no valid entries: %s", file)
 		}
 		cfg.File = file
+		cfg.Hashes = hashes
 		return cfg, nil
 	}
 
@@ -203,6 +231,24 @@ func loadBasicAuth() (BasicAuthConfig, error) {
 	cfg.Username = user
 	cfg.Password = pass
 	return cfg, nil
+}
+
+// parseHtpasswd turns an htpasswd file into username -> hash entries. Blank
+// lines and comments are ignored; malformed lines are skipped.
+func parseHtpasswd(data []byte) map[string]string {
+	hashes := make(map[string]string)
+	for line := range strings.SplitSeq(string(data), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		name, hash, ok := strings.Cut(line, ":")
+		if !ok || name == "" || hash == "" {
+			continue
+		}
+		hashes[name] = hash
+	}
+	return hashes
 }
 
 func getEnv(key, defaultVal string) string {

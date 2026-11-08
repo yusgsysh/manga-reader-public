@@ -1,4 +1,7 @@
 backend/manga-reader
+# local `go build`/`go test -c` output
+backend/manga
+backend/app.test
 backend/data/*
 backend/EHentai-go/*
 backend/cmd/desktop/build/bin/manga-reader-desktop

@@ -28,6 +28,27 @@ func IsValidCookieConfig(c *CookieConfig) bool {
 	return c.IpbMemberID != "" && c.IpbPassHash != ""
 }
 
+// validatingTransport guards every outbound request the production client
+// makes: gallery pages, API calls, scraped image URLs and redirect targets all
+// have to resolve to an allowlisted upstream host. Tests inject their own
+// http.Client, so httptest servers keep working.
+type validatingTransport struct {
+	next http.RoundTripper
+}
+
+func (t validatingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if err := validateUpstreamURL(req.URL.String()); err != nil {
+		return nil, err
+	}
+	return t.next.RoundTrip(req)
+}
+
+func (t validatingTransport) CloseIdleConnections() {
+	if closer, ok := t.next.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
+
 // CreateHTTPClient creates an HTTP client with ExHentai cookies.
 func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 	if !IsValidCookieConfig(cfg) {
@@ -67,6 +88,15 @@ func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 
 	return &http.Client{
 		Jar:       jar,
-		Transport: metrics.NewTransport(transport),
+		Transport: validatingTransport{next: metrics.NewTransport(transport)},
+		// Re-validate every redirect target: the initial URL is allowlisted,
+		// but a hostile/compromised upstream could redirect to localhost or a
+		// cloud metadata endpoint.
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+			return validateUpstreamURL(req.URL.String())
+		},
 	}, nil
 }

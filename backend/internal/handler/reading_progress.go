@@ -76,6 +76,7 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 		return
 	}
 
+	limitRequestBody(c, 64<<10)
 	var req model.UpdateReadingProgressRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -99,19 +100,30 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 	ctx := c.Request.Context()
 	now := time.Now().UTC()
 
-	existing, err := s.DB.Client.ReadingProgress.Query().
-		Where(
-			readingprogress.GalleryID(id),
-			readingprogress.Token(token),
-		).
-		Only(ctx)
-	if err != nil && !ent.IsNotFound(err) {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("check reading progress: %v", err)})
-		return
+	update := func() (int, error) {
+		return s.DB.Client.ReadingProgress.Update().
+			Where(
+				readingprogress.GalleryID(id),
+				readingprogress.Token(token),
+			).
+			SetCurrentPage(req.CurrentPage).
+			SetProgress(req.Progress).
+			SetCompleted(req.Completed).
+			SetUpdatedAt(now).
+			Save(ctx)
 	}
 
-	if existing == nil {
-		_, err = s.DB.Client.ReadingProgress.Create().
+	// Update-first upsert: the old query-then-create pattern raced two
+	// concurrent saves (two tabs, autosave + manual save) into a composite-PK
+	// violation and a 500. If the row does not exist yet, create it; if
+	// another writer inserted first, retry the update instead of failing.
+	updated, err := update()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("update progress failed: %v", err)})
+		return
+	}
+	if updated == 0 {
+		_, createErr := s.DB.Client.ReadingProgress.Create().
 			SetGalleryID(id).
 			SetToken(token).
 			SetCurrentPage(req.CurrentPage).
@@ -120,22 +132,12 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 			SetCreatedAt(now).
 			SetUpdatedAt(now).
 			Save(ctx)
-	} else {
-		update := s.DB.Client.ReadingProgress.Update().
-			Where(
-				readingprogress.GalleryID(id),
-				readingprogress.Token(token),
-			).
-			SetCurrentPage(req.CurrentPage).
-			SetProgress(req.Progress).
-			SetCompleted(req.Completed).
-			SetUpdatedAt(now)
-
-		err = update.Exec(ctx)
-	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("update progress failed: %v", err)})
-		return
+		if createErr != nil {
+			if _, retryErr := update(); retryErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("update progress failed: %v", createErr)})
+				return
+			}
+		}
 	}
 
 	if s.syncSvc != nil {
