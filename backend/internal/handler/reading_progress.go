@@ -15,19 +15,20 @@ import (
 
 	"manga-reader/internal/model"
 	synclib "manga-reader/internal/sync"
+	"manga-reader/internal/web"
 )
 
 func (s *Server) handleGetProgress(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gallery id"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery id"})
 		return
 	}
 
 	token := c.Param("token")
 	if token == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gallery token"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery token"})
 		return
 	}
 
@@ -41,17 +42,17 @@ func (s *Server) handleGetProgress(c *gin.Context) {
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			c.JSON(http.StatusOK, &model.ReadingProgress{
+			web.JSON(c, http.StatusOK, &model.ReadingProgress{
 				GalleryID: id,
 				Token:     token,
 			})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("get progress failed: %v", err)})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("get progress failed: %v", err)})
 		return
 	}
 
-	c.JSON(http.StatusOK, &model.ReadingProgress{
+	web.JSON(c, http.StatusOK, &model.ReadingProgress{
 		GalleryID:   p.GalleryID,
 		Token:       p.Token,
 		CurrentPage: p.CurrentPage,
@@ -66,30 +67,30 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gallery id"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery id"})
 		return
 	}
 
 	token := c.Param("token")
 	if token == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gallery token"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery token"})
 		return
 	}
 
 	limitRequestBody(c, 64<<10)
 	var req model.UpdateReadingProgressRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	if err := web.BindJSON(c, &req); err != nil {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
 	if req.CurrentPage < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "current_page must be >= 0"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "current_page must be >= 0"})
 		return
 	}
 
 	if req.Progress < 0 || req.Progress > 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "progress must be between 0 and 1"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "progress must be between 0 and 1"})
 		return
 	}
 
@@ -119,7 +120,7 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 	// another writer inserted first, retry the update instead of failing.
 	updated, err := update()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("update progress failed: %v", err)})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("update progress failed: %v", err)})
 		return
 	}
 	if updated == 0 {
@@ -134,7 +135,7 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 			Save(ctx)
 		if createErr != nil {
 			if _, retryErr := update(); retryErr != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("update progress failed: %v", createErr)})
+				web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("update progress failed: %v", createErr)})
 				return
 			}
 		}
@@ -170,11 +171,11 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 		).
 		Only(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("read progress failed: %v", err)})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("read progress failed: %v", err)})
 		return
 	}
 
-	c.JSON(http.StatusOK, &model.ReadingProgress{
+	web.JSON(c, http.StatusOK, &model.ReadingProgress{
 		GalleryID:   p.GalleryID,
 		Token:       p.Token,
 		CurrentPage: p.CurrentPage,
@@ -190,7 +191,7 @@ func (s *Server) handleReadingProgressCleanup(c *gin.Context) {
 
 	days, err := strconv.Atoi(daysStr)
 	if err != nil || days < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "days must be a non-negative integer"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "days must be a non-negative integer"})
 		return
 	}
 
@@ -210,7 +211,7 @@ func (s *Server) handleReadingProgressCleanup(c *gin.Context) {
 		}
 		rows, qErr := q.All(ctx)
 		if qErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to cleanup reading progress"})
+			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "failed to cleanup reading progress"})
 			return
 		}
 		purgeKeys = make([]synclib.Key, 0, len(rows))
@@ -229,7 +230,7 @@ func (s *Server) handleReadingProgressCleanup(c *gin.Context) {
 			Exec(ctx)
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to cleanup reading progress"})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "failed to cleanup reading progress"})
 		return
 	}
 
@@ -241,7 +242,7 @@ func (s *Server) handleReadingProgressCleanup(c *gin.Context) {
 
 	s.cleanupGalleryCache(ctx)
 
-	c.JSON(http.StatusOK, gin.H{
+	web.JSON(c, http.StatusOK, gin.H{
 		"days":    days,
 		"deleted": deleted,
 	})

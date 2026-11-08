@@ -23,6 +23,7 @@ import (
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/metrics"
 	"manga-reader/internal/model"
+	"manga-reader/internal/web"
 )
 
 const (
@@ -391,7 +392,7 @@ func (m *prefillManager) cancelRun(id uuid.UUID) bool {
 // It returns nil (after writing the error response) when unavailable.
 func (s *Server) requirePrefill(c *gin.Context) *prefillManager {
 	if s.DB == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not configured"})
+		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "database not configured"})
 		return nil
 	}
 	return s.ensurePrefill()
@@ -400,7 +401,7 @@ func (s *Server) requirePrefill(c *gin.Context) *prefillManager {
 func prefillJobID(c *gin.Context) (uuid.UUID, bool) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid job id"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid job id"})
 		return uuid.UUID{}, false
 	}
 	return id, true
@@ -441,7 +442,7 @@ func (m *prefillManager) snapshotRuns() map[uuid.UUID]prefillRunSnapshot {
 }
 
 func prefillJobJSONWithRuns(row *ent.PrefillJob, runs map[uuid.UUID]prefillRunSnapshot) gin.H {
-	var progress gin.H
+	var progress any
 	failedCount := row.FailedCount
 	errs := row.Errors
 
@@ -495,34 +496,34 @@ func (s *Server) handlePrefillStart(c *gin.Context) {
 	// The urls array is materialized whole before any validation, so cap the
 	// body; ReadTimeout bounds time, not size.
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4<<20)
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := web.BindJSON(c, &req); err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+			web.JSON(c, http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	if len(req.URLs) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "urls must not be empty"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "urls must not be empty"})
 		return
 	}
 	if len(req.URLs) > prefillMaxURIs {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("too many urls (max %d)", prefillMaxURIs)})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": fmt.Sprintf("too many urls (max %d)", prefillMaxURIs)})
 		return
 	}
 	for _, pageURL := range req.URLs {
 		if err := exhentai.ValidatePageURL(pageURL); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 	}
 	if s.DB == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not configured"})
+		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "database not configured"})
 		return
 	}
 	if s.Cache == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
+		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
 		return
 	}
 	m := s.ensurePrefill()
@@ -539,12 +540,12 @@ func (s *Server) handlePrefillStart(c *gin.Context) {
 			Order(ent.Desc(prefilljob.FieldCreatedAt)).
 			First(ctx)
 		if err == nil {
-			c.JSON(http.StatusOK, prefillJobJSON(m, existing))
+			web.JSON(c, http.StatusOK, prefillJobJSON(m, existing))
 			return
 		}
 		if !ent.IsNotFound(err) {
 			slog.Error("prefill dedupe query failed", "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
+			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
 			return
 		}
 	}
@@ -561,11 +562,11 @@ func (s *Server) handlePrefillStart(c *gin.Context) {
 	row, err := create.Save(ctx)
 	if err != nil {
 		slog.Error("prefill create failed", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create prefill job failed"})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create prefill job failed"})
 		return
 	}
 	m.signal()
-	c.JSON(http.StatusAccepted, prefillJobJSON(m, row))
+	web.JSON(c, http.StatusAccepted, prefillJobJSON(m, row))
 }
 
 // handlePrefillList returns jobs newest first. Progress fields are only
@@ -597,14 +598,14 @@ func (s *Server) handlePrefillList(c *gin.Context) {
 		All(c.Request.Context())
 	if err != nil {
 		slog.Error("prefill list failed", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "query prefill jobs failed"})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "query prefill jobs failed"})
 		return
 	}
 	jobs := make([]gin.H, 0, len(rows))
 	for _, row := range rows {
 		jobs = append(jobs, prefillJobJSONWithRuns(row, runSnapshot))
 	}
-	c.JSON(http.StatusOK, gin.H{"jobs": jobs})
+	web.JSON(c, http.StatusOK, gin.H{"jobs": jobs})
 }
 
 // handlePrefillGet returns a single job snapshot.
@@ -620,14 +621,14 @@ func (s *Server) handlePrefillGet(c *gin.Context) {
 	row, err := s.DB.Client.PrefillJob.Get(c.Request.Context(), id)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "prefill job not found"})
+			web.JSON(c, http.StatusNotFound, gin.H{"error": "prefill job not found"})
 			return
 		}
 		slog.Error("prefill get failed", "job_id", id, "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
 		return
 	}
-	c.JSON(http.StatusOK, prefillJobJSON(m, row))
+	web.JSON(c, http.StatusOK, prefillJobJSON(m, row))
 }
 
 // handlePrefillCancel cancels a job. The status flip is always a compare-and-
@@ -649,19 +650,19 @@ func (s *Server) handlePrefillCancel(c *gin.Context) {
 		row, err := s.DB.Client.PrefillJob.Get(ctx, id)
 		if err != nil {
 			if ent.IsNotFound(err) {
-				c.JSON(http.StatusNotFound, gin.H{"error": "prefill job not found"})
+				web.JSON(c, http.StatusNotFound, gin.H{"error": "prefill job not found"})
 				return
 			}
 			slog.Error("prefill cancel get failed", "job_id", id, "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
+			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
 			return
 		}
 		if row.Status != prefillStatusQueued && row.Status != prefillStatusRunning {
 			if row.Status == prefillStatusCancelled {
-				c.JSON(http.StatusOK, prefillJobJSON(m, row))
+				web.JSON(c, http.StatusOK, prefillJobJSON(m, row))
 				return
 			}
-			c.JSON(http.StatusConflict, gin.H{"error": "job already finished"})
+			web.JSON(c, http.StatusConflict, gin.H{"error": "job already finished"})
 			return
 		}
 
@@ -674,7 +675,7 @@ func (s *Server) handlePrefillCancel(c *gin.Context) {
 			Save(ctx)
 		if err != nil {
 			slog.Error("prefill cancel failed", "job_id", id, "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "cancel prefill job failed"})
+			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "cancel prefill job failed"})
 			return
 		}
 		if n == 1 {
@@ -684,12 +685,12 @@ func (s *Server) handlePrefillCancel(c *gin.Context) {
 			}
 			row.Status = prefillStatusCancelled
 			row.FinishedAt = &now
-			c.JSON(http.StatusOK, prefillJobJSON(m, row))
+			web.JSON(c, http.StatusOK, prefillJobJSON(m, row))
 			return
 		}
 		// Lost a race with the worker (it claimed or finished the row): retry.
 	}
-	c.JSON(http.StatusConflict, gin.H{"error": "cancel conflict, retry"})
+	web.JSON(c, http.StatusConflict, gin.H{"error": "cancel conflict, retry"})
 }
 
 // handlePrefillDelete removes a terminal job record.
@@ -706,15 +707,15 @@ func (s *Server) handlePrefillDelete(c *gin.Context) {
 	row, err := s.DB.Client.PrefillJob.Get(ctx, id)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "prefill job not found"})
+			web.JSON(c, http.StatusNotFound, gin.H{"error": "prefill job not found"})
 			return
 		}
 		slog.Error("prefill get failed", "job_id", id, "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
 		return
 	}
 	if row.Status == prefillStatusQueued || row.Status == prefillStatusRunning {
-		c.JSON(http.StatusConflict, gin.H{"error": "job is active, cancel it first"})
+		web.JSON(c, http.StatusConflict, gin.H{"error": "job is active, cancel it first"})
 		return
 	}
 	n, err := s.DB.Client.PrefillJob.Delete().
@@ -725,14 +726,14 @@ func (s *Server) handlePrefillDelete(c *gin.Context) {
 		Exec(ctx)
 	if err != nil {
 		slog.Error("prefill delete failed", "job_id", id, "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete prefill job failed"})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete prefill job failed"})
 		return
 	}
 	if n == 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": "job is active, cancel it first"})
+		web.JSON(c, http.StatusConflict, gin.H{"error": "job is active, cancel it first"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": n})
+	web.JSON(c, http.StatusOK, gin.H{"deleted": n})
 }
 
 // handlePrefillCleanup bulk-deletes terminal jobs. days=0 removes all
@@ -745,7 +746,7 @@ func (s *Server) handlePrefillCleanup(c *gin.Context) {
 	daysStr := c.DefaultQuery("days", strconv.Itoa(prefillCleanupDaysDefault))
 	days, err := strconv.Atoi(daysStr)
 	if err != nil || days < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid days"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid days"})
 		return
 	}
 	q := s.DB.Client.PrefillJob.Delete().
@@ -757,10 +758,10 @@ func (s *Server) handlePrefillCleanup(c *gin.Context) {
 	n, err := q.Exec(c.Request.Context())
 	if err != nil {
 		slog.Error("prefill cleanup failed", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "cleanup prefill jobs failed"})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "cleanup prefill jobs failed"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"days": days, "deleted": n})
+	web.JSON(c, http.StatusOK, gin.H{"days": days, "deleted": n})
 }
 
 // handlePrefillZip streams a ZIP archive for a job. Every entry is written
@@ -771,11 +772,11 @@ func (s *Server) handlePrefillZip(c *gin.Context) {
 	// ZIP download streams for as long as the client reads it; skip latency.
 	metrics.MarkLongRunning(c)
 	if s.DB == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not configured"})
+		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "database not configured"})
 		return
 	}
 	if s.Cache == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
+		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
 		return
 	}
 	id, ok := prefillJobID(c)
@@ -785,11 +786,11 @@ func (s *Server) handlePrefillZip(c *gin.Context) {
 	row, err := s.DB.Client.PrefillJob.Get(c.Request.Context(), id)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "prefill job not found"})
+			web.JSON(c, http.StatusNotFound, gin.H{"error": "prefill job not found"})
 			return
 		}
 		slog.Error("prefill get failed", "job_id", id, "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
 		return
 	}
 
@@ -844,7 +845,7 @@ func (s *Server) handlePrefillZip(c *gin.Context) {
 	}
 
 	if !started {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no pages could be fetched for ZIP"})
+		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "no pages could be fetched for ZIP"})
 		return
 	}
 
@@ -867,11 +868,11 @@ func (s *Server) handlePrefillZip(c *gin.Context) {
 // It returns 200 if the job exists and cache is configured, without streaming any data.
 func (s *Server) handlePrefillZipHead(c *gin.Context) {
 	if s.DB == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not configured"})
+		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "database not configured"})
 		return
 	}
 	if s.Cache == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
+		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
 		return
 	}
 	id, ok := prefillJobID(c)
@@ -881,11 +882,11 @@ func (s *Server) handlePrefillZipHead(c *gin.Context) {
 	_, err := s.DB.Client.PrefillJob.Get(c.Request.Context(), id)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "prefill job not found"})
+			web.JSON(c, http.StatusNotFound, gin.H{"error": "prefill job not found"})
 			return
 		}
 		slog.Error("prefill zip head get failed", "job_id", id, "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "query prefill job failed"})
 		return
 	}
 	c.Status(http.StatusOK)

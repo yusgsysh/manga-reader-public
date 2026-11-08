@@ -16,6 +16,7 @@ import (
 	"manga-reader/internal/ent/tagsyncbaseline"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/model"
+	"manga-reader/internal/web"
 )
 
 // syncKey normalizes a tag for matching local rules, baseline rows and
@@ -327,19 +328,19 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 	// Match io.EOF structurally: "unexpected EOF" (a truncated body) must not
 	// be mistaken for an intentional empty request.
 	limitRequestBody(c, 1<<20)
-	if err := c.ShouldBindJSON(&body); err != nil && !errors.Is(err, io.EOF) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
+	if err := web.BindJSON(c, &body); err != nil && !errors.Is(err, io.EOF) {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
 		return
 	}
 	switch body.ConflictResolution {
 	case "", "remote", "local":
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid conflict_resolution %q", body.ConflictResolution)})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid conflict_resolution %q", body.ConflictResolution)})
 		return
 	}
 
 	if s.Client == nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "upstream client not configured"})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": "upstream client not configured"})
 		return
 	}
 
@@ -352,18 +353,18 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 
 	local, err := s.loadTagRules(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load tag settings failed: %v", err)})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load tag settings failed: %v", err)})
 		return
 	}
 	baseline, err := s.loadTagBaseline(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load tag sync baseline failed: %v", err)})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load tag sync baseline failed: %v", err)})
 		return
 	}
 
 	snapshot, err := exhentai.FetchMyTags(ctx, s.Client)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch mytags failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch mytags failed: %v", err)})
 		return
 	}
 
@@ -455,18 +456,18 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 	// Apply pulls and the refreshed baseline in one transaction; a failure
 	// here leaves everything as-is (the next sync redoes it).
 	if err := s.applyTagSyncState(ctx, plan.Pulls, baseline, plan.BaselineAfter); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("apply tag sync failed: %v", err)})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("apply tag sync failed: %v", err)})
 		return
 	}
 
 	tags, err := s.loadTagRules(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("reload tag settings failed: %v", err)})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("reload tag settings failed: %v", err)})
 		return
 	}
 	result.Tags = tags
 
-	c.JSON(http.StatusOK, result)
+	web.JSON(c, http.StatusOK, result)
 }
 
 // applyTagSyncState writes source → local pulls and the post-sync baseline

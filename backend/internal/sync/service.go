@@ -3,7 +3,7 @@ package sync
 import (
 	"context"
 	"crypto/subtle"
-	"encoding/json"
+	json "encoding/json/v2"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -16,6 +16,7 @@ import (
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/syncchange"
 	"manga-reader/internal/metrics"
+	"manga-reader/internal/web"
 )
 
 const (
@@ -104,7 +105,7 @@ func (s *Service) requireToken() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		got := []byte(c.GetHeader(headerToken))
 		if len(got) == 0 || subtle.ConstantTimeCompare(got, want) != 1 {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid sync token"})
+			web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "invalid sync token"})
 			return
 		}
 		c.Next()
@@ -117,12 +118,12 @@ func (s *Service) handlePush(c *gin.Context) {
 	// stolen token cannot stream an unbounded payload into memory.
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<20)
 	var req PushRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := web.BindJSON(c, &req); err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+			web.JSON(c, http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	ctx := c.Request.Context()
@@ -130,7 +131,7 @@ func (s *Service) handlePush(c *gin.Context) {
 	applied, skipped, err := ApplyChanges(ctx, s.client, req.Changes)
 	if err != nil {
 		slog.Error("apply sync changes failed", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "apply changes failed"})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "apply changes failed"})
 		return
 	}
 	if applied > 0 {
@@ -147,7 +148,7 @@ func (s *Service) handlePush(c *gin.Context) {
 		// neither the snapshot nor the delta.
 		cursor, err = maxOutboxID(ctx, s.client)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "collect cursor failed"})
+			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "collect cursor failed"})
 			return
 		}
 		changes, err = ExportSnapshot(ctx, s.client)
@@ -156,7 +157,7 @@ func (s *Service) handlePush(c *gin.Context) {
 	}
 	if err != nil {
 		slog.Error("collect sync changes failed", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "collect changes failed"})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "collect changes failed"})
 		return
 	}
 
@@ -170,7 +171,7 @@ func (s *Service) handlePush(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, PushResponse{
+	web.JSON(c, http.StatusOK, PushResponse{
 		Cursor:  cursor,
 		Changes: changes,
 		Applied: applied,
@@ -264,40 +265,40 @@ type configResponse struct {
 func (s *Service) handleConfigGet(c *gin.Context) {
 	cfg, err := s.LoadClientConfig(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "read sync config failed"})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync config failed"})
 		return
 	}
 	resp := configResponse{Enabled: cfg.Enabled, ServerURL: cfg.ServerURL}
 	if cfg.Token != "" {
 		resp.Token = Mask
 	}
-	c.JSON(http.StatusOK, resp)
+	web.JSON(c, http.StatusOK, resp)
 }
 
 func (s *Service) handleConfigPut(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
 	var in ConfigUpdate
-	if err := c.ShouldBindJSON(&in); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	if err := web.BindJSON(c, &in); err != nil {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	if in.ServerURL != nil {
 		u := *in.ServerURL
 		if u != "" && !hasHTTPScheme(u) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "server_url must start with http:// or https://"})
+			web.JSON(c, http.StatusBadRequest, gin.H{"error": "server_url must start with http:// or https://"})
 			return
 		}
 	}
 	cfg, err := s.SaveClientConfig(c.Request.Context(), in)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "save sync config failed"})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "save sync config failed"})
 		return
 	}
 	resp := configResponse{Enabled: cfg.Enabled, ServerURL: cfg.ServerURL}
 	if cfg.Token != "" {
 		resp.Token = Mask
 	}
-	c.JSON(http.StatusOK, resp)
+	web.JSON(c, http.StatusOK, resp)
 }
 
 func hasHTTPScheme(u string) bool {
@@ -320,12 +321,12 @@ func (s *Service) handleStatus(c *gin.Context) {
 	ctx := c.Request.Context()
 	cfg, err := s.LoadClientConfig(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "read sync status failed"})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync status failed"})
 		return
 	}
 	st, err := s.LoadEngineState(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "read sync status failed"})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync status failed"})
 		return
 	}
 	pending := 0
@@ -334,11 +335,11 @@ func (s *Service) handleStatus(c *gin.Context) {
 			Where(syncchange.IDGT(st.LastPushedID)).
 			Count(ctx)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "count pending changes failed"})
+			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "count pending changes failed"})
 			return
 		}
 	}
-	c.JSON(http.StatusOK, statusResponse{
+	web.JSON(c, http.StatusOK, statusResponse{
 		Enabled:      cfg.Enabled,
 		Configured:   cfg.Active(),
 		ServerURL:    cfg.ServerURL,

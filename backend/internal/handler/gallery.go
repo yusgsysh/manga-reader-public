@@ -24,6 +24,7 @@ import (
 	"manga-reader/internal/gallerycache"
 	"manga-reader/internal/metrics"
 	"manga-reader/internal/model"
+	"manga-reader/internal/web"
 )
 
 // galleryPagesHardCap bounds an entire /pages scrape (including the detached
@@ -186,12 +187,12 @@ func galleryDetailsJSON(details model.GalleryDetail) gin.H {
 func parseGalleryIDToken(c *gin.Context) (int64, string, bool) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gallery id"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery id"})
 		return 0, "", false
 	}
 	token := c.Param("token")
 	if token == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gallery token"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery token"})
 		return 0, "", false
 	}
 	return id, token, true
@@ -200,7 +201,7 @@ func parseGalleryIDToken(c *gin.Context) (int64, string, bool) {
 // cacheUnavailable reports whether the offline cache backend is configured.
 func (s *Server) cacheUnavailable(c *gin.Context) bool {
 	if s.cacheDB() == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "gallery cache not configured"})
+		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "gallery cache not configured"})
 		return true
 	}
 	return false
@@ -217,10 +218,10 @@ func (s *Server) handleGetGallery(c *gin.Context) {
 
 	meta, err := exhentai.PostGalleryMetadata(c.Request.Context(), s.Client, id, token)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
 	}
-	c.JSON(http.StatusOK, model.ConvertMetadataToGallery(meta))
+	web.JSON(c, http.StatusOK, model.ConvertMetadataToGallery(meta))
 }
 
 // handleGalleryDetails is the online details endpoint. Like handleGetGallery it
@@ -236,11 +237,11 @@ func (s *Server) handleGalleryDetails(c *gin.Context) {
 
 	details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
 		return
 	}
 
-	c.JSON(http.StatusOK, galleryDetailsJSON(details))
+	web.JSON(c, http.StatusOK, galleryDetailsJSON(details))
 }
 
 // galleryPagesLine is one NDJSON line of the streaming /pages response.
@@ -664,7 +665,7 @@ func streamGalleryPagesNDJSON(
 	if !started {
 		// Nothing was streamed. Surface the scrape failure as a plain 502 so
 		// the frontend can fall back to the cached endpoint.
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery pages failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery pages failed: %v", err)})
 		return
 	}
 	if err != nil {
@@ -704,11 +705,11 @@ func (s *Server) handleGalleryTorrents(c *gin.Context) {
 	}
 	torrents, err := exhentai.ScrapeGalleryTorrents(c.Request.Context(), s.Client, strconv.FormatInt(id, 10), token)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery torrents failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery torrents failed: %v", err)})
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, gin.H{"torrents": torrents})
+	web.JSON(c, http.StatusOK, gin.H{"torrents": torrents})
 }
 
 // handleGalleryTorrentInfo returns one torrent's expanded "Information" view
@@ -720,16 +721,16 @@ func (s *Server) handleGalleryTorrentInfo(c *gin.Context) {
 	}
 	gtid := strings.TrimSpace(c.Param("gtid"))
 	if !gtidRe.MatchString(gtid) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid torrent id"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid torrent id"})
 		return
 	}
 	result, err := exhentai.ScrapeGalleryTorrentInfo(c.Request.Context(), s.Client, strconv.FormatInt(id, 10), token, gtid)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch torrent info failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch torrent info failed: %v", err)})
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, result.Info)
+	web.JSON(c, http.StatusOK, result.Info)
 }
 
 // handleGalleryTorrentDownload proxies the .torrent file through the backend so
@@ -742,7 +743,7 @@ func (s *Server) handleGalleryTorrentDownload(c *gin.Context) {
 	}
 	gtid := strings.TrimSpace(c.Param("gtid"))
 	if !gtidRe.MatchString(gtid) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid torrent id"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid torrent id"})
 		return
 	}
 	idParam := strconv.FormatInt(id, 10)
@@ -750,7 +751,7 @@ func (s *Server) handleGalleryTorrentDownload(c *gin.Context) {
 
 	torrents, err := exhentai.ScrapeGalleryTorrents(ctx, s.Client, idParam, token)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery torrents failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery torrents failed: %v", err)})
 		return
 	}
 	var torrent *model.GalleryTorrent
@@ -761,7 +762,7 @@ func (s *Server) handleGalleryTorrentDownload(c *gin.Context) {
 		}
 	}
 	if torrent == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "torrent not found"})
+		web.JSON(c, http.StatusNotFound, gin.H{"error": "torrent not found"})
 		return
 	}
 
@@ -769,23 +770,23 @@ func (s *Server) handleGalleryTorrentDownload(c *gin.Context) {
 	if c.Query("variant") == "personalized" {
 		result, infoErr := exhentai.ScrapeGalleryTorrentInfo(ctx, s.Client, idParam, token, gtid)
 		if infoErr != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch torrent info failed: %v", infoErr)})
+			web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch torrent info failed: %v", infoErr)})
 			return
 		}
 		if result.PersonalizedURL == "" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "personalized torrent not available"})
+			web.JSON(c, http.StatusNotFound, gin.H{"error": "personalized torrent not available"})
 			return
 		}
 		rawURL = result.PersonalizedURL
 	}
 	if rawURL == "" {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "torrent download link missing"})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": "torrent download link missing"})
 		return
 	}
 
 	data, err := exhentai.FetchTorrent(ctx, s.Client, rawURL)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download torrent failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download torrent failed: %v", err)})
 		return
 	}
 
@@ -815,7 +816,7 @@ func (s *Server) handleCachedGallery(c *gin.Context) {
 	} else if found && row.Title != "" {
 		metrics.ObserveGalleryCache("gallery", "hit")
 		c.Header("Cache-Control", "no-store")
-		c.JSON(http.StatusOK, galleryFromCache(row))
+		web.JSON(c, http.StatusOK, galleryFromCache(row))
 		return
 	} else {
 		metrics.ObserveGalleryCache("gallery", "miss")
@@ -823,7 +824,7 @@ func (s *Server) handleCachedGallery(c *gin.Context) {
 
 	meta, err := exhentai.PostGalleryMetadata(ctx, s.Client, id, token)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
 	}
 	gallery := model.ConvertMetadataToGallery(meta)
@@ -835,7 +836,7 @@ func (s *Server) handleCachedGallery(c *gin.Context) {
 		}
 	}
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, gallery)
+	web.JSON(c, http.StatusOK, gallery)
 }
 
 func (s *Server) handleCachedGalleryDetails(c *gin.Context) {
@@ -853,7 +854,7 @@ func (s *Server) handleCachedGalleryDetails(c *gin.Context) {
 	} else if found && row.Title != "" && row.DetailsFetchedAt != nil {
 		metrics.ObserveGalleryCache("details", "hit")
 		c.Header("Cache-Control", "no-store")
-		c.JSON(http.StatusOK, galleryDetailsFromCache(row))
+		web.JSON(c, http.StatusOK, galleryDetailsFromCache(row))
 		return
 	} else {
 		metrics.ObserveGalleryCache("details", "miss")
@@ -862,7 +863,7 @@ func (s *Server) handleCachedGalleryDetails(c *gin.Context) {
 	u := exhentai.GalleryURL(c.Param("id"), token)
 	details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
 		return
 	}
 	if db := s.cacheDB(); db != nil {
@@ -873,7 +874,7 @@ func (s *Server) handleCachedGalleryDetails(c *gin.Context) {
 		}
 	}
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, galleryDetailsJSON(details))
+	web.JSON(c, http.StatusOK, galleryDetailsJSON(details))
 }
 
 func (s *Server) handleCachedGalleryPages(c *gin.Context) {
@@ -887,7 +888,7 @@ func (s *Server) handleCachedGalleryPages(c *gin.Context) {
 
 	row, found, err := gallerycache.Get(ctx, s.cacheDB(), id, token)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("read gallery cache failed: %v", err)})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("read gallery cache failed: %v", err)})
 		return
 	}
 	if found && len(row.Pages) > 0 {
@@ -955,19 +956,19 @@ func (s *Server) handleSearch(c *gin.Context) {
 		page = 0
 	}
 	if page > maxListingPage {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("page too large (max %d)", maxListingPage)})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": fmt.Sprintf("page too large (max %d)", maxListingPage)})
 		return
 	}
 
 	opts, err := parseSearchOptions(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	navOpts, err := parseListingNavOptions(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -982,7 +983,7 @@ func (s *Server) handleSearch(c *gin.Context) {
 
 	total, results, nav, err := exhentai.ScrapeSearch(ctx, s.Client, siteURL, keyword, categories, page, opts, navOpts)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("search failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("search failed: %v", err)})
 		return
 	}
 
@@ -1022,7 +1023,7 @@ func (s *Server) handleSearch(c *gin.Context) {
 	const pageSize = 25
 	totalPages := (total + pageSize - 1) / pageSize
 
-	c.JSON(http.StatusOK, gin.H{
+	web.JSON(c, http.StatusOK, gin.H{
 		"total":       total,
 		"total_pages": totalPages,
 		"page":        page,
@@ -1035,14 +1036,14 @@ func (s *Server) handleSearch(c *gin.Context) {
 func (s *Server) handlePageImage(c *gin.Context) {
 	pageURL := c.Query("url")
 	if pageURL == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing url parameter"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "missing url parameter"})
 		return
 	}
 	// Same allowlist as the cached-page endpoint: without it this handler
 	// would fetch and return arbitrary caller-chosen URLs (SSRF) at the app
 	// origin with no CSP in front.
 	if err := exhentai.ValidatePageURL(pageURL); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -1055,7 +1056,7 @@ func (s *Server) handlePageImage(c *gin.Context) {
 	// written. A mid-body upstream failure truncates the response instead.
 	stream, err := exhentai.FetchPageImageStream(ctx, s.Client, pageURL)
 	if err != nil || stream == nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
 		return
 	}
 	defer stream.Body.Close()
@@ -1084,19 +1085,19 @@ func (s *Server) handleGalleryList(listURL string) gin.HandlerFunc {
 			page = 0
 		}
 		if page > maxListingPage {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("page too large (max %d)", maxListingPage)})
+			web.JSON(c, http.StatusBadRequest, gin.H{"error": fmt.Sprintf("page too large (max %d)", maxListingPage)})
 			return
 		}
 
 		opts, err := parseSearchOptions(c)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
 		navOpts, err := parseListingNavOptions(c)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
@@ -1109,7 +1110,7 @@ func (s *Server) handleGalleryList(listURL string) gin.HandlerFunc {
 
 		results, nav, err := exhentai.ScrapeGalleryList(ctx, s.Client, listURL, page, categories, opts, navOpts)
 		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery list failed: %v", err)})
+			web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery list failed: %v", err)})
 			return
 		}
 
@@ -1146,7 +1147,7 @@ func (s *Server) handleGalleryList(listURL string) gin.HandlerFunc {
 			}
 		}
 
-		c.JSON(http.StatusOK, gin.H{
+		web.JSON(c, http.StatusOK, gin.H{
 			"page":      page,
 			"page_size": len(items),
 			"results":   items,

@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"manga-reader/internal/model"
+	"manga-reader/internal/web"
 )
 
 // recentlyReadPageSize is the fixed number of records per page.
@@ -21,11 +22,11 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 	pageStr := c.DefaultQuery("page", "0")
 	page, _ := strconv.Atoi(pageStr)
 	if page < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid page"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid page"})
 		return
 	}
 	if page > maxDBPage {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "page too large"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "page too large"})
 		return
 	}
 
@@ -34,7 +35,7 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 
 	total, err := s.DB.Client.ReadingProgress.Query().Count(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("count recently read failed: %v", err)})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("count recently read failed: %v", err)})
 		return
 	}
 	totalPages := (total + recentlyReadPageSize - 1) / recentlyReadPageSize
@@ -45,7 +46,7 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 		Limit(recentlyReadPageSize).
 		All(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list recently read failed: %v", err)})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list recently read failed: %v", err)})
 		return
 	}
 
@@ -57,7 +58,7 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 	}
 	metaByRef, err := gallerycache.GetMany(ctx, s.DB.Client, refs)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load gallery cache failed: %v", err)})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load gallery cache failed: %v", err)})
 		return
 	}
 
@@ -91,7 +92,7 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 		items = append(items, item)
 	}
 
-	c.JSON(http.StatusOK, model.RecentlyReadResponse{
+	web.JSON(c, http.StatusOK, model.RecentlyReadResponse{
 		Page:       page,
 		PageSize:   recentlyReadPageSize,
 		Total:      total,

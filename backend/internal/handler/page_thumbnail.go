@@ -22,6 +22,7 @@ import (
 	"manga-reader/internal/membudget"
 	"manga-reader/internal/metrics"
 	"manga-reader/internal/model"
+	"manga-reader/internal/web"
 )
 
 const (
@@ -166,7 +167,7 @@ func thumbRect(thumb model.GalleryPageThumb) image.Rectangle {
 func (s *Server) handlePageThumbnail(c *gin.Context) {
 	req, err := parsePageThumbRequest(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -174,22 +175,22 @@ func (s *Server) handlePageThumbnail(c *gin.Context) {
 	spriteURL, rect, found, err := s.resolveLiveRect(ctx, req)
 	if err != nil {
 		slog.Error("page-thumbnail resolve failed", "index", req.byIndex, "error", err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("resolve page thumbnail failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("resolve page thumbnail failed: %v", err)})
 		return
 	}
 	if !found {
-		c.JSON(http.StatusNotFound, gin.H{"error": "page thumbnail not found"})
+		web.JSON(c, http.StatusNotFound, gin.H{"error": "page thumbnail not found"})
 		return
 	}
 
 	data, err := s.cropLive(ctx, spriteURL, rect)
 	if err != nil {
 		if errors.Is(err, imageproc.ErrOutOfBounds) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		slog.Error("page-thumbnail crop failed", "url", spriteURL, "error", err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("crop page thumbnail failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("crop page thumbnail failed: %v", err)})
 		return
 	}
 
@@ -231,13 +232,13 @@ func isExpiredSprite(err error) bool {
 // on a miss.
 func (s *Server) handleCachedPageThumbnail(c *gin.Context) {
 	if s.Cache == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
+		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
 		return
 	}
 
 	req, err := parsePageThumbRequest(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -261,12 +262,12 @@ func (s *Server) handleCachedPageThumbnail(c *gin.Context) {
 func (s *Server) writeCachedThumbError(c *gin.Context, req pageThumbRequest, err error) {
 	switch {
 	case errors.Is(err, errPageThumbNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": "page thumbnail not found"})
+		web.JSON(c, http.StatusNotFound, gin.H{"error": "page thumbnail not found"})
 	case errors.Is(err, imageproc.ErrOutOfBounds):
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 	default:
 		slog.Error("cached page-thumbnail failed", "id", req.galleryID, "index", req.index, "error", err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("crop page thumbnail failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("crop page thumbnail failed: %v", err)})
 	}
 }
 

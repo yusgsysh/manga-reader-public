@@ -101,11 +101,11 @@ func csrfGuard(extra map[string]struct{}) gin.HandlerFunc {
 		}
 		if origin := c.GetHeader("Origin"); origin != "" {
 			if !originAllowed(origin, c.Request.Host, extra) {
-				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "cross-origin request rejected"})
+				web.AbortWithStatusJSON(c, http.StatusForbidden, gin.H{"error": "cross-origin request rejected"})
 				return
 			}
 		} else if site := c.GetHeader("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "cross-site request rejected"})
+			web.AbortWithStatusJSON(c, http.StatusForbidden, gin.H{"error": "cross-site request rejected"})
 			return
 		}
 		c.Next()
@@ -271,7 +271,7 @@ func run() error {
 	}
 
 	r.GET("/healthz", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		web.JSON(c, http.StatusOK, gin.H{"status": "ok"})
 	})
 
 	// Prometheus exposition for upstream traffic. Registered *after*

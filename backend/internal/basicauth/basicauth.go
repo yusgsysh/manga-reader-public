@@ -19,6 +19,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"manga-reader/internal/config"
+	"manga-reader/internal/web"
 )
 
 const (
@@ -65,14 +66,14 @@ func Middleware(cfg config.BasicAuthConfig) gin.HandlerFunc {
 
 		if !lim.allow(c.ClientIP()) {
 			c.Header("Retry-After", "1")
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
+			web.AbortWithStatusJSON(c, http.StatusTooManyRequests, gin.H{"error": "too many requests"})
 			return
 		}
 
 		user, pass, ok := c.Request.BasicAuth()
 		if !ok || !creds.verify(user, pass) {
 			c.Header("WWW-Authenticate", fmt.Sprintf("Basic realm=%q, charset=%q", realm, "UTF-8"))
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
 		c.Next()

@@ -32,7 +32,7 @@ func Register(r *gin.Engine, fsys fs.FS) {
 	r.NoRoute(func(c *gin.Context) {
 		p := c.Request.URL.Path
 		if isAPIPath(p) || (c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			JSON(c, http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
 

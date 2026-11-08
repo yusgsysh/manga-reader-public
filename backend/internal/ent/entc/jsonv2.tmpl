@@ -1,0 +1,18 @@
+{{/*
+Emit the json/v2 import for generated model files that decode JSON fields.
+
+ent's sql decode template calls json.Unmarshal for field.JSON columns and
+relies on goimports to resolve the "json" identifier, which picks
+encoding/json (v1). Declaring the import here keeps generated code on
+encoding/json/v2; goimports drops it again from files that do not use it.
+*/}}
+
+{{ define "import/additional/jsonv2" }}
+	{{- if hasField $ "Fields" }}
+	{{- $hasJSON := false }}
+	{{- range $f := $.Fields }}{{ if $f.IsJSON }}{{ $hasJSON = true }}{{ end }}{{ end }}
+	{{- if $hasJSON }}
+json "encoding/json/v2"
+	{{- end }}
+	{{- end }}
+{{ end }}

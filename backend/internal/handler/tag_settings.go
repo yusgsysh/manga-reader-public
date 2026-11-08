@@ -10,6 +10,7 @@ import (
 
 	"manga-reader/internal/ent"
 	"manga-reader/internal/model"
+	"manga-reader/internal/web"
 )
 
 // maxTagSettings bounds a single PUT payload so a bad client cannot bloat
@@ -67,10 +68,10 @@ func defaultTagWeight(action string) int {
 func (s *Server) handleTagSettingsGet(c *gin.Context) {
 	tags, err := s.loadTagRules(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list tag settings failed: %v", err)})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list tag settings failed: %v", err)})
 		return
 	}
-	c.JSON(http.StatusOK, model.TagSettingsResponse{Tags: tags})
+	web.JSON(c, http.StatusOK, model.TagSettingsResponse{Tags: tags})
 }
 
 // handleTagSettingsPut replaces the full preference list. Rules are trimmed,
@@ -81,12 +82,12 @@ func (s *Server) handleTagSettingsPut(c *gin.Context) {
 	var body struct {
 		Tags []tagSettingsPutEntry `json:"tags"`
 	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
+	if err := web.BindJSON(c, &body); err != nil {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
 		return
 	}
 	if len(body.Tags) > maxTagSettings {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("too many tags (max %d)", maxTagSettings)})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": fmt.Sprintf("too many tags (max %d)", maxTagSettings)})
 		return
 	}
 
@@ -96,7 +97,7 @@ func (s *Server) handleTagSettingsPut(c *gin.Context) {
 	for _, entry := range body.Tags {
 		rule, err := normalizeTagRule(entry)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		if i, ok := indexByTag[rule.Tag]; ok {
@@ -116,13 +117,13 @@ func (s *Server) handleTagSettingsPut(c *gin.Context) {
 
 	tx, err := s.DB.Client.Tx(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("start transaction failed: %v", err)})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("start transaction failed: %v", err)})
 		return
 	}
 
 	if _, err := tx.TagPreference.Delete().Exec(ctx); err != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("clear tag settings failed: %v", err)})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("clear tag settings failed: %v", err)})
 		return
 	}
 
@@ -133,15 +134,15 @@ func (s *Server) handleTagSettingsPut(c *gin.Context) {
 		}
 		if _, err := tx.TagPreference.CreateBulk(builders...).Save(ctx); err != nil {
 			tx.Rollback()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save tag settings failed: %v", err)})
+			web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save tag settings failed: %v", err)})
 			return
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("commit tag settings failed: %v", err)})
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("commit tag settings failed: %v", err)})
 		return
 	}
 
-	c.JSON(http.StatusOK, model.TagSettingsResponse{Tags: normalized})
+	web.JSON(c, http.StatusOK, model.TagSettingsResponse{Tags: normalized})
 }

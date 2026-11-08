@@ -24,7 +24,7 @@ package main
 
 import (
 	_ "embed"
-	"encoding/json"
+	json "encoding/json/v2"
 	"fmt"
 	"log"
 
@@ -35,6 +35,9 @@ import (
 
 //go:embed schema.tmpl
 var schemaTmpl string
+
+//go:embed jsonv2.tmpl
+var jsonv2Tmpl string
 
 func main() {
 	if err := entc.Generate("./schema", &gen.Config{}, entc.Extensions(extension{})); err != nil {
@@ -59,13 +62,18 @@ func (extension) Hooks() []gen.Hook {
 }
 
 // Templates overrides ent's migrate/schema.go generator so that composite
-// identifiers are emitted as a real PRIMARY KEY (col, ...) clause.
+// identifiers are emitted as a real PRIMARY KEY (col, ...) clause, and adds
+// the encoding/json/v2 import to model files with JSON fields.
 func (extension) Templates() []*gen.Template {
 	t, err := gen.NewTemplate("schema").Parse(schemaTmpl)
 	if err != nil {
 		panic(fmt.Errorf("parse schema.tmpl: %w", err))
 	}
-	return []*gen.Template{t}
+	j, err := gen.NewTemplate("jsonv2").Parse(jsonv2Tmpl)
+	if err != nil {
+		panic(fmt.Errorf("parse jsonv2.tmpl: %w", err))
+	}
+	return []*gen.Template{t, j}
 }
 
 func applyCompositeIDs(g *gen.Graph) error {

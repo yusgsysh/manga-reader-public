@@ -2,6 +2,9 @@
 // and serves it from Gin, so a deployment ships exactly one image with no
 // externally mounted static files.
 //
+// It also hosts the API's JSON helpers (encoding/json/v2 rendering and request
+// binding), which replace Gin's encoding/json (v1) implementations.
+//
 // The image build copies frontend/dist into internal/web/dist before
 // `go build`. A source checkout without that step only carries dist/.gitkeep,
 // and the binary runs API-only (FS returns nil).

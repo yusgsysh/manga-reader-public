@@ -3,7 +3,7 @@
 package ent
 
 import (
-	"encoding/json"
+	json "encoding/json/v2"
 	"fmt"
 	"manga-reader/internal/ent/gallerycache"
 	"manga-reader/internal/model"

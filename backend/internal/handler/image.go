@@ -21,6 +21,7 @@ import (
 	"manga-reader/internal/membudget"
 	"manga-reader/internal/metrics"
 	"manga-reader/internal/ttl"
+	"manga-reader/internal/web"
 )
 
 const (
@@ -116,12 +117,12 @@ func (s *Server) writeCachedStream(c *gin.Context, key string, metricKind string
 func (s *Server) handleThumbnail(c *gin.Context) {
 	rawURL := c.Query("url")
 	if rawURL == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing url parameter"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "missing url parameter"})
 		return
 	}
 
 	if err := exhentai.ValidateThumbnailURL(rawURL); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -138,14 +139,14 @@ func (s *Server) handleThumbnail(c *gin.Context) {
 			c.AbortWithStatus(http.StatusServiceUnavailable)
 			return
 		}
-		c.JSON(http.StatusGatewayTimeout, gin.H{"error": fmt.Sprintf("memory budget wait canceled: %v", leaseErr)})
+		web.JSON(c, http.StatusGatewayTimeout, gin.H{"error": fmt.Sprintf("memory budget wait canceled: %v", leaseErr)})
 		return
 	}
 	defer lease.Release()
 
 	data, contentType, err := fetchThumbnail(ctx, s.Client, rawURL)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download thumbnail failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download thumbnail failed: %v", err)})
 		return
 	}
 	if rerr := lease.Resize(ctx, int64(len(data))); rerr != nil {
@@ -159,12 +160,12 @@ func (s *Server) handleThumbnail(c *gin.Context) {
 func (s *Server) handleCachedThumbnail(c *gin.Context) {
 	rawURL := c.Query("url")
 	if rawURL == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing url parameter"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "missing url parameter"})
 		return
 	}
 
 	if err := exhentai.ValidateThumbnailURL(rawURL); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -172,7 +173,7 @@ func (s *Server) handleCachedThumbnail(c *gin.Context) {
 	key := ThumbnailCacheKey(rawURL)
 
 	if s.Cache == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
+		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
 		return
 	}
 
@@ -183,11 +184,11 @@ func (s *Server) handleCachedThumbnail(c *gin.Context) {
 	result, err := s.loadOrFetchThumbnail(ctx, key, rawURL)
 	if err != nil {
 		if cache.IsNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "thumbnail not found"})
+			web.JSON(c, http.StatusNotFound, gin.H{"error": "thumbnail not found"})
 			return
 		}
 		slog.Error("cached-thumbnail error", "key", key[:16], "error", err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download thumbnail failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download thumbnail failed: %v", err)})
 		return
 	}
 	defer result.release()
@@ -199,12 +200,12 @@ func (s *Server) handleCachedThumbnail(c *gin.Context) {
 func (s *Server) handleCachedImage(c *gin.Context) {
 	rawURL := c.Query("url")
 	if rawURL == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing url parameter"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "missing url parameter"})
 		return
 	}
 
 	if err := exhentai.ValidatePageURL(rawURL); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -212,7 +213,7 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 	key := cache.CacheKey(rawURL)
 
 	if s.Cache == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
+		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
 		return
 	}
 
@@ -223,11 +224,11 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 	result, err := s.loadOrFetchImage(ctx, key, rawURL)
 	if err != nil {
 		if cache.IsNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "image not found"})
+			web.JSON(c, http.StatusNotFound, gin.H{"error": "image not found"})
 			return
 		}
 		slog.Error("cached-image error", "key", key[:16], "error", err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
 		return
 	}
 	defer result.release()
