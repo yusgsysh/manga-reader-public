@@ -40,7 +40,7 @@ func (_d *SyncStateDelete) ExecX(ctx context.Context) int {
 }
 
 func (_d *SyncStateDelete) sqlExec(ctx context.Context) (int, error) {
-	_spec := sqlgraph.NewDeleteSpec(syncstate.Table, sqlgraph.NewFieldSpec(syncstate.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewDeleteSpec(syncstate.Table, sqlgraph.NewFieldSpec(syncstate.FieldID, field.TypeString))
 	if ps := _d.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {

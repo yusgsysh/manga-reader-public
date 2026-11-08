@@ -130,7 +130,7 @@ func (s *Server) handleTagSettingsPut(c *gin.Context) {
 	if len(normalized) > 0 {
 		builders := make([]*ent.TagPreferenceCreate, 0, len(normalized))
 		for _, t := range normalized {
-			builders = append(builders, tx.TagPreference.Create().SetTag(t.Tag).SetAction(t.Action).SetWeight(t.Weight))
+			builders = append(builders, tx.TagPreference.Create().SetID(t.Tag).SetAction(t.Action).SetWeight(t.Weight))
 		}
 		if _, err := tx.TagPreference.CreateBulk(builders...).Save(ctx); err != nil {
 			tx.Rollback()

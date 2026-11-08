@@ -20,12 +20,6 @@ type TagSyncBaselineCreate struct {
 	hooks    []Hook
 }
 
-// SetTag sets the "tag" field.
-func (_c *TagSyncBaselineCreate) SetTag(v string) *TagSyncBaselineCreate {
-	_c.mutation.SetTag(v)
-	return _c
-}
-
 // SetAction sets the "action" field.
 func (_c *TagSyncBaselineCreate) SetAction(v string) *TagSyncBaselineCreate {
 	_c.mutation.SetAction(v)
@@ -71,6 +65,12 @@ func (_c *TagSyncBaselineCreate) SetNillableUpdatedAt(v *time.Time) *TagSyncBase
 	if v != nil {
 		_c.SetUpdatedAt(*v)
 	}
+	return _c
+}
+
+// SetID sets the "id" field.
+func (_c *TagSyncBaselineCreate) SetID(v string) *TagSyncBaselineCreate {
+	_c.mutation.SetID(v)
 	return _c
 }
 
@@ -125,14 +125,6 @@ func (_c *TagSyncBaselineCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *TagSyncBaselineCreate) check() error {
-	if _, ok := _c.mutation.Tag(); !ok {
-		return &ValidationError{Name: "tag", err: errors.New(`ent: missing required field "TagSyncBaseline.tag"`)}
-	}
-	if v, ok := _c.mutation.Tag(); ok {
-		if err := tagsyncbaseline.TagValidator(v); err != nil {
-			return &ValidationError{Name: "tag", err: fmt.Errorf(`ent: validator failed for field "TagSyncBaseline.tag": %w`, err)}
-		}
-	}
 	if _, ok := _c.mutation.Action(); !ok {
 		return &ValidationError{Name: "action", err: errors.New(`ent: missing required field "TagSyncBaseline.action"`)}
 	}
@@ -150,6 +142,11 @@ func (_c *TagSyncBaselineCreate) check() error {
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "TagSyncBaseline.updated_at"`)}
 	}
+	if v, ok := _c.mutation.ID(); ok {
+		if err := tagsyncbaseline.IDValidator(v); err != nil {
+			return &ValidationError{Name: "id", err: fmt.Errorf(`ent: validator failed for field "TagSyncBaseline.id": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -164,8 +161,13 @@ func (_c *TagSyncBaselineCreate) sqlSave(ctx context.Context) (*TagSyncBaseline,
 		}
 		return nil, err
 	}
-	id := _spec.ID.Value.(int64)
-	_node.ID = int(id)
+	if _spec.ID.Value != nil {
+		if id, ok := _spec.ID.Value.(string); ok {
+			_node.ID = id
+		} else {
+			return nil, fmt.Errorf("unexpected TagSyncBaseline.ID type: %T", _spec.ID.Value)
+		}
+	}
 	_c.mutation.id = &_node.ID
 	_c.mutation.done = true
 	return _node, nil
@@ -174,11 +176,11 @@ func (_c *TagSyncBaselineCreate) sqlSave(ctx context.Context) (*TagSyncBaseline,
 func (_c *TagSyncBaselineCreate) createSpec() (*TagSyncBaseline, *sqlgraph.CreateSpec) {
 	var (
 		_node = &TagSyncBaseline{config: _c.config}
-		_spec = sqlgraph.NewCreateSpec(tagsyncbaseline.Table, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeInt))
+		_spec = sqlgraph.NewCreateSpec(tagsyncbaseline.Table, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
 	)
-	if value, ok := _c.mutation.Tag(); ok {
-		_spec.SetField(tagsyncbaseline.FieldTag, field.TypeString, value)
-		_node.Tag = value
+	if id, ok := _c.mutation.ID(); ok {
+		_node.ID = id
+		_spec.ID.Value = id
 	}
 	if value, ok := _c.mutation.Action(); ok {
 		_spec.SetField(tagsyncbaseline.FieldAction, field.TypeString, value)
@@ -244,10 +246,6 @@ func (_c *TagSyncBaselineCreateBulk) Save(ctx context.Context) ([]*TagSyncBaseli
 					return nil, err
 				}
 				mutation.id = &nodes[i].ID
-				if specs[i].ID.Value != nil {
-					id := specs[i].ID.Value.(int64)
-					nodes[i].ID = int(id)
-				}
 				mutation.done = true
 				return nodes[i], nil
 			})

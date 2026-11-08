@@ -12,9 +12,7 @@ const (
 	// Label holds the string label denoting the tagpreference type in the database.
 	Label = "tag_preference"
 	// FieldID holds the string denoting the id field in the database.
-	FieldID = "id"
-	// FieldTag holds the string denoting the tag field in the database.
-	FieldTag = "tag"
+	FieldID = "tag"
 	// FieldAction holds the string denoting the action field in the database.
 	FieldAction = "action"
 	// FieldWeight holds the string denoting the weight field in the database.
@@ -30,7 +28,6 @@ const (
 // Columns holds all SQL columns for tagpreference fields.
 var Columns = []string{
 	FieldID,
-	FieldTag,
 	FieldAction,
 	FieldWeight,
 	FieldCreatedAt,
@@ -48,8 +45,6 @@ func ValidColumn(column string) bool {
 }
 
 var (
-	// TagValidator is a validator for the "tag" field. It is called by the builders before save.
-	TagValidator func(string) error
 	// ActionValidator is a validator for the "action" field. It is called by the builders before save.
 	ActionValidator func(string) error
 	// DefaultWeight holds the default value on creation for the "weight" field.
@@ -60,6 +55,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// IDValidator is a validator for the "id" field. It is called by the builders before save.
+	IDValidator func(string) error
 )
 
 // OrderOption defines the ordering options for the TagPreference queries.
@@ -68,11 +65,6 @@ type OrderOption func(*sql.Selector)
 // ByID orders the results by the id field.
 func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
-}
-
-// ByTag orders the results by the tag field.
-func ByTag(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldTag, opts...).ToFunc()
 }
 
 // ByAction orders the results by the action field.

@@ -28,20 +28,6 @@ func (_u *SyncStateUpdate) Where(ps ...predicate.SyncState) *SyncStateUpdate {
 	return _u
 }
 
-// SetKey sets the "key" field.
-func (_u *SyncStateUpdate) SetKey(v string) *SyncStateUpdate {
-	_u.mutation.SetKey(v)
-	return _u
-}
-
-// SetNillableKey sets the "key" field if the given value is not nil.
-func (_u *SyncStateUpdate) SetNillableKey(v *string) *SyncStateUpdate {
-	if v != nil {
-		_u.SetKey(*v)
-	}
-	return _u
-}
-
 // SetValue sets the "value" field.
 func (_u *SyncStateUpdate) SetValue(v string) *SyncStateUpdate {
 	_u.mutation.SetValue(v)
@@ -104,16 +90,13 @@ func (_u *SyncStateUpdate) defaults() {
 }
 
 func (_u *SyncStateUpdate) sqlSave(ctx context.Context) (_node int, err error) {
-	_spec := sqlgraph.NewUpdateSpec(syncstate.Table, syncstate.Columns, sqlgraph.NewFieldSpec(syncstate.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(syncstate.Table, syncstate.Columns, sqlgraph.NewFieldSpec(syncstate.FieldID, field.TypeString))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
-	}
-	if value, ok := _u.mutation.Key(); ok {
-		_spec.SetField(syncstate.FieldKey, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Value(); ok {
 		_spec.SetField(syncstate.FieldValue, field.TypeString, value)
@@ -139,20 +122,6 @@ type SyncStateUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *SyncStateMutation
-}
-
-// SetKey sets the "key" field.
-func (_u *SyncStateUpdateOne) SetKey(v string) *SyncStateUpdateOne {
-	_u.mutation.SetKey(v)
-	return _u
-}
-
-// SetNillableKey sets the "key" field if the given value is not nil.
-func (_u *SyncStateUpdateOne) SetNillableKey(v *string) *SyncStateUpdateOne {
-	if v != nil {
-		_u.SetKey(*v)
-	}
-	return _u
 }
 
 // SetValue sets the "value" field.
@@ -230,7 +199,7 @@ func (_u *SyncStateUpdateOne) defaults() {
 }
 
 func (_u *SyncStateUpdateOne) sqlSave(ctx context.Context) (_node *SyncState, err error) {
-	_spec := sqlgraph.NewUpdateSpec(syncstate.Table, syncstate.Columns, sqlgraph.NewFieldSpec(syncstate.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(syncstate.Table, syncstate.Columns, sqlgraph.NewFieldSpec(syncstate.FieldID, field.TypeString))
 	id, ok := _u.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "SyncState.id" for update`)}
@@ -254,9 +223,6 @@ func (_u *SyncStateUpdateOne) sqlSave(ctx context.Context) (_node *SyncState, er
 				ps[i](selector)
 			}
 		}
-	}
-	if value, ok := _u.mutation.Key(); ok {
-		_spec.SetField(syncstate.FieldKey, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Value(); ok {
 		_spec.SetField(syncstate.FieldValue, field.TypeString, value)

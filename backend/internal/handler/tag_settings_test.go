@@ -91,7 +91,7 @@ func TestHandleTagSettingsRoundTrip(t *testing.T) {
 func TestHandleTagSettingsPut_ReplacesFullList(t *testing.T) {
 	client := newTestDB(t)
 	// Seed a stale row that the PUT should wipe.
-	client.TagPreference.Create().SetTag("stale:tag").SetAction("like").Save(t.Context())
+	client.TagPreference.Create().SetID("stale:tag").SetAction("like").Save(t.Context())
 
 	r := setupTestRouter()
 	server := &Server{DB: &database.DB{Client: client}}
@@ -112,7 +112,7 @@ func TestHandleTagSettingsPut_ReplacesFullList(t *testing.T) {
 	if count != 1 {
 		t.Errorf("count = %d, want 1", count)
 	}
-	exists, err := client.TagPreference.Query().Where(tagpreference.Tag("stale:tag")).Exist(t.Context())
+	exists, err := client.TagPreference.Query().Where(tagpreference.ID("stale:tag")).Exist(t.Context())
 	if err != nil {
 		t.Fatalf("exist: %v", err)
 	}
@@ -196,8 +196,8 @@ func TestHandleTagSettingsPut_Invalid(t *testing.T) {
 
 func TestHandleTagSettingsPut_EmptyListClearsAll(t *testing.T) {
 	client := newTestDB(t)
-	client.TagPreference.Create().SetTag("female:yuri").SetAction("like").Save(t.Context())
-	client.TagPreference.Create().SetTag("tag:netorare").SetAction("dislike").Save(t.Context())
+	client.TagPreference.Create().SetID("female:yuri").SetAction("like").Save(t.Context())
+	client.TagPreference.Create().SetID("tag:netorare").SetAction("dislike").Save(t.Context())
 
 	r := setupTestRouter()
 	server := &Server{DB: &database.DB{Client: client}}

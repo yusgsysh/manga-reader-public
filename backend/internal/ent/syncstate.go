@@ -16,9 +16,7 @@ import (
 type SyncState struct {
 	config `json:"-"`
 	// ID of the ent.
-	ID int `json:"id,omitempty"`
-	// Key holds the value of the "key" field.
-	Key string `json:"key,omitempty"`
+	ID string `json:"id,omitempty"`
 	// Value holds the value of the "value" field.
 	Value string `json:"value,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -31,9 +29,7 @@ func (*SyncState) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case syncstate.FieldID:
-			values[i] = new(sql.NullInt64)
-		case syncstate.FieldKey, syncstate.FieldValue:
+		case syncstate.FieldID, syncstate.FieldValue:
 			values[i] = new(sql.NullString)
 		case syncstate.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -53,16 +49,10 @@ func (_m *SyncState) assignValues(columns []string, values []any) error {
 	for i := range columns {
 		switch columns[i] {
 		case syncstate.FieldID:
-			value, ok := values[i].(*sql.NullInt64)
-			if !ok {
-				return fmt.Errorf("unexpected type %T for field id", value)
-			}
-			_m.ID = int(value.Int64)
-		case syncstate.FieldKey:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field key", values[i])
+				return fmt.Errorf("unexpected type %T for field id", values[i])
 			} else if value.Valid {
-				_m.Key = value.String
+				_m.ID = value.String
 			}
 		case syncstate.FieldValue:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -112,9 +102,6 @@ func (_m *SyncState) String() string {
 	var builder strings.Builder
 	builder.WriteString("SyncState(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
-	builder.WriteString("key=")
-	builder.WriteString(_m.Key)
-	builder.WriteString(", ")
 	builder.WriteString("value=")
 	builder.WriteString(_m.Value)
 	builder.WriteString(", ")

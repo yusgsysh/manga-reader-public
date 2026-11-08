@@ -20,12 +20,6 @@ type SyncStateCreate struct {
 	hooks    []Hook
 }
 
-// SetKey sets the "key" field.
-func (_c *SyncStateCreate) SetKey(v string) *SyncStateCreate {
-	_c.mutation.SetKey(v)
-	return _c
-}
-
 // SetValue sets the "value" field.
 func (_c *SyncStateCreate) SetValue(v string) *SyncStateCreate {
 	_c.mutation.SetValue(v)
@@ -51,6 +45,12 @@ func (_c *SyncStateCreate) SetNillableUpdatedAt(v *time.Time) *SyncStateCreate {
 	if v != nil {
 		_c.SetUpdatedAt(*v)
 	}
+	return _c
+}
+
+// SetID sets the "id" field.
+func (_c *SyncStateCreate) SetID(v string) *SyncStateCreate {
+	_c.mutation.SetID(v)
 	return _c
 }
 
@@ -101,14 +101,16 @@ func (_c *SyncStateCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *SyncStateCreate) check() error {
-	if _, ok := _c.mutation.Key(); !ok {
-		return &ValidationError{Name: "key", err: errors.New(`ent: missing required field "SyncState.key"`)}
-	}
 	if _, ok := _c.mutation.Value(); !ok {
 		return &ValidationError{Name: "value", err: errors.New(`ent: missing required field "SyncState.value"`)}
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "SyncState.updated_at"`)}
+	}
+	if v, ok := _c.mutation.ID(); ok {
+		if err := syncstate.IDValidator(v); err != nil {
+			return &ValidationError{Name: "id", err: fmt.Errorf(`ent: validator failed for field "SyncState.id": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -124,8 +126,13 @@ func (_c *SyncStateCreate) sqlSave(ctx context.Context) (*SyncState, error) {
 		}
 		return nil, err
 	}
-	id := _spec.ID.Value.(int64)
-	_node.ID = int(id)
+	if _spec.ID.Value != nil {
+		if id, ok := _spec.ID.Value.(string); ok {
+			_node.ID = id
+		} else {
+			return nil, fmt.Errorf("unexpected SyncState.ID type: %T", _spec.ID.Value)
+		}
+	}
 	_c.mutation.id = &_node.ID
 	_c.mutation.done = true
 	return _node, nil
@@ -134,11 +141,11 @@ func (_c *SyncStateCreate) sqlSave(ctx context.Context) (*SyncState, error) {
 func (_c *SyncStateCreate) createSpec() (*SyncState, *sqlgraph.CreateSpec) {
 	var (
 		_node = &SyncState{config: _c.config}
-		_spec = sqlgraph.NewCreateSpec(syncstate.Table, sqlgraph.NewFieldSpec(syncstate.FieldID, field.TypeInt))
+		_spec = sqlgraph.NewCreateSpec(syncstate.Table, sqlgraph.NewFieldSpec(syncstate.FieldID, field.TypeString))
 	)
-	if value, ok := _c.mutation.Key(); ok {
-		_spec.SetField(syncstate.FieldKey, field.TypeString, value)
-		_node.Key = value
+	if id, ok := _c.mutation.ID(); ok {
+		_node.ID = id
+		_spec.ID.Value = id
 	}
 	if value, ok := _c.mutation.Value(); ok {
 		_spec.SetField(syncstate.FieldValue, field.TypeString, value)
@@ -196,10 +203,6 @@ func (_c *SyncStateCreateBulk) Save(ctx context.Context) ([]*SyncState, error) {
 					return nil, err
 				}
 				mutation.id = &nodes[i].ID
-				if specs[i].ID.Value != nil {
-					id := specs[i].ID.Value.(int64)
-					nodes[i].ID = int(id)
-				}
 				mutation.done = true
 				return nodes[i], nil
 			})

@@ -130,7 +130,6 @@ var (
 	}
 	// SyncStateColumns holds the columns for the "sync_state" table.
 	SyncStateColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "key", Type: field.TypeString, Unique: true},
 		{Name: "value", Type: field.TypeString, Default: ""},
 		{Name: "updated_at", Type: field.TypeTime},
@@ -143,7 +142,6 @@ var (
 	}
 	// TagPreferenceColumns holds the columns for the "tag_preference" table.
 	TagPreferenceColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "tag", Type: field.TypeString, Unique: true},
 		{Name: "action", Type: field.TypeString},
 		{Name: "weight", Type: field.TypeInt, Default: 10},
@@ -158,7 +156,6 @@ var (
 	}
 	// TagSyncBaselineColumns holds the columns for the "tag_sync_baseline" table.
 	TagSyncBaselineColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "tag", Type: field.TypeString, Unique: true},
 		{Name: "action", Type: field.TypeString},
 		{Name: "weight", Type: field.TypeInt, Default: 10},

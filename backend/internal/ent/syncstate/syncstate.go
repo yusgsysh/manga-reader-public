@@ -12,9 +12,7 @@ const (
 	// Label holds the string label denoting the syncstate type in the database.
 	Label = "sync_state"
 	// FieldID holds the string denoting the id field in the database.
-	FieldID = "id"
-	// FieldKey holds the string denoting the key field in the database.
-	FieldKey = "key"
+	FieldID = "key"
 	// FieldValue holds the string denoting the value field in the database.
 	FieldValue = "value"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -26,7 +24,6 @@ const (
 // Columns holds all SQL columns for syncstate fields.
 var Columns = []string{
 	FieldID,
-	FieldKey,
 	FieldValue,
 	FieldUpdatedAt,
 }
@@ -48,6 +45,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// IDValidator is a validator for the "id" field. It is called by the builders before save.
+	IDValidator func(string) error
 )
 
 // OrderOption defines the ordering options for the SyncState queries.
@@ -56,11 +55,6 @@ type OrderOption func(*sql.Selector)
 // ByID orders the results by the id field.
 func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
-}
-
-// ByKey orders the results by the key field.
-func ByKey(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldKey, opts...).ToFunc()
 }
 
 // ByValue orders the results by the value field.

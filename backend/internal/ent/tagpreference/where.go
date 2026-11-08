@@ -10,53 +10,58 @@ import (
 )
 
 // ID filters vertices based on their ID field.
-func ID(id int) predicate.TagPreference {
+func ID(id string) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldEQ(FieldID, id))
 }
 
 // IDEQ applies the EQ predicate on the ID field.
-func IDEQ(id int) predicate.TagPreference {
+func IDEQ(id string) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldEQ(FieldID, id))
 }
 
 // IDNEQ applies the NEQ predicate on the ID field.
-func IDNEQ(id int) predicate.TagPreference {
+func IDNEQ(id string) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldNEQ(FieldID, id))
 }
 
 // IDIn applies the In predicate on the ID field.
-func IDIn(ids ...int) predicate.TagPreference {
+func IDIn(ids ...string) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldIn(FieldID, ids...))
 }
 
 // IDNotIn applies the NotIn predicate on the ID field.
-func IDNotIn(ids ...int) predicate.TagPreference {
+func IDNotIn(ids ...string) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldNotIn(FieldID, ids...))
 }
 
 // IDGT applies the GT predicate on the ID field.
-func IDGT(id int) predicate.TagPreference {
+func IDGT(id string) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldGT(FieldID, id))
 }
 
 // IDGTE applies the GTE predicate on the ID field.
-func IDGTE(id int) predicate.TagPreference {
+func IDGTE(id string) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldGTE(FieldID, id))
 }
 
 // IDLT applies the LT predicate on the ID field.
-func IDLT(id int) predicate.TagPreference {
+func IDLT(id string) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldLT(FieldID, id))
 }
 
 // IDLTE applies the LTE predicate on the ID field.
-func IDLTE(id int) predicate.TagPreference {
+func IDLTE(id string) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldLTE(FieldID, id))
 }
 
-// Tag applies equality check predicate on the "tag" field. It's identical to TagEQ.
-func Tag(v string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldEQ(FieldTag, v))
+// IDEqualFold applies the EqualFold predicate on the ID field.
+func IDEqualFold(id string) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldEqualFold(FieldID, id))
+}
+
+// IDContainsFold applies the ContainsFold predicate on the ID field.
+func IDContainsFold(id string) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldContainsFold(FieldID, id))
 }
 
 // Action applies equality check predicate on the "action" field. It's identical to ActionEQ.
@@ -77,71 +82,6 @@ func CreatedAt(v time.Time) predicate.TagPreference {
 // UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
 func UpdatedAt(v time.Time) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldEQ(FieldUpdatedAt, v))
-}
-
-// TagEQ applies the EQ predicate on the "tag" field.
-func TagEQ(v string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldEQ(FieldTag, v))
-}
-
-// TagNEQ applies the NEQ predicate on the "tag" field.
-func TagNEQ(v string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldNEQ(FieldTag, v))
-}
-
-// TagIn applies the In predicate on the "tag" field.
-func TagIn(vs ...string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldIn(FieldTag, vs...))
-}
-
-// TagNotIn applies the NotIn predicate on the "tag" field.
-func TagNotIn(vs ...string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldNotIn(FieldTag, vs...))
-}
-
-// TagGT applies the GT predicate on the "tag" field.
-func TagGT(v string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldGT(FieldTag, v))
-}
-
-// TagGTE applies the GTE predicate on the "tag" field.
-func TagGTE(v string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldGTE(FieldTag, v))
-}
-
-// TagLT applies the LT predicate on the "tag" field.
-func TagLT(v string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldLT(FieldTag, v))
-}
-
-// TagLTE applies the LTE predicate on the "tag" field.
-func TagLTE(v string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldLTE(FieldTag, v))
-}
-
-// TagContains applies the Contains predicate on the "tag" field.
-func TagContains(v string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldContains(FieldTag, v))
-}
-
-// TagHasPrefix applies the HasPrefix predicate on the "tag" field.
-func TagHasPrefix(v string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldHasPrefix(FieldTag, v))
-}
-
-// TagHasSuffix applies the HasSuffix predicate on the "tag" field.
-func TagHasSuffix(v string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldHasSuffix(FieldTag, v))
-}
-
-// TagEqualFold applies the EqualFold predicate on the "tag" field.
-func TagEqualFold(v string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldEqualFold(FieldTag, v))
-}
-
-// TagContainsFold applies the ContainsFold predicate on the "tag" field.
-func TagContainsFold(v string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldContainsFold(FieldTag, v))
 }
 
 // ActionEQ applies the EQ predicate on the "action" field.

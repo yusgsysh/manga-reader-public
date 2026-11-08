@@ -82,8 +82,8 @@ func (_q *TagSyncBaselineQuery) FirstX(ctx context.Context) *TagSyncBaseline {
 
 // FirstID returns the first TagSyncBaseline ID from the query.
 // Returns a *NotFoundError when no TagSyncBaseline ID was found.
-func (_q *TagSyncBaselineQuery) FirstID(ctx context.Context) (id int, err error) {
-	var ids []int
+func (_q *TagSyncBaselineQuery) FirstID(ctx context.Context) (id string, err error) {
+	var ids []string
 	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
@@ -95,7 +95,7 @@ func (_q *TagSyncBaselineQuery) FirstID(ctx context.Context) (id int, err error)
 }
 
 // FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *TagSyncBaselineQuery) FirstIDX(ctx context.Context) int {
+func (_q *TagSyncBaselineQuery) FirstIDX(ctx context.Context) string {
 	id, err := _q.FirstID(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -133,8 +133,8 @@ func (_q *TagSyncBaselineQuery) OnlyX(ctx context.Context) *TagSyncBaseline {
 // OnlyID is like Only, but returns the only TagSyncBaseline ID in the query.
 // Returns a *NotSingularError when more than one TagSyncBaseline ID is found.
 // Returns a *NotFoundError when no entities are found.
-func (_q *TagSyncBaselineQuery) OnlyID(ctx context.Context) (id int, err error) {
-	var ids []int
+func (_q *TagSyncBaselineQuery) OnlyID(ctx context.Context) (id string, err error) {
+	var ids []string
 	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
@@ -150,7 +150,7 @@ func (_q *TagSyncBaselineQuery) OnlyID(ctx context.Context) (id int, err error) 
 }
 
 // OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *TagSyncBaselineQuery) OnlyIDX(ctx context.Context) int {
+func (_q *TagSyncBaselineQuery) OnlyIDX(ctx context.Context) string {
 	id, err := _q.OnlyID(ctx)
 	if err != nil {
 		panic(err)
@@ -178,7 +178,7 @@ func (_q *TagSyncBaselineQuery) AllX(ctx context.Context) []*TagSyncBaseline {
 }
 
 // IDs executes the query and returns a list of TagSyncBaseline IDs.
-func (_q *TagSyncBaselineQuery) IDs(ctx context.Context) (ids []int, err error) {
+func (_q *TagSyncBaselineQuery) IDs(ctx context.Context) (ids []string, err error) {
 	if _q.ctx.Unique == nil && _q.path != nil {
 		_q.Unique(true)
 	}
@@ -190,7 +190,7 @@ func (_q *TagSyncBaselineQuery) IDs(ctx context.Context) (ids []int, err error) 
 }
 
 // IDsX is like IDs, but panics if an error occurs.
-func (_q *TagSyncBaselineQuery) IDsX(ctx context.Context) []int {
+func (_q *TagSyncBaselineQuery) IDsX(ctx context.Context) []string {
 	ids, err := _q.IDs(ctx)
 	if err != nil {
 		panic(err)
@@ -262,12 +262,12 @@ func (_q *TagSyncBaselineQuery) Clone() *TagSyncBaselineQuery {
 // Example:
 //
 //	var v []struct {
-//		Tag string `json:"tag,omitempty"`
+//		Action string `json:"action,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.TagSyncBaseline.Query().
-//		GroupBy(tagsyncbaseline.FieldTag).
+//		GroupBy(tagsyncbaseline.FieldAction).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *TagSyncBaselineQuery) GroupBy(field string, fields ...string) *TagSyncBaselineGroupBy {
@@ -285,11 +285,11 @@ func (_q *TagSyncBaselineQuery) GroupBy(field string, fields ...string) *TagSync
 // Example:
 //
 //	var v []struct {
-//		Tag string `json:"tag,omitempty"`
+//		Action string `json:"action,omitempty"`
 //	}
 //
 //	client.TagSyncBaseline.Query().
-//		Select(tagsyncbaseline.FieldTag).
+//		Select(tagsyncbaseline.FieldAction).
 //		Scan(ctx, &v)
 func (_q *TagSyncBaselineQuery) Select(fields ...string) *TagSyncBaselineSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
@@ -365,7 +365,7 @@ func (_q *TagSyncBaselineQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (_q *TagSyncBaselineQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewQuerySpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique

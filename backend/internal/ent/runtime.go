@@ -201,12 +201,12 @@ func init() {
 	syncstate.DefaultUpdatedAt = syncstateDescUpdatedAt.Default.(func() time.Time)
 	// syncstate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	syncstate.UpdateDefaultUpdatedAt = syncstateDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// syncstateDescID is the schema descriptor for id field.
+	syncstateDescID := syncstateFields[0].Descriptor()
+	// syncstate.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	syncstate.IDValidator = syncstateDescID.Validators[0].(func(string) error)
 	tagpreferenceFields := schema.TagPreference{}.Fields()
 	_ = tagpreferenceFields
-	// tagpreferenceDescTag is the schema descriptor for tag field.
-	tagpreferenceDescTag := tagpreferenceFields[0].Descriptor()
-	// tagpreference.TagValidator is a validator for the "tag" field. It is called by the builders before save.
-	tagpreference.TagValidator = tagpreferenceDescTag.Validators[0].(func(string) error)
 	// tagpreferenceDescAction is the schema descriptor for action field.
 	tagpreferenceDescAction := tagpreferenceFields[1].Descriptor()
 	// tagpreference.ActionValidator is a validator for the "action" field. It is called by the builders before save.
@@ -225,12 +225,12 @@ func init() {
 	tagpreference.DefaultUpdatedAt = tagpreferenceDescUpdatedAt.Default.(func() time.Time)
 	// tagpreference.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	tagpreference.UpdateDefaultUpdatedAt = tagpreferenceDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// tagpreferenceDescID is the schema descriptor for id field.
+	tagpreferenceDescID := tagpreferenceFields[0].Descriptor()
+	// tagpreference.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	tagpreference.IDValidator = tagpreferenceDescID.Validators[0].(func(string) error)
 	tagsyncbaselineFields := schema.TagSyncBaseline{}.Fields()
 	_ = tagsyncbaselineFields
-	// tagsyncbaselineDescTag is the schema descriptor for tag field.
-	tagsyncbaselineDescTag := tagsyncbaselineFields[0].Descriptor()
-	// tagsyncbaseline.TagValidator is a validator for the "tag" field. It is called by the builders before save.
-	tagsyncbaseline.TagValidator = tagsyncbaselineDescTag.Validators[0].(func(string) error)
 	// tagsyncbaselineDescAction is the schema descriptor for action field.
 	tagsyncbaselineDescAction := tagsyncbaselineFields[1].Descriptor()
 	// tagsyncbaseline.ActionValidator is a validator for the "action" field. It is called by the builders before save.
@@ -249,4 +249,8 @@ func init() {
 	tagsyncbaseline.DefaultUpdatedAt = tagsyncbaselineDescUpdatedAt.Default.(func() time.Time)
 	// tagsyncbaseline.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	tagsyncbaseline.UpdateDefaultUpdatedAt = tagsyncbaselineDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// tagsyncbaselineDescID is the schema descriptor for id field.
+	tagsyncbaselineDescID := tagsyncbaselineFields[0].Descriptor()
+	// tagsyncbaseline.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	tagsyncbaseline.IDValidator = tagsyncbaselineDescID.Validators[0].(func(string) error)
 }

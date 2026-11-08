@@ -48,7 +48,7 @@ type EngineState struct {
 
 func (s *Service) getState(ctx context.Context, key string) (string, bool, error) {
 	row, err := s.client.SyncState.Query().
-		Where(syncstate.Key(key)).
+		Where(syncstate.ID(key)).
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -61,14 +61,14 @@ func (s *Service) getState(ctx context.Context, key string) (string, bool, error
 
 func (s *Service) setState(ctx context.Context, key, value string) error {
 	existing, err := s.client.SyncState.Query().
-		Where(syncstate.Key(key)).
+		Where(syncstate.ID(key)).
 		Only(ctx)
 	if err != nil && !ent.IsNotFound(err) {
 		return fmt.Errorf("read sync state %q: %w", key, err)
 	}
 	if existing == nil {
 		if _, err := s.client.SyncState.Create().
-			SetKey(key).
+			SetID(key).
 			SetValue(value).
 			Save(ctx); err != nil {
 			return fmt.Errorf("write sync state %q: %w", key, err)
@@ -79,7 +79,7 @@ func (s *Service) setState(ctx context.Context, key, value string) error {
 		return nil
 	}
 	if err := s.client.SyncState.Update().
-		Where(syncstate.Key(key)).
+		Where(syncstate.ID(key)).
 		SetValue(value).
 		Exec(ctx); err != nil {
 		return fmt.Errorf("write sync state %q: %w", key, err)

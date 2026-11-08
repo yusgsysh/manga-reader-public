@@ -40,7 +40,7 @@ func (_d *TagPreferenceDelete) ExecX(ctx context.Context) int {
 }
 
 func (_d *TagPreferenceDelete) sqlExec(ctx context.Context) (int, error) {
-	_spec := sqlgraph.NewDeleteSpec(tagpreference.Table, sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewDeleteSpec(tagpreference.Table, sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeString))
 	if ps := _d.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {

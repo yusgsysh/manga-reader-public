@@ -26,7 +26,14 @@ func (SyncState) Annotations() []schema.Annotation {
 // Fields of the SyncState.
 func (SyncState) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("key").Unique(),
+		// The key is the identity: each setting is a single row, so an
+		// auto-increment id would only duplicate the natural key. ent exposes
+		// the primary key as "id" in Go and stores it in the "key" column.
+		field.String("id").
+			StorageKey("key").
+			NotEmpty().
+			Unique().
+			Immutable(),
 		field.String("value").Default(""),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}

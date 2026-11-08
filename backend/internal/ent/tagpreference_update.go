@@ -28,20 +28,6 @@ func (_u *TagPreferenceUpdate) Where(ps ...predicate.TagPreference) *TagPreferen
 	return _u
 }
 
-// SetTag sets the "tag" field.
-func (_u *TagPreferenceUpdate) SetTag(v string) *TagPreferenceUpdate {
-	_u.mutation.SetTag(v)
-	return _u
-}
-
-// SetNillableTag sets the "tag" field if the given value is not nil.
-func (_u *TagPreferenceUpdate) SetNillableTag(v *string) *TagPreferenceUpdate {
-	if v != nil {
-		_u.SetTag(*v)
-	}
-	return _u
-}
-
 // SetAction sets the "action" field.
 func (_u *TagPreferenceUpdate) SetAction(v string) *TagPreferenceUpdate {
 	_u.mutation.SetAction(v)
@@ -126,11 +112,6 @@ func (_u *TagPreferenceUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *TagPreferenceUpdate) check() error {
-	if v, ok := _u.mutation.Tag(); ok {
-		if err := tagpreference.TagValidator(v); err != nil {
-			return &ValidationError{Name: "tag", err: fmt.Errorf(`ent: validator failed for field "TagPreference.tag": %w`, err)}
-		}
-	}
 	if v, ok := _u.mutation.Action(); ok {
 		if err := tagpreference.ActionValidator(v); err != nil {
 			return &ValidationError{Name: "action", err: fmt.Errorf(`ent: validator failed for field "TagPreference.action": %w`, err)}
@@ -143,16 +124,13 @@ func (_u *TagPreferenceUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(tagpreference.Table, tagpreference.Columns, sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(tagpreference.Table, tagpreference.Columns, sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeString))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
-	}
-	if value, ok := _u.mutation.Tag(); ok {
-		_spec.SetField(tagpreference.FieldTag, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagpreference.FieldAction, field.TypeString, value)
@@ -184,20 +162,6 @@ type TagPreferenceUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *TagPreferenceMutation
-}
-
-// SetTag sets the "tag" field.
-func (_u *TagPreferenceUpdateOne) SetTag(v string) *TagPreferenceUpdateOne {
-	_u.mutation.SetTag(v)
-	return _u
-}
-
-// SetNillableTag sets the "tag" field if the given value is not nil.
-func (_u *TagPreferenceUpdateOne) SetNillableTag(v *string) *TagPreferenceUpdateOne {
-	if v != nil {
-		_u.SetTag(*v)
-	}
-	return _u
 }
 
 // SetAction sets the "action" field.
@@ -297,11 +261,6 @@ func (_u *TagPreferenceUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *TagPreferenceUpdateOne) check() error {
-	if v, ok := _u.mutation.Tag(); ok {
-		if err := tagpreference.TagValidator(v); err != nil {
-			return &ValidationError{Name: "tag", err: fmt.Errorf(`ent: validator failed for field "TagPreference.tag": %w`, err)}
-		}
-	}
 	if v, ok := _u.mutation.Action(); ok {
 		if err := tagpreference.ActionValidator(v); err != nil {
 			return &ValidationError{Name: "action", err: fmt.Errorf(`ent: validator failed for field "TagPreference.action": %w`, err)}
@@ -314,7 +273,7 @@ func (_u *TagPreferenceUpdateOne) sqlSave(ctx context.Context) (_node *TagPrefer
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(tagpreference.Table, tagpreference.Columns, sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(tagpreference.Table, tagpreference.Columns, sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeString))
 	id, ok := _u.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "TagPreference.id" for update`)}
@@ -338,9 +297,6 @@ func (_u *TagPreferenceUpdateOne) sqlSave(ctx context.Context) (_node *TagPrefer
 				ps[i](selector)
 			}
 		}
-	}
-	if value, ok := _u.mutation.Tag(); ok {
-		_spec.SetField(tagpreference.FieldTag, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagpreference.FieldAction, field.TypeString, value)

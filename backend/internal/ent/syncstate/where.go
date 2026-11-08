@@ -10,53 +10,58 @@ import (
 )
 
 // ID filters vertices based on their ID field.
-func ID(id int) predicate.SyncState {
+func ID(id string) predicate.SyncState {
 	return predicate.SyncState(sql.FieldEQ(FieldID, id))
 }
 
 // IDEQ applies the EQ predicate on the ID field.
-func IDEQ(id int) predicate.SyncState {
+func IDEQ(id string) predicate.SyncState {
 	return predicate.SyncState(sql.FieldEQ(FieldID, id))
 }
 
 // IDNEQ applies the NEQ predicate on the ID field.
-func IDNEQ(id int) predicate.SyncState {
+func IDNEQ(id string) predicate.SyncState {
 	return predicate.SyncState(sql.FieldNEQ(FieldID, id))
 }
 
 // IDIn applies the In predicate on the ID field.
-func IDIn(ids ...int) predicate.SyncState {
+func IDIn(ids ...string) predicate.SyncState {
 	return predicate.SyncState(sql.FieldIn(FieldID, ids...))
 }
 
 // IDNotIn applies the NotIn predicate on the ID field.
-func IDNotIn(ids ...int) predicate.SyncState {
+func IDNotIn(ids ...string) predicate.SyncState {
 	return predicate.SyncState(sql.FieldNotIn(FieldID, ids...))
 }
 
 // IDGT applies the GT predicate on the ID field.
-func IDGT(id int) predicate.SyncState {
+func IDGT(id string) predicate.SyncState {
 	return predicate.SyncState(sql.FieldGT(FieldID, id))
 }
 
 // IDGTE applies the GTE predicate on the ID field.
-func IDGTE(id int) predicate.SyncState {
+func IDGTE(id string) predicate.SyncState {
 	return predicate.SyncState(sql.FieldGTE(FieldID, id))
 }
 
 // IDLT applies the LT predicate on the ID field.
-func IDLT(id int) predicate.SyncState {
+func IDLT(id string) predicate.SyncState {
 	return predicate.SyncState(sql.FieldLT(FieldID, id))
 }
 
 // IDLTE applies the LTE predicate on the ID field.
-func IDLTE(id int) predicate.SyncState {
+func IDLTE(id string) predicate.SyncState {
 	return predicate.SyncState(sql.FieldLTE(FieldID, id))
 }
 
-// Key applies equality check predicate on the "key" field. It's identical to KeyEQ.
-func Key(v string) predicate.SyncState {
-	return predicate.SyncState(sql.FieldEQ(FieldKey, v))
+// IDEqualFold applies the EqualFold predicate on the ID field.
+func IDEqualFold(id string) predicate.SyncState {
+	return predicate.SyncState(sql.FieldEqualFold(FieldID, id))
+}
+
+// IDContainsFold applies the ContainsFold predicate on the ID field.
+func IDContainsFold(id string) predicate.SyncState {
+	return predicate.SyncState(sql.FieldContainsFold(FieldID, id))
 }
 
 // Value applies equality check predicate on the "value" field. It's identical to ValueEQ.
@@ -67,71 +72,6 @@ func Value(v string) predicate.SyncState {
 // UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
 func UpdatedAt(v time.Time) predicate.SyncState {
 	return predicate.SyncState(sql.FieldEQ(FieldUpdatedAt, v))
-}
-
-// KeyEQ applies the EQ predicate on the "key" field.
-func KeyEQ(v string) predicate.SyncState {
-	return predicate.SyncState(sql.FieldEQ(FieldKey, v))
-}
-
-// KeyNEQ applies the NEQ predicate on the "key" field.
-func KeyNEQ(v string) predicate.SyncState {
-	return predicate.SyncState(sql.FieldNEQ(FieldKey, v))
-}
-
-// KeyIn applies the In predicate on the "key" field.
-func KeyIn(vs ...string) predicate.SyncState {
-	return predicate.SyncState(sql.FieldIn(FieldKey, vs...))
-}
-
-// KeyNotIn applies the NotIn predicate on the "key" field.
-func KeyNotIn(vs ...string) predicate.SyncState {
-	return predicate.SyncState(sql.FieldNotIn(FieldKey, vs...))
-}
-
-// KeyGT applies the GT predicate on the "key" field.
-func KeyGT(v string) predicate.SyncState {
-	return predicate.SyncState(sql.FieldGT(FieldKey, v))
-}
-
-// KeyGTE applies the GTE predicate on the "key" field.
-func KeyGTE(v string) predicate.SyncState {
-	return predicate.SyncState(sql.FieldGTE(FieldKey, v))
-}
-
-// KeyLT applies the LT predicate on the "key" field.
-func KeyLT(v string) predicate.SyncState {
-	return predicate.SyncState(sql.FieldLT(FieldKey, v))
-}
-
-// KeyLTE applies the LTE predicate on the "key" field.
-func KeyLTE(v string) predicate.SyncState {
-	return predicate.SyncState(sql.FieldLTE(FieldKey, v))
-}
-
-// KeyContains applies the Contains predicate on the "key" field.
-func KeyContains(v string) predicate.SyncState {
-	return predicate.SyncState(sql.FieldContains(FieldKey, v))
-}
-
-// KeyHasPrefix applies the HasPrefix predicate on the "key" field.
-func KeyHasPrefix(v string) predicate.SyncState {
-	return predicate.SyncState(sql.FieldHasPrefix(FieldKey, v))
-}
-
-// KeyHasSuffix applies the HasSuffix predicate on the "key" field.
-func KeyHasSuffix(v string) predicate.SyncState {
-	return predicate.SyncState(sql.FieldHasSuffix(FieldKey, v))
-}
-
-// KeyEqualFold applies the EqualFold predicate on the "key" field.
-func KeyEqualFold(v string) predicate.SyncState {
-	return predicate.SyncState(sql.FieldEqualFold(FieldKey, v))
-}
-
-// KeyContainsFold applies the ContainsFold predicate on the "key" field.
-func KeyContainsFold(v string) predicate.SyncState {
-	return predicate.SyncState(sql.FieldContainsFold(FieldKey, v))
 }
 
 // ValueEQ applies the EQ predicate on the "value" field.

@@ -168,14 +168,14 @@ func (m *syncMockServer) mutations() int {
 
 func seedTagRule(t *testing.T, client *ent.Client, tag, action string, weight int) {
 	t.Helper()
-	if _, err := client.TagPreference.Create().SetTag(tag).SetAction(action).SetWeight(weight).Save(t.Context()); err != nil {
+	if _, err := client.TagPreference.Create().SetID(tag).SetAction(action).SetWeight(weight).Save(t.Context()); err != nil {
 		t.Fatalf("seed rule %s: %v", tag, err)
 	}
 }
 
 func seedBaseline(t *testing.T, client *ent.Client, tag, action string, weight int) {
 	t.Helper()
-	if _, err := client.TagSyncBaseline.Create().SetTag(tag).SetAction(action).SetWeight(weight).Save(t.Context()); err != nil {
+	if _, err := client.TagSyncBaseline.Create().SetID(tag).SetAction(action).SetWeight(weight).Save(t.Context()); err != nil {
 		t.Fatalf("seed baseline %s: %v", tag, err)
 	}
 }
@@ -189,7 +189,7 @@ func readRules(t *testing.T, client *ent.Client) map[string]model.TagPreference 
 	}
 	out := make(map[string]model.TagPreference, len(rows))
 	for _, row := range rows {
-		out[row.Tag] = model.TagPreference{Tag: row.Tag, Action: row.Action, Weight: row.Weight}
+		out[row.ID] = model.TagPreference{Tag: row.ID, Action: row.Action, Weight: row.Weight}
 	}
 	return out
 }
@@ -203,7 +203,7 @@ func readBaseline(t *testing.T, client *ent.Client) map[string]model.TagPreferen
 	}
 	out := make(map[string]model.TagPreference, len(rows))
 	for _, row := range rows {
-		out[row.Tag] = model.TagPreference{Tag: row.Tag, Action: row.Action, Weight: row.Weight}
+		out[row.ID] = model.TagPreference{Tag: row.ID, Action: row.Action, Weight: row.Weight}
 	}
 	return out
 }

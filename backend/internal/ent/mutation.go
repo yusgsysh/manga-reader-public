@@ -4128,8 +4128,7 @@ type SyncStateMutation struct {
 	config
 	op            Op
 	typ           string
-	id            *int
-	key           *string
+	id            *string
 	value         *string
 	updated_at    *time.Time
 	clearedFields map[string]struct{}
@@ -4158,7 +4157,7 @@ func newSyncStateMutation(c config, op Op, opts ...syncstateOption) *SyncStateMu
 }
 
 // withSyncStateID sets the ID field of the mutation.
-func withSyncStateID(id int) syncstateOption {
+func withSyncStateID(id string) syncstateOption {
 	return func(m *SyncStateMutation) {
 		var (
 			err   error
@@ -4208,9 +4207,15 @@ func (m SyncStateMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of SyncState entities.
+func (m *SyncStateMutation) SetID(id string) {
+	m.id = &id
+}
+
 // ID returns the ID value in the mutation. Note that the ID is only available
 // if it was provided to the builder or after it was returned from the database.
-func (m *SyncStateMutation) ID() (id int, exists bool) {
+func (m *SyncStateMutation) ID() (id string, exists bool) {
 	if m.id == nil {
 		return
 	}
@@ -4221,12 +4226,12 @@ func (m *SyncStateMutation) ID() (id int, exists bool) {
 // That means, if the mutation is applied within a transaction with an isolation level such
 // as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
 // or updated by the mutation.
-func (m *SyncStateMutation) IDs(ctx context.Context) ([]int, error) {
+func (m *SyncStateMutation) IDs(ctx context.Context) ([]string, error) {
 	switch {
 	case m.op.Is(OpUpdateOne | OpDeleteOne):
 		id, exists := m.ID()
 		if exists {
-			return []int{id}, nil
+			return []string{id}, nil
 		}
 		fallthrough
 	case m.op.Is(OpUpdate | OpDelete):
@@ -4234,42 +4239,6 @@ func (m *SyncStateMutation) IDs(ctx context.Context) ([]int, error) {
 	default:
 		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
 	}
-}
-
-// SetKey sets the "key" field.
-func (m *SyncStateMutation) SetKey(s string) {
-	m.key = &s
-}
-
-// Key returns the value of the "key" field in the mutation.
-func (m *SyncStateMutation) Key() (r string, exists bool) {
-	v := m.key
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldKey returns the old "key" field's value of the SyncState entity.
-// If the SyncState object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SyncStateMutation) OldKey(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldKey is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldKey requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldKey: %w", err)
-	}
-	return oldValue.Key, nil
-}
-
-// ResetKey resets all changes to the "key" field.
-func (m *SyncStateMutation) ResetKey() {
-	m.key = nil
 }
 
 // SetValue sets the "value" field.
@@ -4378,10 +4347,7 @@ func (m *SyncStateMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SyncStateMutation) Fields() []string {
-	fields := make([]string, 0, 3)
-	if m.key != nil {
-		fields = append(fields, syncstate.FieldKey)
-	}
+	fields := make([]string, 0, 2)
 	if m.value != nil {
 		fields = append(fields, syncstate.FieldValue)
 	}
@@ -4396,8 +4362,6 @@ func (m *SyncStateMutation) Fields() []string {
 // schema.
 func (m *SyncStateMutation) Field(name string) (ent.Value, bool) {
 	switch name {
-	case syncstate.FieldKey:
-		return m.Key()
 	case syncstate.FieldValue:
 		return m.Value()
 	case syncstate.FieldUpdatedAt:
@@ -4411,8 +4375,6 @@ func (m *SyncStateMutation) Field(name string) (ent.Value, bool) {
 // database failed.
 func (m *SyncStateMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
-	case syncstate.FieldKey:
-		return m.OldKey(ctx)
 	case syncstate.FieldValue:
 		return m.OldValue(ctx)
 	case syncstate.FieldUpdatedAt:
@@ -4426,13 +4388,6 @@ func (m *SyncStateMutation) OldField(ctx context.Context, name string) (ent.Valu
 // type.
 func (m *SyncStateMutation) SetField(name string, value ent.Value) error {
 	switch name {
-	case syncstate.FieldKey:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetKey(v)
-		return nil
 	case syncstate.FieldValue:
 		v, ok := value.(string)
 		if !ok {
@@ -4496,9 +4451,6 @@ func (m *SyncStateMutation) ClearField(name string) error {
 // It returns an error if the field is not defined in the schema.
 func (m *SyncStateMutation) ResetField(name string) error {
 	switch name {
-	case syncstate.FieldKey:
-		m.ResetKey()
-		return nil
 	case syncstate.FieldValue:
 		m.ResetValue()
 		return nil
@@ -4562,8 +4514,7 @@ type TagPreferenceMutation struct {
 	config
 	op            Op
 	typ           string
-	id            *int
-	tag           *string
+	id            *string
 	action        *string
 	weight        *int
 	addweight     *int
@@ -4595,7 +4546,7 @@ func newTagPreferenceMutation(c config, op Op, opts ...tagpreferenceOption) *Tag
 }
 
 // withTagPreferenceID sets the ID field of the mutation.
-func withTagPreferenceID(id int) tagpreferenceOption {
+func withTagPreferenceID(id string) tagpreferenceOption {
 	return func(m *TagPreferenceMutation) {
 		var (
 			err   error
@@ -4645,9 +4596,15 @@ func (m TagPreferenceMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of TagPreference entities.
+func (m *TagPreferenceMutation) SetID(id string) {
+	m.id = &id
+}
+
 // ID returns the ID value in the mutation. Note that the ID is only available
 // if it was provided to the builder or after it was returned from the database.
-func (m *TagPreferenceMutation) ID() (id int, exists bool) {
+func (m *TagPreferenceMutation) ID() (id string, exists bool) {
 	if m.id == nil {
 		return
 	}
@@ -4658,12 +4615,12 @@ func (m *TagPreferenceMutation) ID() (id int, exists bool) {
 // That means, if the mutation is applied within a transaction with an isolation level such
 // as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
 // or updated by the mutation.
-func (m *TagPreferenceMutation) IDs(ctx context.Context) ([]int, error) {
+func (m *TagPreferenceMutation) IDs(ctx context.Context) ([]string, error) {
 	switch {
 	case m.op.Is(OpUpdateOne | OpDeleteOne):
 		id, exists := m.ID()
 		if exists {
-			return []int{id}, nil
+			return []string{id}, nil
 		}
 		fallthrough
 	case m.op.Is(OpUpdate | OpDelete):
@@ -4671,42 +4628,6 @@ func (m *TagPreferenceMutation) IDs(ctx context.Context) ([]int, error) {
 	default:
 		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
 	}
-}
-
-// SetTag sets the "tag" field.
-func (m *TagPreferenceMutation) SetTag(s string) {
-	m.tag = &s
-}
-
-// Tag returns the value of the "tag" field in the mutation.
-func (m *TagPreferenceMutation) Tag() (r string, exists bool) {
-	v := m.tag
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldTag returns the old "tag" field's value of the TagPreference entity.
-// If the TagPreference object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TagPreferenceMutation) OldTag(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldTag is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldTag requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldTag: %w", err)
-	}
-	return oldValue.Tag, nil
-}
-
-// ResetTag resets all changes to the "tag" field.
-func (m *TagPreferenceMutation) ResetTag() {
-	m.tag = nil
 }
 
 // SetAction sets the "action" field.
@@ -4907,10 +4828,7 @@ func (m *TagPreferenceMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TagPreferenceMutation) Fields() []string {
-	fields := make([]string, 0, 5)
-	if m.tag != nil {
-		fields = append(fields, tagpreference.FieldTag)
-	}
+	fields := make([]string, 0, 4)
 	if m.action != nil {
 		fields = append(fields, tagpreference.FieldAction)
 	}
@@ -4931,8 +4849,6 @@ func (m *TagPreferenceMutation) Fields() []string {
 // schema.
 func (m *TagPreferenceMutation) Field(name string) (ent.Value, bool) {
 	switch name {
-	case tagpreference.FieldTag:
-		return m.Tag()
 	case tagpreference.FieldAction:
 		return m.Action()
 	case tagpreference.FieldWeight:
@@ -4950,8 +4866,6 @@ func (m *TagPreferenceMutation) Field(name string) (ent.Value, bool) {
 // database failed.
 func (m *TagPreferenceMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
-	case tagpreference.FieldTag:
-		return m.OldTag(ctx)
 	case tagpreference.FieldAction:
 		return m.OldAction(ctx)
 	case tagpreference.FieldWeight:
@@ -4969,13 +4883,6 @@ func (m *TagPreferenceMutation) OldField(ctx context.Context, name string) (ent.
 // type.
 func (m *TagPreferenceMutation) SetField(name string, value ent.Value) error {
 	switch name {
-	case tagpreference.FieldTag:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetTag(v)
-		return nil
 	case tagpreference.FieldAction:
 		v, ok := value.(string)
 		if !ok {
@@ -5068,9 +4975,6 @@ func (m *TagPreferenceMutation) ClearField(name string) error {
 // It returns an error if the field is not defined in the schema.
 func (m *TagPreferenceMutation) ResetField(name string) error {
 	switch name {
-	case tagpreference.FieldTag:
-		m.ResetTag()
-		return nil
 	case tagpreference.FieldAction:
 		m.ResetAction()
 		return nil
@@ -5140,8 +5044,7 @@ type TagSyncBaselineMutation struct {
 	config
 	op            Op
 	typ           string
-	id            *int
-	tag           *string
+	id            *string
 	action        *string
 	weight        *int
 	addweight     *int
@@ -5173,7 +5076,7 @@ func newTagSyncBaselineMutation(c config, op Op, opts ...tagsyncbaselineOption) 
 }
 
 // withTagSyncBaselineID sets the ID field of the mutation.
-func withTagSyncBaselineID(id int) tagsyncbaselineOption {
+func withTagSyncBaselineID(id string) tagsyncbaselineOption {
 	return func(m *TagSyncBaselineMutation) {
 		var (
 			err   error
@@ -5223,9 +5126,15 @@ func (m TagSyncBaselineMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of TagSyncBaseline entities.
+func (m *TagSyncBaselineMutation) SetID(id string) {
+	m.id = &id
+}
+
 // ID returns the ID value in the mutation. Note that the ID is only available
 // if it was provided to the builder or after it was returned from the database.
-func (m *TagSyncBaselineMutation) ID() (id int, exists bool) {
+func (m *TagSyncBaselineMutation) ID() (id string, exists bool) {
 	if m.id == nil {
 		return
 	}
@@ -5236,12 +5145,12 @@ func (m *TagSyncBaselineMutation) ID() (id int, exists bool) {
 // That means, if the mutation is applied within a transaction with an isolation level such
 // as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
 // or updated by the mutation.
-func (m *TagSyncBaselineMutation) IDs(ctx context.Context) ([]int, error) {
+func (m *TagSyncBaselineMutation) IDs(ctx context.Context) ([]string, error) {
 	switch {
 	case m.op.Is(OpUpdateOne | OpDeleteOne):
 		id, exists := m.ID()
 		if exists {
-			return []int{id}, nil
+			return []string{id}, nil
 		}
 		fallthrough
 	case m.op.Is(OpUpdate | OpDelete):
@@ -5249,42 +5158,6 @@ func (m *TagSyncBaselineMutation) IDs(ctx context.Context) ([]int, error) {
 	default:
 		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
 	}
-}
-
-// SetTag sets the "tag" field.
-func (m *TagSyncBaselineMutation) SetTag(s string) {
-	m.tag = &s
-}
-
-// Tag returns the value of the "tag" field in the mutation.
-func (m *TagSyncBaselineMutation) Tag() (r string, exists bool) {
-	v := m.tag
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldTag returns the old "tag" field's value of the TagSyncBaseline entity.
-// If the TagSyncBaseline object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TagSyncBaselineMutation) OldTag(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldTag is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldTag requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldTag: %w", err)
-	}
-	return oldValue.Tag, nil
-}
-
-// ResetTag resets all changes to the "tag" field.
-func (m *TagSyncBaselineMutation) ResetTag() {
-	m.tag = nil
 }
 
 // SetAction sets the "action" field.
@@ -5485,10 +5358,7 @@ func (m *TagSyncBaselineMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TagSyncBaselineMutation) Fields() []string {
-	fields := make([]string, 0, 5)
-	if m.tag != nil {
-		fields = append(fields, tagsyncbaseline.FieldTag)
-	}
+	fields := make([]string, 0, 4)
 	if m.action != nil {
 		fields = append(fields, tagsyncbaseline.FieldAction)
 	}
@@ -5509,8 +5379,6 @@ func (m *TagSyncBaselineMutation) Fields() []string {
 // schema.
 func (m *TagSyncBaselineMutation) Field(name string) (ent.Value, bool) {
 	switch name {
-	case tagsyncbaseline.FieldTag:
-		return m.Tag()
 	case tagsyncbaseline.FieldAction:
 		return m.Action()
 	case tagsyncbaseline.FieldWeight:
@@ -5528,8 +5396,6 @@ func (m *TagSyncBaselineMutation) Field(name string) (ent.Value, bool) {
 // database failed.
 func (m *TagSyncBaselineMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
-	case tagsyncbaseline.FieldTag:
-		return m.OldTag(ctx)
 	case tagsyncbaseline.FieldAction:
 		return m.OldAction(ctx)
 	case tagsyncbaseline.FieldWeight:
@@ -5547,13 +5413,6 @@ func (m *TagSyncBaselineMutation) OldField(ctx context.Context, name string) (en
 // type.
 func (m *TagSyncBaselineMutation) SetField(name string, value ent.Value) error {
 	switch name {
-	case tagsyncbaseline.FieldTag:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetTag(v)
-		return nil
 	case tagsyncbaseline.FieldAction:
 		v, ok := value.(string)
 		if !ok {
@@ -5646,9 +5505,6 @@ func (m *TagSyncBaselineMutation) ClearField(name string) error {
 // It returns an error if the field is not defined in the schema.
 func (m *TagSyncBaselineMutation) ResetField(name string) error {
 	switch name {
-	case tagsyncbaseline.FieldTag:
-		m.ResetTag()
-		return nil
 	case tagsyncbaseline.FieldAction:
 		m.ResetAction()
 		return nil

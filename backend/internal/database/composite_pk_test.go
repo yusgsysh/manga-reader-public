@@ -93,11 +93,40 @@ func TestCompositePK_FreshSchema(t *testing.T) {
 	if !hasIndex(t, db.Conn, "prefill_job", "prefilljob_status_created_at") {
 		t.Error("prefill_job lost the (status, created_at) index")
 	}
+
+	// The tag tables use the tag itself as the natural primary key.
+	for table, index := range map[string]string{
+		"tag_preference":    "tag_preference_tag_key",
+		"tag_sync_baseline": "tag_sync_baseline_tag_key",
+	} {
+		ddl := tableDDL(t, db.Conn, table)
+		if !strings.Contains(ddl, "PRIMARY KEY (`tag`)") {
+			t.Errorf("%s DDL missing tag primary key:\n%s", table, ddl)
+		}
+		if hasColumn(t, db.Conn, table, "id") {
+			t.Errorf("%s still has an auto-increment id column:\n%s", table, ddl)
+		}
+		if hasIndex(t, db.Conn, table, index) {
+			t.Errorf("%s still has the unique index that the primary key replaces", table)
+		}
+	}
+
+	// Settings are keyed by their name.
+	ddl = tableDDL(t, db.Conn, "sync_state")
+	if !strings.Contains(ddl, "PRIMARY KEY (`key`)") {
+		t.Errorf("sync_state DDL missing key primary key:\n%s", ddl)
+	}
+	if hasColumn(t, db.Conn, "sync_state", "id") {
+		t.Errorf("sync_state still has an auto-increment id column:\n%s", ddl)
+	}
+	if hasIndex(t, db.Conn, "sync_state", "sync_state_key_key") {
+		t.Error("sync_state still has the unique index that the primary key replaces")
+	}
 }
 
 // A database created before the primary keys changed must migrate in place:
 // tables are rebuilt with the new keys, existing rows survive, and ent can
-// read them back through the new composite predicates.
+// read them back through the new primary-key predicates.
 func TestCompositePK_LegacySchemaMigration(t *testing.T) {
 	dsn := filepath.Join(t.TempDir(), "legacy.db")
 
@@ -134,12 +163,43 @@ CREATE TABLE "reading_progress" (
   "updated_at" datetime NOT NULL
 );
 CREATE UNIQUE INDEX "readingprogress_gallery_id_token" ON "reading_progress"("gallery_id", "token");
+CREATE TABLE "tag_preference" (
+  "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "tag" text NOT NULL,
+  "action" text NOT NULL,
+  "weight" integer NOT NULL DEFAULT 10,
+  "created_at" datetime NOT NULL,
+  "updated_at" datetime NOT NULL
+);
+CREATE UNIQUE INDEX "tag_preference_tag_key" ON "tag_preference"("tag");
+CREATE TABLE "tag_sync_baseline" (
+  "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "tag" text NOT NULL,
+  "action" text NOT NULL,
+  "weight" integer NOT NULL DEFAULT 10,
+  "created_at" datetime NOT NULL,
+  "updated_at" datetime NOT NULL
+);
+CREATE UNIQUE INDEX "tag_sync_baseline_tag_key" ON "tag_sync_baseline"("tag");
+CREATE TABLE "sync_state" (
+  "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "key" text NOT NULL,
+  "value" text NOT NULL DEFAULT '',
+  "updated_at" datetime NOT NULL
+);
+CREATE UNIQUE INDEX "sync_state_key_key" ON "sync_state"("key");
 INSERT INTO bookshelf (gallery_id, token, created_at, updated_at)
   VALUES (111, 'aaa', '2024-01-01 00:00:00', '2024-01-01 00:00:00');
 INSERT INTO gallery_cache (gallery_id, token, title, created_at, updated_at)
   VALUES (111, 'aaa', 'Legacy Title', '2024-01-01 00:00:00', '2024-01-01 00:00:00');
 INSERT INTO reading_progress (gallery_id, token, current_page, progress, completed, created_at, updated_at)
   VALUES (111, 'aaa', 3, 0.3, false, '2024-01-01 00:00:00', '2024-01-01 00:00:00');
+INSERT INTO tag_preference (tag, action, weight, created_at, updated_at)
+  VALUES ('female:yuri', 'like', 10, '2024-01-01 00:00:00', '2024-01-01 00:00:00');
+INSERT INTO tag_sync_baseline (tag, action, weight, created_at, updated_at)
+  VALUES ('female:yuri', 'like', 10, '2024-01-01 00:00:00', '2024-01-01 00:00:00');
+INSERT INTO sync_state ("key", value, updated_at)
+  VALUES ('client.enabled', 'true', '2024-01-01 00:00:00');
 `
 	if _, err := seed.Exec(legacyDDL); err != nil {
 		t.Fatalf("seed legacy schema: %v", err)
@@ -156,13 +216,23 @@ INSERT INTO reading_progress (gallery_id, token, current_page, progress, complet
 	ctx := context.Background()
 
 	for table, index := range map[string]string{
-		"bookshelf":        "bookshelf_gallery_id_token",
-		"gallery_cache":    "gallerycache_gallery_id_token",
-		"reading_progress": "readingprogress_gallery_id_token",
+		"bookshelf":         "bookshelf_gallery_id_token",
+		"gallery_cache":     "gallerycache_gallery_id_token",
+		"reading_progress":  "readingprogress_gallery_id_token",
+		"tag_preference":    "tag_preference_tag_key",
+		"tag_sync_baseline": "tag_sync_baseline_tag_key",
+		"sync_state":        "sync_state_key_key",
 	} {
 		ddl := tableDDL(t, db.Conn, table)
-		if !strings.Contains(ddl, "PRIMARY KEY (`gallery_id`, `token`)") {
-			t.Errorf("%s was not rebuilt with a composite primary key:\n%s", table, ddl)
+		wantPK := "PRIMARY KEY (`gallery_id`, `token`)"
+		switch table {
+		case "tag_preference", "tag_sync_baseline":
+			wantPK = "PRIMARY KEY (`tag`)"
+		case "sync_state":
+			wantPK = "PRIMARY KEY (`key`)"
+		}
+		if !strings.Contains(ddl, wantPK) {
+			t.Errorf("%s was not rebuilt with %s:\n%s", table, wantPK, ddl)
 		}
 		if hasColumn(t, db.Conn, table, "id") {
 			t.Errorf("%s kept the obsolete id column:\n%s", table, ddl)
@@ -200,6 +270,36 @@ INSERT INTO reading_progress (gallery_id, token, current_page, progress, complet
 	}
 	if prog.CurrentPage != 3 || prog.Progress != 0.3 {
 		t.Errorf("reading_progress = (%d, %v), want (3, 0.3)", prog.CurrentPage, prog.Progress)
+	}
+
+	rule, err := db.Client.TagPreference.Get(ctx, "female:yuri")
+	if err != nil {
+		t.Fatalf("read tag_preference row: %v", err)
+	}
+	if rule.Action != "like" || rule.Weight != 10 {
+		t.Errorf("tag_preference = (%q, %d), want (like, 10)", rule.Action, rule.Weight)
+	}
+	baseline, err := db.Client.TagSyncBaseline.Get(ctx, "female:yuri")
+	if err != nil {
+		t.Fatalf("read tag_sync_baseline row: %v", err)
+	}
+	if baseline.Action != "like" || baseline.Weight != 10 {
+		t.Errorf("tag_sync_baseline = (%q, %d), want (like, 10)", baseline.Action, baseline.Weight)
+	}
+
+	state, err := db.Client.SyncState.Get(ctx, "client.enabled")
+	if err != nil {
+		t.Fatalf("read sync_state row: %v", err)
+	}
+	if state.Value != "true" {
+		t.Errorf("sync_state value = %q, want %q", state.Value, "true")
+	}
+
+	// The tag primary key still rejects duplicates after the migration.
+	if _, err := db.Client.TagPreference.Create().
+		SetID("female:yuri").SetAction("like").
+		Save(ctx); err == nil || !ent.IsConstraintError(err) {
+		t.Errorf("duplicate tag preference: err = %v, want constraint error", err)
 	}
 
 	// Rows written after the migration must collide with the legacy row.

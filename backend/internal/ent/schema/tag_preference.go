@@ -26,7 +26,14 @@ func (TagPreference) Annotations() []schema.Annotation {
 // Fields of the TagPreference.
 func (TagPreference) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("tag").Unique().NotEmpty(),
+		// The tag itself is the identity: one row per `namespace:name`, so an
+		// auto-increment id would only duplicate the natural key. ent exposes
+		// the primary key as "id" in Go and stores it in the "tag" column.
+		field.String("id").
+			StorageKey("tag").
+			NotEmpty().
+			Unique().
+			Immutable(),
 		field.String("action").NotEmpty(),
 		// Weight mirrors ExHentai My Tags tag weight: like rules are >= 0,
 		// dislike rules are <= 0. Used only for ordering (strongest first),

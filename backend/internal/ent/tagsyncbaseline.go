@@ -16,9 +16,7 @@ import (
 type TagSyncBaseline struct {
 	config `json:"-"`
 	// ID of the ent.
-	ID int `json:"id,omitempty"`
-	// Tag holds the value of the "tag" field.
-	Tag string `json:"tag,omitempty"`
+	ID string `json:"id,omitempty"`
 	// Action holds the value of the "action" field.
 	Action string `json:"action,omitempty"`
 	// Weight holds the value of the "weight" field.
@@ -35,9 +33,9 @@ func (*TagSyncBaseline) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case tagsyncbaseline.FieldID, tagsyncbaseline.FieldWeight:
+		case tagsyncbaseline.FieldWeight:
 			values[i] = new(sql.NullInt64)
-		case tagsyncbaseline.FieldTag, tagsyncbaseline.FieldAction:
+		case tagsyncbaseline.FieldID, tagsyncbaseline.FieldAction:
 			values[i] = new(sql.NullString)
 		case tagsyncbaseline.FieldCreatedAt, tagsyncbaseline.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -57,16 +55,10 @@ func (_m *TagSyncBaseline) assignValues(columns []string, values []any) error {
 	for i := range columns {
 		switch columns[i] {
 		case tagsyncbaseline.FieldID:
-			value, ok := values[i].(*sql.NullInt64)
-			if !ok {
-				return fmt.Errorf("unexpected type %T for field id", value)
-			}
-			_m.ID = int(value.Int64)
-		case tagsyncbaseline.FieldTag:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field tag", values[i])
+				return fmt.Errorf("unexpected type %T for field id", values[i])
 			} else if value.Valid {
-				_m.Tag = value.String
+				_m.ID = value.String
 			}
 		case tagsyncbaseline.FieldAction:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -128,9 +120,6 @@ func (_m *TagSyncBaseline) String() string {
 	var builder strings.Builder
 	builder.WriteString("TagSyncBaseline(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
-	builder.WriteString("tag=")
-	builder.WriteString(_m.Tag)
-	builder.WriteString(", ")
 	builder.WriteString("action=")
 	builder.WriteString(_m.Action)
 	builder.WriteString(", ")

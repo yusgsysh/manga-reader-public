@@ -28,20 +28,6 @@ func (_u *TagSyncBaselineUpdate) Where(ps ...predicate.TagSyncBaseline) *TagSync
 	return _u
 }
 
-// SetTag sets the "tag" field.
-func (_u *TagSyncBaselineUpdate) SetTag(v string) *TagSyncBaselineUpdate {
-	_u.mutation.SetTag(v)
-	return _u
-}
-
-// SetNillableTag sets the "tag" field if the given value is not nil.
-func (_u *TagSyncBaselineUpdate) SetNillableTag(v *string) *TagSyncBaselineUpdate {
-	if v != nil {
-		_u.SetTag(*v)
-	}
-	return _u
-}
-
 // SetAction sets the "action" field.
 func (_u *TagSyncBaselineUpdate) SetAction(v string) *TagSyncBaselineUpdate {
 	_u.mutation.SetAction(v)
@@ -126,11 +112,6 @@ func (_u *TagSyncBaselineUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *TagSyncBaselineUpdate) check() error {
-	if v, ok := _u.mutation.Tag(); ok {
-		if err := tagsyncbaseline.TagValidator(v); err != nil {
-			return &ValidationError{Name: "tag", err: fmt.Errorf(`ent: validator failed for field "TagSyncBaseline.tag": %w`, err)}
-		}
-	}
 	if v, ok := _u.mutation.Action(); ok {
 		if err := tagsyncbaseline.ActionValidator(v); err != nil {
 			return &ValidationError{Name: "action", err: fmt.Errorf(`ent: validator failed for field "TagSyncBaseline.action": %w`, err)}
@@ -143,16 +124,13 @@ func (_u *TagSyncBaselineUpdate) sqlSave(ctx context.Context) (_node int, err er
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
-	}
-	if value, ok := _u.mutation.Tag(); ok {
-		_spec.SetField(tagsyncbaseline.FieldTag, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagsyncbaseline.FieldAction, field.TypeString, value)
@@ -184,20 +162,6 @@ type TagSyncBaselineUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *TagSyncBaselineMutation
-}
-
-// SetTag sets the "tag" field.
-func (_u *TagSyncBaselineUpdateOne) SetTag(v string) *TagSyncBaselineUpdateOne {
-	_u.mutation.SetTag(v)
-	return _u
-}
-
-// SetNillableTag sets the "tag" field if the given value is not nil.
-func (_u *TagSyncBaselineUpdateOne) SetNillableTag(v *string) *TagSyncBaselineUpdateOne {
-	if v != nil {
-		_u.SetTag(*v)
-	}
-	return _u
 }
 
 // SetAction sets the "action" field.
@@ -297,11 +261,6 @@ func (_u *TagSyncBaselineUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *TagSyncBaselineUpdateOne) check() error {
-	if v, ok := _u.mutation.Tag(); ok {
-		if err := tagsyncbaseline.TagValidator(v); err != nil {
-			return &ValidationError{Name: "tag", err: fmt.Errorf(`ent: validator failed for field "TagSyncBaseline.tag": %w`, err)}
-		}
-	}
 	if v, ok := _u.mutation.Action(); ok {
 		if err := tagsyncbaseline.ActionValidator(v); err != nil {
 			return &ValidationError{Name: "action", err: fmt.Errorf(`ent: validator failed for field "TagSyncBaseline.action": %w`, err)}
@@ -314,7 +273,7 @@ func (_u *TagSyncBaselineUpdateOne) sqlSave(ctx context.Context) (_node *TagSync
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
 	id, ok := _u.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "TagSyncBaseline.id" for update`)}
@@ -338,9 +297,6 @@ func (_u *TagSyncBaselineUpdateOne) sqlSave(ctx context.Context) (_node *TagSync
 				ps[i](selector)
 			}
 		}
-	}
-	if value, ok := _u.mutation.Tag(); ok {
-		_spec.SetField(tagsyncbaseline.FieldTag, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagsyncbaseline.FieldAction, field.TypeString, value)

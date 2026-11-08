@@ -82,8 +82,8 @@ func (_q *SyncStateQuery) FirstX(ctx context.Context) *SyncState {
 
 // FirstID returns the first SyncState ID from the query.
 // Returns a *NotFoundError when no SyncState ID was found.
-func (_q *SyncStateQuery) FirstID(ctx context.Context) (id int, err error) {
-	var ids []int
+func (_q *SyncStateQuery) FirstID(ctx context.Context) (id string, err error) {
+	var ids []string
 	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
@@ -95,7 +95,7 @@ func (_q *SyncStateQuery) FirstID(ctx context.Context) (id int, err error) {
 }
 
 // FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *SyncStateQuery) FirstIDX(ctx context.Context) int {
+func (_q *SyncStateQuery) FirstIDX(ctx context.Context) string {
 	id, err := _q.FirstID(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -133,8 +133,8 @@ func (_q *SyncStateQuery) OnlyX(ctx context.Context) *SyncState {
 // OnlyID is like Only, but returns the only SyncState ID in the query.
 // Returns a *NotSingularError when more than one SyncState ID is found.
 // Returns a *NotFoundError when no entities are found.
-func (_q *SyncStateQuery) OnlyID(ctx context.Context) (id int, err error) {
-	var ids []int
+func (_q *SyncStateQuery) OnlyID(ctx context.Context) (id string, err error) {
+	var ids []string
 	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
@@ -150,7 +150,7 @@ func (_q *SyncStateQuery) OnlyID(ctx context.Context) (id int, err error) {
 }
 
 // OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *SyncStateQuery) OnlyIDX(ctx context.Context) int {
+func (_q *SyncStateQuery) OnlyIDX(ctx context.Context) string {
 	id, err := _q.OnlyID(ctx)
 	if err != nil {
 		panic(err)
@@ -178,7 +178,7 @@ func (_q *SyncStateQuery) AllX(ctx context.Context) []*SyncState {
 }
 
 // IDs executes the query and returns a list of SyncState IDs.
-func (_q *SyncStateQuery) IDs(ctx context.Context) (ids []int, err error) {
+func (_q *SyncStateQuery) IDs(ctx context.Context) (ids []string, err error) {
 	if _q.ctx.Unique == nil && _q.path != nil {
 		_q.Unique(true)
 	}
@@ -190,7 +190,7 @@ func (_q *SyncStateQuery) IDs(ctx context.Context) (ids []int, err error) {
 }
 
 // IDsX is like IDs, but panics if an error occurs.
-func (_q *SyncStateQuery) IDsX(ctx context.Context) []int {
+func (_q *SyncStateQuery) IDsX(ctx context.Context) []string {
 	ids, err := _q.IDs(ctx)
 	if err != nil {
 		panic(err)
@@ -262,12 +262,12 @@ func (_q *SyncStateQuery) Clone() *SyncStateQuery {
 // Example:
 //
 //	var v []struct {
-//		Key string `json:"key,omitempty"`
+//		Value string `json:"value,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.SyncState.Query().
-//		GroupBy(syncstate.FieldKey).
+//		GroupBy(syncstate.FieldValue).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *SyncStateQuery) GroupBy(field string, fields ...string) *SyncStateGroupBy {
@@ -285,11 +285,11 @@ func (_q *SyncStateQuery) GroupBy(field string, fields ...string) *SyncStateGrou
 // Example:
 //
 //	var v []struct {
-//		Key string `json:"key,omitempty"`
+//		Value string `json:"value,omitempty"`
 //	}
 //
 //	client.SyncState.Query().
-//		Select(syncstate.FieldKey).
+//		Select(syncstate.FieldValue).
 //		Scan(ctx, &v)
 func (_q *SyncStateQuery) Select(fields ...string) *SyncStateSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
@@ -365,7 +365,7 @@ func (_q *SyncStateQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (_q *SyncStateQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(syncstate.Table, syncstate.Columns, sqlgraph.NewFieldSpec(syncstate.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewQuerySpec(syncstate.Table, syncstate.Columns, sqlgraph.NewFieldSpec(syncstate.FieldID, field.TypeString))
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique

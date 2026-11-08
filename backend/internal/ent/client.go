@@ -894,7 +894,7 @@ func (c *SyncStateClient) UpdateOne(_m *SyncState) *SyncStateUpdateOne {
 }
 
 // UpdateOneID returns an update builder for the given id.
-func (c *SyncStateClient) UpdateOneID(id int) *SyncStateUpdateOne {
+func (c *SyncStateClient) UpdateOneID(id string) *SyncStateUpdateOne {
 	mutation := newSyncStateMutation(c.config, OpUpdateOne, withSyncStateID(id))
 	return &SyncStateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
@@ -911,7 +911,7 @@ func (c *SyncStateClient) DeleteOne(_m *SyncState) *SyncStateDeleteOne {
 }
 
 // DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *SyncStateClient) DeleteOneID(id int) *SyncStateDeleteOne {
+func (c *SyncStateClient) DeleteOneID(id string) *SyncStateDeleteOne {
 	builder := c.Delete().Where(syncstate.ID(id))
 	builder.mutation.id = &id
 	builder.mutation.op = OpDeleteOne
@@ -928,12 +928,12 @@ func (c *SyncStateClient) Query() *SyncStateQuery {
 }
 
 // Get returns a SyncState entity by its id.
-func (c *SyncStateClient) Get(ctx context.Context, id int) (*SyncState, error) {
+func (c *SyncStateClient) Get(ctx context.Context, id string) (*SyncState, error) {
 	return c.Query().Where(syncstate.ID(id)).Only(ctx)
 }
 
 // GetX is like Get, but panics if an error occurs.
-func (c *SyncStateClient) GetX(ctx context.Context, id int) *SyncState {
+func (c *SyncStateClient) GetX(ctx context.Context, id string) *SyncState {
 	obj, err := c.Get(ctx, id)
 	if err != nil {
 		panic(err)
@@ -1027,7 +1027,7 @@ func (c *TagPreferenceClient) UpdateOne(_m *TagPreference) *TagPreferenceUpdateO
 }
 
 // UpdateOneID returns an update builder for the given id.
-func (c *TagPreferenceClient) UpdateOneID(id int) *TagPreferenceUpdateOne {
+func (c *TagPreferenceClient) UpdateOneID(id string) *TagPreferenceUpdateOne {
 	mutation := newTagPreferenceMutation(c.config, OpUpdateOne, withTagPreferenceID(id))
 	return &TagPreferenceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
@@ -1044,7 +1044,7 @@ func (c *TagPreferenceClient) DeleteOne(_m *TagPreference) *TagPreferenceDeleteO
 }
 
 // DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *TagPreferenceClient) DeleteOneID(id int) *TagPreferenceDeleteOne {
+func (c *TagPreferenceClient) DeleteOneID(id string) *TagPreferenceDeleteOne {
 	builder := c.Delete().Where(tagpreference.ID(id))
 	builder.mutation.id = &id
 	builder.mutation.op = OpDeleteOne
@@ -1061,12 +1061,12 @@ func (c *TagPreferenceClient) Query() *TagPreferenceQuery {
 }
 
 // Get returns a TagPreference entity by its id.
-func (c *TagPreferenceClient) Get(ctx context.Context, id int) (*TagPreference, error) {
+func (c *TagPreferenceClient) Get(ctx context.Context, id string) (*TagPreference, error) {
 	return c.Query().Where(tagpreference.ID(id)).Only(ctx)
 }
 
 // GetX is like Get, but panics if an error occurs.
-func (c *TagPreferenceClient) GetX(ctx context.Context, id int) *TagPreference {
+func (c *TagPreferenceClient) GetX(ctx context.Context, id string) *TagPreference {
 	obj, err := c.Get(ctx, id)
 	if err != nil {
 		panic(err)
@@ -1160,7 +1160,7 @@ func (c *TagSyncBaselineClient) UpdateOne(_m *TagSyncBaseline) *TagSyncBaselineU
 }
 
 // UpdateOneID returns an update builder for the given id.
-func (c *TagSyncBaselineClient) UpdateOneID(id int) *TagSyncBaselineUpdateOne {
+func (c *TagSyncBaselineClient) UpdateOneID(id string) *TagSyncBaselineUpdateOne {
 	mutation := newTagSyncBaselineMutation(c.config, OpUpdateOne, withTagSyncBaselineID(id))
 	return &TagSyncBaselineUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
@@ -1177,7 +1177,7 @@ func (c *TagSyncBaselineClient) DeleteOne(_m *TagSyncBaseline) *TagSyncBaselineD
 }
 
 // DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *TagSyncBaselineClient) DeleteOneID(id int) *TagSyncBaselineDeleteOne {
+func (c *TagSyncBaselineClient) DeleteOneID(id string) *TagSyncBaselineDeleteOne {
 	builder := c.Delete().Where(tagsyncbaseline.ID(id))
 	builder.mutation.id = &id
 	builder.mutation.op = OpDeleteOne
@@ -1194,12 +1194,12 @@ func (c *TagSyncBaselineClient) Query() *TagSyncBaselineQuery {
 }
 
 // Get returns a TagSyncBaseline entity by its id.
-func (c *TagSyncBaselineClient) Get(ctx context.Context, id int) (*TagSyncBaseline, error) {
+func (c *TagSyncBaselineClient) Get(ctx context.Context, id string) (*TagSyncBaseline, error) {
 	return c.Query().Where(tagsyncbaseline.ID(id)).Only(ctx)
 }
 
 // GetX is like Get, but panics if an error occurs.
-func (c *TagSyncBaselineClient) GetX(ctx context.Context, id int) *TagSyncBaseline {
+func (c *TagSyncBaselineClient) GetX(ctx context.Context, id string) *TagSyncBaseline {
 	obj, err := c.Get(ctx, id)
 	if err != nil {
 		panic(err)

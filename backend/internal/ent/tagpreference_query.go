@@ -82,8 +82,8 @@ func (_q *TagPreferenceQuery) FirstX(ctx context.Context) *TagPreference {
 
 // FirstID returns the first TagPreference ID from the query.
 // Returns a *NotFoundError when no TagPreference ID was found.
-func (_q *TagPreferenceQuery) FirstID(ctx context.Context) (id int, err error) {
-	var ids []int
+func (_q *TagPreferenceQuery) FirstID(ctx context.Context) (id string, err error) {
+	var ids []string
 	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
@@ -95,7 +95,7 @@ func (_q *TagPreferenceQuery) FirstID(ctx context.Context) (id int, err error) {
 }
 
 // FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *TagPreferenceQuery) FirstIDX(ctx context.Context) int {
+func (_q *TagPreferenceQuery) FirstIDX(ctx context.Context) string {
 	id, err := _q.FirstID(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -133,8 +133,8 @@ func (_q *TagPreferenceQuery) OnlyX(ctx context.Context) *TagPreference {
 // OnlyID is like Only, but returns the only TagPreference ID in the query.
 // Returns a *NotSingularError when more than one TagPreference ID is found.
 // Returns a *NotFoundError when no entities are found.
-func (_q *TagPreferenceQuery) OnlyID(ctx context.Context) (id int, err error) {
-	var ids []int
+func (_q *TagPreferenceQuery) OnlyID(ctx context.Context) (id string, err error) {
+	var ids []string
 	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
@@ -150,7 +150,7 @@ func (_q *TagPreferenceQuery) OnlyID(ctx context.Context) (id int, err error) {
 }
 
 // OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *TagPreferenceQuery) OnlyIDX(ctx context.Context) int {
+func (_q *TagPreferenceQuery) OnlyIDX(ctx context.Context) string {
 	id, err := _q.OnlyID(ctx)
 	if err != nil {
 		panic(err)
@@ -178,7 +178,7 @@ func (_q *TagPreferenceQuery) AllX(ctx context.Context) []*TagPreference {
 }
 
 // IDs executes the query and returns a list of TagPreference IDs.
-func (_q *TagPreferenceQuery) IDs(ctx context.Context) (ids []int, err error) {
+func (_q *TagPreferenceQuery) IDs(ctx context.Context) (ids []string, err error) {
 	if _q.ctx.Unique == nil && _q.path != nil {
 		_q.Unique(true)
 	}
@@ -190,7 +190,7 @@ func (_q *TagPreferenceQuery) IDs(ctx context.Context) (ids []int, err error) {
 }
 
 // IDsX is like IDs, but panics if an error occurs.
-func (_q *TagPreferenceQuery) IDsX(ctx context.Context) []int {
+func (_q *TagPreferenceQuery) IDsX(ctx context.Context) []string {
 	ids, err := _q.IDs(ctx)
 	if err != nil {
 		panic(err)
@@ -262,12 +262,12 @@ func (_q *TagPreferenceQuery) Clone() *TagPreferenceQuery {
 // Example:
 //
 //	var v []struct {
-//		Tag string `json:"tag,omitempty"`
+//		Action string `json:"action,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.TagPreference.Query().
-//		GroupBy(tagpreference.FieldTag).
+//		GroupBy(tagpreference.FieldAction).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *TagPreferenceQuery) GroupBy(field string, fields ...string) *TagPreferenceGroupBy {
@@ -285,11 +285,11 @@ func (_q *TagPreferenceQuery) GroupBy(field string, fields ...string) *TagPrefer
 // Example:
 //
 //	var v []struct {
-//		Tag string `json:"tag,omitempty"`
+//		Action string `json:"action,omitempty"`
 //	}
 //
 //	client.TagPreference.Query().
-//		Select(tagpreference.FieldTag).
+//		Select(tagpreference.FieldAction).
 //		Scan(ctx, &v)
 func (_q *TagPreferenceQuery) Select(fields ...string) *TagPreferenceSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
@@ -365,7 +365,7 @@ func (_q *TagPreferenceQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (_q *TagPreferenceQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(tagpreference.Table, tagpreference.Columns, sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewQuerySpec(tagpreference.Table, tagpreference.Columns, sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeString))
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique

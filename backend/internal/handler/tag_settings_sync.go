@@ -69,14 +69,14 @@ type tagSyncPlan struct {
 // loadTagRules reads all stored tag preferences ordered by tag.
 func (s *Server) loadTagRules(ctx context.Context) ([]model.TagPreference, error) {
 	rows, err := s.DB.Client.TagPreference.Query().
-		Order(ent.Asc(tagpreference.FieldTag)).
+		Order(ent.Asc(tagpreference.FieldID)).
 		All(ctx)
 	if err != nil {
 		return nil, err
 	}
 	tags := make([]model.TagPreference, 0, len(rows))
 	for _, row := range rows {
-		tags = append(tags, model.TagPreference{Tag: row.Tag, Action: row.Action, Weight: row.Weight})
+		tags = append(tags, model.TagPreference{Tag: row.ID, Action: row.Action, Weight: row.Weight})
 	}
 	return tags, nil
 }
@@ -85,14 +85,14 @@ func (s *Server) loadTagRules(ctx context.Context) ([]model.TagPreference, error
 // common ancestor.
 func (s *Server) loadTagBaseline(ctx context.Context) ([]model.TagPreference, error) {
 	rows, err := s.DB.Client.TagSyncBaseline.Query().
-		Order(ent.Asc(tagsyncbaseline.FieldTag)).
+		Order(ent.Asc(tagsyncbaseline.FieldID)).
 		All(ctx)
 	if err != nil {
 		return nil, err
 	}
 	tags := make([]model.TagPreference, 0, len(rows))
 	for _, row := range rows {
-		tags = append(tags, model.TagPreference{Tag: row.Tag, Action: row.Action, Weight: row.Weight})
+		tags = append(tags, model.TagPreference{Tag: row.ID, Action: row.Action, Weight: row.Weight})
 	}
 	return tags, nil
 }
@@ -500,7 +500,7 @@ func (s *Server) applyTagSyncState(
 	for _, op := range pulls {
 		if op.Existing != nil {
 			if _, err := tx.TagPreference.Delete().
-				Where(tagpreference.TagEQ(op.Existing.Tag)).
+				Where(tagpreference.IDEQ(op.Existing.Tag)).
 				Exec(ctx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("remove pulled tag %q: %w", op.Key, err)
@@ -508,7 +508,7 @@ func (s *Server) applyTagSyncState(
 		}
 		if op.Remote != nil {
 			if _, err := tx.TagPreference.Create().
-				SetTag(op.Remote.Tag).
+				SetID(op.Remote.Tag).
 				SetAction(op.Remote.Action).
 				SetWeight(op.Remote.Weight).
 				Save(ctx); err != nil {
@@ -532,7 +532,7 @@ func (s *Server) applyTagSyncState(
 		for _, key := range finalKeys {
 			rule := final[key]
 			builders = append(builders, tx.TagSyncBaseline.Create().
-				SetTag(key).
+				SetID(key).
 				SetAction(rule.Action).
 				SetWeight(rule.Weight))
 		}

@@ -10,53 +10,58 @@ import (
 )
 
 // ID filters vertices based on their ID field.
-func ID(id int) predicate.TagSyncBaseline {
+func ID(id string) predicate.TagSyncBaseline {
 	return predicate.TagSyncBaseline(sql.FieldEQ(FieldID, id))
 }
 
 // IDEQ applies the EQ predicate on the ID field.
-func IDEQ(id int) predicate.TagSyncBaseline {
+func IDEQ(id string) predicate.TagSyncBaseline {
 	return predicate.TagSyncBaseline(sql.FieldEQ(FieldID, id))
 }
 
 // IDNEQ applies the NEQ predicate on the ID field.
-func IDNEQ(id int) predicate.TagSyncBaseline {
+func IDNEQ(id string) predicate.TagSyncBaseline {
 	return predicate.TagSyncBaseline(sql.FieldNEQ(FieldID, id))
 }
 
 // IDIn applies the In predicate on the ID field.
-func IDIn(ids ...int) predicate.TagSyncBaseline {
+func IDIn(ids ...string) predicate.TagSyncBaseline {
 	return predicate.TagSyncBaseline(sql.FieldIn(FieldID, ids...))
 }
 
 // IDNotIn applies the NotIn predicate on the ID field.
-func IDNotIn(ids ...int) predicate.TagSyncBaseline {
+func IDNotIn(ids ...string) predicate.TagSyncBaseline {
 	return predicate.TagSyncBaseline(sql.FieldNotIn(FieldID, ids...))
 }
 
 // IDGT applies the GT predicate on the ID field.
-func IDGT(id int) predicate.TagSyncBaseline {
+func IDGT(id string) predicate.TagSyncBaseline {
 	return predicate.TagSyncBaseline(sql.FieldGT(FieldID, id))
 }
 
 // IDGTE applies the GTE predicate on the ID field.
-func IDGTE(id int) predicate.TagSyncBaseline {
+func IDGTE(id string) predicate.TagSyncBaseline {
 	return predicate.TagSyncBaseline(sql.FieldGTE(FieldID, id))
 }
 
 // IDLT applies the LT predicate on the ID field.
-func IDLT(id int) predicate.TagSyncBaseline {
+func IDLT(id string) predicate.TagSyncBaseline {
 	return predicate.TagSyncBaseline(sql.FieldLT(FieldID, id))
 }
 
 // IDLTE applies the LTE predicate on the ID field.
-func IDLTE(id int) predicate.TagSyncBaseline {
+func IDLTE(id string) predicate.TagSyncBaseline {
 	return predicate.TagSyncBaseline(sql.FieldLTE(FieldID, id))
 }
 
-// Tag applies equality check predicate on the "tag" field. It's identical to TagEQ.
-func Tag(v string) predicate.TagSyncBaseline {
-	return predicate.TagSyncBaseline(sql.FieldEQ(FieldTag, v))
+// IDEqualFold applies the EqualFold predicate on the ID field.
+func IDEqualFold(id string) predicate.TagSyncBaseline {
+	return predicate.TagSyncBaseline(sql.FieldEqualFold(FieldID, id))
+}
+
+// IDContainsFold applies the ContainsFold predicate on the ID field.
+func IDContainsFold(id string) predicate.TagSyncBaseline {
+	return predicate.TagSyncBaseline(sql.FieldContainsFold(FieldID, id))
 }
 
 // Action applies equality check predicate on the "action" field. It's identical to ActionEQ.
@@ -77,71 +82,6 @@ func CreatedAt(v time.Time) predicate.TagSyncBaseline {
 // UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
 func UpdatedAt(v time.Time) predicate.TagSyncBaseline {
 	return predicate.TagSyncBaseline(sql.FieldEQ(FieldUpdatedAt, v))
-}
-
-// TagEQ applies the EQ predicate on the "tag" field.
-func TagEQ(v string) predicate.TagSyncBaseline {
-	return predicate.TagSyncBaseline(sql.FieldEQ(FieldTag, v))
-}
-
-// TagNEQ applies the NEQ predicate on the "tag" field.
-func TagNEQ(v string) predicate.TagSyncBaseline {
-	return predicate.TagSyncBaseline(sql.FieldNEQ(FieldTag, v))
-}
-
-// TagIn applies the In predicate on the "tag" field.
-func TagIn(vs ...string) predicate.TagSyncBaseline {
-	return predicate.TagSyncBaseline(sql.FieldIn(FieldTag, vs...))
-}
-
-// TagNotIn applies the NotIn predicate on the "tag" field.
-func TagNotIn(vs ...string) predicate.TagSyncBaseline {
-	return predicate.TagSyncBaseline(sql.FieldNotIn(FieldTag, vs...))
-}
-
-// TagGT applies the GT predicate on the "tag" field.
-func TagGT(v string) predicate.TagSyncBaseline {
-	return predicate.TagSyncBaseline(sql.FieldGT(FieldTag, v))
-}
-
-// TagGTE applies the GTE predicate on the "tag" field.
-func TagGTE(v string) predicate.TagSyncBaseline {
-	return predicate.TagSyncBaseline(sql.FieldGTE(FieldTag, v))
-}
-
-// TagLT applies the LT predicate on the "tag" field.
-func TagLT(v string) predicate.TagSyncBaseline {
-	return predicate.TagSyncBaseline(sql.FieldLT(FieldTag, v))
-}
-
-// TagLTE applies the LTE predicate on the "tag" field.
-func TagLTE(v string) predicate.TagSyncBaseline {
-	return predicate.TagSyncBaseline(sql.FieldLTE(FieldTag, v))
-}
-
-// TagContains applies the Contains predicate on the "tag" field.
-func TagContains(v string) predicate.TagSyncBaseline {
-	return predicate.TagSyncBaseline(sql.FieldContains(FieldTag, v))
-}
-
-// TagHasPrefix applies the HasPrefix predicate on the "tag" field.
-func TagHasPrefix(v string) predicate.TagSyncBaseline {
-	return predicate.TagSyncBaseline(sql.FieldHasPrefix(FieldTag, v))
-}
-
-// TagHasSuffix applies the HasSuffix predicate on the "tag" field.
-func TagHasSuffix(v string) predicate.TagSyncBaseline {
-	return predicate.TagSyncBaseline(sql.FieldHasSuffix(FieldTag, v))
-}
-
-// TagEqualFold applies the EqualFold predicate on the "tag" field.
-func TagEqualFold(v string) predicate.TagSyncBaseline {
-	return predicate.TagSyncBaseline(sql.FieldEqualFold(FieldTag, v))
-}
-
-// TagContainsFold applies the ContainsFold predicate on the "tag" field.
-func TagContainsFold(v string) predicate.TagSyncBaseline {
-	return predicate.TagSyncBaseline(sql.FieldContainsFold(FieldTag, v))
 }
 
 // ActionEQ applies the EQ predicate on the "action" field.
