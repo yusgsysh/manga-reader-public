@@ -18,8 +18,8 @@
 #
 # 公网部署：Basic Auth 必须开启且置于 HTTPS 之后；PostgreSQL / MinIO
 # 默认仅绑定回环地址，不发布公网端口（见 README「公网部署」）。
-# 需要局域网访问时，显式改成 "0.0.0.0:5173:8080"，并务必开启 Basic Auth +
-# HTTPS 反向代理；生产环境（ENVIRONMENT=production）未开启 Basic Auth 会拒绝启动。
+# 需要局域网/公网访问时，显式改成 "0.0.0.0:5173:8080"，并建议开启 Basic Auth +
+# HTTPS 反向代理（默认关闭认证，匿名即可访问）。
 
 services:
   backend:
@@ -34,8 +34,6 @@ services:
       - "127.0.0.1:5173:8080"
 
     environment:
-      # 生产模式：未开启 Basic Auth 时后端拒绝启动（fail closed）。
-      ENVIRONMENT: ${ENVIRONMENT:-production}
       # 容器内必须监听所有接口，宿主侧由 ports 的 127.0.0.1 限制。
       EHENTAI_PORT: ":8080"
       MANGA_READER_DB_PATH: /app/data/manga-reader.db

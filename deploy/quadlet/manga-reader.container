@@ -16,7 +16,6 @@ PublishPort=127.0.0.1:5173:8080
 # 该值经 podman --env-file 注入：每行须为 KEY=VALUE，且 $ 不做展开
 # HTTP_PROXY/HTTPS_PROXY/NO_PROXY 也在该文件中配置，出站经代理（见 .env.example）
 EnvironmentFile=/root/manga-reader-public/.env
-Environment=ENVIRONMENT=production
 # 容器内监听所有接口；宿主侧由 PublishPort=127.0.0.1 限制。
 Environment=EHENTAI_PORT=:8080
 Environment=MANGA_READER_DB_PATH=/app/data/manga-reader.db

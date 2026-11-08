@@ -8,12 +8,11 @@ import (
 )
 
 type Config struct {
-	Port        string
-	Database    DatabaseConfig
-	Cookie      CookieConfig
-	MinIO       MinIOConfig
-	LogLevel    string
-	Environment string
+	Port     string
+	Database DatabaseConfig
+	Cookie   CookieConfig
+	MinIO    MinIOConfig
+	LogLevel string
 	// SyncToken enables the peer-facing sync endpoints when non-empty
 	// (/api/sync/push and /api/sync/events). Empty disables the sync host.
 	SyncToken string
@@ -97,13 +96,9 @@ func Load() (*Config, error) {
 			Path:   getEnv("MANGA_READER_DB_PATH", "data/manga-reader.db"),
 			DSN:    dbDSN,
 		},
-		LogLevel: getEnv("LOG_LEVEL", "warn"),
-		// Default to development so a bare `go run` is usable; every shipped
-		// deployment manifest sets ENVIRONMENT=production explicitly, where
-		// Basic Auth becomes mandatory (see the check below).
-		Environment: getEnv("ENVIRONMENT", "development"),
-		DevTools:    parseBoolEnv("MANGA_READER_DEV_TOOLS", false),
-		SyncToken:   getEnv("MANGA_READER_SYNC_TOKEN", ""),
+		LogLevel:  getEnv("LOG_LEVEL", "warn"),
+		DevTools:  parseBoolEnv("MANGA_READER_DEV_TOOLS", false),
+		SyncToken: getEnv("MANGA_READER_SYNC_TOKEN", ""),
 		Cookie: CookieConfig{
 			IpbMemberID: getEnv("EHENTAI_COOKIE_IPB_MEMBER_ID", ""),
 			IpbPassHash: getEnv("EHENTAI_COOKIE_IPB_PASS_HASH", ""),
@@ -129,13 +124,6 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg.BasicAuth = basicAuth
-
-	// Fail closed: a production instance that is reachable without
-	// credentials is the documented footgun (the old default was auth off +
-	// a port published on every interface). Development runs stay convenient.
-	if cfg.Environment == "production" && !cfg.BasicAuth.Enabled {
-		return nil, fmt.Errorf("MANGA_READER_BASIC_AUTH_ENABLED must be true when ENVIRONMENT=production")
-	}
 
 	if !cfg.Cookie.IsValid() {
 		return nil, fmt.Errorf("missing required cookies: set EHENTAI_COOKIE or EHENTAI_COOKIE_IPB_MEMBER_ID + EHENTAI_COOKIE_IPB_PASS_HASH")

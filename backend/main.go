@@ -36,11 +36,9 @@ func corsOriginSet() map[string]struct{} {
 		}
 	}
 	// `bun dev` runs Vite on :5173 and calls the API on :8080 cross-origin.
-	// Production stays locked down and requires an explicit allowlist.
-	if strings.ToLower(strings.TrimSpace(os.Getenv("ENVIRONMENT"))) != "production" {
-		set["http://localhost:5173"] = struct{}{}
-		set["http://127.0.0.1:5173"] = struct{}{}
-	}
+	// Both are loopback origins; other origins must be listed explicitly.
+	set["http://localhost:5173"] = struct{}{}
+	set["http://127.0.0.1:5173"] = struct{}{}
 	return set
 }
 
@@ -168,7 +166,6 @@ func run() error {
 	logger := setupLogger(cfg.LogLevel)
 	logger.Info("starting server",
 		"port", cfg.Port,
-		"environment", cfg.Environment,
 		"db_driver", cfg.Database.Driver,
 	)
 
@@ -238,9 +235,11 @@ func run() error {
 
 	srv := handler.New(handlerCfg)
 
-	// Production runs release mode: gin's debug mode dumps the full route
-	// table at startup and logs every request line (including query strings).
-	if cfg.Environment == "production" {
+	// Release mode avoids gin's debug route dump; request lines are still
+	// logged by gin.Logger() below. LOG_LEVEL=debug opts into gin debug mode.
+	if strings.EqualFold(strings.TrimSpace(cfg.LogLevel), "debug") {
+		gin.SetMode(gin.DebugMode)
+	} else {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	// gin.New() rather than gin.Default(): the metrics middleware has to be

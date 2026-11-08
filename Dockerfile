@@ -3,7 +3,7 @@
 # Build (context must be the repository root):
 #   docker build -t manga-reader .
 #
-# Run (bind to loopback; ENVIRONMENT=production requires Basic Auth in .env):
+# Run (bind to loopback; Basic Auth is opt-in via MANGA_READER_BASIC_AUTH_ENABLED):
 #   docker run -d -p 127.0.0.1:5173:8080 --env-file .env manga-reader
 #
 # Stages:
@@ -65,8 +65,6 @@ RUN mkdir -p /app/data && chown -R appuser:appuser /app
 USER appuser
 
 ENV EHENTAI_PORT=:8080
-# Production mode: the backend refuses to start without Basic Auth.
-ENV ENVIRONMENT=production
 ENV MANGA_READER_DB_PATH=/app/data/manga-reader.db
 
 # Go heap soft limit: keeps RSS near ~160MiB by making GC run harder as the

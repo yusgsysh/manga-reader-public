@@ -120,23 +120,13 @@ func TestCSRFGuard(t *testing.T) {
 	}
 }
 
-func TestCORSOriginSetOnlyAllowsDevLoopbackOutsideProduction(t *testing.T) {
+func TestCORSOriginSetIncludesAllowlistAndViteDev(t *testing.T) {
 	t.Setenv("MANGA_READER_CORS_ORIGINS", "https://app.example.com")
-	t.Setenv("ENVIRONMENT", "development")
 	set := corsOriginSet()
 	if _, ok := set["https://app.example.com"]; !ok {
 		t.Error("explicit allowlist entry missing")
 	}
 	if _, ok := set["http://localhost:5173"]; !ok {
-		t.Error("dev Vite origin missing outside production")
-	}
-
-	t.Setenv("ENVIRONMENT", "production")
-	set = corsOriginSet()
-	if _, ok := set["http://localhost:5173"]; ok {
-		t.Error("dev Vite origin must not be allowed in production")
-	}
-	if _, ok := set["https://app.example.com"]; !ok {
-		t.Error("explicit allowlist entry missing in production")
+		t.Error("Vite dev origin missing")
 	}
 }

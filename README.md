@@ -17,7 +17,7 @@
 - 离线下载任务（Prefill）：后台排队预填充图片缓存、下载管理页、流式 ZIP 下载
 - 缩略图源站代理与 MinIO 缓存
 - 页面图片 MinIO 缓存（可选）
-- 单用户设计，无用户系统；公网访问经内置 HTTP Basic Auth 保护（见「公网部署」）
+- 单用户设计，无用户系统；默认匿名访问，可选内置 HTTP Basic Auth（见「公网部署」）
 
 ## 目录结构
 
@@ -84,11 +84,8 @@ backend/
    EHENTAI_COOKIE_IPB_PASS_HASH=xxx
    ```
 
-   并设置 Basic Auth 口令（`.env.example` 中留空；生产模式未设置时后端拒绝启动）：
-
-   ```env
-   MANGA_READER_BASIC_AUTH_PASSWORD=your-strong-password
-   ```
+   `.env.example` 默认关闭 Basic Auth，匿名即可访问。如果要把服务暴露到公网，
+   建议再开启认证并设置强口令（见「公网部署」）。
 
 2. 启动服务（单镜像：Gin API + 内嵌前端由 GitHub Actions 构建推送到 `ghcr.io/yusgsysh/manga-reader`，compose 直接拉取，仓库内无 `build:` 配置）。GHCR 包为私有时先登录（PAT 需 `read:packages`）：
 
@@ -117,7 +114,7 @@ backend/
 
 ## 公网部署（HTTPS + HTTP Basic Authentication）
 
-开发环境（`ENVIRONMENT` 未设置时默认为 `development`）Basic Auth **默认关闭**，`bun dev`、`go run .`、Playwright、单元测试、桌面端均不受影响。Docker 镜像 / compose / quadlet 显式设置 `ENVIRONMENT=production`：此时若未开启 Basic Auth，后端**拒绝启动**（fail closed）。公网部署必须显式开启，并满足：
+Basic Auth **默认关闭**：启动后匿名即可访问，`bun dev`、`go run .`、Playwright、单元测试、桌面端均不受影响。需要认证时设置 `MANGA_READER_BASIC_AUTH_ENABLED=true` 并提供凭据（启用但缺少凭据时后端拒绝启动，fail closed）。公网部署建议开启，并满足：
 
 - **HTTPS 必须在 Basic Auth 之前**：Basic Auth 只是 `base64(user:pass)`，不是加密。TLS 由前置层（云负载均衡 / Caddy / 前置 nginx）提供，同时负责 HTTP :80 → HTTPS :443 跳转；HSTS 也由该层配置，确认域名永久 HTTPS 后再开启。
 - **应用端口不暴露公网**：容器 `:8080`、PostgreSQL `:5432`、MinIO `:9000/:9001` 不发布到公网，只在 Docker 内网通信；compose 与 quadlet 默认发布到 `127.0.0.1:5173:8080`，公网只经过带 TLS 的前置反代。确实需要局域网直连时才改成 `0.0.0.0:5173:8080`。
@@ -163,7 +160,7 @@ docker compose up -d   # 环境变量变化会重建容器
 
 - **哈希格式**：apr1（`$1$` / `$apr1$`，`htpasswd -m`/`-n`）与 bcrypt（`$2$`，`htpasswd -B`）均可校验；`$5$`/`$6$`（sha-crypt）不支持，会被当作验证失败（锁死而非降级）。htpasswd 文件每次请求重新读取，轮换口令无需重启。
 - `.env` 中的 `$` 需写成 `$$`（compose 变量插值）。
-- **限流**：Basic Auth 开启时按来源 IP 限 50 req/s（突发 200，超限 `429` + `Retry-After`），作为基础防洪水/防爆破；需要更强防爆破时在前置防火墙 / fail2ban 封禁。切勿因此放松口令强度。计数键取自 `ClientIP()`（优先 `X-Forwarded-For`）：部署在反代之后时请让前置正确传该头，否则所有请求会共享同一个限流桶。
+- **限流**：Basic Auth 开启时按来源 IP 限 50 req/s（突发 200，超限 `429` + `Retry-After`），作为基础防洪水/防爆破；需要更强防爆破时在前置防火墙 / fail2ban 封禁。切勿因此放松口令强度。默认不信任 `X-Forwarded-For`；部署在反代之后时设置 `MANGA_READER_TRUSTED_PROXIES=<代理 CIDR>`，让限流按真实客户端 IP 计数。
 - **桌面端同步**：同步端点同样受 Basic Auth 保护。桌面端在设置页的服务器地址内嵌凭据即可：`https://user:$PASSWORD@server.example.com`（Go HTTP 客户端自动携带 `Authorization`）；本仓库部署实例即 `https://admin:$PASSWORD@server.example.com`（口令含 `@`、`:` 时需 URL 编码）。Basic 用户名/口令与 `MANGA_READER_SYNC_TOKEN` 是两套独立凭据，需同时正确（见 `backend/API.md` 28）。
 - **安全 Header** 由 Gin 统一添加：`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`；刻意不加 CSP（避免破坏 React、SSE、图片代理）。
 
@@ -249,7 +246,7 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `MINIO_BUCKET` | 否 | - | MinIO Bucket |
 | `MINIO_USE_SSL` | 否 | `false` | 是否启用 SSL |
 | `MINIO_REGION` | 否 | - | MinIO Region |
-| `MANGA_READER_BASIC_AUTH_ENABLED` | 否 | `false` | 内置 HTTP Basic Auth 开关；公网生产必须 `true`（见「公网部署」） |
+| `MANGA_READER_BASIC_AUTH_ENABLED` | 否 | `false` | 内置 HTTP Basic Auth 开关；默认匿名，公网暴露建议 `true`（见「公网部署」） |
 | `MANGA_READER_BASIC_AUTH_USERNAME` | 否† | - | Basic Auth 用户名（启用且用环境变量/口令文件方式时必填） |
 | `MANGA_READER_BASIC_AUTH_PASSWORD` | 否† | - | Basic Auth 口令（生产建议改用 secret 文件，勿提交真实口令） |
 | `MANGA_READER_BASIC_AUTH_FILE` | 否† | - | 现成 htpasswd 文件路径（docker secret，推荐；apr1 `$1$` / bcrypt `$2$`） |
