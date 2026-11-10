@@ -34,7 +34,6 @@ Volume=manga-reader-public_backend_data:/app/data
 NoNewPrivileges=true
 DropCapability=all
 PidsLimit=512
-Memory=512M
 HealthCmd=wget -qO- http://127.0.0.1:8080/healthz || exit 1
 HealthInterval=30s
 HealthRetries=3

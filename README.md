@@ -253,8 +253,7 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `MANGA_READER_BASIC_AUTH_PASSWORD_FILE` | 否† | - | 单行口令文件路径（docker secret） |
 | `MANGA_READER_DEV_TOOLS` | 否 | `false` | 启用 `/api/dev/*` 调试接口（可运行时模拟 ExHentai 不可用，见 `backend/API.md` Dev Tools） |
 | `MANGA_READER_SYNC_TOKEN` | 否 | - | 同步宿主令牌；非空时启用服务端同步端点（`/api/sync/push`、`/api/sync/events`） |
-| `MANGA_READER_MEM_BUDGET` | 否 | `96MiB` | 进程内图片缓冲的字节预算（下载、精灵图解码等驻留内存的操作按大小预留，超出则排队）；可用 `MiB`/`MB` 后缀 |
-| `GOMEMLIMIT` | 否 | `160MiB`（镜像/compose 默认） | Go 堆软上限：接近时 GC 加速回收，内存尖峰后 RSS 回落；按部署内存预算调整 |
+| `MANGA_READER_MEM_BUDGET` | 否 | 不限制（`0`） | 进程内图片缓冲的字节预算（下载、精灵图解码等驻留内存的操作按大小预留，超出则排队）；默认不限制，设为正数才启用；可用 `MiB`/`MB` 后缀 |
 | `HTTP_PROXY` | 否 | - | backend 出站 HTTP 代理（`http://`、`https://`、`socks5://`），仅作用于后端抓取/同步请求 |
 | `HTTPS_PROXY` | 否 | - | 同上，用于 `https://` 目标（ExHentai 等） |
 | `NO_PROXY` | 否 | - | 绕过代理的主机/网段（内网 MinIO、数据库、compose 服务名等） |
@@ -385,7 +384,7 @@ Schema 文件：
 | `http_requests_total` | Counter | `method, route, status_code` | 本应用 HTTP 请求（含 Basic Auth 401 与限流 429；handler panic 由 Recovery 转成 500 后同样计入） |
 | `http_request_duration_seconds` | Histogram | `method, route` | 本应用 HTTP 延迟（中间件入口 → 响应完成） |
 | `membudget_reserved_bytes` | Gauge | — | 当前已预留的图片负载字节数（`MANGA_READER_MEM_BUDGET` 预算内） |
-| `membudget_limit_bytes` | Gauge | — | 内存预算上限（默认 96 MiB） |
+| `membudget_limit_bytes` | Gauge | — | 内存预算上限；`0` 表示不限制（默认） |
 | `membudget_waiters` | Gauge | — | 正阻塞等待预算释放的操作数（>0 说明预算打满、在排队） |
 | `membudget_acquire_wait_seconds` | Histogram | — | 等待内存预算授予的时长 |
 

@@ -5,6 +5,10 @@
 // load. The budget is a weighted semaphore over bytes: each operation that
 // retains a buffer reserves its size (estimated before it is known, resized
 // once known) and returns it when the buffer goes out of scope.
+//
+// The budget is unbounded by default: reservations and queueing only exist once
+// a limit is configured via MANGA_READER_MEM_BUDGET or SetLimit. Deployments
+// that want to cap concurrent image buffering opt in explicitly.
 package membudget
 
 import (
@@ -33,10 +37,12 @@ const DefaultWeight = 8 << 20
 // throttle thumbnail concurrency for no reason.
 const ThumbnailWeight = 512 << 10
 
-// defaultLimit is the default total budget, overridable with
-// MANGA_READER_MEM_BUDGET (bytes, or a value with a KiB/MiB/GiB — or
-// KB/MB/GB — suffix).
-const defaultLimit = 96 << 20
+// defaultLimit is the default total budget. Zero means unbounded: nothing is
+// reserved and callers never queue, so the process buffers whatever concurrent
+// requests need. Set MANGA_READER_MEM_BUDGET (bytes, or a value with a
+// KiB/MiB/GiB — or KB/MB/GB — suffix) to opt into a ceiling; a value of 0 keeps
+// the budget unbounded.
+const defaultLimit = 0
 
 // maxWeightFraction/maxWeightDenom cap a single reservation at 3/4 of the
 // total budget so one oversized payload cannot reserve the whole budget and
@@ -63,7 +69,8 @@ func capWeight(weight, limit int64) int64 {
 var (
 	stateMu sync.Mutex
 	limit   int64 = defaultLimit
-	sem           = semaphore.NewWeighted(defaultLimit)
+	// sem is nil while the budget is unbounded (limit == 0).
+	sem *semaphore.Weighted
 
 	// reserved and waiters mirror the semaphore's internal state for the
 	// metrics gauges: semaphore.Weighted does not expose current usage.
@@ -88,21 +95,26 @@ func init() {
 	}
 }
 
-// SetLimit replaces the global budget. Call it only before traffic is
-// served (startup or tests): replacing the semaphore would strand waiters
-// queued on the previous one.
+// SetLimit replaces the global budget; 0 disables the ceiling (unbounded). Call
+// it only before traffic is served (startup or tests): replacing the semaphore
+// would strand waiters queued on the previous one, and leases taken while the
+// budget was unbounded are not tracked.
 func SetLimit(n int64) {
-	if n <= 0 {
+	if n < 0 {
 		return
 	}
 	stateMu.Lock()
 	defer stateMu.Unlock()
 	limit = n
-	sem = semaphore.NewWeighted(n)
+	if n > 0 {
+		sem = semaphore.NewWeighted(n)
+	} else {
+		sem = nil
+	}
 	metrics.SetMemBudgetLimit(n)
 }
 
-// Limit returns the current total budget in bytes.
+// Limit returns the current total budget in bytes. Zero means unbounded.
 func Limit() int64 {
 	stateMu.Lock()
 	defer stateMu.Unlock()
@@ -170,8 +182,13 @@ type Lease struct {
 // the budget is exhausted. weight <= 0 reserves DefaultWeight. Weights are
 // capped at a fraction of the total budget (see capWeight) so a single
 // oversized operation cannot reserve the whole budget and starve the rest.
+// When the budget is unbounded (Limit() == 0) no bytes are reserved and the
+// call never blocks; it returns an inert lease whose methods are no-ops.
 func Acquire(ctx context.Context, weight int64) (*Lease, error) {
 	s, lim := current()
+	if lim <= 0 {
+		return &Lease{}, nil
+	}
 	if weight <= 0 {
 		weight = DefaultWeight
 	}

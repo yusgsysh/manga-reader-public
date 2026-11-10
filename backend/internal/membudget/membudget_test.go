@@ -7,11 +7,44 @@ import (
 	"time"
 )
 
-// withLimit sets a test budget and restores the default afterwards.
+// withLimit sets a test budget and restores the previous one afterwards.
 func withLimit(t *testing.T, n int64) {
 	t.Helper()
+	prev := Limit()
 	SetLimit(n)
-	t.Cleanup(func() { SetLimit(defaultLimit) })
+	t.Cleanup(func() { SetLimit(prev) })
+}
+
+// The budget is unbounded unless configured: nothing is reserved, a huge
+// payload never queues, and Limit reports 0.
+func TestUnboundedByDefault(t *testing.T) {
+	prev := Limit()
+	SetLimit(0)
+	t.Cleanup(func() { SetLimit(prev) })
+
+	if got := Limit(); got != 0 {
+		t.Fatalf("Limit() = %d, want 0 (unbounded)", got)
+	}
+
+	start := reserved.Load()
+	l, err := Acquire(context.Background(), 1<<40)
+	if err != nil {
+		t.Fatalf("Acquire while unbounded: %v", err)
+	}
+	if got := reserved.Load() - start; got != 0 {
+		t.Errorf("reserved while unbounded = %d, want 0", got)
+	}
+
+	// A canceled ctx is irrelevant when there is no budget to wait for.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := Acquire(ctx, 1<<40); err != nil {
+		t.Errorf("Acquire while unbounded errored: %v", err)
+	}
+	l.Release()
+	if got := reserved.Load() - start; got != 0 {
+		t.Errorf("reserved after release while unbounded = %d, want 0", got)
+	}
 }
 
 func TestParseBytes(t *testing.T) {

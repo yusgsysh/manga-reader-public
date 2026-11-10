@@ -112,7 +112,7 @@ var (
 
 	memBudgetLimit = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "membudget_limit_bytes",
-		Help: "Total size of the process-wide memory budget.",
+		Help: "Total size of the process-wide memory budget; 0 means unbounded.",
 	})
 
 	memBudgetWaiters = prometheus.NewGauge(prometheus.GaugeOpts{
@@ -358,7 +358,7 @@ func ObserveGalleryCache(kind, result string) {
 }
 
 // SetMemBudgetLimit records the current total size of the image payload memory
-// budget.
+// budget. Zero means the budget is unbounded.
 func SetMemBudgetLimit(bytes int64) {
 	memBudgetLimit.Set(float64(bytes))
 }

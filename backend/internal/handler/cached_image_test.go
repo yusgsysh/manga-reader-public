@@ -292,9 +292,11 @@ func TestCachedImage_MissFallsBackToBufferedFetch(t *testing.T) {
 // estimate *before* joining the singleflight and released its own reservation,
 // so N requests reserved N copies of a buffer only one of them ever held.
 func TestCachedImage_ConcurrentMissSharesOneReservation(t *testing.T) {
-	if limit := membudget.Limit(); limit < 2*membudget.DefaultWeight {
-		t.Skipf("budget %d too small for this test's assumption", limit)
-	}
+	// The budget is unbounded by default, so pin a ceiling for the accounting
+	// this test asserts on.
+	prevLimit := membudget.Limit()
+	membudget.SetLimit(4 * membudget.DefaultWeight)
+	t.Cleanup(func() { membudget.SetLimit(prevLimit) })
 
 	entered := make(chan struct{})
 	release := make(chan struct{})
