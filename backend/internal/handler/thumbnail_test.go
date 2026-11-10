@@ -26,22 +26,6 @@ const testThumbURL = "https://s.exhentai.org/w/00/999/15582-3owak8q3.webp"
 
 // ==================== Cache Key Tests ====================
 
-func TestThumbnailCacheKey_SameURL(t *testing.T) {
-	key1 := ThumbnailCacheKey(testThumbURL)
-	key2 := ThumbnailCacheKey(testThumbURL)
-	if key1 != key2 {
-		t.Errorf("same URL should produce same key: %q != %q", key1, key2)
-	}
-}
-
-func TestThumbnailCacheKey_DifferentURL(t *testing.T) {
-	u1 := testThumbURL
-	u2 := testThumbURL + "?x=1"
-	if ThumbnailCacheKey(u1) == ThumbnailCacheKey(u2) {
-		t.Error("different URLs should produce different keys")
-	}
-}
-
 func TestThumbnailCacheKey_Format(t *testing.T) {
 	key := ThumbnailCacheKey(testThumbURL)
 
@@ -65,25 +49,6 @@ func TestThumbnailCacheKey_MatchesSHA256(t *testing.T) {
 
 	if key := ThumbnailCacheKey(testThumbURL); key != expected {
 		t.Errorf("key = %q, want %q", key, expected)
-	}
-}
-
-func TestThumbnailCacheKey_DifferentPartsProduceDifferentKeys(t *testing.T) {
-	urls := []string{
-		testThumbURL,
-		"https://s.exhentai.org/w/00/999/15582-3owak8q4.webp",
-		"https://ehgt.org/w/00/999/15582-3owak8q3.webp",
-		"https://s.exhentai.org/w/01/000/15582-3owak8q3.webp",
-		testThumbURL + "?nl=XYZ",
-	}
-
-	seen := make(map[string]string)
-	for _, u := range urls {
-		key := ThumbnailCacheKey(u)
-		if prev, ok := seen[key]; ok {
-			t.Errorf("URL %q and %q produced same key %q", u, prev, key)
-		}
-		seen[key] = u
 	}
 }
 

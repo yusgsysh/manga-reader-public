@@ -3,8 +3,6 @@ package handler
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -21,74 +19,6 @@ import (
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/membudget"
 )
-
-// ==================== Cache Key Tests ====================
-
-func TestCacheKey_SameURL(t *testing.T) {
-	u := "https://exhentai.org/s/51d1aa689c/4153369-29"
-	key1 := cache.CacheKey(u)
-	key2 := cache.CacheKey(u)
-	if key1 != key2 {
-		t.Errorf("same URL should produce same key: %q != %q", key1, key2)
-	}
-}
-
-func TestCacheKey_DifferentURL(t *testing.T) {
-	key1 := cache.CacheKey("https://exhentai.org/s/aaa/111-1")
-	key2 := cache.CacheKey("https://exhentai.org/s/bbb/222-2")
-	if key1 == key2 {
-		t.Error("different URLs should produce different keys")
-	}
-}
-
-func TestCacheKey_Format(t *testing.T) {
-	u := "https://exhentai.org/s/51d1aa689c/4153369-29"
-	key := cache.CacheKey(u)
-
-	if !strings.HasPrefix(key, cache.ImageCachePrefix) {
-		t.Errorf("key should start with %q, got %q", cache.ImageCachePrefix, key)
-	}
-
-	hexPart := strings.TrimPrefix(key, cache.ImageCachePrefix)
-	if len(hexPart) != cache.CacheKeyLength {
-		t.Errorf("hex part length = %d, want %d", len(hexPart), cache.CacheKeyLength)
-	}
-
-	if _, err := hex.DecodeString(hexPart); err != nil {
-		t.Errorf("hex part should be valid hex: %v", err)
-	}
-}
-
-func TestCacheKey_MatchesSHA256(t *testing.T) {
-	u := "https://exhentai.org/s/51d1aa689c/4153369-29"
-	key := cache.CacheKey(u)
-
-	sum := sha256.Sum256([]byte(u))
-	expected := cache.ImageCachePrefix + hex.EncodeToString(sum[:])
-
-	if key != expected {
-		t.Errorf("key = %q, want %q", key, expected)
-	}
-}
-
-func TestCacheKey_DifferentPartsProduceDifferentKeys(t *testing.T) {
-	urls := []string{
-		"https://exhentai.org/s/aaa/111-1",
-		"https://exhentai.org/s/bbb/111-1",
-		"https://exhentai.org/s/aaa/222-2",
-		"https://e-hentai.org/s/aaa/111-1",
-		"https://exhentai.org/s/aaa/111-1?nl=XYZ",
-	}
-
-	seen := make(map[string]string)
-	for _, u := range urls {
-		key := cache.CacheKey(u)
-		if prev, ok := seen[key]; ok {
-			t.Errorf("URL %q and %q produced same key %q", u, prev, key)
-		}
-		seen[key] = u
-	}
-}
 
 // ==================== URL Validation Tests ====================
 
@@ -142,36 +72,6 @@ func TestValidatePageURL_Invalid(t *testing.T) {
 				t.Errorf("validatePageURL(%q) = nil, want error", tt.url)
 			}
 		})
-	}
-}
-
-// ==================== URL Decode Tests ====================
-
-func TestCachedImageURLDecode(t *testing.T) {
-	original := "https://exhentai.org/s/51d1aa689c/4153369-29"
-	encoded := url.QueryEscape(original)
-
-	decoded, err := url.QueryUnescape(encoded)
-	if err != nil {
-		t.Fatalf("QueryUnescape failed: %v", err)
-	}
-
-	if decoded != original {
-		t.Errorf("decoded = %q, want %q", decoded, original)
-	}
-}
-
-func TestCachedImageURLDecode_WithSpecialChars(t *testing.T) {
-	original := "https://exhentai.org/s/abc/123-1?nl=SZF-483294&key=val"
-	encoded := url.QueryEscape(original)
-
-	decoded, err := url.QueryUnescape(encoded)
-	if err != nil {
-		t.Fatalf("QueryUnescape failed: %v", err)
-	}
-
-	if decoded != original {
-		t.Errorf("decoded = %q, want %q", decoded, original)
 	}
 }
 
@@ -245,128 +145,6 @@ type mockCacheEntry struct {
 	data        []byte
 	contentType string
 	exists      bool
-}
-
-type mockMinIOCache struct {
-	mu      sync.RWMutex
-	objects map[string]mockCacheEntry
-}
-
-func newMockMinIOCache() *mockMinIOCache {
-	return &mockMinIOCache{objects: make(map[string]mockCacheEntry)}
-}
-
-func (m *mockMinIOCache) StatObject(key string) (mockCacheEntry, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	entry, ok := m.objects[key]
-	if !ok || !entry.exists {
-		return mockCacheEntry{}, fmt.Errorf("NoSuchKey")
-	}
-	return entry, nil
-}
-
-func (m *mockMinIOCache) PutObject(key string, data []byte, contentType string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.objects[key] = mockCacheEntry{data: data, contentType: contentType, exists: true}
-}
-
-// ==================== Singleflight Concurrency Test ====================
-
-func TestSingleflight_CoalescesRequests(t *testing.T) {
-	var fetchCount atomic.Int32
-
-	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/s/") {
-			w.Header().Set("Content-Type", "text/html")
-			fmt.Fprint(w, mockPageHTML("https://example.com/image.webp", ""))
-		} else {
-			fetchCount.Add(1)
-			w.Header().Set("Content-Type", "image/webp")
-			w.Write(mockImageBytes())
-		}
-	})
-	defer mockServer.Close()
-
-	pageURL := mockServer.URL + "/s/abc123/3138775-1"
-
-	var wg sync.WaitGroup
-	var errCount atomic.Int32
-	n := 10
-
-	start := make(chan struct{})
-
-	for range n {
-		wg.Go(func() {
-			<-start
-			client := newMockClient(mockServer.URL)
-			_, _, err := exhentai.FetchPageImage(context.Background(), client, pageURL)
-			if err != nil {
-				errCount.Add(1)
-			}
-		})
-	}
-
-	close(start)
-	wg.Wait()
-
-	if errCount.Load() > 0 {
-		t.Errorf("concurrent fetchPageImage had %d errors", errCount.Load())
-	}
-	count := fetchCount.Load()
-	t.Logf("Concurrent fetches: %d goroutines, %d image fetches", n, count)
-}
-
-// ==================== Cache Key Integration Test ====================
-
-func TestCacheKey_IntegrationWithMockMinIO(t *testing.T) {
-	mockCache := newMockMinIOCache()
-
-	pageURL := "https://exhentai.org/s/51d1aa689c/4153369-29"
-	key := cache.CacheKey(pageURL)
-
-	// Simulate cache miss
-	_, err := mockCache.StatObject(key)
-	if err == nil {
-		t.Error("expected cache miss, got hit")
-	}
-
-	// Simulate storing
-	imgData := mockImageBytes()
-	mockCache.PutObject(key, imgData, "image/png")
-
-	// Simulate cache hit
-	entry, err := mockCache.StatObject(key)
-	if err != nil {
-		t.Fatalf("expected cache hit, got error: %v", err)
-	}
-	if entry.contentType != "image/png" {
-		t.Errorf("contentType = %q, want %q", entry.contentType, "image/png")
-	}
-	if len(entry.data) != len(imgData) {
-		t.Errorf("data len = %d, want %d", len(entry.data), len(imgData))
-	}
-}
-
-func TestCacheKey_SameURLAlwaysSameKey(t *testing.T) {
-	mockCache := newMockMinIOCache()
-
-	urls := []string{
-		"https://exhentai.org/s/51d1aa689c/4153369-29",
-		"https://exhentai.org/s/51d1aa689c/4153369-29",
-		"https://exhentai.org/s/51d1aa689c/4153369-29",
-	}
-
-	for i, u := range urls {
-		key := cache.CacheKey(u)
-		mockCache.PutObject(key, fmt.Appendf(nil, "image-%d", i), "image/webp")
-	}
-
-	// All three should have overwritten the same key
-	if len(mockCache.objects) != 1 {
-		t.Errorf("expected 1 object, got %d", len(mockCache.objects))
-	}
 }
 
 // ==================== MinIOConfig Tests ====================

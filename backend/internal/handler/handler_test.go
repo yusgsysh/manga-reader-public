@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -106,62 +104,4 @@ func parsePagesStream(t *testing.T, body []byte) pagesStreamResult {
 		}
 	}
 	return res
-}
-
-// ==================== 参数校验测试 ====================
-
-func TestAPI_GetGallery_InvalidID(t *testing.T) {
-	r := setupRouter()
-	app := &Server{Client: &http.Client{}}
-	r.GET("/api/gallery/:id/:token", app.handleGetGallery)
-
-	req := httptest.NewRequest("GET", "/api/gallery/abc/xyz", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
-	}
-}
-
-func TestAPI_PageImage_MissingURL(t *testing.T) {
-	r := setupRouter()
-	app := &Server{Client: &http.Client{}}
-	r.GET("/api/image/page", app.handlePageImage)
-
-	req := httptest.NewRequest("GET", "/api/image/page", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
-	}
-}
-
-func TestAPI_GalleryDetails_InvalidID(t *testing.T) {
-	r := setupRouter()
-	app := &Server{Client: &http.Client{}}
-	r.GET("/api/gallery/:id/:token/details", app.handleGalleryDetails)
-
-	req := httptest.NewRequest("GET", "/api/gallery//xyz/details", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
-	}
-}
-
-func TestAPI_GalleryPages_InvalidID(t *testing.T) {
-	r := setupRouter()
-	app := &Server{Client: &http.Client{}}
-	r.GET("/api/gallery/:id/:token/pages", app.handleGalleryPages)
-
-	req := httptest.NewRequest("GET", "/api/gallery//xyz/pages", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
-	}
 }

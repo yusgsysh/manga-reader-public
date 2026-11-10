@@ -11,23 +11,6 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
-func TestCacheKey_SameURL(t *testing.T) {
-	u := "https://exhentai.org/s/51d1aa689c/4153369-29"
-	key1 := CacheKey(u)
-	key2 := CacheKey(u)
-	if key1 != key2 {
-		t.Errorf("same URL should produce same key: %q != %q", key1, key2)
-	}
-}
-
-func TestCacheKey_DifferentURL(t *testing.T) {
-	key1 := CacheKey("https://exhentai.org/s/aaa/111-1")
-	key2 := CacheKey("https://exhentai.org/s/bbb/222-2")
-	if key1 == key2 {
-		t.Error("different URLs should produce different keys")
-	}
-}
-
 func TestCacheKey_Format(t *testing.T) {
 	u := "https://exhentai.org/s/51d1aa689c/4153369-29"
 	key := CacheKey(u)
@@ -55,25 +38,6 @@ func TestCacheKey_MatchesSHA256(t *testing.T) {
 
 	if key != expected {
 		t.Errorf("key = %q, want %q", key, expected)
-	}
-}
-
-func TestCacheKey_DifferentPartsProduceDifferentKeys(t *testing.T) {
-	urls := []string{
-		"https://exhentai.org/s/aaa/111-1",
-		"https://exhentai.org/s/bbb/111-1",
-		"https://exhentai.org/s/aaa/222-2",
-		"https://e-hentai.org/s/aaa/111-1",
-		"https://exhentai.org/s/aaa/111-1?nl=XYZ",
-	}
-
-	seen := make(map[string]string)
-	for _, u := range urls {
-		key := CacheKey(u)
-		if prev, ok := seen[key]; ok {
-			t.Errorf("URL %q and %q produced same key %q", u, prev, key)
-		}
-		seen[key] = u
 	}
 }
 

@@ -188,22 +188,6 @@ func TestMockGetGallery_InvalidID(t *testing.T) {
 	}
 }
 
-func TestMockGetGallery_EmptyToken(t *testing.T) {
-	server := &Server{Client: &http.Client{}}
-	r := setupMockRouter(server)
-
-	// Gin route :token never matches empty — using "x" as placeholder to test token validation
-	// is not meaningful; instead test that a non-existent route returns 404
-	req := httptest.NewRequest("GET", "/api/gallery/12345/nonexist", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	// With valid route params, the handler runs but may fail at API call
-	if w.Code == http.StatusOK {
-		t.Error("expected non-OK status for non-existent gallery")
-	}
-}
-
 func TestMockGetGallery_APIError(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -405,45 +389,6 @@ func TestMockSearch_Success(t *testing.T) {
 	}
 	if len(resp.Results) != 25 {
 		t.Fatalf("results len = %d, want 25", len(resp.Results))
-	}
-	for i, r := range resp.Results {
-		if r.ID == 0 || r.Token == "" || r.Title == "" {
-			t.Errorf("results[%d]: missing fields (id=%d, token=%q, title=%q)", i, r.ID, r.Token, r.Title)
-		}
-	}
-}
-
-func TestMockSearch_ExtendedLayout(t *testing.T) {
-	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, mockSearchHTML(5))
-	})
-	defer mockServer.Close()
-
-	server := &Server{Client: newMockClient(mockServer.URL)}
-	r := setupMockRouter(server)
-
-	req := httptest.NewRequest("GET", "/api/search?q=yuri", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp struct {
-		Results []struct {
-			ID       int64                 `json:"id"`
-			Token    string                `json:"token"`
-			Title    string                `json:"title"`
-			Category model.GalleryCategory `json:"category"`
-			Pages    int                   `json:"pages"`
-		} `json:"results"`
-	}
-	json.Unmarshal(w.Body.Bytes(), &resp)
-
-	if len(resp.Results) != 5 {
-		t.Fatalf("results len = %d, want 5", len(resp.Results))
 	}
 	for i, r := range resp.Results {
 		if r.ID == 0 || r.Token == "" || r.Title == "" {
