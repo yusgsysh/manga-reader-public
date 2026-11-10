@@ -25,47 +25,56 @@ function lastUrl(): URL {
   return new URL(fetchMock.mock.calls.at(-1)![0] as string);
 }
 
-describe("listing jump/seek parameters", () => {
-  it("forwards jump on the homepage list", async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ page: 0, page_size: 0, results: [] }),
-    );
-
-    await fetchGalleries(0, undefined, { jump: "1y" });
-
-    const url = lastUrl();
-    expect(url.searchParams.get("jump")).toBe("1y");
-    expect(url.searchParams.has("seek")).toBe(false);
+const listResponse = () =>
+  jsonResponse({ page: 0, page_size: 0, results: [] });
+const searchResponse = () =>
+  jsonResponse({
+    total: 0,
+    total_pages: 0,
+    page: 0,
+    page_size: 0,
+    results: [],
   });
 
-  it("forwards seek on the watched list", async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ page: 0, page_size: 0, results: [] }),
-    );
+describe("listing parameters", () => {
+  it("forwards jump/seek to the matching endpoint", async () => {
+    const cases = [
+      {
+        name: "galleries jump",
+        call: () => fetchGalleries(0, undefined, { jump: "1y" }),
+        expected: { jump: "1y" },
+        absent: "seek",
+      },
+      {
+        name: "watched seek",
+        call: () => fetchWatched(0, undefined, { seek: "2020-01" }),
+        expected: { seek: "2020-01" },
+        absent: "jump",
+      },
+      {
+        name: "search jump",
+        call: () => fetchSearch({ q: "yuri", jump: "1m" }),
+        expected: { q: "yuri", jump: "1m" },
+        absent: "seek",
+      },
+    ];
 
-    await fetchWatched(0, undefined, { seek: "2020-01" });
+    for (const tc of cases) {
+      fetchMock.mockResolvedValue(searchResponse());
+      await tc.call();
 
-    const url = lastUrl();
-    expect(url.searchParams.get("seek")).toBe("2020-01");
-    expect(url.searchParams.has("jump")).toBe(false);
+      const url = lastUrl();
+      for (const [key, value] of Object.entries(tc.expected)) {
+        expect(url.searchParams.get(key), `${tc.name}: ${key}`).toBe(value);
+      }
+      expect(url.searchParams.has(tc.absent), `${tc.name}: ${tc.absent}`).toBe(
+        false,
+      );
+    }
   });
 
-  it("forwards seek on search", async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ total: 0, total_pages: 0, page: 0, page_size: 0, results: [] }),
-    );
-
-    await fetchSearch({ q: "yuri", jump: "1m" });
-
-    const url = lastUrl();
-    expect(url.searchParams.get("q")).toBe("yuri");
-    expect(url.searchParams.get("jump")).toBe("1m");
-  });
-
-  it("omits nav parameters when not provided", async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ page: 0, page_size: 0, results: [] }),
-    );
+  it("omits jump/seek when not provided", async () => {
+    fetchMock.mockResolvedValue(listResponse());
 
     await fetchGalleries(0);
 
@@ -74,69 +83,48 @@ describe("listing jump/seek parameters", () => {
     expect(url.searchParams.has("jump")).toBe(false);
   });
 
-  it("forwards tags on the homepage list", async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ page: 0, page_size: 0, results: [] }),
-    );
+  it("forwards tags and categories and joins list values", async () => {
+    const cases = [
+      {
+        name: "galleries tags",
+        call: () => fetchGalleries(0, { tags: ["female:yuri", "full color"] }),
+        param: "tags",
+        value: "female:yuri,full color",
+      },
+      {
+        name: "watched tags",
+        call: () => fetchWatched(0, { tags: ["lolicon"] }),
+        param: "tags",
+        value: "lolicon",
+      },
+      {
+        name: "galleries categories",
+        call: () => fetchGalleries(0, { categories: ["doujinshi", "manga"] }),
+        param: "categories",
+        value: "doujinshi,manga",
+      },
+      {
+        name: "watched categories",
+        call: () => fetchWatched(0, { categories: ["misc"] }),
+        param: "categories",
+        value: "misc",
+      },
+    ];
 
-    await fetchGalleries(0, { tags: ["female:yuri", "full color"] });
-
-    const url = lastUrl();
-    expect(url.searchParams.get("tags")).toBe("female:yuri,full color");
+    for (const tc of cases) {
+      fetchMock.mockResolvedValue(listResponse());
+      await tc.call();
+      expect(lastUrl().searchParams.get(tc.param), tc.name).toBe(tc.value);
+    }
   });
 
-  it("forwards tags on the watched list", async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ page: 0, page_size: 0, results: [] }),
-    );
+  it("omits empty tag and category lists", async () => {
+    fetchMock.mockResolvedValue(listResponse());
 
-    await fetchWatched(0, { tags: ["lolicon"] });
-
-    const url = lastUrl();
-    expect(url.searchParams.get("tags")).toBe("lolicon");
-  });
-
-  it("omits tags when the list is empty", async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ page: 0, page_size: 0, results: [] }),
-    );
-
-    await fetchGalleries(0, { tags: [] });
+    await fetchGalleries(0, { tags: [], categories: [] });
 
     const url = lastUrl();
     expect(url.searchParams.has("tags")).toBe(false);
-  });
-
-  it("forwards categories on the homepage list", async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ page: 0, page_size: 0, results: [] }),
-    );
-
-    await fetchGalleries(0, { categories: ["doujinshi", "manga"] });
-
-    const url = lastUrl();
-    expect(url.searchParams.get("categories")).toBe("doujinshi,manga");
-  });
-
-  it("forwards categories on the watched list", async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ page: 0, page_size: 0, results: [] }),
-    );
-
-    await fetchWatched(0, { categories: ["misc"] });
-
-    const url = lastUrl();
-    expect(url.searchParams.get("categories")).toBe("misc");
-  });
-
-  it("omits categories when the list is empty", async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ page: 0, page_size: 0, results: [] }),
-    );
-
-    await fetchGalleries(0, { categories: [] });
-
-    const url = lastUrl();
     expect(url.searchParams.has("categories")).toBe(false);
   });
 });

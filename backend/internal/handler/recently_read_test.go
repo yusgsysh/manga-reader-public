@@ -69,27 +69,9 @@ func TestHandleRecentlyRead_WithRecords(t *testing.T) {
 
 	meta := newTestGallery()
 	seedGalleryMeta(t, client, meta)
-	client.ReadingProgress.Create().
-		SetGalleryID(meta.ID).
-		SetToken(meta.Token).
-		SetCurrentPage(5).
-		SetProgress(0.2).
-		SetCompleted(false).
-		SetCreatedAt(time.Now().UTC()).
-		SetUpdatedAt(time.Now().UTC()).
-		Save(t.Context())
-
-	time.Sleep(10 * time.Millisecond)
-
-	client.ReadingProgress.Create().
-		SetGalleryID(222222).
-		SetToken("bbb").
-		SetCurrentPage(10).
-		SetProgress(0.4).
-		SetCompleted(false).
-		SetCreatedAt(time.Now().UTC()).
-		SetUpdatedAt(time.Now().UTC()).
-		Save(t.Context())
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	insertProgressWithTimestamp(t, client, meta.ID, meta.Token, base)
+	insertProgressWithTimestamp(t, client, 222222, "bbb", base.Add(time.Minute))
 
 	r := setupTestRouter()
 	server := &Server{DB: &database.DB{Client: client}}

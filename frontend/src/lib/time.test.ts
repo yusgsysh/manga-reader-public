@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   formatDate,
   formatDateTime,
@@ -7,7 +7,20 @@ import {
 } from "./time";
 
 describe("formatRelativeTime", () => {
-  const now = Date.now();
+  // Pin the clock: these assertions are about the elapsed-time thresholds, not
+  // about whatever time the test happens to run at.
+  const now = new Date("2026-08-29T10:00:00Z");
+  const ago = (ms: number) =>
+    new Date(now.getTime() - ms).toISOString();
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("returns empty for missing/invalid input", () => {
     expect(formatRelativeTime()).toBe("");
@@ -15,34 +28,12 @@ describe("formatRelativeTime", () => {
     expect(formatRelativeTime("not-a-date")).toBe("");
   });
 
-  it("formats just now", () => {
-    expect(formatRelativeTime(new Date(now - 30_000).toISOString())).toBe(
-      "刚刚",
-    );
-  });
-
-  it("formats minutes", () => {
-    expect(formatRelativeTime(new Date(now - 10 * 60_000).toISOString())).toBe(
-      "10分钟前",
-    );
-  });
-
-  it("formats hours", () => {
-    expect(formatRelativeTime(new Date(now - 3 * 3_600_000).toISOString())).toBe(
-      "3小时前",
-    );
-  });
-
-  it("formats yesterday", () => {
-    expect(
-      formatRelativeTime(new Date(now - 26 * 3_600_000).toISOString()),
-    ).toBe("昨天");
-  });
-
-  it("formats days", () => {
-    expect(
-      formatRelativeTime(new Date(now - 5 * 86_400_000).toISOString()),
-    ).toBe("5天前");
+  it("formats just now, minutes, hours, yesterday and days", () => {
+    expect(formatRelativeTime(ago(30_000))).toBe("刚刚");
+    expect(formatRelativeTime(ago(10 * 60_000))).toBe("10分钟前");
+    expect(formatRelativeTime(ago(3 * 3_600_000))).toBe("3小时前");
+    expect(formatRelativeTime(ago(26 * 3_600_000))).toBe("昨天");
+    expect(formatRelativeTime(ago(5 * 86_400_000))).toBe("5天前");
   });
 });
 

@@ -123,8 +123,6 @@ func TestHandleUpdateProgress_Update(t *testing.T) {
 	var first model.ReadingProgress
 	json.Unmarshal(w.Body.Bytes(), &first)
 
-	time.Sleep(10 * time.Millisecond)
-
 	body, _ = json.Marshal(model.UpdateReadingProgressRequest{CurrentPage: 10, Progress: 0.4})
 	req = httptest.NewRequest("PUT", "/api/progress/123456/abcdef", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -222,66 +220,33 @@ func TestHandleUpdateProgress_Completed(t *testing.T) {
 	}
 }
 
-func TestHandleUpdateProgress_InvalidProgress(t *testing.T) {
+func TestHandleUpdateProgress_InvalidPayload(t *testing.T) {
 	client := newTestDB(t)
 	r := setupTestRouter()
 	server := &Server{DB: &database.DB{Client: client}}
 
 	r.PUT("/api/progress/:id/:token", server.handleUpdateProgress)
 
-	body, _ := json.Marshal(model.UpdateReadingProgressRequest{
-		CurrentPage: 5,
-		Progress:    1.5,
-	})
-	req := httptest.NewRequest("PUT", "/api/progress/123456/abcdef", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	tests := []struct {
+		name string
+		req  model.UpdateReadingProgressRequest
+	}{
+		{"progress above 1", model.UpdateReadingProgressRequest{CurrentPage: 5, Progress: 1.5}},
+		{"negative progress", model.UpdateReadingProgressRequest{CurrentPage: 5, Progress: -0.1}},
+		{"negative page", model.UpdateReadingProgressRequest{CurrentPage: -1, Progress: 0.5}},
 	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(tt.req)
+			req := httptest.NewRequest("PUT", "/api/progress/123456/abcdef", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
 
-func TestHandleUpdateProgress_NegativeProgress(t *testing.T) {
-	client := newTestDB(t)
-	r := setupTestRouter()
-	server := &Server{DB: &database.DB{Client: client}}
-
-	r.PUT("/api/progress/:id/:token", server.handleUpdateProgress)
-
-	body, _ := json.Marshal(model.UpdateReadingProgressRequest{
-		CurrentPage: 5,
-		Progress:    -0.1,
-	})
-	req := httptest.NewRequest("PUT", "/api/progress/123456/abcdef", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
-	}
-}
-
-func TestHandleUpdateProgress_NegativePage(t *testing.T) {
-	client := newTestDB(t)
-	r := setupTestRouter()
-	server := &Server{DB: &database.DB{Client: client}}
-
-	r.PUT("/api/progress/:id/:token", server.handleUpdateProgress)
-
-	body, _ := json.Marshal(model.UpdateReadingProgressRequest{
-		CurrentPage: -1,
-		Progress:    0.5,
-	})
-	req := httptest.NewRequest("PUT", "/api/progress/123456/abcdef", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+			}
+		})
 	}
 }
 
@@ -381,86 +346,42 @@ func performCleanup(t *testing.T, client *ent.Client, query string) (int, cleanu
 
 // ==================== days parameter tests ====================
 
-func TestHandleReadingProgressCleanup_DefaultDays(t *testing.T) {
-	client := newTestDB(t)
-	insertProgressWithTimestamp(t, client, 111111, "old", time.Now().UTC().AddDate(0, 0, -31))
+func TestHandleReadingProgressCleanup_Days(t *testing.T) {
+	tests := []struct {
+		name          string
+		query         string
+		agesInDays    []int
+		wantDays      int
+		wantDeleted   int64
+		wantRemaining int
+	}{
+		{"default is 30 days", "", []int{31}, 30, 1, 0},
+		{"custom 7 days keeps younger record", "?days=7", []int{6, 8}, 7, 1, 1},
+		{"custom 30 days keeps younger record", "?days=30", []int{29, 31}, 30, 1, 1},
+		{"zero deletes all records", "?days=0", []int{0, 60}, 0, 2, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := newTestDB(t)
+			for i, age := range tt.agesInDays {
+				insertProgressWithTimestamp(t, client, int64(111111+i), "tok", time.Now().UTC().AddDate(0, 0, -age))
+			}
 
-	code, resp := performCleanup(t, client, "")
+			code, resp := performCleanup(t, client, tt.query)
 
-	if code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", code, http.StatusOK)
-	}
-	if resp.Days != 30 {
-		t.Errorf("days = %d, want 30 (default)", resp.Days)
-	}
-	if resp.Deleted != 1 {
-		t.Errorf("deleted = %d, want 1", resp.Deleted)
-	}
-	if n := countReadingProgress(t, client); n != 0 {
-		t.Errorf("remaining records = %d, want 0", n)
-	}
-}
-
-func TestHandleReadingProgressCleanup_Days7(t *testing.T) {
-	client := newTestDB(t)
-	insertProgressWithTimestamp(t, client, 111111, "six", time.Now().UTC().AddDate(0, 0, -6))
-	insertProgressWithTimestamp(t, client, 222222, "eight", time.Now().UTC().AddDate(0, 0, -8))
-
-	code, resp := performCleanup(t, client, "?days=7")
-
-	if code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", code, http.StatusOK)
-	}
-	if resp.Days != 7 {
-		t.Errorf("days = %d, want 7", resp.Days)
-	}
-	if resp.Deleted != 1 {
-		t.Errorf("deleted = %d, want 1 (only the 8-day-old record)", resp.Deleted)
-	}
-	if n := countReadingProgress(t, client); n != 1 {
-		t.Errorf("remaining records = %d, want 1", n)
-	}
-}
-
-func TestHandleReadingProgressCleanup_Days30(t *testing.T) {
-	client := newTestDB(t)
-	insertProgressWithTimestamp(t, client, 111111, "twenty-nine", time.Now().UTC().AddDate(0, 0, -29))
-	insertProgressWithTimestamp(t, client, 222222, "thirty-one", time.Now().UTC().AddDate(0, 0, -31))
-
-	code, resp := performCleanup(t, client, "?days=30")
-
-	if code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", code, http.StatusOK)
-	}
-	if resp.Days != 30 {
-		t.Errorf("days = %d, want 30", resp.Days)
-	}
-	if resp.Deleted != 1 {
-		t.Errorf("deleted = %d, want 1 (only the 31-day-old record)", resp.Deleted)
-	}
-	if n := countReadingProgress(t, client); n != 1 {
-		t.Errorf("remaining records = %d, want 1 (29-day-old kept)", n)
-	}
-}
-
-func TestHandleReadingProgressCleanup_Days0(t *testing.T) {
-	client := newTestDB(t)
-	insertProgressWithTimestamp(t, client, 111111, "fresh", time.Now().UTC())
-	insertProgressWithTimestamp(t, client, 222222, "old", time.Now().UTC().AddDate(0, 0, -60))
-
-	code, resp := performCleanup(t, client, "?days=0")
-
-	if code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", code, http.StatusOK)
-	}
-	if resp.Days != 0 {
-		t.Errorf("days = %d, want 0", resp.Days)
-	}
-	if resp.Deleted != 2 {
-		t.Errorf("deleted = %d, want 2 (all records)", resp.Deleted)
-	}
-	if n := countReadingProgress(t, client); n != 0 {
-		t.Errorf("remaining records = %d, want 0", n)
+			if code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", code, http.StatusOK)
+			}
+			if resp.Days != tt.wantDays {
+				t.Errorf("days = %d, want %d", resp.Days, tt.wantDays)
+			}
+			if resp.Deleted != tt.wantDeleted {
+				t.Errorf("deleted = %d, want %d", resp.Deleted, tt.wantDeleted)
+			}
+			if n := countReadingProgress(t, client); n != tt.wantRemaining {
+				t.Errorf("remaining records = %d, want %d", n, tt.wantRemaining)
+			}
+		})
 	}
 }
 

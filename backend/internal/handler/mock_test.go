@@ -426,124 +426,43 @@ func TestMockSearch_NegativePageClamped(t *testing.T) {
 
 // ==================== Advanced Search Parameter Tests ====================
 
-func TestMockSearch_InvalidMinPages(t *testing.T) {
+// TestMockSearch_InvalidParams keeps the full validation matrix in one table:
+// each case exercises a different parser branch, but they all share the same
+// expected 400 response.
+func TestMockSearch_InvalidParams(t *testing.T) {
 	server := &Server{Client: &http.Client{}}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/search?q=test&min_pages=-1", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	tests := []struct {
+		name  string
+		query string
+	}{
+		{"negative min pages", "min_pages=-1"},
+		{"negative max pages", "max_pages=-5"},
+		{"min pages greater than max", "min_pages=200&max_pages=10"},
+		{"min rating below range", "min_rating=1"},
+		{"min rating above range", "min_rating=6"},
+		{"invalid torrent flag", "has_torrent=abc"},
+		{"invalid include expunged", "include_expunged=badvalue"},
+		{"invalid disable language filter", "disable_language_filter=badvalue"},
+		{"invalid disable uploader filter", "disable_uploader_filter=badvalue"},
+		{"invalid disable tag filter", "disable_tag_filter=badvalue"},
+		{"non-numeric min pages", "min_pages=abc"},
+		{"non-numeric max pages", "max_pages=xyz"},
+		{"non-numeric min rating", "min_rating=abc"},
+		{"invalid seek", "seek=not-a-date"},
+		{"invalid jump", "jump=abc"},
 	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/search?q=test&"+tt.query, nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
 
-func TestMockSearch_InvalidMaxPages(t *testing.T) {
-	server := &Server{Client: &http.Client{}}
-	r := setupMockRouter(server)
-
-	req := httptest.NewRequest("GET", "/api/search?q=test&max_pages=-5", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
-	}
-}
-
-func TestMockSearch_MinPagesGreaterThanMax(t *testing.T) {
-	server := &Server{Client: &http.Client{}}
-	r := setupMockRouter(server)
-
-	req := httptest.NewRequest("GET", "/api/search?q=test&min_pages=200&max_pages=10", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
-	}
-}
-
-func TestMockSearch_InvalidMinRating(t *testing.T) {
-	server := &Server{Client: &http.Client{}}
-	r := setupMockRouter(server)
-
-	req := httptest.NewRequest("GET", "/api/search?q=test&min_rating=1", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
-	}
-
-	req = httptest.NewRequest("GET", "/api/search?q=test&min_rating=6", nil)
-	w = httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
-	}
-}
-
-func TestMockSearch_InvalidHasTorrent(t *testing.T) {
-	server := &Server{Client: &http.Client{}}
-	r := setupMockRouter(server)
-
-	req := httptest.NewRequest("GET", "/api/search?q=test&has_torrent=abc", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
-	}
-}
-
-func TestMockSearch_InvalidBooleanParams(t *testing.T) {
-	server := &Server{Client: &http.Client{}}
-	r := setupMockRouter(server)
-
-	params := []string{
-		"include_expunged",
-		"disable_language_filter", "disable_uploader_filter", "disable_tag_filter",
-	}
-	for _, p := range params {
-		req := httptest.NewRequest("GET", "/api/search?q=test&"+p+"=badvalue", nil)
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("%s: status = %d, want %d. body: %s", p, w.Code, http.StatusBadRequest, w.Body.String())
-		}
-	}
-}
-
-func TestMockSearch_InvalidNonNumericParams(t *testing.T) {
-	server := &Server{Client: &http.Client{}}
-	r := setupMockRouter(server)
-
-	req := httptest.NewRequest("GET", "/api/search?q=test&min_pages=abc", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("min_pages=abc: status = %d, want %d", w.Code, http.StatusBadRequest)
-	}
-
-	req = httptest.NewRequest("GET", "/api/search?q=test&max_pages=xyz", nil)
-	w = httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("max_pages=xyz: status = %d, want %d", w.Code, http.StatusBadRequest)
-	}
-
-	req = httptest.NewRequest("GET", "/api/search?q=test&min_rating=abc", nil)
-	w = httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("min_rating=abc: status = %d, want %d", w.Code, http.StatusBadRequest)
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want %d. body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+			}
+		})
 	}
 }
 
@@ -649,16 +568,21 @@ func TestMockSearch_NoAdvancedWhenEmptyOpts(t *testing.T) {
 	}
 }
 
-func TestMockGalleryDetails_EmptyID(t *testing.T) {
+func TestMockGallery_EmptyID(t *testing.T) {
 	server := &Server{Client: &http.Client{}}
 	r := setupMockRouter(server)
 
-	req := httptest.NewRequest("GET", "/api/gallery//abc/details", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
+	for _, target := range []string{
+		"/api/gallery//abc/details",
+		"/api/gallery//abc/pages",
+	} {
+		req := httptest.NewRequest("GET", target, nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want %d", target, w.Code, http.StatusBadRequest)
+		}
 	}
 }
 
@@ -747,19 +671,6 @@ func TestMockGalleryDetails_Success(t *testing.T) {
 }
 
 // ==================== handleGalleryPages Tests ====================
-
-func TestMockGalleryPages_EmptyID(t *testing.T) {
-	server := &Server{Client: &http.Client{}}
-	r := setupMockRouter(server)
-
-	req := httptest.NewRequest("GET", "/api/gallery//abc/pages", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
-	}
-}
 
 func TestMockGalleryPages_Success(t *testing.T) {
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
@@ -919,29 +830,28 @@ func TestMockPageImage_Success(t *testing.T) {
 
 // ==================== nl Retry Tests ====================
 
-func TestMockPageImage_RetryOnImageDownloadFailure(t *testing.T) {
+// A failed image download is retried through the page's nl fallback. Two
+// failures in a row still succeed on the third attempt, which also pins the
+// retry budget (the exhausted case is covered by TestMockPageImage_RetryExhausted).
+func TestMockPageImage_RetriesAfterImageDownloadFailure(t *testing.T) {
 	imgData := mockImageBytes()
-	callCount := 0
+	imageAttempts := 0
+	pageRequests := 0
 	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.Contains(r.URL.Path, "/s/"):
+		if strings.Contains(r.URL.Path, "/s/") {
+			pageRequests++
 			w.Header().Set("Content-Type", "text/html")
-			// First page request: provide image URL and nl fallback
-			// The fallback page will serve the same HTML but the image URL will work
-			fmt.Fprint(w, mockPageHTML("https://example.com/image.webp", "FALLBACK123"))
-		case r.URL.Path == "/image.webp":
-			callCount++
-			if callCount == 1 {
-				// First image download fails
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			// Second attempt (via fallback) succeeds
-			w.Header().Set("Content-Type", "image/webp")
-			w.Write(imgData)
-		default:
-			w.WriteHeader(http.StatusNotFound)
+			// Each page request provides a new nl fallback.
+			fmt.Fprint(w, mockPageHTML("https://example.com/image.webp", fmt.Sprintf("RETRY%d", pageRequests)))
+			return
 		}
+		imageAttempts++
+		if imageAttempts <= 2 {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Content-Type", "image/webp")
+		w.Write(imgData)
 	})
 	defer mockServer.Close()
 
@@ -960,7 +870,9 @@ func TestMockPageImage_RetryOnImageDownloadFailure(t *testing.T) {
 	if len(w.Body.Bytes()) != len(imgData) {
 		t.Errorf("body len = %d, want %d", len(w.Body.Bytes()), len(imgData))
 	}
-	t.Logf("Retry succeeded: callCount=%d", callCount)
+	if imageAttempts != 3 {
+		t.Errorf("image attempts = %d, want 3 (initial + 2 retries)", imageAttempts)
+	}
 }
 
 func TestMockPageImage_RetryExhausted(t *testing.T) {
@@ -1013,75 +925,6 @@ func TestMockPageImage_NoFallbackNoRetry(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	// Should fail immediately since no fallback
-	if w.Code != http.StatusBadGateway {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadGateway)
-	}
-}
-
-func TestMockPageImage_RetryWithMultipleFailures(t *testing.T) {
-	imgData := mockImageBytes()
-	imageAttempts := 0
-	pageRequests := 0
-	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/s/") {
-			pageRequests++
-			w.Header().Set("Content-Type", "text/html")
-			// Each page request provides a new fallback
-			nlCode := fmt.Sprintf("RETRY%d", pageRequests)
-			fmt.Fprint(w, mockPageHTML("https://example.com/image.webp", nlCode))
-		} else {
-			imageAttempts++
-			if imageAttempts <= 2 {
-				// First two attempts fail
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
-			// Third attempt succeeds
-			w.Header().Set("Content-Type", "image/webp")
-			w.Write(imgData)
-		}
-	})
-	defer mockServer.Close()
-
-	pageURL := "https://exhentai.org/s/abc123/3138775-1"
-
-	server := &Server{Client: newMockClient(mockServer.URL)}
-	r := setupMockRouter(server)
-
-	req := httptest.NewRequest("GET", "/api/image/page?url="+url.QueryEscape(pageURL), nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-	if len(w.Body.Bytes()) != len(imgData) {
-		t.Errorf("body len = %d, want %d", len(w.Body.Bytes()), len(imgData))
-	}
-	t.Logf("Retry with multiple failures: imageAttempts=%d, pageRequests=%d", imageAttempts, pageRequests)
-}
-
-func TestMockPageImage_RetryCancelledByContext(t *testing.T) {
-	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/s/") {
-			w.Header().Set("Content-Type", "text/html")
-			fmt.Fprint(w, mockPageHTML("https://example.com/image.webp", "RETRY123"))
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-	})
-	defer mockServer.Close()
-
-	pageURL := "https://exhentai.org/s/abc123/3138775-1"
-
-	server := &Server{Client: newMockClient(mockServer.URL)}
-	r := setupMockRouter(server)
-
-	req := httptest.NewRequest("GET", "/api/image/page?url="+url.QueryEscape(pageURL), nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	// Even with retries, should eventually fail
 	if w.Code != http.StatusBadGateway {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusBadGateway)
 	}
@@ -1588,32 +1431,6 @@ func TestMockSearch_SeekForwardsParam(t *testing.T) {
 	}
 	if gotSeek != "2020" {
 		t.Errorf("upstream seek = %q, want %q", gotSeek, "2020")
-	}
-}
-
-func TestMockSearch_InvalidSeek(t *testing.T) {
-	server := &Server{Client: &http.Client{}}
-	r := setupMockRouter(server)
-
-	req := httptest.NewRequest("GET", "/api/search?q=yuri&seek=not-a-date", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
-	}
-}
-
-func TestMockSearch_InvalidJump(t *testing.T) {
-	server := &Server{Client: &http.Client{}}
-	r := setupMockRouter(server)
-
-	req := httptest.NewRequest("GET", "/api/search?q=yuri&jump=abc", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
 }
 

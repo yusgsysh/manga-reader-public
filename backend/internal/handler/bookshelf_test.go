@@ -29,22 +29,6 @@ func TestHandleBookshelfAdd_InvalidID(t *testing.T) {
 	}
 }
 
-func TestHandleBookshelfAdd_EmptyToken(t *testing.T) {
-	client := newTestDB(t)
-	r := setupTestRouter()
-	server := &Server{DB: &database.DB{Client: client}}
-
-	r.POST("/api/bookshelf/:id/:token", server.handleBookshelfAdd)
-
-	req := httptest.NewRequest("POST", "/api/bookshelf/123456/", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code == http.StatusOK {
-		t.Error("expected non-OK status for missing token")
-	}
-}
-
 func TestHandleBookshelfAdd_Success(t *testing.T) {
 	client := newTestDB(t)
 

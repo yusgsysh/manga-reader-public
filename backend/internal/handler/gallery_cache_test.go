@@ -182,6 +182,9 @@ func TestCachedGalleryPages_HitServedWithoutUpstream(t *testing.T) {
 	if !stream.Done || len(stream.PageURLs) != 2 {
 		t.Fatalf("stream should replay the cached 2 pages: done=%v pages=%d", stream.Done, len(stream.PageURLs))
 	}
+	if got := w.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store", got)
+	}
 }
 
 func TestGalleryPages_StaleCacheUpstreamFailure(t *testing.T) {
@@ -772,29 +775,6 @@ func TestGalleryDetails_UpstreamFailure(t *testing.T) {
 }
 
 // ==================== Cache-only endpoints ====================
-
-func TestCachedGalleryPages_Hit(t *testing.T) {
-	client := newTestDB(t)
-	seedGalleryCache(t, client, 12345, "tok12345")
-
-	server := &Server{DB: &database.DB{Client: client}}
-	r := setupMockRouter(server)
-
-	req := httptest.NewRequest("GET", "/api/gallery-cache/12345/tok12345/pages", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200. body: %s", w.Code, w.Body.String())
-	}
-	stream := parsePagesStream(t, w.Body.Bytes())
-	if !stream.Done || len(stream.PageURLs) != 2 {
-		t.Fatalf("pages = %d done=%v, want done with 2", len(stream.PageURLs), stream.Done)
-	}
-	if got := w.Header().Get("Cache-Control"); got != "no-store" {
-		t.Errorf("Cache-Control = %q, want no-store", got)
-	}
-}
 
 func TestCachedGalleryPages_MissUpstreamFailure(t *testing.T) {
 	client := newTestDB(t)

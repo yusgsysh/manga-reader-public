@@ -32,14 +32,10 @@ const fixture = {
 describe("parseDb", () => {
   const index = parseDb(fixture);
 
-  it("builds a translation map", () => {
+  it("builds a translation map with tags stripped from names", () => {
     const entry = index.translationMap.get("female:yuri");
     expect(entry?.translation).toBe("百合");
     expect(entry?.description).toBe("百合题材");
-  });
-
-  it("strips html tags from names", () => {
-    expect(index.translationMap.get("female:yuri")?.translation).toBe("百合");
     expect(index.translationMap.get("artist:Foo Bar")?.translation).toBe(
       "富棒",
     );

@@ -711,6 +711,13 @@ func TestPrefillCleanup(t *testing.T) {
 	up := &prefillUpstream{}
 	r, server, _ := newPrefillTestServer(t, up)
 
+	// Bootstrap the manager before inserting the synthetic running row; the
+	// restart-recovery path would otherwise pick it up as a pending job and
+	// turn it terminal, making the cleanup assertions timing-dependent.
+	if code, body := doJSON(t, r, http.MethodGet, "/api/prefill", nil); code != http.StatusOK {
+		t.Fatalf("list failed to bootstrap manager: status = %d, body: %s", code, body)
+	}
+
 	oldJob := insertPrefillJob(t, server.DB.Client, prefillStatusCompleted, pageURLs("cl1"), func(c *ent.PrefillJobCreate) {
 		c.SetFinishedAt(time.Now().AddDate(0, 0, -40))
 	})
