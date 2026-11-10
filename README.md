@@ -230,11 +230,11 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 
 | 变量 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
-| `EHENTAI_COOKIE` | 可选* | - | ExHentai 完整 Cookie 字符串 |
-| `EHENTAI_COOKIE_IPB_MEMBER_ID` | 可选* | - | 单独设置方式 |
-| `EHENTAI_COOKIE_IPB_PASS_HASH` | 可选* | - | 单独设置方式 |
-| `EHENTAI_COOKIE_IGNEOUS` | 否 | - | 仅 ExHentai 需要 |
-| `EHENTAI_COOKIE_SK` | 否 | - | 可选 |
+| `EHENTAI_COOKIE` | 可选* | - | ExHentai 完整 Cookie 字符串；与单独变量同时存在时只用于补齐空缺字段 |
+| `EHENTAI_COOKIE_IPB_MEMBER_ID` | 可选* | - | 登录凭据（单独设置方式，优先于完整字符串） |
+| `EHENTAI_COOKIE_IPB_PASS_HASH` | 可选* | - | 登录凭据（单独设置方式，优先于完整字符串） |
+| `EHENTAI_COOKIE_IGNEOUS` | 否 | - | ExHentai 会话 Cookie；过期值会被自动丢弃并重试（见「ExHentai 返回 sad panda」） |
+| `EHENTAI_COOKIE_SK` | 否 | - | 标签过滤用的设置键，不参与登录 |
 | `EHENTAI_PORT` | 否 | `127.0.0.1:8080` | 后端监听地址；裸跑默认仅回环，容器内由镜像/compose 覆盖为 `:8080` |
 | `MANGA_READER_DB_DRIVER` | 否 | `sqlite` | 数据库类型：`sqlite` 或 `postgres` |
 | `MANGA_READER_DB_PATH` | 否 | `data/manga-reader.db` | SQLite 路径（Docker 内 `/app/data/manga-reader.db`） |
@@ -260,6 +260,15 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 
 > \* `EHENTAI_COOKIE` 与 `EHENTAI_COOKIE_IPB_MEMBER_ID` + `EHENTAI_COOKIE_IPB_PASS_HASH` 至少配置一种，否则后端无法启动。
 > † Basic Auth 启用时必须提供凭据来源之一（用户名+口令、`_FILE`、或 `MANGA_READER_BASIC_AUTH_FILE`），否则后端拒绝启动（fail closed）。
+
+### ExHentai 返回 sad panda
+
+sad panda 是 ExHentai 拒绝会话的响应（HTTP 200 + 空白页面），不是网络故障。按顺序排查：
+
+1. `ipb_member_id` / `ipb_pass_hash` 是否还有效：改过密码或在别处退出登录都会让它们失效，需要重新从浏览器复制。
+2. `igneous` 是否过期：它随每次登录轮换，旧值会让 ExHentai 直接返回 sad panda，即使 `ipb_pass_hash` 仍然有效。后端检测到 sad panda 时会丢弃该 cookie 并重试一次，成功后由响应写入新的 `igneous`，日志里会出现 `exhentai rejected the igneous cookie; retrying without it`；更新 `.env` 中的值可以省掉这次往返。
+3. 出口 IP 是否被限制：ExHentai 对机房 IP、公共代理常返回 sad panda 或 IP 封禁页，可换出口或配置 `HTTPS_PROXY`。
+4. `sk` 只影响标签过滤，与登录无关，缺它不会导致 sad panda。
 
 ## 后端开发
 

@@ -85,6 +85,15 @@ func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 		"max_idle_conns_per_host", transport.MaxIdleConnsPerHost,
 		"max_conns_per_host", transport.MaxConnsPerHost,
 	)
+	// Cookie lengths (never values) make a truncated paste or an ignored
+	// .env entry visible without leaking the session: ipb_pass_hash is always 32
+	// hex chars, and a missing igneous means the first request has to earn one.
+	slog.Info("exhentai cookies loaded",
+		"ipb_member_id_len", len(cfg.IpbMemberID),
+		"ipb_pass_hash_len", len(cfg.IpbPassHash),
+		"igneous_len", len(cfg.Igneous),
+		"sk_len", len(cfg.SK),
+	)
 
 	return &http.Client{
 		Jar:       jar,

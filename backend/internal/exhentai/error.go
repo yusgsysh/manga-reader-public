@@ -10,7 +10,7 @@ var (
 	ErrNonOKStatus   = errors.New("non-ok status")
 	ErrParsingFailed = errors.New("parsing failed")
 	ErrAPIError      = errors.New("api error")
-	ErrSadPanda      = errors.New("sad panda")
+	ErrSadPanda      = errors.New("sad panda: ExHentai rejected the session (expired ipb_member_id/ipb_pass_hash, or a blocked outbound IP)")
 	ErrIPBanned      = errors.New("ip banned")
 	ErrNoMetadata    = errors.New("no metadata returned")
 	ErrImageTooLarge = errors.New("image too large")

@@ -99,12 +99,7 @@ func Load() (*Config, error) {
 		LogLevel:  getEnv("LOG_LEVEL", "warn"),
 		DevTools:  parseBoolEnv("MANGA_READER_DEV_TOOLS", false),
 		SyncToken: getEnv("MANGA_READER_SYNC_TOKEN", ""),
-		Cookie: CookieConfig{
-			IpbMemberID: getEnv("EHENTAI_COOKIE_IPB_MEMBER_ID", ""),
-			IpbPassHash: getEnv("EHENTAI_COOKIE_IPB_PASS_HASH", ""),
-			Igneous:     getEnv("EHENTAI_COOKIE_IGNEOUS", ""),
-			SK:          getEnv("EHENTAI_COOKIE_SK", ""),
-		},
+		Cookie:    loadCookieConfig(),
 		MinIO: MinIOConfig{
 			Endpoint:  getEnv("MINIO_ENDPOINT", ""),
 			AccessKey: getEnv("MINIO_ACCESS_KEY", ""),
@@ -270,7 +265,7 @@ func parseCookieString(s string) CookieConfig {
 			continue
 		}
 		key := trimSpace(parts[0])
-		value := trimSpace(parts[1])
+		value := normalizeCookieValue(parts[1])
 		switch key {
 		case "ipb_member_id":
 			cfg.IpbMemberID = value
@@ -320,4 +315,45 @@ func trimSpace(s string) string {
 		end--
 	}
 	return s[start:end]
+}
+
+// loadCookieConfig reads the ExHentai session cookies from the environment.
+// Both supported forms may be present: the individual variables take precedence,
+// and a combined EHENTAI_COOKIE string only fills the fields they leave empty.
+// Treating the string as a wholesale override (the old behaviour) silently
+// dropped igneous/sk from an otherwise complete individual setup as soon as an
+// older partial string survived in .env, and ExHentai answered with sad panda.
+func loadCookieConfig() CookieConfig {
+	cfg := CookieConfig{
+		IpbMemberID: normalizeCookieValue(getEnv("EHENTAI_COOKIE_IPB_MEMBER_ID", "")),
+		IpbPassHash: normalizeCookieValue(getEnv("EHENTAI_COOKIE_IPB_PASS_HASH", "")),
+		Igneous:     normalizeCookieValue(getEnv("EHENTAI_COOKIE_IGNEOUS", "")),
+		SK:          normalizeCookieValue(getEnv("EHENTAI_COOKIE_SK", "")),
+	}
+	combined := parseCookieString(getEnv("EHENTAI_COOKIE", ""))
+	if cfg.IpbMemberID == "" {
+		cfg.IpbMemberID = combined.IpbMemberID
+	}
+	if cfg.IpbPassHash == "" {
+		cfg.IpbPassHash = combined.IpbPassHash
+	}
+	if cfg.Igneous == "" {
+		cfg.Igneous = combined.Igneous
+	}
+	if cfg.SK == "" {
+		cfg.SK = combined.SK
+	}
+	return cfg
+}
+
+// normalizeCookieValue removes what copying a cookie out of browser devtools or
+// a shell wrapper leaves around the value: whitespace, surrounding quotes and a
+// trailing separator. A stray space in ipb_pass_hash or igneous is enough for
+// ExHentai to reject the session.
+func normalizeCookieValue(v string) string {
+	v = strings.TrimSpace(v)
+	if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') && v[len(v)-1] == v[0] {
+		v = strings.TrimSpace(v[1 : len(v)-1])
+	}
+	return strings.TrimRight(strings.TrimSpace(v), ";,")
 }
