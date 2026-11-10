@@ -365,7 +365,7 @@ func TestPageThumbnail_Live_ByIndexOutOfRange(t *testing.T) {
 
 func TestCachedPageThumbnail_ByIndexUsesCachedGeometry(t *testing.T) {
 	client := newTestDB(t)
-	if err := gallerycache.UpsertPages(t.Context(), client, testGalleryIDInt, thumbToken,
+	if err := gallerycache.ReplacePages(t.Context(), client, testGalleryIDInt, thumbToken,
 		[]string{"https://exhentai.org/s/a/1-1"}); err != nil {
 		t.Fatalf("seed pages: %v", err)
 	}
@@ -710,7 +710,7 @@ func TestCachedPageThumbnail_SpriteExpired_RefetchAndRetry(t *testing.T) {
 	// 1. Seed gallery_cache with OLD sprite URL
 	db := newTestDB(t)
 	oldSpriteURL := "https://cdn.hath.network/c2/OLD/123-0.webp"
-	if err := gallerycache.UpsertPages(t.Context(), db, 999001, token,
+	if err := gallerycache.ReplacePages(t.Context(), db, 999001, token,
 		[]string{"https://exhentai.org/s/a/1-1", "https://exhentai.org/s/b/1-2"}); err != nil {
 		t.Fatalf("seed pages: %v", err)
 	}
@@ -817,7 +817,7 @@ func TestCachedPageThumbnail_SpriteExpired_ConcurrentRequests(t *testing.T) {
 	// 1. Seed gallery_cache with OLD sprite URL
 	db := newTestDB(t)
 	oldSpriteURL := "https://cdn.hath.network/c2/OLD/456-0.webp"
-	if err := gallerycache.UpsertPages(t.Context(), db, 999002, token,
+	if err := gallerycache.ReplacePages(t.Context(), db, 999002, token,
 		[]string{"https://exhentai.org/s/a/1-1"}); err != nil {
 		t.Fatalf("seed pages: %v", err)
 	}

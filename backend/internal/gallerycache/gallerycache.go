@@ -235,23 +235,6 @@ func countThumbnails(thumbnails []model.GalleryPageThumb) int {
 	return n
 }
 
-// mergeStrings merges incoming page URLs over the stored list index by index. A
-// non-empty incoming URL replaces the stored one at the same index; empty
-// entries leave the stored value untouched. New indices are appended. The
-// result never shrinks, so a shorter (partial) scrape cannot truncate the
-// cache.
-func mergeStrings(stored, incoming []string) []string {
-	n := max(len(incoming), len(stored))
-	merged := make([]string, n)
-	copy(merged, stored)
-	for i, v := range incoming {
-		if v != "" {
-			merged[i] = v
-		}
-	}
-	return merged
-}
-
 // mergeThumbs merges incoming thumbnail geometry over the stored list index by
 // index, capped at limit (the number of known pages). An entry with a non-empty
 // SpriteURL replaces the stored geometry at the same index; empty entries leave
@@ -266,36 +249,6 @@ func mergeThumbs(stored, incoming []model.GalleryPageThumb, limit int) []model.G
 		}
 	}
 	return merged
-}
-
-// UpsertPages stores the page URL list. Page URLs are stable for a gallery, so
-// the stored list is merged index by index: non-empty incoming URLs overwrite,
-// empty entries are ignored, and new indices are appended. The list never
-// shrinks. pages_fetched_at is always refreshed so the online endpoint can treat
-// a recently verified list as fresh; the JSON column is only rewritten when the
-// list actually changed.
-func UpsertPages(ctx context.Context, client *ent.Client, galleryID int64, token string, pageURLs []string) error {
-	existing, found, err := Get(ctx, client, galleryID, token)
-	if err != nil {
-		return err
-	}
-	now := time.Now().UTC()
-
-	if !found {
-		return client.GalleryCache.Create().
-			SetGalleryID(galleryID).
-			SetToken(token).
-			SetPages(pageURLs).
-			SetPagesFetchedAt(now).
-			Exec(ctx)
-	}
-
-	merged := mergeStrings(existing.Pages, pageURLs)
-	update := client.GalleryCache.UpdateOne(existing).SetPagesFetchedAt(now)
-	if !slices.Equal(merged, existing.Pages) {
-		update.SetPages(merged)
-	}
-	return update.Exec(ctx)
 }
 
 // UpsertThumbnails stores page-thumbnail geometry independently of the page

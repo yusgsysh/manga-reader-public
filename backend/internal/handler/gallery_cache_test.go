@@ -81,7 +81,7 @@ func seedGalleryCache(t *testing.T, client *ent.Client, id int64, token string) 
 	}); err != nil {
 		t.Fatalf("seed cache meta: %v", err)
 	}
-	if err := gallerycache.UpsertPages(t.Context(), client, id, token,
+	if err := gallerycache.ReplacePages(t.Context(), client, id, token,
 		[]string{"https://exhentai.org/s/abc/1", "https://exhentai.org/s/abc/2"}); err != nil {
 		t.Fatalf("seed cache pages: %v", err)
 	}
@@ -947,7 +947,7 @@ func TestPrefetchGallery_IncompletePagesNotCached(t *testing.T) {
 	}
 }
 
-func TestGalleryCache_MetaTracksApiPagesFirstWrite(t *testing.T) {
+func TestUpsertMeta_MergesIncomingFields(t *testing.T) {
 	client := newTestDB(t)
 	ctx := t.Context()
 
@@ -990,26 +990,6 @@ func TestGalleryCache_MetaTracksApiPagesFirstWrite(t *testing.T) {
 	if row.Rating != 5.0 || row.Uploader != "uploader" {
 		t.Errorf("empty fields must not overwrite: rating=%v uploader=%q", row.Rating, row.Uploader)
 	}
-
-	// Page URLs merge index by index and never shrink.
-	if err := gallerycache.UpsertPages(ctx, client, 9001, "tok", []string{"a"}); err != nil {
-		t.Fatalf("first pages write: %v", err)
-	}
-	if err := gallerycache.UpsertPages(ctx, client, 9001, "tok", []string{"a", "b", "c"}); err != nil {
-		t.Fatalf("second pages write: %v", err)
-	}
-	row, _, _ = gallerycache.Get(ctx, client, 9001, "tok")
-	if len(row.Pages) != 3 {
-		t.Errorf("pages = %d, want 3 (merged)", len(row.Pages))
-	}
-	// A shorter list must not truncate the cached one.
-	if err := gallerycache.UpsertPages(ctx, client, 9001, "tok", []string{"a"}); err != nil {
-		t.Fatalf("shorter pages write: %v", err)
-	}
-	row, _, _ = gallerycache.Get(ctx, client, 9001, "tok")
-	if len(row.Pages) != 3 {
-		t.Errorf("pages = %d, want 3 (never shrinks)", len(row.Pages))
-	}
 }
 
 func TestUpsertThumbnails_BackfillsThumbnailGeometry(t *testing.T) {
@@ -1017,7 +997,7 @@ func TestUpsertThumbnails_BackfillsThumbnailGeometry(t *testing.T) {
 	ctx := t.Context()
 
 	// A row cached before sprite geometry existed (pages only, no thumbnails).
-	if err := gallerycache.UpsertPages(ctx, client, 9002, "tok", []string{"a", "b"}); err != nil {
+	if err := gallerycache.ReplacePages(ctx, client, 9002, "tok", []string{"a", "b"}); err != nil {
 		t.Fatalf("pages write: %v", err)
 	}
 
@@ -1076,7 +1056,7 @@ func TestReplacePages_Shrinks(t *testing.T) {
 	client := newTestDB(t)
 	ctx := t.Context()
 
-	if err := gallerycache.UpsertPages(ctx, client, 9004, "tok", []string{"a", "b", "c"}); err != nil {
+	if err := gallerycache.ReplacePages(ctx, client, 9004, "tok", []string{"a", "b", "c"}); err != nil {
 		t.Fatalf("seed pages: %v", err)
 	}
 	if err := gallerycache.ReplacePages(ctx, client, 9004, "tok", []string{"x", "y"}); err != nil {
@@ -1122,7 +1102,7 @@ func TestRefreshPages_Shrinks(t *testing.T) {
 	defer mockServer.Close()
 
 	client := newTestDB(t)
-	if err := gallerycache.UpsertPages(t.Context(), client, 12345, "tok12345",
+	if err := gallerycache.ReplacePages(t.Context(), client, 12345, "tok12345",
 		[]string{"a", "b", "c", "d", "e"}); err != nil {
 		t.Fatalf("seed pages: %v", err)
 	}
@@ -1147,7 +1127,7 @@ func TestCachedImage_PermanentFailureRefreshesGalleryCache(t *testing.T) {
 	pageURL := "https://exhentai.org/s/abc/91005-1"
 
 	db := newTestDB(t)
-	if err := gallerycache.UpsertPages(t.Context(), db, id, token,
+	if err := gallerycache.ReplacePages(t.Context(), db, id, token,
 		[]string{"https://exhentai.org/s/old/91005-1"}); err != nil {
 		t.Fatalf("seed pages: %v", err)
 	}

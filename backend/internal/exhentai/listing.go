@@ -38,12 +38,6 @@ type ListingNavOptions struct {
 	Jump string
 }
 
-// Active reports whether any navigation parameter is set. A nil receiver is not
-// active, so callers can pass nil for a plain paginated request.
-func (n *ListingNavOptions) Active() bool {
-	return n != nil && (n.Seek != "" || n.Jump != "")
-}
-
 // Apply merges the navigation parameters into an existing query.
 func (n *ListingNavOptions) Apply(q url.Values) {
 	if n == nil {

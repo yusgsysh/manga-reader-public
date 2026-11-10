@@ -56,10 +56,19 @@ func DecodeSprite(data []byte) (image.Image, error) {
 	return src, nil
 }
 
-// CropDecoded crops rect out of an already-decoded sprite and re-encodes it
-// as WebP, applying the same bounds check and transparent-padding trim as
-// CropWEBP. Sharing one DecodeSprite across concurrent calls is what keeps a
-// burst of grid thumbnails from decoding the same sheet once per cell.
+// CropDecoded crops rect out of an already-decoded sprite and re-encodes it as
+// a WebP image. rect is expressed in the sprite's pixel coordinates (as parsed
+// from the site's CSS background-position) and must be fully contained in the
+// sprite bounds.
+//
+// Fully transparent padding around the cell content is trimmed so the returned
+// thumbnail tightly bounds the page image, keeping consumers from rendering the
+// transparent letterbox as a solid (white) border.
+//
+// Callers crop many cells of one sprite sheet, so they decode once with
+// DecodeSprite and share that image across concurrent CropDecoded calls: that is
+// what keeps a burst of grid thumbnails from decoding the same sheet once per
+// cell.
 func CropDecoded(src image.Image, rect image.Rectangle) ([]byte, error) {
 	if rect.Empty() || !rect.In(src.Bounds()) {
 		return nil, fmt.Errorf("%w: %v not in %v", ErrOutOfBounds, rect, src.Bounds())
@@ -75,25 +84,6 @@ func CropDecoded(src image.Image, rect image.Rectangle) ([]byte, error) {
 		return nil, fmt.Errorf("encode thumbnail: %w", err)
 	}
 	return out.Bytes(), nil
-}
-
-// CropWEBP decodes a WebP image, crops it to rect and re-encodes the result as
-// a WebP image. rect is expressed in the sprite's pixel coordinates (as parsed
-// from the site's CSS background-position). rect must be fully contained in the
-// sprite bounds.
-//
-// Fully transparent padding around the cell content is trimmed so the returned
-// thumbnail tightly bounds the page image. This keeps consumers from rendering
-// the transparent letterbox as a solid (white) border.
-//
-// Prefer DecodeSprite + CropDecoded when cropping more than one rectangle of
-// the same sprite: that shares the decode instead of re-running it per call.
-func CropWEBP(data []byte, rect image.Rectangle) ([]byte, error) {
-	src, err := DecodeSprite(data)
-	if err != nil {
-		return nil, err
-	}
-	return CropDecoded(src, rect)
 }
 
 // toNRGBA copies the given region of src into a new opaquely-backed NRGBA image.

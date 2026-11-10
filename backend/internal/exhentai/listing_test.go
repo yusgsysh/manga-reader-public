@@ -119,18 +119,15 @@ func TestExtractNextURL(t *testing.T) {
 }
 
 func TestListingNavOptions_Apply(t *testing.T) {
-	if (*ListingNavOptions)(nil).Active() {
-		t.Error("nil options should not be active")
-	}
-	if (&ListingNavOptions{}).Active() {
-		t.Error("empty options should not be active")
+	// A nil receiver is a plain paginated request: Apply must leave the query
+	// untouched rather than panic.
+	q := url.Values{}
+	(*ListingNavOptions)(nil).Apply(q)
+	if len(q) != 0 {
+		t.Errorf("nil options must not modify the query, got %v", q)
 	}
 
-	q := url.Values{}
 	nav := &ListingNavOptions{Seek: "2020-01", Jump: "1y"}
-	if !nav.Active() {
-		t.Error("options with seek/jump should be active")
-	}
 	nav.Apply(q)
 
 	if got := q.Get("seek"); got != "2020-01" {

@@ -80,9 +80,6 @@ func NewService(client *ent.Client, opts Options) *Service {
 	return s
 }
 
-// Hub exposes the change hub (handlers use it to record notifications).
-func (s *Service) Hub() *Hub { return s.hub }
-
 // RunEngine runs the sync client engine until ctx is cancelled.
 func (s *Service) RunEngine(ctx context.Context) { s.engine.Run(ctx) }
 

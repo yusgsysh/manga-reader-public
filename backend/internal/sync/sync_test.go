@@ -207,9 +207,9 @@ func TestRecordNotifiesHub(t *testing.T) {
 	client := newTestClient(t)
 	svc := NewService(client, Options{})
 
-	peerCh, unsubPeer := svc.Hub().SubscribePeer()
+	peerCh, unsubPeer := svc.hub.SubscribePeer()
 	defer unsubPeer()
-	localCh, unsubLocal := svc.Hub().SubscribeLocal()
+	localCh, unsubLocal := svc.hub.SubscribeLocal()
 	defer unsubLocal()
 
 	if err := svc.RecordUpsert(t.Context(), EntityBookshelf, 1, "tok"); err != nil {
@@ -219,7 +219,7 @@ func TestRecordNotifiesHub(t *testing.T) {
 	assertSignaled(t, localCh, "local subscriber")
 
 	// Remote-originated applies notify local subscribers only.
-	svc.Hub().NotifyLocal()
+	svc.hub.NotifyLocal()
 	assertSignaled(t, localCh, "local subscriber after NotifyLocal")
 	select {
 	case <-peerCh:
@@ -560,7 +560,7 @@ func TestLocalEventsStreamsPayloads(t *testing.T) {
 	}
 
 	// A notification produces another payload.
-	svc.Hub().NotifyLocal()
+	svc.hub.NotifyLocal()
 	if line := readEventLine(t, reader); !strings.HasPrefix(line, "data: ") {
 		t.Fatalf("notified line = %q, want data payload", line)
 	}

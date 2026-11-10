@@ -35,12 +35,23 @@ func makeSprite(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-func TestCropWEBP(t *testing.T) {
+// cropSprite decodes the sprite and crops one cell, mirroring how the handler
+// crops page thumbnails (DecodeSprite once, CropDecoded per cell).
+func cropSprite(t *testing.T, sprite []byte, rect image.Rectangle) ([]byte, error) {
+	t.Helper()
+	src, err := DecodeSprite(sprite)
+	if err != nil {
+		return nil, err
+	}
+	return CropDecoded(src, rect)
+}
+
+func TestCropDecoded(t *testing.T) {
 	sprite := makeSprite(t)
 
-	out, err := CropWEBP(sprite, image.Rect(4, 0, 8, 4))
+	out, err := cropSprite(t, sprite, image.Rect(4, 0, 8, 4))
 	if err != nil {
-		t.Fatalf("CropWEBP: %v", err)
+		t.Fatalf("crop: %v", err)
 	}
 
 	img, err := webp.Decode(bytes.NewReader(out))
@@ -59,7 +70,7 @@ func TestCropWEBP(t *testing.T) {
 	}
 }
 
-func TestCropWEBP_TrimsTransparentPadding(t *testing.T) {
+func TestCropDecoded_TrimsTransparentPadding(t *testing.T) {
 	src := image.NewNRGBA(image.Rect(0, 0, 10, 10))
 	for y := 2; y < 8; y++ {
 		for x := 2; x < 8; x++ {
@@ -71,9 +82,9 @@ func TestCropWEBP_TrimsTransparentPadding(t *testing.T) {
 		t.Fatalf("encode sprite: %v", err)
 	}
 
-	out, err := CropWEBP(buf.Bytes(), image.Rect(0, 0, 10, 10))
+	out, err := cropSprite(t, buf.Bytes(), image.Rect(0, 0, 10, 10))
 	if err != nil {
-		t.Fatalf("CropWEBP: %v", err)
+		t.Fatalf("crop: %v", err)
 	}
 
 	img, err := webp.Decode(bytes.NewReader(out))
@@ -85,19 +96,19 @@ func TestCropWEBP_TrimsTransparentPadding(t *testing.T) {
 	}
 }
 
-func TestCropWEBP_OutOfBounds(t *testing.T) {
+func TestCropDecoded_OutOfBounds(t *testing.T) {
 	sprite := makeSprite(t)
 
-	if _, err := CropWEBP(sprite, image.Rect(8, 0, 20, 4)); err == nil {
+	if _, err := cropSprite(t, sprite, image.Rect(8, 0, 20, 4)); err == nil {
 		t.Error("expected out-of-bounds error")
 	}
-	if _, err := CropWEBP(sprite, image.Rect(0, 0, 0, 0)); err == nil {
+	if _, err := cropSprite(t, sprite, image.Rect(0, 0, 0, 0)); err == nil {
 		t.Error("expected empty-rect error")
 	}
 }
 
-func TestCropWEBP_InvalidData(t *testing.T) {
-	if _, err := CropWEBP([]byte("not a webp"), image.Rect(0, 0, 1, 1)); err == nil {
+func TestCropDecoded_InvalidData(t *testing.T) {
+	if _, err := cropSprite(t, []byte("not a webp"), image.Rect(0, 0, 1, 1)); err == nil {
 		t.Error("expected decode error for invalid data")
 	}
 }
