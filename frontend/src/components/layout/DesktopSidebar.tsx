@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router";
 import {
   CaretDoubleLeft,
@@ -43,10 +44,34 @@ interface DesktopSidebarProps {
   onToggle: () => void;
 }
 
+const SIDEBAR_ID = "app-sidebar";
+
 export function DesktopSidebar({ collapsed, onToggle }: DesktopSidebarProps) {
   const location = useLocation();
   const { mode, setMode } = useTheme();
   const { lastListRoute } = useNavigationContext();
+  const asideRef = useRef<HTMLElement>(null);
+  const collapseRef = useRef<HTMLButtonElement>(null);
+  const expandRef = useRef<HTMLButtonElement>(null);
+  // The toggles unmount as the rail flips state, so a keyboard user would be
+  // dropped to <body>. Remember a toggle initiated from the rail or its
+  // controls and hand focus to the counterpart once the new state renders.
+  const restoreFocus = useRef(false);
+
+  useEffect(() => {
+    if (!restoreFocus.current) return;
+    restoreFocus.current = false;
+    (collapsed ? expandRef : collapseRef).current?.focus();
+  }, [collapsed]);
+
+  const handleToggle = () => {
+    const active = document.activeElement;
+    restoreFocus.current =
+      active === collapseRef.current ||
+      active === expandRef.current ||
+      Boolean(active && asideRef.current?.contains(active));
+    onToggle();
+  };
 
   return (
     <>
@@ -57,6 +82,8 @@ export function DesktopSidebar({ collapsed, onToggle }: DesktopSidebarProps) {
         out of focus and the accessibility tree.
       */}
       <aside
+        id={SIDEBAR_ID}
+        ref={asideRef}
         inert={collapsed}
         className={cn(
           "fixed inset-y-0 left-0 z-40 hidden w-[var(--app-sidebar-width)] flex-col overflow-hidden bg-kumo-base transition-[width] duration-200 ease-out lg:flex",
@@ -81,8 +108,11 @@ export function DesktopSidebar({ collapsed, onToggle }: DesktopSidebarProps) {
             </Link>
             {!collapsed && (
               <IconButton
+                ref={collapseRef}
                 label="折叠侧边栏"
-                onClick={onToggle}
+                aria-expanded
+                aria-controls={SIDEBAR_ID}
+                onClick={handleToggle}
                 className="absolute top-1/2 right-3 -translate-y-1/2"
               >
                 <CaretDoubleLeft className="size-5" weight="bold" />
@@ -150,8 +180,11 @@ export function DesktopSidebar({ collapsed, onToggle }: DesktopSidebarProps) {
       */}
       {collapsed && (
         <IconButton
+          ref={expandRef}
           label="展开侧边栏"
-          onClick={onToggle}
+          aria-expanded={false}
+          aria-controls={SIDEBAR_ID}
+          onClick={handleToggle}
           className="fixed top-3 left-3 z-30 hidden bg-kumo-recessed shadow-sm hover:bg-kumo-tint lg:flex"
         >
           <CaretDoubleRight className="size-5" weight="bold" />
