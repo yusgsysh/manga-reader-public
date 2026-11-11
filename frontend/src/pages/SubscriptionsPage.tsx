@@ -1,6 +1,5 @@
 import { useSearchParams } from "react-router";
 import { useMemo } from "react";
-import { BookmarkSimple } from "@phosphor-icons/react";
 import { useWatched } from "../hooks/useGalleryList";
 import { GalleryGrid } from "../components/gallery/GalleryGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
@@ -54,7 +53,6 @@ export function SubscriptionsPage() {
     <div>
       <PageHeader
         title="订阅"
-        icon={<BookmarkSimple className="size-5" weight="fill" />}
         actions={
           <>
             <AdvancedSearchMenu value={filters} onApply={handleFiltersChange} />

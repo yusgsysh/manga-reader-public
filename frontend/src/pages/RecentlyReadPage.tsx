@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ClockCounterClockwise, Trash, CircleNotch } from "@phosphor-icons/react";
+import { CircleNotch, Trash } from "@phosphor-icons/react";
 import { Button, Dialog } from "@cloudflare/kumo";
 import {
   useRecentlyRead,
@@ -54,7 +54,6 @@ export function RecentlyReadPage() {
     <div>
       <PageHeader
         title="阅读历史"
-        icon={<ClockCounterClockwise className="size-5" weight="fill" />}
         actions={items.length > 0 ? clearButton : undefined}
       />
       {isLoading ? (

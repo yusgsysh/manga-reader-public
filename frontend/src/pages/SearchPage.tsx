@@ -220,10 +220,7 @@ export function SearchPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="搜索"
-        icon={<MagnifyingGlass className="size-5" weight="bold" />}
-      />
+      <PageHeader title="搜索" />
 
       {/* Sticky search bar. Sits right below the header, so a blur here would
           stack a second backdrop-filter layer on every scroll frame. */}

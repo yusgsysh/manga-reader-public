@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Dialog, Input, cn } from "@cloudflare/kumo";
-import { CircleNotch, Tag, X } from "@phosphor-icons/react";
+import { CircleNotch, X } from "@phosphor-icons/react";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import {
   useTagPreferences,
@@ -503,7 +503,6 @@ export function TagSettingsPage() {
     <div className="max-w-3xl">
       <PageHeader
         title="标签设置"
-        icon={<Tag className="size-5" weight="fill" />}
         actions={
           <>
             {dirty && (

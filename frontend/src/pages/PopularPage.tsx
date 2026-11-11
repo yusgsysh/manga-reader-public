@@ -1,4 +1,3 @@
-import { Fire } from "@phosphor-icons/react";
 import { useMemo } from "react";
 import { usePopular } from "../hooks/useGalleryList";
 import { GalleryGrid } from "../components/gallery/GalleryGrid";
@@ -47,7 +46,6 @@ export function PopularPage() {
       <div>
         <PageHeader
           title="热门"
-          icon={<Fire className="size-5" weight="fill" />}
         />
         <EmptyState message="暂无热门 Gallery" />
       </div>
@@ -58,7 +56,6 @@ export function PopularPage() {
     <div>
       <PageHeader
         title="热门"
-        icon={<Fire className="size-5" weight="fill" />}
       />
       <GalleryGrid galleries={galleries} />
       <InfiniteScrollTrigger

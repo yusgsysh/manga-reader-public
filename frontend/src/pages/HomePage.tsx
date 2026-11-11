@@ -1,6 +1,5 @@
 import { useSearchParams } from "react-router";
 import { useMemo } from "react";
-import { Sparkle } from "@phosphor-icons/react";
 import { useGalleries } from "../hooks/useGalleryList";
 import { GalleryGrid } from "../components/gallery/GalleryGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
@@ -57,7 +56,6 @@ export function HomePage() {
     <div>
       <PageHeader
         title="最新"
-        icon={<Sparkle className="size-5" weight="fill" />}
         actions={
           <>
             <AdvancedSearchMenu value={filters} onApply={handleFiltersChange} />

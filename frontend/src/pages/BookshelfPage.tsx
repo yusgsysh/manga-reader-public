@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { Books as BooksIcon } from "@phosphor-icons/react";
 import { cn } from "@cloudflare/kumo";
 import { useBookshelf } from "../hooks/useBookshelf";
 import { BookshelfGrid } from "../components/gallery/BookshelfGrid";
@@ -71,7 +70,6 @@ export function BookshelfPage() {
     <div>
       <PageHeader
         title="书架"
-        icon={<BooksIcon className="size-5" weight="fill" />}
         actions={items.length > 0 ? controls : undefined}
       />
       {isLoading ? (

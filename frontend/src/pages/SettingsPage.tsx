@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   ArrowsClockwise,
   CircleNotch,
-  Gear,
   Monitor,
   Moon,
   Palette,
@@ -481,7 +480,6 @@ export function SettingsPage() {
     <div className="max-w-3xl">
       <PageHeader
         title="设置"
-        icon={<Gear className="size-5" weight="fill" />}
       />
       <div className="space-y-8">
         <AppearanceSection />
