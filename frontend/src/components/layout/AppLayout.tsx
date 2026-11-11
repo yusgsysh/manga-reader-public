@@ -36,8 +36,10 @@ export function AppLayout() {
         subtree each frame, so every frame must stay cheap: cards already opt
         into `content-visibility: auto` (off-screen ones skip layout), and this
         mirrors the aside's 200ms ease-out so both edges move as one motion.
+        When collapsed, the extra inline inset reserves the corner the expand
+        button floats in; padding both sides keeps the page centered.
       */}
-      <div className="transition-[padding] duration-200 ease-out lg:pl-[var(--app-sidebar-width)]">
+      <div className="transition-[padding] duration-200 ease-out lg:pl-[calc(var(--app-sidebar-width)+var(--app-content-inset))] lg:pr-[var(--app-content-inset)]">
         <main className="app-container py-6 md:py-8">
           <PageTransition routeKey={location.pathname}>
             <Outlet />

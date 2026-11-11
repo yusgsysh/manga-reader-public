@@ -19,44 +19,21 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
   { mode: "system", label: "跟随系统", icon: Monitor },
 ];
 
-function SidebarLink({
-  item,
-  active,
-  collapsed,
-}: {
-  item: NavItem;
-  active: boolean;
-  collapsed: boolean;
-}) {
+function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
   return (
     <Link
       to={item.to}
       aria-current={active ? "page" : undefined}
-      title={collapsed ? item.label : undefined}
       className={cn(
-        "flex items-center rounded-xl px-3 py-2 text-sm font-medium transition-[gap,background-color,color] duration-200 ease-out",
-        collapsed ? "justify-center gap-0" : "gap-3",
+        "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
         active
           ? "bg-[var(--app-accent)] text-[var(--app-accent-contrast)]"
           : "text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default",
       )}
     >
       <Icon className="size-5 shrink-0" weight={active ? "fill" : "regular"} />
-      {/*
-        The label stays mounted and collapses via max-width/opacity so the text
-        slides and fades with the rail instead of popping in at the end. Kept in
-        the accessibility tree (no display:none) so collapsed links still have a
-        readable name.
-      */}
-      <span
-        className={cn(
-          "min-w-0 overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 ease-out",
-          collapsed ? "max-w-0 opacity-0" : "max-w-[10rem] opacity-100",
-        )}
-      >
-        {item.label}
-      </span>
+      <span className="truncate">{item.label}</span>
     </Link>
   );
 }
@@ -72,93 +49,114 @@ export function DesktopSidebar({ collapsed, onToggle }: DesktopSidebarProps) {
   const { lastListRoute } = useNavigationContext();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[var(--app-sidebar-width)] flex-col border-r border-kumo-hairline bg-kumo-base transition-[width] duration-200 ease-out lg:flex">
-      <div className="relative flex h-14 shrink-0 items-center px-3">
+    <>
+      {/*
+        Collapsing sets the rail width to 0, so the sidebar disappears entirely
+        rather than shrinking into an icon rail. `overflow-hidden` clips the
+        children while the width animates, and `inert` keeps the hidden links
+        out of focus and the accessibility tree.
+      */}
+      <aside
+        inert={collapsed}
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 hidden w-[var(--app-sidebar-width)] flex-col overflow-hidden bg-kumo-base transition-[width] duration-200 ease-out lg:flex",
+          collapsed
+            ? "border-r border-transparent"
+            : "border-r border-kumo-hairline",
+        )}
+      >
         {/*
-          The logo collapses its own width instead of being unmounted, so it
-          slides/fades out with the rail. The toggle is pinned to the right edge
-          and only nudges to the rail's center, avoiding a full jump when the
-          header switches alignment.
+          The contents fade while the rail narrows, so the collapse reads as the
+          panel receding rather than icons and labels being squeezed out.
         */}
-        <Link
-          to="/"
-          aria-label="Manga Reader 首页"
-          className={cn(
-            "overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 ease-out",
-            collapsed ? "max-w-0 opacity-0" : "max-w-[8rem] opacity-100",
-          )}
-        >
-          <Logo />
-        </Link>
-        <IconButton
-          label={collapsed ? "展开侧边栏" : "折叠侧边栏"}
-          onClick={onToggle}
-          className={cn(
-            "absolute top-1/2 -translate-y-1/2 transition-[right] duration-200 ease-out",
-            collapsed ? "right-[18px]" : "right-3",
-          )}
-        >
-          {collapsed ? (
-            <CaretDoubleRight className="size-5" weight="bold" />
-          ) : (
-            <CaretDoubleLeft className="size-5" weight="bold" />
-          )}
-        </IconButton>
-      </div>
-
-      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-3 py-2">
-        {PRIMARY_NAV.map((item) => (
-          <SidebarLink
-            key={item.to}
-            item={item}
-            active={isNavActive(location.pathname, item.to, lastListRoute)}
-            collapsed={collapsed}
-          />
-        ))}
-
-        <div className="my-3 border-t border-kumo-hairline" />
-
-        {SECONDARY_NAV.map((item) => (
-          <SidebarLink
-            key={item.to}
-            item={item}
-            active={isNavActive(location.pathname, item.to, lastListRoute)}
-            collapsed={collapsed}
-          />
-        ))}
-      </nav>
-
-      <div className="shrink-0 border-t border-kumo-hairline p-3">
         <div
           className={cn(
-            "flex items-center gap-1 rounded-xl bg-kumo-recessed p-1",
-            collapsed && "flex-col",
+            "flex h-full flex-col transition-opacity duration-150 ease-out",
+            collapsed && "opacity-0",
           )}
         >
-          {THEME_OPTIONS.map((option) => {
-            const Icon = option.icon;
-            const active = mode === option.mode;
-            return (
-              <button
-                key={option.mode}
-                type="button"
-                onClick={() => setMode(option.mode)}
-                aria-label={option.label}
-                aria-pressed={active}
-                title={option.label}
-                className={cn(
-                  "flex flex-1 items-center justify-center rounded-lg py-1.5 transition-colors",
-                  active
-                    ? "bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
-                    : "text-kumo-subtle hover:text-kumo-default",
-                )}
+          <div className="relative flex h-14 shrink-0 items-center px-3">
+            <Link to="/" aria-label="Manga Reader 首页">
+              <Logo />
+            </Link>
+            {!collapsed && (
+              <IconButton
+                label="折叠侧边栏"
+                onClick={onToggle}
+                className="absolute top-1/2 right-3 -translate-y-1/2"
               >
-                <Icon className="size-4" weight={active ? "fill" : "regular"} />
-              </button>
-            );
-          })}
+                <CaretDoubleLeft className="size-5" weight="bold" />
+              </IconButton>
+            )}
+          </div>
+
+          <nav className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-3 py-2">
+            {PRIMARY_NAV.map((item) => (
+              <SidebarLink
+                key={item.to}
+                item={item}
+                active={isNavActive(location.pathname, item.to, lastListRoute)}
+              />
+            ))}
+
+            <div className="my-3 border-t border-kumo-hairline" />
+
+            {SECONDARY_NAV.map((item) => (
+              <SidebarLink
+                key={item.to}
+                item={item}
+                active={isNavActive(location.pathname, item.to, lastListRoute)}
+              />
+            ))}
+          </nav>
+
+          <div className="shrink-0 border-t border-kumo-hairline p-3">
+            <div className="flex items-center gap-1 rounded-xl bg-kumo-recessed p-1">
+              {THEME_OPTIONS.map((option) => {
+                const Icon = option.icon;
+                const active = mode === option.mode;
+                return (
+                  <button
+                    key={option.mode}
+                    type="button"
+                    onClick={() => setMode(option.mode)}
+                    aria-label={option.label}
+                    aria-pressed={active}
+                    title={option.label}
+                    className={cn(
+                      "flex flex-1 items-center justify-center rounded-lg py-1.5 transition-colors",
+                      active
+                        ? "bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
+                        : "text-kumo-subtle hover:text-kumo-default",
+                    )}
+                  >
+                    <Icon
+                      className="size-4"
+                      weight={active ? "fill" : "regular"}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+
+      {/*
+        With the rail gone, the in-rail toggle is gone too. The expand button
+        takes over its top-left corner, so the control returns to where the
+        rail's own toggle sits: collapsing and expanding feel like the same
+        corner. `--app-content-inset` reserves the gutter it floats in.
+      */}
+      {collapsed && (
+        <IconButton
+          label="展开侧边栏"
+          onClick={onToggle}
+          className="fixed top-3 left-3 z-30 hidden bg-kumo-recessed shadow-sm hover:bg-kumo-tint lg:flex"
+        >
+          <CaretDoubleRight className="size-5" weight="bold" />
+        </IconButton>
+      )}
+    </>
   );
 }
