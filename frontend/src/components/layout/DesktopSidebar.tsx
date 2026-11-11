@@ -87,9 +87,7 @@ export function DesktopSidebar({ collapsed, onToggle }: DesktopSidebarProps) {
         inert={collapsed}
         className={cn(
           "fixed inset-y-0 left-0 z-40 hidden w-[var(--app-sidebar-width)] flex-col overflow-hidden bg-kumo-base transition-[width] duration-200 ease-out lg:flex",
-          collapsed
-            ? "border-r border-transparent"
-            : "border-r border-kumo-hairline",
+          !collapsed && "border-r border-kumo-hairline",
         )}
       >
         {/*
