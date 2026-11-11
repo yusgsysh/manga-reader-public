@@ -1,19 +1,12 @@
 import { useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router";
 import { AnimatePresence, m } from "motion/react";
-import { Monitor, Moon, Sun, X } from "@phosphor-icons/react";
+import { X } from "@phosphor-icons/react";
 import { cn } from "@cloudflare/kumo";
-import { useTheme } from "../../hooks/useTheme";
-import type { ThemeMode } from "../../lib/theme";
 import { Logo } from "../ui";
+import { ThemeSwitcher } from "./ThemeSwitcher";
 import { PRIMARY_NAV, SECONDARY_NAV, isNavActive, type NavItem } from "./nav";
 import { useNavigationContext } from "../../hooks/useNavigationContext";
-
-const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
-  { mode: "light", label: "浅色", icon: Sun },
-  { mode: "dark", label: "深色", icon: Moon },
-  { mode: "system", label: "跟随系统", icon: Monitor },
-];
 
 interface MobileDrawerProps {
   open: boolean;
@@ -50,7 +43,6 @@ function DrawerLink({
 
 export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
   const location = useLocation();
-  const { mode, setMode } = useTheme();
   const panelRef = useRef<HTMLDivElement>(null);
   const { lastListRoute } = useNavigationContext();
 
@@ -128,33 +120,7 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
             </nav>
 
             <div className="shrink-0 border-t border-kumo-hairline p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-              <div className="flex items-center gap-1 rounded-xl bg-kumo-recessed p-1">
-                {THEME_OPTIONS.map((option) => {
-                  const Icon = option.icon;
-                  const active = mode === option.mode;
-                  return (
-                    <button
-                      key={option.mode}
-                      type="button"
-                      onClick={() => setMode(option.mode)}
-                      aria-label={option.label}
-                      aria-pressed={active}
-                      title={option.label}
-                      className={cn(
-                        "flex flex-1 items-center justify-center rounded-lg py-1.5 transition-colors",
-                        active
-                          ? "bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
-                          : "text-kumo-subtle hover:text-kumo-default",
-                      )}
-                    >
-                      <Icon
-                        className="size-4"
-                        weight={active ? "fill" : "regular"}
-                      />
-                    </button>
-                  );
-                })}
-              </div>
+              <ThemeSwitcher className="w-full" />
             </div>
           </m.div>
         </div>

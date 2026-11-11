@@ -323,8 +323,8 @@ try {
     await page.goto(`${BASE}/bookshelf`, { waitUntil: "domcontentloaded" });
     await page.waitForSelector('a[href^="/gallery/1001/"]', { timeout: 30000 });
 
-    const deadLink = await page.locator('aside a[href="/gallery"]').count();
-    check("sidebar has no gallery entry", deadLink === 0, `${deadLink} links`);
+    const deadLink = await page.locator('header a[href="/gallery"]').count();
+    check("top bar has no gallery entry", deadLink === 0, `${deadLink} links`);
 
     await page.locator('a[href^="/gallery/1001/"]').first().click();
     await page.waitForURL(`${BASE}/gallery/1001/tok`, { timeout: 10000 });
@@ -337,13 +337,13 @@ try {
     await page.waitForSelector(".comimi-menu-link", { timeout: 10000 });
     await page.locator(".comimi-menu-link").last().click();
     await page.waitForURL(`${BASE}/gallery/1001/tok`, { timeout: 10000 });
-    await page.waitForSelector('aside a[href="/bookshelf"][aria-current="page"]', {
+    await page.waitForSelector('header a[href="/bookshelf"][aria-current="page"]', {
       timeout: 10000,
     });
 
-    const activeTotal = await page.locator("aside a[aria-current='page']").count();
+    const activeTotal = await page.locator("header a[aria-current='page']").count();
     const activeBookshelf = await page
-      .locator('aside a[href="/bookshelf"][aria-current="page"]')
+      .locator('header a[href="/bookshelf"][aria-current="page"]')
       .count();
     check(
       "detail highlights the bookshelf as the source",
@@ -351,7 +351,7 @@ try {
       `${activeBookshelf} active`,
     );
     check(
-      "no other sidebar entry is active",
+      "no other top bar entry is active",
       activeTotal === 1,
       `${activeTotal} active`,
     );
@@ -364,7 +364,7 @@ try {
       page.url(),
     );
     const shelfActive = await page
-      .locator('aside a[href="/bookshelf"][aria-current="page"]')
+      .locator('header a[href="/bookshelf"][aria-current="page"]')
       .count();
     check("bookshelf highlights itself", shelfActive === 1, `${shelfActive} active`);
     await page.close();

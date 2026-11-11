@@ -227,7 +227,7 @@ export function SearchPage() {
 
       {/* Sticky search bar. Sits right below the header, so a blur here would
           stack a second backdrop-filter layer on every scroll frame. */}
-      <div className="sticky top-14 z-30 -mx-1 bg-kumo-base/95 px-1 py-3 lg:top-0">
+      <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-30 -mx-1 bg-kumo-base/95 px-1 py-3">
         <div className="flex gap-2">
           <Input
             placeholder="搜索 Gallery..."

@@ -312,4 +312,4 @@ Gallery 详情页也提供页面缩略图网格（`PageThumbnailGrid`，每页 2
 | `/gallery/:id/:token` | Gallery Detail |
 | `/reader/:id/:token` | Reader |
 
-列表页通过 `NavigationContext` + `useLastListRoute` 记住来源路由：进入 Gallery 详情时侧边栏 / 抽屉高亮来源列表项，直接访问（无 referrer）时回落到首页。
+列表页通过 `NavigationContext` + `useLastListRoute` 记住来源路由：进入 Gallery 详情时顶栏 / 抽屉高亮来源列表项，直接访问（无 referrer）时回落到首页。

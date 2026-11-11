@@ -24,26 +24,6 @@
   --text-color-kumo-link: var(--app-accent);
 
   --app-cover-radius: 0.75rem;
-
-  /* Desktop navigation rail width; 0 while the mobile header is used. */
-  --app-sidebar-width: 0px;
-  --app-sidebar-expanded: 15rem;
-  /* Fully hidden: collapsing removes the rail instead of leaving an icon strip. */
-  --app-sidebar-collapsed: 0px;
-  /* Extra inline inset that keeps the floating expand button clear of content.
-     Applied to both sides so the page stays visually centered. */
-  --app-content-inset: 0px;
-}
-
-@media (min-width: 1024px) {
-  :root {
-    --app-sidebar-width: var(--app-sidebar-expanded);
-  }
-
-  [data-sidebar="collapsed"] {
-    --app-sidebar-width: var(--app-sidebar-collapsed);
-    --app-content-inset: 1.75rem;
-  }
 }
 
 [data-mode="dark"] {
@@ -342,10 +322,10 @@ body {
 }
 
 /*
- * Kumo's toast viewport ships at z-1, below the app chrome (z-40 sidebar,
- * z-50 header/back-to-top, z-60 drawer) and dialog overlays. Lift it so
- * stacked toasts — newest in front, older ones receding behind — stay
- * visible on every page. Matches the viewport's fixed/bottom-4/z-1 combo.
+ * Kumo's toast viewport ships at z-1, below the app chrome (z-50 header and
+ * back-to-top, z-60 drawer) and dialog overlays. Lift it so stacked toasts —
+ * newest in front, older ones receding behind — stay visible on every page.
+ * Matches the viewport's fixed/bottom-4/z-1 combo.
  */
 div.fixed.bottom-4.z-1 {
   z-index: 80;
