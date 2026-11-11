@@ -1,0 +1,25 @@
+# Manga Reader 容器组（pod）：manga-reader 与 Cloudflare WARP 共用同一个网络命名空间。
+# WARP 客户端把 pod 的出站流量接到 Cloudflare；manga-reader 经 pod 内的
+# 127.0.0.1:1080（WARP 镜像自带的 gost，HTTP + SOCKS5）出网。
+# WARP 未连上时 1080 不可用，后端请求会失败而不是回退直连（fail closed）。
+#
+# 安装：manga-reader.pod / manga-reader.container / manga-reader-warp.container
+# 三个文件一起放到 /etc/containers/systemd/，然后：
+#   systemctl daemon-reload
+#   systemctl restart manga-reader.service   # 会连带启动 pod 与 manga-reader-warp
+[Unit]
+Description=Manga Reader pod (manga-reader + Cloudflare WARP)
+
+[Pod]
+PodName=manga-reader-pod
+# 对外发布端口（原 frontend 的 5173 入口），从 container 单元移到这里：
+# pod 内的容器不能再各自 PublishPort。
+# 默认仅绑定回环：公网访问请显式改为 0.0.0.0:5173:8080，并置于 HTTPS 反向代理之后。
+PublishPort=127.0.0.1:5173:8080
+# WARP 客户端要求的 netns 级 sysctl。容器共享 pod 的 netns，
+# 所以这些必须建在 pod 上（.pod 没有 Sysctl= 键，用 PodmanArgs 透传）。
+PodmanArgs=--sysctl=net.ipv6.conf.all.disable_ipv6=0 --sysctl=net.ipv4.conf.all.src_valid_mark=1
+
+[Service]
+Restart=always
+RestartSec=5

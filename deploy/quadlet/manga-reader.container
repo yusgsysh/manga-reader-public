@@ -1,22 +1,37 @@
 # Manga Reader（单镜像：Gin API + 内嵌前端，容器 :8080 → 宿主 5173）
-# 安装：/etc/containers/systemd/manga-reader.container
+#
+# 安装：manga-reader.pod / manga-reader.container / manga-reader-warp.container
+# 三个文件一起放到 /etc/containers/systemd/，然后：
+#   systemctl daemon-reload
+#   systemctl restart manga-reader.service
+# 端口发布在 manga-reader.pod；出站流量经同一 pod 内的 Cloudflare WARP。
 #
 # 迁移到单镜像：先停用并删除旧 unit，否则旧的 frontend(Angie) 容器会继续跑：
 #   systemctl disable --now manga-reader-frontend.service
 #   systemctl disable --now manga-reader-backend.service 2>/dev/null || true
-#   rm /etc/containers/systemd/manga-reader-{backend,frontend}.container /etc/containers/systemd/manga-reader.pod
+#   rm /etc/containers/systemd/manga-reader-{backend,frontend}.container
 #   systemctl daemon-reload
+[Unit]
+# 启动时一并拉起 WARP 客户端（它自己会加入同一个 pod）。
+Wants=manga-reader-warp.service
+After=manga-reader-warp.service
+
 [Container]
 Image=ghcr.io/yusgsysh/manga-reader:latest
-# 对外发布端口（原 frontend 的 5173 入口）。
-# 默认仅绑定回环：公网访问请显式改为 0.0.0.0:5173:8080，并置于 HTTPS 反向代理之后。
-PublishPort=127.0.0.1:5173:8080
+# 容器组：共享 WARP 所在的 netns；PublishPort 必须写在 manga-reader.pod 里。
+Pod=manga-reader.pod
 # 全量配置（EHENTAI_COOKIE、同步令牌、数据库驱动、Basic Auth 等）
 # 注意：键名必须是 EnvironmentFile=（EnvFile= 非法键，quadlet 会跳过整个 unit）
 # 该值经 podman --env-file 注入：每行须为 KEY=VALUE，且 $ 不做展开
-# HTTP_PROXY/HTTPS_PROXY/NO_PROXY 也在该文件中配置，出站经代理（见 .env.example）
+# NO_PROXY 仍在 .env 中配置（内网 MinIO / 数据库 / 服务名需要绕过代理）
 EnvironmentFile=/root/manga-reader-public/.env
-# 容器内监听所有接口；宿主侧由 PublishPort=127.0.0.1 限制。
+# 出站统一走同一 pod 内的 WARP：WARP 容器的 gost 在共享 netns 的
+# 127.0.0.1:1080 上提供 HTTP + SOCKS5 代理，后端请求经它进 Cloudflare 隧道。
+# 显式覆盖 .env：pod 内看不到宿主的 127.0.0.1:7890 之类代理地址。
+# WARP 掉线时 1080 无监听，请求直接失败，不会静默回退成直连。
+Environment=HTTP_PROXY=socks5://127.0.0.1:1080
+Environment=HTTPS_PROXY=socks5://127.0.0.1:1080
+# 容器内监听所有接口；宿主侧由 manga-reader.pod 的 PublishPort=127.0.0.1 限制。
 Environment=EHENTAI_PORT=:8080
 Environment=MANGA_READER_DB_PATH=/app/data/manga-reader.db
 

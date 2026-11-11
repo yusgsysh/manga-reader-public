@@ -1,0 +1,31 @@
+# Cloudflare WARP 客户端（官方客户端 + gost），为 manga-reader pod 提供出网出口。
+# 镜像默认以非 root 的 warp 用户运行，entrypoint 通过 sudo 启动 warp-svc、
+# 必要时 mknod，因此需要下面的设备和 capability；不要加
+# NoNewPrivileges=true 或 DropCapability=all，否则无法创建 tun / 改写路由。
+#
+# 验证（在宿主机）：
+#   podman exec manga-reader-warp curl -fsS --socks5-hostname 127.0.0.1:1080 \
+#     https://cloudflare.com/cdn-cgi/trace | grep '^warp='
+# 输出 warp=on / warp=plus 即已走 Cloudflare 出口。
+[Container]
+Image=docker.io/caomingjun/warp:latest
+ContainerName=manga-reader-warp
+Pod=manga-reader.pod
+# 等待 WARP daemon 就绪的秒数；机器慢可适当加大。
+Environment=WARP_SLEEP=2
+# WARP+ 授权码（可选）
+#Environment=WARP_LICENSE_KEY=
+# 注册信息持久化。WARP 有注册频率限制，删除该卷会触发重新注册。
+Volume=manga-reader-warp_data:/var/lib/cloudflare-warp
+# WARP 需要 tun 设备在同一 netns 内接管路由。
+AddDevice=/dev/net/tun
+AddCapability=NET_ADMIN
+# Podman 下官方镜像还需要这两个能力（sudo / mknod）。
+AddCapability=MKNOD
+AddCapability=AUDIT_WRITE
+PidsLimit=256
+PodmanArgs=--log-opt max-size=10m --log-opt max-file=3
+
+[Service]
+Restart=always
+RestartSec=5
