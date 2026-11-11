@@ -173,7 +173,8 @@ func (s *Server) handleCachedThumbnail(c *gin.Context) {
 	key := ThumbnailCacheKey(rawURL)
 
 	if s.Cache == nil {
-		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
+		// MinIO is optional: fall back to the live proxy instead of failing.
+		s.handleThumbnail(c)
 		return
 	}
 
@@ -213,7 +214,8 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 	key := cache.CacheKey(rawURL)
 
 	if s.Cache == nil {
-		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
+		// MinIO is optional: fall back to the live proxy instead of failing.
+		s.handlePageImage(c)
 		return
 	}
 

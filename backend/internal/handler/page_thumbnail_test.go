@@ -297,15 +297,20 @@ func TestCachedPageThumbnail_ConcurrentCropsShareSpriteDownload(t *testing.T) {
 	}
 }
 
-func TestCachedPageThumbnail_NoCache(t *testing.T) {
-	server := &Server{Client: &http.Client{}}
+// MinIO is optional: without a cache the endpoint delegates to the live crop.
+func TestCachedPageThumbnail_FallsBackToLiveWithoutCache(t *testing.T) {
+	srv := spriteServer(t, nil)
+	server := &Server{Client: newMockClient(srv.URL)}
 	r := setupMockRouter(server)
 
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("GET", directThumbPath(cachedThumbPath, testSpriteURL), nil))
 
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := decodeSize(t, w.Body.Bytes()); got.X != 4 || got.Y != 4 {
+		t.Errorf("cropped size = %v, want 4x4", got)
 	}
 }
 

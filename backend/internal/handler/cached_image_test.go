@@ -122,10 +122,23 @@ func TestCachedImage_InvalidURL(t *testing.T) {
 	}
 }
 
-func TestCachedImage_MissingMinIO(t *testing.T) {
+// MinIO is optional: without a cache the endpoint delegates to the live proxy.
+func TestCachedImage_FallsBackToLiveWithoutCache(t *testing.T) {
+	imgData := mockImageBytes()
+	srv := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/s/") {
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, mockPageHTML("https://example.com/image.webp", ""))
+			return
+		}
+		w.Header().Set("Content-Type", "image/webp")
+		_, _ = w.Write(imgData)
+	})
+	defer srv.Close()
+
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	app := &Server{Client: &http.Client{}}
+	app := &Server{Client: newMockClient(srv.URL)}
 	r.GET("/api/image-cache/page", app.handleCachedImage)
 
 	pageURL := "https://exhentai.org/s/abc/123-1"
@@ -133,9 +146,11 @@ func TestCachedImage_MissingMinIO(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// Should fail because Cache is nil (no MinIO configured)
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("status = %d, want %d when MinIO is not configured", w.Code, http.StatusServiceUnavailable)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if !bytes.Equal(w.Body.Bytes(), imgData) {
+		t.Errorf("body mismatch: got %q, want %q", w.Body.Bytes(), imgData)
 	}
 }
 

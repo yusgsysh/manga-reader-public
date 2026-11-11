@@ -321,17 +321,28 @@ func TestCachedThumbnail_InvalidURL(t *testing.T) {
 	}
 }
 
-func TestCachedThumbnail_MissingMinIO(t *testing.T) {
+// MinIO is optional: without a cache the endpoint delegates to the live proxy.
+func TestCachedThumbnail_FallsBackToLiveWithoutCache(t *testing.T) {
+	imgData := mockImageBytes()
+	mockServer := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/webp")
+		_, _ = w.Write(imgData)
+	})
+	defer mockServer.Close()
+
 	r := setupRouter()
-	app := &Server{Client: &http.Client{}}
+	app := &Server{Client: newMockClient(mockServer.URL)}
 	r.GET("/api/image-cache/thumbnail", app.handleCachedThumbnail)
 
 	req := httptest.NewRequest("GET", "/api/image-cache/thumbnail?url="+url.QueryEscape(testThumbURL), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("status = %d, want %d when MinIO is not configured", w.Code, http.StatusServiceUnavailable)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d. body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if !bytes.Equal(w.Body.Bytes(), imgData) {
+		t.Errorf("body mismatch: got %q, want %q", w.Body.Bytes(), imgData)
 	}
 }
 

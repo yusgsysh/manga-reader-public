@@ -232,7 +232,8 @@ func isExpiredSprite(err error) bool {
 // on a miss.
 func (s *Server) handleCachedPageThumbnail(c *gin.Context) {
 	if s.Cache == nil {
-		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "cache not configured"})
+		// MinIO is optional: fall back to the live crop instead of failing.
+		s.handlePageThumbnail(c)
 		return
 	}
 

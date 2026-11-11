@@ -649,7 +649,8 @@ Cache-Control: public, max-age=31536000, immutable
 |-------------|-------------|
 | 400 | Bad request (参数无效、URL 不合法) |
 | 502 | 上游错误 (ExHentai 请求失败) |
-| 503 | Cache 未配置 (MinIO 环境变量缺失) |
+
+> MinIO 未配置时不会返回 503，而是自动回落到 live 端点 `/api/image/page`。
 
 **URL 安全限制:**
 
@@ -694,7 +695,8 @@ Cache-Control: public, max-age=31536000, immutable
 |-------------|-------------|
 | 400 | Bad request (参数无效、URL 不合法) |
 | 502 | 上游错误 (ExHentai 请求失败) |
-| 503 | Cache 未配置 (MinIO 环境变量缺失) |
+
+> MinIO 未配置时不会返回 503，而是自动回落到 live 端点 `/api/image/thumbnail`。
 
 **URL 安全限制:**
 
@@ -733,7 +735,8 @@ Cache-Control: public, max-age=31536000, immutable
 | 400 | 参数缺失/非法、URL 不在白名单、裁剪越界 |
 | 404 | 索引超出范围或该页无缩略图元数据 |
 | 502 | 上游抓取或裁剪失败 |
-| 503 | Cache 未配置 (MinIO 环境变量缺失) |
+
+> MinIO 未配置时不会返回 503，而是自动回落到 live 端点 `/api/image/page-thumbnail`。
 
 ---
 
