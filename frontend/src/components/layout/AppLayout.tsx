@@ -10,7 +10,7 @@ export function AppLayout() {
     <div className="min-h-dvh bg-kumo-base text-kumo-default">
       <ScrollRestoration />
       <Header />
-      <main className="app-container py-6 md:py-8">
+      <main className="app-container pt-3 pb-6 md:pt-4 md:pb-8">
         <PageTransition routeKey={location.pathname}>
           <Outlet />
         </PageTransition>

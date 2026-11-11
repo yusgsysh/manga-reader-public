@@ -99,7 +99,7 @@ export function AdvancedSearchMenu({
             disabled={disabled}
             className={cnActive(active)}
           >
-            <Funnel className="size-4" weight="bold" />
+            <Funnel className="size-5" weight="bold" />
             {activeCount > 0 && (
               <span className="absolute -right-1 -top-1 flex min-w-4 items-center justify-center rounded-full bg-[var(--app-accent)] px-1 text-[10px] font-medium leading-4 text-[var(--app-accent-contrast)]">
                 {activeCount}

@@ -42,7 +42,7 @@ export function JumpSeekMenu({
                 : undefined
             }
           >
-            <CalendarBlank className="size-4" weight="bold" />
+            <CalendarBlank className="size-5" weight="bold" />
           </IconButton>
         }
       />
