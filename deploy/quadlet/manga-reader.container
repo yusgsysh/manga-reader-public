@@ -58,3 +58,7 @@ PodmanArgs=--log-opt max-size=10m --log-opt max-file=3
 [Service]
 Restart=always
 RestartSec=5
+
+[Install]
+# quadlet 单元无法 systemctl enable，靠 [Install] 在开机时由 generator 拉起。
+WantedBy=multi-user.target

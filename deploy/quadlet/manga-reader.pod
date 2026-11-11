@@ -19,6 +19,9 @@ PublishPort=127.0.0.1:5173:8080
 # WARP 客户端要求的 netns 级 sysctl。容器共享 pod 的 netns，
 # 所以这些必须建在 pod 上（.pod 没有 Sysctl= 键，用 PodmanArgs 透传）。
 PodmanArgs=--sysctl=net.ipv6.conf.all.disable_ipv6=0 --sysctl=net.ipv4.conf.all.src_valid_mark=1
+# 宿主启用 ufw 且默认 deny routed 时，podman0 的转发会被拦掉（容器连 WARP API
+# 都会超时）。一次性放行（规则写入 /etc/ufw，重启后仍生效）：
+#   ufw route allow in on podman0
 
 [Service]
 Restart=always
