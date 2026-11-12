@@ -253,7 +253,9 @@ function RuleRow({
               commitWeight((e.target as HTMLInputElement).value);
             }
           }}
-          className="w-16"
+          // Wide enough for the 4-character worst case ("-999") plus the
+          // native number spinner, so the digits never sit under it.
+          className="w-20"
         />
       </label>
 
