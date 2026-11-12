@@ -1,9 +1,8 @@
 interface LogoProps {
   className?: string;
-  showWordmark?: boolean;
 }
 
-export function Logo({ className, showWordmark = true }: LogoProps) {
+export function Logo({ className }: LogoProps) {
   return (
     <span className={`inline-flex items-center gap-2 ${className ?? ""}`}>
       <svg
@@ -37,11 +36,6 @@ export function Logo({ className, showWordmark = true }: LogoProps) {
           strokeLinejoin="round"
         />
       </svg>
-      {showWordmark && (
-        <span className="text-[15px] font-semibold tracking-tight">
-          Manga Reader
-        </span>
-      )}
     </span>
   );
 }
