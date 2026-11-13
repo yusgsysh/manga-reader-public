@@ -444,6 +444,30 @@ body {
   animation: page-enter 0.18s ease-out;
 }
 
+/* Settings: fade/rise when switching sections on desktop. */
+@keyframes settings-section-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.settings-section-in {
+  animation: settings-section-in 0.2s ease-out;
+}
+
+/* Settings (mobile): slide in from the right when entering a section. */
+@keyframes settings-section-slide {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+.settings-section-slide {
+  animation: settings-section-slide 0.22s ease-out;
+}
+
 .skeleton-shimmer {
   position: relative;
   overflow: hidden;

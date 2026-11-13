@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   ArrowsClockwise,
   CaretLeft,
@@ -767,38 +767,12 @@ export function SettingsPage() {
   const [mobileSectionId, setMobileSectionId] = useState<string | null>(null);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
-  // Highlight the section currently under the sticky header as the user
-  // scrolls, so the sidebar stays in sync with the visible content.
-  useEffect(() => {
-    if (!isDesktop) return;
-    const onScroll = () => {
-      const offset = 100;
-      let current = sectionIds[0] ?? "";
-      for (const id of sectionIds) {
-        const el = document.getElementById(id);
-        if (el && el.getBoundingClientRect().top <= offset) {
-          current = id;
-        }
-      }
-      const scrolledToBottom =
-        window.innerHeight + window.scrollY >=
-        document.documentElement.scrollHeight - 4;
-      if (scrolledToBottom && sectionIds.length > 0) {
-        current = sectionIds[sectionIds.length - 1];
-      }
-      setActiveId(current);
-    };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-    };
-  }, [sectionIds, isDesktop]);
+  // Desktop renders only the selected section (switch pages, not scroll).
+  const activeSection =
+    sections.find((d) => d.id === activeId) ?? sections[0];
 
   const navigateTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setActiveId(id);
   };
 
   const selectedSection = mobileSectionId
@@ -825,18 +799,18 @@ export function SettingsPage() {
             <div className="sticky top-20">
               <SettingsSidebar
                 groups={groups}
-                activeId={activeId}
+                activeId={activeSection?.id ?? ""}
                 onNavigate={navigateTo}
               />
             </div>
           </aside>
 
-          <div className="min-w-0 space-y-10">
-            {sections.map((def) => (
-              <div key={def.id} id={def.id} className="scroll-mt-24">
-                {def.element}
+          <div className="min-w-0">
+            {activeSection && (
+              <div key={activeSection.id} className="settings-section-in">
+                {activeSection.element}
               </div>
-            ))}
+            )}
           </div>
         </div>
       ) : selectedSection ? (
@@ -849,7 +823,9 @@ export function SettingsPage() {
             <CaretLeft className="size-4" weight="bold" />
             返回设置
           </button>
-          {selectedSection.element}
+          <div key={selectedSection.id} className="settings-section-slide">
+            {selectedSection.element}
+          </div>
         </div>
       ) : (
         <nav aria-label="设置导航">
