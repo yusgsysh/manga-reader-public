@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowsClockwise,
+  CaretLeft,
+  CaretRight,
   CircleNotch,
   Cookie,
   Monitor,
@@ -38,6 +40,7 @@ import type { ThemeMode } from "../lib/theme";
 import { PageHeader, Section, useToast } from "../components/ui";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAuth } from "../context/auth";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { TagRulesSection } from "../components/settings/TagRulesSection";
 import { UserManagementSection } from "../components/settings/UserManagementSection";
 import { ApiManagementSection } from "../components/settings/ApiManagementSection";
@@ -761,10 +764,13 @@ export function SettingsPage() {
   );
 
   const [activeId, setActiveId] = useState<string>(sectionIds[0] ?? "");
+  const [mobileSectionId, setMobileSectionId] = useState<string | null>(null);
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   // Highlight the section currently under the sticky header as the user
   // scrolls, so the sidebar stays in sync with the visible content.
   useEffect(() => {
+    if (!isDesktop) return;
     const onScroll = () => {
       const offset = 100;
       let current = sectionIds[0] ?? "";
@@ -789,55 +795,87 @@ export function SettingsPage() {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
     };
-  }, [sectionIds]);
+  }, [sectionIds, isDesktop]);
 
   const navigateTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const selectedSection = mobileSectionId
+    ? sections.find((d) => d.id === mobileSectionId)
+    : undefined;
+
+  const openMobileSection = (id: string) => {
+    setMobileSectionId(id);
+    window.scrollTo(0, 0);
+  };
+
+  const closeMobileSection = () => {
+    setMobileSectionId(null);
+    window.scrollTo(0, 0);
   };
 
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader title="设置" />
 
-      {/* Mobile: grouped dropdown to jump between sections. */}
-      <div className="mb-4 lg:hidden">
-        <select
-          aria-label="跳转到设置区块"
-          value={activeId}
-          onChange={(event) => navigateTo(event.target.value)}
-          className="w-full rounded-lg border border-kumo-hairline bg-kumo-base px-3 py-2 text-sm text-kumo-default"
-        >
-          {groups.map((group) => (
-            <optgroup key={group.id} label={group.label}>
-              {group.items.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      </div>
+      {isDesktop ? (
+        <div className="grid grid-cols-[15rem_minmax(0,1fr)] gap-10">
+          <aside>
+            <div className="sticky top-20">
+              <SettingsSidebar
+                groups={groups}
+                activeId={activeId}
+                onNavigate={navigateTo}
+              />
+            </div>
+          </aside>
 
-      <div className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-10">
-        <aside className="hidden lg:block">
-          <div className="sticky top-20">
-            <SettingsSidebar
-              groups={groups}
-              activeId={activeId}
-              onNavigate={navigateTo}
-            />
+          <div className="min-w-0 space-y-10">
+            {sections.map((def) => (
+              <div key={def.id} id={def.id} className="scroll-mt-24">
+                {def.element}
+              </div>
+            ))}
           </div>
-        </aside>
-
-        <div className="min-w-0 space-y-10">
-          {sections.map((def) => (
-            <div key={def.id} id={def.id} className="scroll-mt-24">
-              {def.element}
+        </div>
+      ) : selectedSection ? (
+        <div>
+          <button
+            type="button"
+            onClick={closeMobileSection}
+            className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-kumo-subtle transition-colors hover:text-kumo-default"
+          >
+            <CaretLeft className="size-4" weight="bold" />
+            返回设置
+          </button>
+          {selectedSection.element}
+        </div>
+      ) : (
+        <nav aria-label="设置导航">
+          {groups.map((group) => (
+            <div key={group.id} className="mb-5">
+              <h2 className="mb-1.5 px-1 text-xs font-medium text-kumo-subtle">
+                {group.label}
+              </h2>
+              <ul className="space-y-0.5">
+                {group.items.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => openMobileSection(item.id)}
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm text-kumo-default transition-colors hover:bg-kumo-tint"
+                    >
+                      {item.label}
+                      <CaretRight className="size-4 text-kumo-subtle" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           ))}
-        </div>
-      </div>
+        </nav>
+      )}
     </div>
   );
 }

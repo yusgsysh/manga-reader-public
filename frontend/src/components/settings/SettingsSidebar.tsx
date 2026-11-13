@@ -24,20 +24,12 @@ export function SettingsSidebar({
   onNavigate: (id: string) => void;
   className?: string;
 }) {
+  // Desktop sidebar starts with every group expanded; groups can be collapsed
+  // manually. (Mobile uses a separate two-level menu -> detail flow.)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
-  // Adjust state during render (same pattern as SyncSection): the group
-  // containing the active section is always expanded, so scrolling can never
-  // leave the highlighted item hidden behind a collapsed group.
-  const activeGroupId = groups.find((group) =>
-    group.items.some((item) => item.id === activeId),
-  )?.id;
-  if (activeGroupId && collapsed[activeGroupId]) {
-    setCollapsed((prev) => ({ ...prev, [activeGroupId]: false }));
-  }
-
   const toggle = (groupId: string) =>
-    setCollapsed((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+    setCollapsed((prev) => ({ ...prev, [groupId]: !(prev[groupId] ?? false) }));
 
   return (
     <nav className={cn("space-y-1", className)} aria-label="设置导航">
