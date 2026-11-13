@@ -1,0 +1,312 @@
+package auth
+
+import (
+	"bytes"
+	"database/sql"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	_ "modernc.org/sqlite"
+
+	entsql "entgo.io/ent/dialect/sql"
+
+	"manga-reader/internal/config"
+	"manga-reader/internal/ent"
+)
+
+func newTestClient(t *testing.T) *ent.Client {
+	t.Helper()
+	conn, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	conn.SetMaxOpenConns(1)
+	if _, err := conn.Exec("PRAGMA foreign_keys=ON"); err != nil {
+		t.Fatalf("enable foreign keys: %v", err)
+	}
+	client := ent.NewClient(ent.Driver(entsql.OpenDB("sqlite3", conn)))
+	if err := client.Schema.Create(t.Context()); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if _, err := client.Tenant.Create().
+		SetName(config.DefaultTenantName).
+		SetSlug(config.DefaultTenantSlug).
+		SetStatus(config.StatusActive).
+		Save(t.Context()); err != nil {
+		t.Fatalf("create default tenant: %v", err)
+	}
+	t.Cleanup(func() { client.Close() })
+	return client
+}
+
+func testConfig(secret string) config.AuthConfig {
+	return config.AuthConfig{
+		Enabled:       true,
+		JWTSecret:     secret,
+		JWTIssuer:     "manga-reader-test",
+		JWTExpiresIn:  time.Hour,
+		AdminUsername: "admin",
+		AdminPassword: "password123",
+	}
+}
+
+func newTestService(t *testing.T) (*Service, *ent.Client) {
+	t.Helper()
+	client := newTestClient(t)
+	svc := New(client, testConfig(strings.Repeat("k", 32)))
+	if _, err := svc.EnsureAdmin(t.Context()); err != nil {
+		t.Fatalf("EnsureAdmin: %v", err)
+	}
+	return svc, client
+}
+
+func newTestRouter(svc *Service) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(svc.Middleware())
+	svc.RegisterRoutes(r)
+	r.GET("/api/search", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"public": true}) })
+	r.GET("/api/bookshelf", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"protected": true}) })
+	return r
+}
+
+func doJSON(r http.Handler, method, path, body, token string) *httptest.ResponseRecorder {
+	var reader *bytes.Reader
+	if body == "" {
+		reader = bytes.NewReader(nil)
+	} else {
+		reader = bytes.NewReader([]byte(body))
+	}
+	req := httptest.NewRequest(method, path, reader)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
+func login(t *testing.T, r http.Handler, username, password string) (string, *httptest.ResponseRecorder) {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"username": username, "password": password})
+	w := doJSON(r, http.MethodPost, "/api/auth/login", string(body), "")
+	if w.Code != http.StatusOK {
+		return "", w
+	}
+	var res struct {
+		AccessToken string `json:"access_token"`
+		TokenType   string `json:"token_type"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode login: %v", err)
+	}
+	if res.TokenType != "Bearer" || res.AccessToken == "" || res.ExpiresIn <= 0 {
+		t.Fatalf("unexpected login response: %s", w.Body.String())
+	}
+	return res.AccessToken, w
+}
+
+func TestHashPasswordAndVerify(t *testing.T) {
+	hash, err := HashPassword("correct horse battery staple")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	if !strings.HasPrefix(hash, "$argon2id$v=19$") {
+		t.Fatalf("hash = %q, want argon2id PHC", hash)
+	}
+	if strings.Contains(hash, "correct horse") {
+		t.Fatal("hash contains the plaintext password")
+	}
+	if !VerifyPassword(hash, "correct horse battery staple") {
+		t.Fatal("correct password did not verify")
+	}
+	if VerifyPassword(hash, "wrong") {
+		t.Fatal("wrong password verified")
+	}
+	if VerifyPassword("not-a-hash", "anything") {
+		t.Fatal("malformed hash verified")
+	}
+}
+
+func TestLoginSuccessAndProtectedRoutes(t *testing.T) {
+	svc, _ := newTestService(t)
+	r := newTestRouter(svc)
+
+	token, w := login(t, r, "admin", "password123")
+	if token == "" {
+		t.Fatalf("login failed: %d %s", w.Code, w.Body.String())
+	}
+	cookies := w.Result().Cookies()
+	if len(cookies) == 0 || cookies[0].Name != CookieName || !cookies[0].HttpOnly {
+		t.Fatalf("login did not set an HttpOnly cookie: %+v", cookies)
+	}
+
+	if got := doJSON(r, http.MethodGet, "/api/auth/me", "", token); got.Code != http.StatusOK {
+		t.Fatalf("/me = %d, want 200 (%s)", got.Code, got.Body.String())
+	}
+	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", token); got.Code != http.StatusOK {
+		t.Fatalf("protected route with token = %d, want 200", got.Code)
+	}
+	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", ""); got.Code != http.StatusUnauthorized {
+		t.Fatalf("protected route without token = %d, want 401", got.Code)
+	}
+	if got := doJSON(r, http.MethodGet, "/api/search", "", ""); got.Code != http.StatusOK {
+		t.Fatalf("public route = %d, want 200", got.Code)
+	}
+}
+
+func TestLoginWrongPasswordAndUnknownUser(t *testing.T) {
+	svc, _ := newTestService(t)
+	r := newTestRouter(svc)
+
+	for _, tc := range []struct{ user, pass string }{
+		{"admin", "wrong-password"},
+		{"nobody", "password123"},
+	} {
+		body, _ := json.Marshal(map[string]string{"username": tc.user, "password": tc.pass})
+		w := doJSON(r, http.MethodPost, "/api/auth/login", string(body), "")
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("%s: status = %d, want 401", tc.user, w.Code)
+		}
+		if !strings.Contains(w.Body.String(), "invalid username or password") {
+			t.Fatalf("%s: body = %s, want unified error", tc.user, w.Body.String())
+		}
+	}
+}
+
+func TestMiddlewareRejectsMissingInvalidAndWrongSignatureTokens(t *testing.T) {
+	svc, _ := newTestService(t)
+	r := newTestRouter(svc)
+
+	valid, _ := login(t, r, "admin", "password123")
+	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", "not-a-jwt"); got.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid token = %d, want 401", got.Code)
+	}
+
+	other := newTokenManager(strings.Repeat("x", 32), svc.cfg.JWTIssuer, time.Hour)
+	wrongSig, _, err := other.issue(1, 1, "admin", config.RolePlatformAdmin, 0)
+	if err != nil {
+		t.Fatalf("issue wrong-signature token: %v", err)
+	}
+	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", wrongSig); got.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong signature = %d, want 401", got.Code)
+	}
+
+	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", valid); got.Code != http.StatusOK {
+		t.Fatalf("valid token = %d, want 200", got.Code)
+	}
+}
+
+func TestMiddlewareRejectsExpiredAndWrongIssuerTokens(t *testing.T) {
+	svc, _ := newTestService(t)
+	r := newTestRouter(svc)
+	u, err := svc.db.User.Query().Only(t.Context())
+	if err != nil {
+		t.Fatalf("load user: %v", err)
+	}
+
+	expired := newTokenManager(svc.cfg.JWTSecret, svc.cfg.JWTIssuer, time.Minute)
+	expired.now = func() time.Time { return time.Now().Add(-2 * time.Hour) }
+	expiredToken, _, err := expired.issue(u.ID, u.TenantID, u.Username, u.Role, u.TokenVersion)
+	if err != nil {
+		t.Fatalf("issue expired: %v", err)
+	}
+	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", expiredToken); got.Code != http.StatusUnauthorized {
+		t.Fatalf("expired token = %d, want 401", got.Code)
+	}
+
+	wrongIssuer := newTokenManager(svc.cfg.JWTSecret, "someone-else", time.Hour)
+	issuerToken, _, err := wrongIssuer.issue(u.ID, u.TenantID, u.Username, u.Role, u.TokenVersion)
+	if err != nil {
+		t.Fatalf("issue wrong issuer: %v", err)
+	}
+	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", issuerToken); got.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong issuer = %d, want 401", got.Code)
+	}
+
+	// An explicit non-HS256 variant must be rejected even if signed with the
+	// same secret (algorithm confusion / "none").
+	none := "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJpc3MiOiJtYW5nYS1yZWFkZXItdGVzdCIsInN1YiI6IjEiLCJleHAiOjk5OTk5OTk5OTl9."
+	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", none); got.Code != http.StatusUnauthorized {
+		t.Fatalf("alg=none token = %d, want 401", got.Code)
+	}
+}
+
+func TestLogoutRevokesOutstandingTokens(t *testing.T) {
+	svc, _ := newTestService(t)
+	r := newTestRouter(svc)
+
+	token, _ := login(t, r, "admin", "password123")
+	if got := doJSON(r, http.MethodPost, "/api/auth/logout", "", token); got.Code != http.StatusOK {
+		t.Fatalf("logout = %d, want 200 (%s)", got.Code, got.Body.String())
+	}
+	if got := doJSON(r, http.MethodGet, "/api/auth/me", "", token); got.Code != http.StatusUnauthorized {
+		t.Fatalf("token after logout = %d, want 401", got.Code)
+	}
+
+	// A fresh login carries the incremented token_version and works again.
+	newToken, _ := login(t, r, "admin", "password123")
+	if newToken == "" {
+		t.Fatal("login after logout failed")
+	}
+	if got := doJSON(r, http.MethodGet, "/api/auth/me", "", newToken); got.Code != http.StatusOK {
+		t.Fatalf("new token = %d, want 200", got.Code)
+	}
+}
+
+func TestEnsureAdminDoesNotOverwriteExistingPassword(t *testing.T) {
+	svc, client := newTestService(t)
+
+	changed := New(client, func() config.AuthConfig {
+		cfg := testConfig(strings.Repeat("k", 32))
+		cfg.AdminPassword = "another-password"
+		return cfg
+	}())
+	created, err := changed.EnsureAdmin(t.Context())
+	if err != nil {
+		t.Fatalf("EnsureAdmin: %v", err)
+	}
+	if created {
+		t.Fatal("EnsureAdmin created a second administrator")
+	}
+	u, err := client.User.Query().Only(t.Context())
+	if err != nil {
+		t.Fatalf("query user: %v", err)
+	}
+	if !VerifyPassword(u.PasswordHash, "password123") {
+		t.Fatal("existing password was overwritten")
+	}
+	if VerifyPassword(u.PasswordHash, "another-password") {
+		t.Fatal("new environment password replaced the stored hash")
+	}
+	_ = svc
+}
+
+func TestStatusIsPublicAndReportsInitialized(t *testing.T) {
+	svc, _ := newTestService(t)
+	r := newTestRouter(svc)
+
+	w := doJSON(r, http.MethodGet, "/api/auth/status", "", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	var res struct {
+		Enabled     bool `json:"enabled"`
+		Initialized bool `json:"initialized"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	if !res.Enabled || !res.Initialized {
+		t.Fatalf("status = %+v, want enabled+initialized", res)
+	}
+}

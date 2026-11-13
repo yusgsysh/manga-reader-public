@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -24,6 +25,39 @@ type Config struct {
 	// It replaced the reverse-proxy layer that used to sit in front of the
 	// API, now that Gin serves the frontend too.
 	BasicAuth BasicAuthConfig
+	// Auth is the JWT authentication setup used by the SPA login page. It is
+	// enabled by setting JWT_SECRET; without it the app keeps its legacy
+	// anonymous single-user behaviour (and Basic Auth remains available).
+	Auth AuthConfig
+}
+
+// AuthConfig configures the JWT login flow. The administrator row itself is
+// stored in the database; ADMIN_USERNAME/ADMIN_PASSWORD are only used once,
+// when the users table is empty, so changing the environment later never
+// overwrites an existing password.
+type AuthConfig struct {
+	Enabled bool
+	// JWTSecret signs HS256 tokens. It must be a high-entropy value of at
+	// least 32 bytes; auth refuses to start with a weak/empty secret.
+	JWTSecret string
+	JWTIssuer string
+	// JWTExpiresIn is embedded in exp/iat and returned as expires_in.
+	JWTExpiresIn time.Duration
+	// AdminUsername / AdminPassword seed the first administrator. The
+	// password is hashed with Argon2id before it reaches the database.
+	AdminUsername string
+	AdminPassword string
+	// CookieSecure selects the Secure flag for the HttpOnly auth cookie.
+	// Auto (the default) sets it when the request arrived over TLS or a
+	// trusted proxy reported X-Forwarded-Proto=https.
+	CookieSecure     bool
+	CookieSecureAuto bool
+}
+
+// ExpiresInSeconds is the token lifetime in whole seconds for the login
+// response (expires_in).
+func (c AuthConfig) ExpiresInSeconds() int {
+	return int(c.JWTExpiresIn / time.Second)
 }
 
 // BasicAuthConfig is the validated HTTP Basic Auth setup. Credentials come
@@ -120,6 +154,12 @@ func Load() (*Config, error) {
 	}
 	cfg.BasicAuth = basicAuth
 
+	authCfg, err := loadAuth()
+	if err != nil {
+		return nil, err
+	}
+	cfg.Auth = authCfg
+
 	if !cfg.Cookie.IsValid() {
 		return nil, fmt.Errorf("missing required cookies: set EHENTAI_COOKIE or EHENTAI_COOKIE_IPB_MEMBER_ID + EHENTAI_COOKIE_IPB_PASS_HASH")
 	}
@@ -213,6 +253,80 @@ func loadBasicAuth() (BasicAuthConfig, error) {
 
 	cfg.Username = user
 	cfg.Password = pass
+	return cfg, nil
+}
+
+// loadAuth reads the JWT/admin settings. Auth is opt-in for backwards
+// compatibility with existing anonymous deployments: a non-empty JWT_SECRET
+// enables it. Setting ADMIN_PASSWORD without a secret is a configuration
+// error rather than a silently anonymous deployment.
+func loadAuth() (AuthConfig, error) {
+	secret := strings.TrimSpace(getEnv("JWT_SECRET", ""))
+	adminPassword := getEnv("ADMIN_PASSWORD", "")
+
+	if secret == "" {
+		if adminPassword != "" {
+			return AuthConfig{}, fmt.Errorf("ADMIN_PASSWORD is set but JWT_SECRET is empty; set JWT_SECRET (for example: openssl rand -hex 32)")
+		}
+		// Keep the defaults available for diagnostics, but do not enable.
+		return AuthConfig{}, nil
+	}
+
+	// HMAC-SHA256 keys shorter than the 32-byte output weaken the signature.
+	// Requiring 32 bytes also rejects placeholder values such as "change-me".
+	if len(secret) < 32 {
+		return AuthConfig{}, fmt.Errorf("JWT_SECRET must be at least 32 bytes of random data (for example: openssl rand -hex 32)")
+	}
+
+	issuer := strings.TrimSpace(getEnv("JWT_ISSUER", "manga-reader"))
+	if issuer == "" {
+		return AuthConfig{}, fmt.Errorf("JWT_ISSUER must not be empty")
+	}
+
+	expires := time.Hour
+	if raw := strings.TrimSpace(getEnv("JWT_EXPIRES_IN", "")); raw != "" {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil {
+			// Also accept a bare integer number of seconds (3600).
+			if seconds, convErr := strconv.Atoi(raw); convErr == nil {
+				parsed = time.Duration(seconds) * time.Second
+				err = nil
+			}
+		}
+		if err != nil {
+			return AuthConfig{}, fmt.Errorf("invalid JWT_EXPIRES_IN %q: use a duration such as 1h or 30m", raw)
+		}
+		if parsed < time.Minute || parsed > 30*24*time.Hour {
+			return AuthConfig{}, fmt.Errorf("JWT_EXPIRES_IN must be between 1m and 720h")
+		}
+		expires = parsed
+	}
+
+	username := strings.TrimSpace(getEnv("ADMIN_USERNAME", "admin"))
+	if username == "" {
+		return AuthConfig{}, fmt.Errorf("ADMIN_USERNAME must not be empty")
+	}
+
+	secureMode := strings.ToLower(strings.TrimSpace(getEnv("MANGA_READER_AUTH_COOKIE_SECURE", "auto")))
+	cfg := AuthConfig{
+		Enabled:       true,
+		JWTSecret:     secret,
+		JWTIssuer:     issuer,
+		JWTExpiresIn:  expires,
+		AdminUsername: username,
+		AdminPassword: adminPassword,
+	}
+	switch secureMode {
+	case "", "auto":
+		cfg.CookieSecureAuto = true
+	case "true", "1", "yes":
+		cfg.CookieSecure = true
+	case "false", "0", "no":
+		cfg.CookieSecure = false
+	default:
+		return AuthConfig{}, fmt.Errorf("invalid MANGA_READER_AUTH_COOKIE_SECURE value (want auto/true/false)")
+	}
+
 	return cfg, nil
 }
 

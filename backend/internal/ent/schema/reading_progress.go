@@ -7,6 +7,7 @@ import (
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 )
 
 // ReadingProgress holds the schema definition for the ReadingProgress entity.
@@ -18,13 +19,13 @@ type ReadingProgress struct {
 func (ReadingProgress) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		entsql.Annotation{Table: "reading_progress"},
-		compositeID("gallery_id", "token"),
 	}
 }
 
 // Fields of the ReadingProgress.
 func (ReadingProgress) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int64("tenant_id").Default(1),
 		field.Int64("gallery_id"),
 		field.String("token"),
 		field.Int("current_page").Default(0).NonNegative(),
@@ -32,5 +33,12 @@ func (ReadingProgress) Fields() []ent.Field {
 		field.Bool("completed").Default(false),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
+	}
+}
+
+// Indexes of the ReadingProgress.
+func (ReadingProgress) Indexes() []ent.Index {
+	return []ent.Index{
+		index.Fields("tenant_id", "gallery_id", "token").Unique(),
 	}
 }

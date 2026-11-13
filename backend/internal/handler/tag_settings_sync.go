@@ -67,8 +67,9 @@ type tagSyncPlan struct {
 }
 
 // loadTagRules reads all stored tag preferences ordered by tag.
-func (s *Server) loadTagRules(ctx context.Context) ([]model.TagPreference, error) {
+func (s *Server) loadTagRules(ctx context.Context, tenantID int64) ([]model.TagPreference, error) {
 	rows, err := s.DB.Client.TagPreference.Query().
+		Where(tagpreference.TenantIDEQ(tenantID)).
 		Order(ent.Asc(tagpreference.FieldID)).
 		All(ctx)
 	if err != nil {
@@ -83,8 +84,9 @@ func (s *Server) loadTagRules(ctx context.Context) ([]model.TagPreference, error
 
 // loadTagBaseline reads the last-synced source snapshot used as the merge
 // common ancestor.
-func (s *Server) loadTagBaseline(ctx context.Context) ([]model.TagPreference, error) {
+func (s *Server) loadTagBaseline(ctx context.Context, tenantID int64) ([]model.TagPreference, error) {
 	rows, err := s.DB.Client.TagSyncBaseline.Query().
+		Where(tagsyncbaseline.TenantIDEQ(tenantID)).
 		Order(ent.Asc(tagsyncbaseline.FieldID)).
 		All(ctx)
 	if err != nil {
@@ -349,14 +351,18 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 	s.tagSyncMu.Lock()
 	defer s.tagSyncMu.Unlock()
 
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
 
-	local, err := s.loadTagRules(ctx)
+	local, err := s.loadTagRules(ctx, tid)
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load tag settings failed: %v", err)})
 		return
 	}
-	baseline, err := s.loadTagBaseline(ctx)
+	baseline, err := s.loadTagBaseline(ctx, tid)
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load tag sync baseline failed: %v", err)})
 		return
@@ -455,12 +461,12 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 
 	// Apply pulls and the refreshed baseline in one transaction; a failure
 	// here leaves everything as-is (the next sync redoes it).
-	if err := s.applyTagSyncState(ctx, plan.Pulls, baseline, plan.BaselineAfter); err != nil {
+	if err := s.applyTagSyncState(ctx, tid, plan.Pulls, baseline, plan.BaselineAfter); err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("apply tag sync failed: %v", err)})
 		return
 	}
 
-	tags, err := s.loadTagRules(ctx)
+	tags, err := s.loadTagRules(ctx, tid)
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("reload tag settings failed: %v", err)})
 		return
@@ -476,6 +482,7 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 // plan's outcomes; keys mapped to nil drop their row.
 func (s *Server) applyTagSyncState(
 	ctx context.Context,
+	tenantID int64,
 	pulls []tagPullOp,
 	baseline []model.TagPreference,
 	after map[string]*model.TagPreference,
@@ -500,7 +507,7 @@ func (s *Server) applyTagSyncState(
 	for _, op := range pulls {
 		if op.Existing != nil {
 			if _, err := tx.TagPreference.Delete().
-				Where(tagpreference.IDEQ(op.Existing.Tag)).
+				Where(tagpreference.TenantIDEQ(tenantID), tagpreference.IDEQ(op.Existing.Tag)).
 				Exec(ctx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("remove pulled tag %q: %w", op.Key, err)
@@ -508,6 +515,7 @@ func (s *Server) applyTagSyncState(
 		}
 		if op.Remote != nil {
 			if _, err := tx.TagPreference.Create().
+				SetTenantID(tenantID).
 				SetID(op.Remote.Tag).
 				SetAction(op.Remote.Action).
 				SetWeight(op.Remote.Weight).
@@ -518,7 +526,9 @@ func (s *Server) applyTagSyncState(
 		}
 	}
 
-	if _, err := tx.TagSyncBaseline.Delete().Exec(ctx); err != nil {
+	if _, err := tx.TagSyncBaseline.Delete().
+		Where(tagsyncbaseline.TenantIDEQ(tenantID)).
+		Exec(ctx); err != nil {
 		tx.Rollback()
 		return fmt.Errorf("clear tag sync baseline: %w", err)
 	}
@@ -532,6 +542,7 @@ func (s *Server) applyTagSyncState(
 		for _, key := range finalKeys {
 			rule := final[key]
 			builders = append(builders, tx.TagSyncBaseline.Create().
+				SetTenantID(tenantID).
 				SetID(key).
 				SetAction(rule.Action).
 				SetWeight(rule.Weight))

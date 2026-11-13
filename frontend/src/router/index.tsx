@@ -1,12 +1,16 @@
 import { Suspense } from "react";
 import { createBrowserRouter } from "react-router";
 import { AppLayout } from "../components/layout/AppLayout";
+import { RequireAuth } from "../components/auth/RequireAuth";
+import { RequireRole } from "../components/auth/RequireRole";
 import {
   BookshelfPage,
   DownloadManagerPage,
   GalleryDetailPage,
   HomePage,
   LazyPage,
+  LoginPage,
+  PlatformAdminPage,
   PopularPage,
   ReaderLoading,
   ReaderRoute,
@@ -15,12 +19,25 @@ import {
   SettingsPage,
   SubscriptionsPage,
   TagSettingsPage,
+  TenantAdminPage,
 } from "./pages";
 
 export const router = createBrowserRouter([
   {
+    path: "/login",
+    element: (
+      <LazyPage>
+        <LoginPage />
+      </LazyPage>
+    ),
+  },
+  {
     path: "/",
-    element: <AppLayout />,
+    element: (
+      <RequireAuth>
+        <AppLayout />
+      </RequireAuth>
+    ),
     children: [
       {
         index: true,
@@ -87,6 +104,26 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: "admin/tenants",
+        element: (
+          <RequireRole role="platform_admin">
+            <LazyPage>
+              <PlatformAdminPage />
+            </LazyPage>
+          </RequireRole>
+        ),
+      },
+      {
+        path: "tenant/users",
+        element: (
+          <RequireRole role="tenant_admin">
+            <LazyPage>
+              <TenantAdminPage />
+            </LazyPage>
+          </RequireRole>
+        ),
+      },
+      {
         path: "tag-settings",
         element: (
           <LazyPage>
@@ -107,9 +144,11 @@ export const router = createBrowserRouter([
   {
     path: "/reader/:id/:token",
     element: (
-      <Suspense fallback={<ReaderLoading />}>
-        <ReaderRoute />
-      </Suspense>
+      <RequireAuth>
+        <Suspense fallback={<ReaderLoading />}>
+          <ReaderRoute />
+        </Suspense>
+      </RequireAuth>
     ),
   },
 ]);

@@ -9,59 +9,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
-// ID filters vertices based on their ID field.
-func ID(id string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldEQ(FieldID, id))
-}
-
-// IDEQ applies the EQ predicate on the ID field.
-func IDEQ(id string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldEQ(FieldID, id))
-}
-
-// IDNEQ applies the NEQ predicate on the ID field.
-func IDNEQ(id string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldNEQ(FieldID, id))
-}
-
-// IDIn applies the In predicate on the ID field.
-func IDIn(ids ...string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldIn(FieldID, ids...))
-}
-
-// IDNotIn applies the NotIn predicate on the ID field.
-func IDNotIn(ids ...string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldNotIn(FieldID, ids...))
-}
-
-// IDGT applies the GT predicate on the ID field.
-func IDGT(id string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldGT(FieldID, id))
-}
-
-// IDGTE applies the GTE predicate on the ID field.
-func IDGTE(id string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldGTE(FieldID, id))
-}
-
-// IDLT applies the LT predicate on the ID field.
-func IDLT(id string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldLT(FieldID, id))
-}
-
-// IDLTE applies the LTE predicate on the ID field.
-func IDLTE(id string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldLTE(FieldID, id))
-}
-
-// IDEqualFold applies the EqualFold predicate on the ID field.
-func IDEqualFold(id string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldEqualFold(FieldID, id))
-}
-
-// IDContainsFold applies the ContainsFold predicate on the ID field.
-func IDContainsFold(id string) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldContainsFold(FieldID, id))
+// TenantID applies equality check predicate on the "tenant_id" field. It's identical to TenantIDEQ.
+func TenantID(v int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldEQ(FieldTenantID, v))
 }
 
 // Action applies equality check predicate on the "action" field. It's identical to ActionEQ.
@@ -82,6 +32,51 @@ func CreatedAt(v time.Time) predicate.TagPreference {
 // UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
 func UpdatedAt(v time.Time) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldEQ(FieldUpdatedAt, v))
+}
+
+// ID applies equality check predicate on the "id" field. It's identical to IDEQ.
+func ID(v string) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldEQ(FieldID, v))
+}
+
+// TenantIDEQ applies the EQ predicate on the "tenant_id" field.
+func TenantIDEQ(v int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldEQ(FieldTenantID, v))
+}
+
+// TenantIDNEQ applies the NEQ predicate on the "tenant_id" field.
+func TenantIDNEQ(v int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldNEQ(FieldTenantID, v))
+}
+
+// TenantIDIn applies the In predicate on the "tenant_id" field.
+func TenantIDIn(vs ...int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldIn(FieldTenantID, vs...))
+}
+
+// TenantIDNotIn applies the NotIn predicate on the "tenant_id" field.
+func TenantIDNotIn(vs ...int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldNotIn(FieldTenantID, vs...))
+}
+
+// TenantIDGT applies the GT predicate on the "tenant_id" field.
+func TenantIDGT(v int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldGT(FieldTenantID, v))
+}
+
+// TenantIDGTE applies the GTE predicate on the "tenant_id" field.
+func TenantIDGTE(v int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldGTE(FieldTenantID, v))
+}
+
+// TenantIDLT applies the LT predicate on the "tenant_id" field.
+func TenantIDLT(v int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldLT(FieldTenantID, v))
+}
+
+// TenantIDLTE applies the LTE predicate on the "tenant_id" field.
+func TenantIDLTE(v int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldLTE(FieldTenantID, v))
 }
 
 // ActionEQ applies the EQ predicate on the "action" field.
@@ -267,6 +262,56 @@ func UpdatedAtLT(v time.Time) predicate.TagPreference {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// IDEQ applies the EQ predicate on the "id" field.
+func IDEQ(v string) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldEQ(FieldID, v))
+}
+
+// IDNEQ applies the NEQ predicate on the "id" field.
+func IDNEQ(v string) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldNEQ(FieldID, v))
+}
+
+// IDIn applies the In predicate on the "id" field.
+func IDIn(vs ...string) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldIn(FieldID, vs...))
+}
+
+// IDNotIn applies the NotIn predicate on the "id" field.
+func IDNotIn(vs ...string) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldNotIn(FieldID, vs...))
+}
+
+// IDGT applies the GT predicate on the "id" field.
+func IDGT(v string) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldGT(FieldID, v))
+}
+
+// IDGTE applies the GTE predicate on the "id" field.
+func IDGTE(v string) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldGTE(FieldID, v))
+}
+
+// IDLT applies the LT predicate on the "id" field.
+func IDLT(v string) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldLT(FieldID, v))
+}
+
+// IDLTE applies the LTE predicate on the "id" field.
+func IDLTE(v string) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldLTE(FieldID, v))
+}
+
+// IDEqualFold applies the EqualFold predicate on the "id" field.
+func IDEqualFold(v string) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldEqualFold(FieldID, v))
+}
+
+// IDContainsFold applies the ContainsFold predicate on the "id" field.
+func IDContainsFold(v string) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldContainsFold(FieldID, v))
 }
 
 // And groups predicates with the AND operator between them.

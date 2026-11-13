@@ -30,6 +30,11 @@ type Server struct {
 	DB     *database.DB
 	Cache  ImageCache
 
+	// authEnabled mirrors JWT auth. When false (legacy anonymous single-user
+	// mode or handler unit tests), tenant-owned handlers fall back to the
+	// default tenant instead of failing closed.
+	authEnabled bool
+
 	// syncSvc serves the sync protocol endpoints and records outbox entries
 	// for local mutations of synced tables. Optional (nil disables sync).
 	syncSvc *synclib.Service
@@ -49,20 +54,22 @@ type Server struct {
 }
 
 type Config struct {
-	Client   *http.Client
-	DB       *database.DB
-	Cache    ImageCache
-	DevTools bool
-	Sync     *synclib.Service
+	Client      *http.Client
+	DB          *database.DB
+	Cache       ImageCache
+	DevTools    bool
+	Sync        *synclib.Service
+	AuthEnabled bool
 }
 
 func New(cfg Config) *Server {
 	return &Server{
-		Client:   cfg.Client,
-		DB:       cfg.DB,
-		Cache:    cfg.Cache,
-		syncSvc:  cfg.Sync,
-		devTools: cfg.DevTools,
+		Client:      cfg.Client,
+		DB:          cfg.DB,
+		Cache:       cfg.Cache,
+		syncSvc:     cfg.Sync,
+		devTools:    cfg.DevTools,
+		authEnabled: cfg.AuthEnabled,
 	}
 }
 
@@ -78,6 +85,20 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 		r.GET("/api/dev/upstream-down", s.handleDevUpstreamDownGet)
 		r.PUT("/api/dev/upstream-down", s.handleDevUpstreamDownPut)
 	}
+
+	// Platform administration (global; platform_admin only).
+	r.POST("/api/admin/tenants", s.handleAdminTenantCreate)
+	r.GET("/api/admin/tenants", s.handleAdminTenantList)
+	r.GET("/api/admin/tenants/:id", s.handleAdminTenantGet)
+	r.PUT("/api/admin/tenants/:id", s.handleAdminTenantUpdate)
+	r.PATCH("/api/admin/tenants/:id/status", s.handleAdminTenantStatus)
+
+	// Tenant administration (tenant_admin only; always scoped to the JWT
+	// tenant, never to a path/query/body tenant id).
+	r.GET("/api/tenant/users", s.handleTenantUserList)
+	r.POST("/api/tenant/users", s.handleTenantUserCreate)
+	r.PUT("/api/tenant/users/:id", s.handleTenantUserUpdate)
+	r.PATCH("/api/tenant/users/:id/status", s.handleTenantUserStatus)
 
 	r.GET("/api/gallery/:id/:token", s.handleGetGallery)
 	r.GET("/api/gallery/:id/:token/details", s.handleGalleryDetails)

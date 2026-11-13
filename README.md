@@ -17,7 +17,8 @@
 - 离线下载任务（Prefill）：后台排队预填充图片缓存、下载管理页、流式 ZIP 下载
 - 缩略图源站代理与 MinIO 缓存
 - 页面图片 MinIO 缓存（可选）
-- 单用户设计，无用户系统；默认匿名访问，可选内置 HTTP Basic Auth（见「公网部署」）
+- 多租户：Shared Database + Shared Schema + `tenant_id` 隔离；平台管理员 / 租户管理员 / 普通用户三级角色
+- 默认匿名访问（默认租户），可选 JWT 登录页（内置管理员、Argon2id 密码哈希、HttpOnly Cookie、服务端登出撤销）或 HTTP Basic Auth（见「公网部署」）
 
 ## 目录结构
 
@@ -51,6 +52,8 @@ backend/
 │   │   ├── prefilljob/           # PrefillJob 字段常量与查询辅助
 │   │   ├── gallerycache/         # GalleryCache 字段常量与查询辅助
 │   │   └── migrate/              # 数据库迁移逻辑
+│   ├── auth/                     # JWT 登录（Argon2id / HS256 / Gin 中间件）
+│   ├── tenant/                   # 租户上下文与租户中间件
 │   ├── basicauth/                # HTTP Basic Auth（apr1/bcrypt 校验 + 限流）
 │   ├── exhentai/                 # ExHentai API / 页面抓取（含 10 秒请求去重）
 │   ├── gallerycache/             # gallery_cache 读写
@@ -112,17 +115,54 @@ backend/
 
 数据位于 Docker 命名卷中，`docker compose down` 不会丢失；如需彻底清除使用 `docker compose down -v`。
 
-## 公网部署（HTTPS + HTTP Basic Authentication）
+## 公网部署（HTTPS + 认证）
 
-Basic Auth **默认关闭**：启动后匿名即可访问，`bun dev`、`go run .`、Playwright、单元测试、桌面端均不受影响。需要认证时设置 `MANGA_READER_BASIC_AUTH_ENABLED=true` 并提供凭据（启用但缺少凭据时后端拒绝启动，fail closed）。公网部署建议开启，并满足：
+两种认证方式均为**默认关闭**：不配置时匿名即可访问，`bun dev`、`go run .`、Playwright、单元测试、桌面端均不受影响。公网部署选择其中一种即可（不要同时开启，否则 Basic Auth 会先于登录页拦截请求）：
 
-- **HTTPS 必须在 Basic Auth 之前**：Basic Auth 只是 `base64(user:pass)`，不是加密。TLS 由前置层（云负载均衡 / Caddy / 前置 nginx）提供，同时负责 HTTP :80 → HTTPS :443 跳转；HSTS 也由该层配置，确认域名永久 HTTPS 后再开启。
+- **JWT 登录页（推荐）**：设置 `JWT_SECRET` 启用，浏览器访问 `/login`，见下节「JWT 登录认证」。
+- **HTTP Basic Auth**：设置 `MANGA_READER_BASIC_AUTH_ENABLED=true` 并提供凭据（启用但缺少凭据时后端拒绝启动，fail closed）。
+
+两种方式都要求：
+
+- **HTTPS 必须在认证之前**：Basic Auth 只是 `base64(user:pass)`，不是加密；JWT 的 HttpOnly Cookie 也必须走 TLS。TLS 由前置层（云负载均衡 / Caddy / 前置 nginx）提供，同时负责 HTTP :80 → HTTPS :443 跳转；HSTS 也由该层配置，确认域名永久 HTTPS 后再开启。
 - **应用端口不暴露公网**：容器 `:8080`、PostgreSQL `:5432`、MinIO `:9000/:9001` 不发布到公网，只在 Docker 内网通信；compose 与 quadlet 默认发布到 `127.0.0.1:5173:8080`，公网只经过带 TLS 的前置反代。确实需要局域网直连时才改成 `0.0.0.0:5173:8080`。
-- **保护范围**：`/`、静态资源、`/api/*`（含 SSE `/api/sync/events`、`/api/events/changes`、图片代理、Prefill、ZIP）、`/metrics`（Prometheus 指标，见「可观测性」）全部经 Basic Auth；仅 `/healthz` 豁免（`{"status":"ok"}`，无 Cookie / 令牌 / 配置信息）。认证失败返回 `401` + `WWW-Authenticate: Basic realm="Manga Reader"`，由浏览器处理——前端没有、也不需要登录页。
+- **保护范围**：Basic Auth 模式覆盖 `/`、静态资源、`/api/*`、`/metrics`，仅 `/healthz` 豁免；认证失败返回 `401` + `WWW-Authenticate: Basic realm="Manga Reader"`，由浏览器处理，不会显示登录页。JWT 模式则允许前端打开 `/login`，静态页面和公开 API 可匿名加载，用户数据接口由 JWT 中间件保护（见下节）。
+- **`/metrics`**：JWT 模式下不要求登录 Token（便于监控抓取），仍可用 Basic Auth 或前置反代保护；Prometheus 指标见「可观测性」。
 
 认证、静态资源与 API 同在一个 Gin 进程内（前端在构建时 `//go:embed` 进二进制），因此没有反代层在中间消费 `Authorization`。
 
-### 开关与凭据
+### JWT 登录认证与多租户
+
+多租户场景。设置随机 `JWT_SECRET` 即启用（至少 32 字节）：
+
+```bash
+openssl rand -hex 32
+```
+
+```env
+JWT_SECRET=<粘贴上一步输出>
+JWT_ISSUER=manga-reader
+JWT_EXPIRES_IN=1h
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=change-me-strong-password   # 仅首次启动用于创建管理员
+MANGA_READER_AUTH_COOKIE_SECURE=auto
+```
+
+- **默认租户与平台管理员**：首次启动创建 `default` 租户（ID 1），并用 `ADMIN_USERNAME` + `ADMIN_PASSWORD` 创建该租户的**平台管理员**；密码以 Argon2id PHC 哈希写入数据库。之后启动**不会覆盖**已有密码，可清空 `ADMIN_PASSWORD`。
+- **登录接口**：`POST /api/auth/login` 需要 `tenant`（租户 slug，可省略并回退到 `default`）+ `username` + `password`。成功后返回 `access_token` / `token_type` / `expires_in`，同时写入 `HttpOnly; SameSite=Lax; Secure(auto)` Cookie；JWT 中含有 `sub`、`tenant_id`、`role`、`iss`、`iat`、`exp`、`jti`。前端不把 Token 放进 `localStorage`（降低 XSS 窃取风险），页面刷新后由 Cookie + `GET /api/auth/me` 恢复登录态。
+- **角色**：`platform_admin` 管理全局租户；`tenant_admin` 管理本租户用户和业务数据；`user` 只使用业务功能。角色校验同时在前端路由与后端 handler 执行。
+- **数据隔离**：`bookshelf`、`reading_progress`、`prefill_job`、`tag_preference`、`tag_sync_baseline` 全部带 `tenant_id`；它们按租户共享（同一租户内的用户工作在同一空间），所有查询/创建/更新/删除都从 JWT 租户上下文取 ID。`gallery_cache` 是全局共享的上游元数据缓存，不按租户拆分。`tenant_id` 请求参数/Header 一律被忽略。
+- **租户中间件**：JWT 验证后加载租户并检查 `status=active`；不存在/禁用返回 403，删除或禁用用户的 Token 会在下一次请求失效。平台管理员与租户管理员也不能跨租户访问用户或业务数据。
+- **数据迁移**：旧单用户数据库启动时自动创建 `default` 租户，把旧管理员提升为平台管理员、把所有租户业务行归入租户 1；`gallery_cache` 保留。迁移在事务中执行且可重复运行。
+- **CSRF**：Cookie 仅用于同源请求；已有的 `csrfGuard` 会拒绝跨站 `Origin` / `Sec-Fetch-Site` 的写请求。反向代理必须透传 `Origin` / `Sec-Fetch-Site`，并保持应用与前端同源；HTTPS 终止在反代时还要设置 `X-Forwarded-Proto: https`，否则 `auto` 模式不会给 Cookie 加 `Secure`。
+- **登出**：`POST /api/auth/logout` 会递增 `users.token_version` 并清除 Cookie，所有已签发 Token 立即失效（服务端撤销，不只是前端删除 Token）。
+- **Token 校验**：只接受 `Authorization: Bearer <JWT>`（或同源 Cookie），严格校验 HS256 签名、`iss`、`iat`、`exp` 和 `token_version`；缺失/无效/过期/签名错误统一返回 `401`。
+- **公开 API**：`/api/auth/login`、`/api/auth/status`、搜索/画廊/图片代理；同步推送端点继续使用 `X-Sync-Token`。**其余 `/api/*` 默认要求 JWT**（书架、阅读进度、最近阅读、标签设置、Prefill、同步配置、Dev Tools、`/api/admin/*`、`/api/tenant/*` 等）。
+- **管理 API**：`/api/admin/tenants*` 仅平台管理员；`/api/tenant/users*` 仅租户管理员，且路径中的用户 ID 必须同时匹配 JWT 租户。
+- **数据同步范围**：现有 peer 同步协议按单个租户运行（默认租户）；其他租户的写入不会进入默认租户的 outbox，避免跨租户复制。
+- **与 Basic Auth 二选一**：Basic Auth 在 JWT 之前执行；同时开启时浏览器会先弹 Basic Auth 对话框。桌面端同步仍可使用 Basic Auth 或独立 `MANGA_READER_SYNC_TOKEN`。
+
+### Basic Auth 开关与凭据
 
 最小生产配置（`.env`，占位示例，勿提交真实口令；`secrets/` 与 `*.htpasswd` 已在 `.gitignore`）：
 
@@ -168,10 +208,11 @@ docker compose up -d   # 环境变量变化会重建容器
 
 ```bash
 cd backend
-go test ./internal/basicauth/ ./internal/web/ ./internal/config/
+go test ./internal/auth/ ./internal/basicauth/ ./internal/web/ ./internal/config/
+cd ../frontend && bun run test
 ```
 
-覆盖：配置 fail-closed 矩阵、apr1/bcrypt 已知答案向量、`/healthz` 豁免、401 挑战头、限流 429、SPA 回退与缓存策略。
+覆盖：JWT 登录成功/失败、缺失/无效/过期/错误签名 Token、公开与受保护 API、登出后 Token 撤销、管理员密码不被覆盖、跨租户书架/进度/Prefill 隔离、角色权限、JWT 篡改、禁用租户与迁移保数据；Basic Auth 配置 fail-closed 矩阵、apr1/bcrypt 已知答案向量、`/healthz` 豁免、401 挑战头、限流 429、SPA 回退与缓存策略；前端登录态恢复、Bearer 头与 401 并发去重。
 
 ## CI 与部署
 
@@ -246,7 +287,13 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `MINIO_BUCKET` | 否 | - | MinIO Bucket |
 | `MINIO_USE_SSL` | 否 | `false` | 是否启用 SSL |
 | `MINIO_REGION` | 否 | - | MinIO Region |
-| `MANGA_READER_BASIC_AUTH_ENABLED` | 否 | `false` | 内置 HTTP Basic Auth 开关；默认匿名，公网暴露建议 `true`（见「公网部署」） |
+| `JWT_SECRET` | 否 | - | 设置后启用 JWT 登录页；至少 32 字节随机值（`openssl rand -hex 32`）。为空则保持匿名模式 |
+| `JWT_ISSUER` | 否 | `manga-reader` | JWT 的 `iss`，校验时必须一致 |
+| `JWT_EXPIRES_IN` | 否 | `1h` | Token 有效期（Go duration，范围 1m–720h） |
+| `ADMIN_USERNAME` | 否 | `admin` | 首次初始化默认租户（`default`）的平台管理员用户名 |
+| `ADMIN_PASSWORD` | 否 | - | 首次初始化平台管理员密码（至少 8 位）；仅在默认租户没有用户时使用，不覆盖已有密码 |
+| `MANGA_READER_AUTH_COOKIE_SECURE` | 否 | `auto` | 认证 Cookie 的 `Secure`：`auto`（TLS 或 `X-Forwarded-Proto=https` 时开启）/`true`/`false` |
+| `MANGA_READER_BASIC_AUTH_ENABLED` | 否 | `false` | 内置 HTTP Basic Auth 开关；与 JWT 登录二选一 |
 | `MANGA_READER_BASIC_AUTH_USERNAME` | 否† | - | Basic Auth 用户名（启用且用环境变量/口令文件方式时必填） |
 | `MANGA_READER_BASIC_AUTH_PASSWORD` | 否† | - | Basic Auth 口令（生产建议改用 secret 文件，勿提交真实口令） |
 | `MANGA_READER_BASIC_AUTH_FILE` | 否† | - | 现成 htpasswd 文件路径（docker secret，推荐；apr1 `$1$` / bcrypt `$2$`） |

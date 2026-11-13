@@ -28,6 +28,27 @@ func (_u *BookshelfUpdate) Where(ps ...predicate.Bookshelf) *BookshelfUpdate {
 	return _u
 }
 
+// SetTenantID sets the "tenant_id" field.
+func (_u *BookshelfUpdate) SetTenantID(v int64) *BookshelfUpdate {
+	_u.mutation.ResetTenantID()
+	_u.mutation.SetTenantID(v)
+	return _u
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_u *BookshelfUpdate) SetNillableTenantID(v *int64) *BookshelfUpdate {
+	if v != nil {
+		_u.SetTenantID(*v)
+	}
+	return _u
+}
+
+// AddTenantID adds value to the "tenant_id" field.
+func (_u *BookshelfUpdate) AddTenantID(v int64) *BookshelfUpdate {
+	_u.mutation.AddTenantID(v)
+	return _u
+}
+
 // SetGalleryID sets the "gallery_id" field.
 func (_u *BookshelfUpdate) SetGalleryID(v int64) *BookshelfUpdate {
 	_u.mutation.ResetGalleryID()
@@ -111,13 +132,19 @@ func (_u *BookshelfUpdate) defaults() {
 }
 
 func (_u *BookshelfUpdate) sqlSave(ctx context.Context) (_node int, err error) {
-	_spec := sqlgraph.NewUpdateSpec(bookshelf.Table, bookshelf.Columns, sqlgraph.NewFieldSpec(bookshelf.FieldGalleryID, field.TypeInt64), sqlgraph.NewFieldSpec(bookshelf.FieldToken, field.TypeString))
+	_spec := sqlgraph.NewUpdateSpec(bookshelf.Table, bookshelf.Columns, sqlgraph.NewFieldSpec(bookshelf.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.TenantID(); ok {
+		_spec.SetField(bookshelf.FieldTenantID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTenantID(); ok {
+		_spec.AddField(bookshelf.FieldTenantID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(bookshelf.FieldGalleryID, field.TypeInt64, value)
@@ -149,6 +176,27 @@ type BookshelfUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *BookshelfMutation
+}
+
+// SetTenantID sets the "tenant_id" field.
+func (_u *BookshelfUpdateOne) SetTenantID(v int64) *BookshelfUpdateOne {
+	_u.mutation.ResetTenantID()
+	_u.mutation.SetTenantID(v)
+	return _u
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_u *BookshelfUpdateOne) SetNillableTenantID(v *int64) *BookshelfUpdateOne {
+	if v != nil {
+		_u.SetTenantID(*v)
+	}
+	return _u
+}
+
+// AddTenantID adds value to the "tenant_id" field.
+func (_u *BookshelfUpdateOne) AddTenantID(v int64) *BookshelfUpdateOne {
+	_u.mutation.AddTenantID(v)
+	return _u
 }
 
 // SetGalleryID sets the "gallery_id" field.
@@ -247,24 +295,22 @@ func (_u *BookshelfUpdateOne) defaults() {
 }
 
 func (_u *BookshelfUpdateOne) sqlSave(ctx context.Context) (_node *Bookshelf, err error) {
-	_spec := sqlgraph.NewUpdateSpec(bookshelf.Table, bookshelf.Columns, sqlgraph.NewFieldSpec(bookshelf.FieldGalleryID, field.TypeInt64), sqlgraph.NewFieldSpec(bookshelf.FieldToken, field.TypeString))
-	if id, ok := _u.mutation.GalleryID(); !ok {
-		return nil, &ValidationError{Name: "gallery_id", err: errors.New(`ent: missing "Bookshelf.gallery_id" for update`)}
-	} else {
-		_spec.Node.CompositeID[0].Value = id
+	_spec := sqlgraph.NewUpdateSpec(bookshelf.Table, bookshelf.Columns, sqlgraph.NewFieldSpec(bookshelf.FieldID, field.TypeInt))
+	id, ok := _u.mutation.ID()
+	if !ok {
+		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "Bookshelf.id" for update`)}
 	}
-	if id, ok := _u.mutation.Token(); !ok {
-		return nil, &ValidationError{Name: "token", err: errors.New(`ent: missing "Bookshelf.token" for update`)}
-	} else {
-		_spec.Node.CompositeID[1].Value = id
-	}
+	_spec.Node.ID.Value = id
 	if fields := _u.fields; len(fields) > 0 {
-		_spec.Node.Columns = make([]string, len(fields))
-		for i, f := range fields {
+		_spec.Node.Columns = make([]string, 0, len(fields))
+		_spec.Node.Columns = append(_spec.Node.Columns, bookshelf.FieldID)
+		for _, f := range fields {
 			if !bookshelf.ValidColumn(f) {
 				return nil, &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 			}
-			_spec.Node.Columns[i] = f
+			if f != bookshelf.FieldID {
+				_spec.Node.Columns = append(_spec.Node.Columns, f)
+			}
 		}
 	}
 	if ps := _u.mutation.predicates; len(ps) > 0 {
@@ -273,6 +319,12 @@ func (_u *BookshelfUpdateOne) sqlSave(ctx context.Context) (_node *Bookshelf, er
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.TenantID(); ok {
+		_spec.SetField(bookshelf.FieldTenantID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTenantID(); ok {
+		_spec.AddField(bookshelf.FieldTenantID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(bookshelf.FieldGalleryID, field.TypeInt64, value)

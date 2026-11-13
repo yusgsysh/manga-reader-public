@@ -30,6 +30,27 @@ func (_u *PrefillJobUpdate) Where(ps ...predicate.PrefillJob) *PrefillJobUpdate 
 	return _u
 }
 
+// SetTenantID sets the "tenant_id" field.
+func (_u *PrefillJobUpdate) SetTenantID(v int64) *PrefillJobUpdate {
+	_u.mutation.ResetTenantID()
+	_u.mutation.SetTenantID(v)
+	return _u
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_u *PrefillJobUpdate) SetNillableTenantID(v *int64) *PrefillJobUpdate {
+	if v != nil {
+		_u.SetTenantID(*v)
+	}
+	return _u
+}
+
+// AddTenantID adds value to the "tenant_id" field.
+func (_u *PrefillJobUpdate) AddTenantID(v int64) *PrefillJobUpdate {
+	_u.mutation.AddTenantID(v)
+	return _u
+}
+
 // SetGalleryID sets the "gallery_id" field.
 func (_u *PrefillJobUpdate) SetGalleryID(v int64) *PrefillJobUpdate {
 	_u.mutation.ResetGalleryID()
@@ -247,6 +268,12 @@ func (_u *PrefillJobUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 			}
 		}
 	}
+	if value, ok := _u.mutation.TenantID(); ok {
+		_spec.SetField(prefilljob.FieldTenantID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTenantID(); ok {
+		_spec.AddField(prefilljob.FieldTenantID, field.TypeInt64, value)
+	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(prefilljob.FieldGalleryID, field.TypeInt64, value)
 	}
@@ -323,6 +350,27 @@ type PrefillJobUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *PrefillJobMutation
+}
+
+// SetTenantID sets the "tenant_id" field.
+func (_u *PrefillJobUpdateOne) SetTenantID(v int64) *PrefillJobUpdateOne {
+	_u.mutation.ResetTenantID()
+	_u.mutation.SetTenantID(v)
+	return _u
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_u *PrefillJobUpdateOne) SetNillableTenantID(v *int64) *PrefillJobUpdateOne {
+	if v != nil {
+		_u.SetTenantID(*v)
+	}
+	return _u
+}
+
+// AddTenantID adds value to the "tenant_id" field.
+func (_u *PrefillJobUpdateOne) AddTenantID(v int64) *PrefillJobUpdateOne {
+	_u.mutation.AddTenantID(v)
+	return _u
 }
 
 // SetGalleryID sets the "gallery_id" field.
@@ -571,6 +619,12 @@ func (_u *PrefillJobUpdateOne) sqlSave(ctx context.Context) (_node *PrefillJob, 
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.TenantID(); ok {
+		_spec.SetField(prefilljob.FieldTenantID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTenantID(); ok {
+		_spec.AddField(prefilljob.FieldTenantID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(prefilljob.FieldGalleryID, field.TypeInt64, value)

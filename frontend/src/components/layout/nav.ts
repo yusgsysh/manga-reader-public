@@ -9,6 +9,8 @@ import {
   House,
   MagnifyingGlass,
   Tag,
+  Buildings,
+  UsersThree,
 } from "@phosphor-icons/react";
 
 export interface NavItem {
@@ -30,6 +32,14 @@ export const SECONDARY_NAV: NavItem[] = [
   { to: "/downloads", label: "下载管理", icon: DownloadSimple },
   { to: "/tag-settings", label: "标签设置", icon: Tag },
   { to: "/settings", label: "设置", icon: Gear },
+];
+
+export const PLATFORM_ADMIN_NAV: NavItem[] = [
+  { to: "/admin/tenants", label: "租户管理", icon: Buildings },
+];
+
+export const TENANT_ADMIN_NAV: NavItem[] = [
+  { to: "/tenant/users", label: "用户管理", icon: UsersThree },
 ];
 
 export function isNavActive(pathname: string, to: string, lastListRoute?: string): boolean {

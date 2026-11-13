@@ -301,6 +301,11 @@ const server = Bun.serve({
       return new Response("ok", { headers: CORS });
     }
 
+    // E2E runs the legacy anonymous mode: the SPA must skip the login wall.
+    if (path === "/api/auth/status") {
+      return json({ enabled: false, initialized: false });
+    }
+
     // Mocked dev-tools switch (the settings page toggles this).
     if (path === "/api/dev/upstream-down") {
       if (req.method === "PUT") {

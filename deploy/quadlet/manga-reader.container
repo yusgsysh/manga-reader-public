@@ -20,7 +20,7 @@ After=manga-reader-warp.service
 Image=ghcr.io/yusgsysh/manga-reader:latest
 # 容器组：共享 WARP 所在的 netns；PublishPort 必须写在 manga-reader.pod 里。
 Pod=manga-reader.pod
-# 全量配置（EHENTAI_COOKIE、同步令牌、数据库驱动、Basic Auth 等）
+# 全量配置（EHENTAI_COOKIE、同步令牌、数据库驱动、JWT / Basic Auth 等）
 # 注意：键名必须是 EnvironmentFile=（EnvFile= 非法键，quadlet 会跳过整个 unit）
 # 该值经 podman --env-file 注入：每行须为 KEY=VALUE，且 $ 不做展开
 # NO_PROXY 仍在 .env 中配置（内网 MinIO / 数据库 / 服务名需要绕过代理）
@@ -35,7 +35,17 @@ Environment=HTTPS_PROXY=socks5://127.0.0.1:1080
 Environment=EHENTAI_PORT=:8080
 Environment=MANGA_READER_DB_PATH=/app/data/manga-reader.db
 
-# HTTP Basic Auth（Gin 层；生产置于 HTTPS 之后）
+# JWT 登录认证（推荐；生产置于 HTTPS 之后）。设置 JWT_SECRET 即启用登录页，
+# 首次启动还需 ADMIN_PASSWORD 以创建管理员（之后不会覆盖数据库中的哈希）。
+# 生成密钥：openssl rand -hex 32
+#Environment=JWT_SECRET=<paste output of: openssl rand -hex 32>
+#Environment=JWT_ISSUER=manga-reader
+#Environment=JWT_EXPIRES_IN=1h
+#Environment=ADMIN_USERNAME=admin
+#Environment=ADMIN_PASSWORD=change-me-strong-password
+#Environment=MANGA_READER_AUTH_COOKIE_SECURE=auto
+
+# HTTP Basic Auth（Gin 层；生产置于 HTTPS 之后；与 JWT 登录二选一）
 # 开关与凭据优先读 EnvironmentFile（.env）；也可在此显式覆盖：
 #Environment=MANGA_READER_BASIC_AUTH_ENABLED=true
 #Environment=MANGA_READER_BASIC_AUTH_USERNAME=admin

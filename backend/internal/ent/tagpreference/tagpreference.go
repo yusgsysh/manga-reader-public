@@ -11,8 +11,8 @@ import (
 const (
 	// Label holds the string label denoting the tagpreference type in the database.
 	Label = "tag_preference"
-	// FieldID holds the string denoting the id field in the database.
-	FieldID = "tag"
+	// FieldTenantID holds the string denoting the tenant_id field in the database.
+	FieldTenantID = "tenant_id"
 	// FieldAction holds the string denoting the action field in the database.
 	FieldAction = "action"
 	// FieldWeight holds the string denoting the weight field in the database.
@@ -21,17 +21,20 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldID holds the string denoting the id field in the database.
+	FieldID = "tag"
 	// Table holds the table name of the tagpreference in the database.
 	Table = "tag_preference"
 )
 
 // Columns holds all SQL columns for tagpreference fields.
 var Columns = []string{
-	FieldID,
+	FieldTenantID,
 	FieldAction,
 	FieldWeight,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldID,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -45,6 +48,8 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultTenantID holds the default value on creation for the "tenant_id" field.
+	DefaultTenantID int64
 	// ActionValidator is a validator for the "action" field. It is called by the builders before save.
 	ActionValidator func(string) error
 	// DefaultWeight holds the default value on creation for the "weight" field.
@@ -62,9 +67,9 @@ var (
 // OrderOption defines the ordering options for the TagPreference queries.
 type OrderOption func(*sql.Selector)
 
-// ByID orders the results by the id field.
-func ByID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldID, opts...).ToFunc()
+// ByTenantID orders the results by the tenant_id field.
+func ByTenantID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTenantID, opts...).ToFunc()
 }
 
 // ByAction orders the results by the action field.
@@ -85,4 +90,9 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByID orders the results by the id field.
+func ByID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldID, opts...).ToFunc()
 }

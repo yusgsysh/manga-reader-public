@@ -22,7 +22,11 @@ export function useSyncEvents(): void {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const source = new EventSource(buildApiUrl("/api/events/changes"));
+    // EventSource cannot set an Authorization header; the HttpOnly auth
+    // cookie is sent with withCredentials (needed for the dev origin).
+    const source = new EventSource(buildApiUrl("/api/events/changes"), {
+      withCredentials: true,
+    });
 
     source.onmessage = () => {
       for (const queryKey of SYNCED_QUERY_KEYS) {

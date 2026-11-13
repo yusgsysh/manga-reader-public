@@ -28,6 +28,7 @@ import { formatDateTime } from "../lib/time";
 import type { ThemeMode } from "../lib/theme";
 import { PageHeader, Section, useToast } from "../components/ui";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { useAuth } from "../context/auth";
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
   { mode: "light", label: "浅色", icon: Sun },
@@ -476,6 +477,8 @@ function SyncSection() {
 
 export function SettingsPage() {
   useDocumentTitle("设置");
+  const { enabled: authEnabled, isPlatformAdmin } = useAuth();
+  const canManageGlobal = !authEnabled || isPlatformAdmin;
   return (
     <div className="max-w-3xl">
       <PageHeader
@@ -484,8 +487,8 @@ export function SettingsPage() {
       <div className="space-y-8">
         <AppearanceSection />
         <TagDatabaseSection />
-        <SyncSection />
-        <DevToolsSection />
+        {canManageGlobal && <SyncSection />}
+        {canManageGlobal && <DevToolsSection />}
       </div>
     </div>
   );

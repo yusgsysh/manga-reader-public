@@ -34,6 +34,7 @@ func (PrefillJob) Annotations() []schema.Annotation {
 // Fields of the PrefillJob.
 func (PrefillJob) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int64("tenant_id").Default(1),
 		// Jobs are identified by a random UUID (stored as "job_id") instead of
 		// an auto-increment counter: one gallery may hold several jobs, so the
 		// (gallery_id, token) pair can only be a lookup key, never the identity.
@@ -68,9 +69,9 @@ func (PrefillJob) Fields() []ent.Field {
 // Indexes of the PrefillJob.
 func (PrefillJob) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("status", "created_at"),
-		// Backs the dedupe lookup (gallery_id + token + status); not unique
-		// because jobs without a gallery keep the empty defaults.
-		index.Fields("gallery_id", "token"),
+		index.Fields("tenant_id", "status", "created_at"),
+		// Backs the dedupe lookup (tenant + gallery_id + token + status); not
+		// unique because jobs without a gallery keep the empty defaults.
+		index.Fields("tenant_id", "gallery_id", "token"),
 	}
 }

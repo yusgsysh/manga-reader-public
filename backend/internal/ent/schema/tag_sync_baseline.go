@@ -24,19 +24,19 @@ type TagSyncBaseline struct {
 func (TagSyncBaseline) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		entsql.Annotation{Table: "tag_sync_baseline"},
+		compositeID("tenant_id", "id"),
 	}
 }
 
 // Fields of the TagSyncBaseline.
 func (TagSyncBaseline) Fields() []ent.Field {
 	return []ent.Field{
-		// The tag itself is the identity: one row per `namespace:name`, so an
-		// auto-increment id would only duplicate the natural key. ent exposes
-		// the primary key as "id" in Go and stores it in the "tag" column.
+		field.Int64("tenant_id").Default(1),
+		// The tag itself is the identity within a tenant: the primary key is
+		// (tenant_id, tag).
 		field.String("id").
 			StorageKey("tag").
 			NotEmpty().
-			Unique().
 			Immutable(),
 		field.String("action").NotEmpty(),
 		field.Int("weight").Default(10),

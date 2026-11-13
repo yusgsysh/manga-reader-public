@@ -28,6 +28,27 @@ func (_u *ReadingProgressUpdate) Where(ps ...predicate.ReadingProgress) *Reading
 	return _u
 }
 
+// SetTenantID sets the "tenant_id" field.
+func (_u *ReadingProgressUpdate) SetTenantID(v int64) *ReadingProgressUpdate {
+	_u.mutation.ResetTenantID()
+	_u.mutation.SetTenantID(v)
+	return _u
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_u *ReadingProgressUpdate) SetNillableTenantID(v *int64) *ReadingProgressUpdate {
+	if v != nil {
+		_u.SetTenantID(*v)
+	}
+	return _u
+}
+
+// AddTenantID adds value to the "tenant_id" field.
+func (_u *ReadingProgressUpdate) AddTenantID(v int64) *ReadingProgressUpdate {
+	_u.mutation.AddTenantID(v)
+	return _u
+}
+
 // SetGalleryID sets the "gallery_id" field.
 func (_u *ReadingProgressUpdate) SetGalleryID(v int64) *ReadingProgressUpdate {
 	_u.mutation.ResetGalleryID()
@@ -185,13 +206,19 @@ func (_u *ReadingProgressUpdate) sqlSave(ctx context.Context) (_node int, err er
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(readingprogress.Table, readingprogress.Columns, sqlgraph.NewFieldSpec(readingprogress.FieldGalleryID, field.TypeInt64), sqlgraph.NewFieldSpec(readingprogress.FieldToken, field.TypeString))
+	_spec := sqlgraph.NewUpdateSpec(readingprogress.Table, readingprogress.Columns, sqlgraph.NewFieldSpec(readingprogress.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.TenantID(); ok {
+		_spec.SetField(readingprogress.FieldTenantID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTenantID(); ok {
+		_spec.AddField(readingprogress.FieldTenantID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(readingprogress.FieldGalleryID, field.TypeInt64, value)
@@ -238,6 +265,27 @@ type ReadingProgressUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *ReadingProgressMutation
+}
+
+// SetTenantID sets the "tenant_id" field.
+func (_u *ReadingProgressUpdateOne) SetTenantID(v int64) *ReadingProgressUpdateOne {
+	_u.mutation.ResetTenantID()
+	_u.mutation.SetTenantID(v)
+	return _u
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_u *ReadingProgressUpdateOne) SetNillableTenantID(v *int64) *ReadingProgressUpdateOne {
+	if v != nil {
+		_u.SetTenantID(*v)
+	}
+	return _u
+}
+
+// AddTenantID adds value to the "tenant_id" field.
+func (_u *ReadingProgressUpdateOne) AddTenantID(v int64) *ReadingProgressUpdateOne {
+	_u.mutation.AddTenantID(v)
+	return _u
 }
 
 // SetGalleryID sets the "gallery_id" field.
@@ -410,24 +458,22 @@ func (_u *ReadingProgressUpdateOne) sqlSave(ctx context.Context) (_node *Reading
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(readingprogress.Table, readingprogress.Columns, sqlgraph.NewFieldSpec(readingprogress.FieldGalleryID, field.TypeInt64), sqlgraph.NewFieldSpec(readingprogress.FieldToken, field.TypeString))
-	if id, ok := _u.mutation.GalleryID(); !ok {
-		return nil, &ValidationError{Name: "gallery_id", err: errors.New(`ent: missing "ReadingProgress.gallery_id" for update`)}
-	} else {
-		_spec.Node.CompositeID[0].Value = id
+	_spec := sqlgraph.NewUpdateSpec(readingprogress.Table, readingprogress.Columns, sqlgraph.NewFieldSpec(readingprogress.FieldID, field.TypeInt))
+	id, ok := _u.mutation.ID()
+	if !ok {
+		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "ReadingProgress.id" for update`)}
 	}
-	if id, ok := _u.mutation.Token(); !ok {
-		return nil, &ValidationError{Name: "token", err: errors.New(`ent: missing "ReadingProgress.token" for update`)}
-	} else {
-		_spec.Node.CompositeID[1].Value = id
-	}
+	_spec.Node.ID.Value = id
 	if fields := _u.fields; len(fields) > 0 {
-		_spec.Node.Columns = make([]string, len(fields))
-		for i, f := range fields {
+		_spec.Node.Columns = make([]string, 0, len(fields))
+		_spec.Node.Columns = append(_spec.Node.Columns, readingprogress.FieldID)
+		for _, f := range fields {
 			if !readingprogress.ValidColumn(f) {
 				return nil, &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 			}
-			_spec.Node.Columns[i] = f
+			if f != readingprogress.FieldID {
+				_spec.Node.Columns = append(_spec.Node.Columns, f)
+			}
 		}
 	}
 	if ps := _u.mutation.predicates; len(ps) > 0 {
@@ -436,6 +482,12 @@ func (_u *ReadingProgressUpdateOne) sqlSave(ctx context.Context) (_node *Reading
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.TenantID(); ok {
+		_spec.SetField(readingprogress.FieldTenantID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTenantID(); ok {
+		_spec.AddField(readingprogress.FieldTenantID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(readingprogress.FieldGalleryID, field.TypeInt64, value)

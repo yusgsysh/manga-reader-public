@@ -262,12 +262,12 @@ func (_q *SyncChangeQuery) Clone() *SyncChangeQuery {
 // Example:
 //
 //	var v []struct {
-//		Entity string `json:"entity,omitempty"`
+//		TenantID int64 `json:"tenant_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.SyncChange.Query().
-//		GroupBy(syncchange.FieldEntity).
+//		GroupBy(syncchange.FieldTenantID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *SyncChangeQuery) GroupBy(field string, fields ...string) *SyncChangeGroupBy {
@@ -285,11 +285,11 @@ func (_q *SyncChangeQuery) GroupBy(field string, fields ...string) *SyncChangeGr
 // Example:
 //
 //	var v []struct {
-//		Entity string `json:"entity,omitempty"`
+//		TenantID int64 `json:"tenant_id,omitempty"`
 //	}
 //
 //	client.SyncChange.Query().
-//		Select(syncchange.FieldEntity).
+//		Select(syncchange.FieldTenantID).
 //		Scan(ctx, &v)
 func (_q *SyncChangeQuery) Select(fields ...string) *SyncChangeSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

@@ -20,6 +20,20 @@ type TagPreferenceCreate struct {
 	hooks    []Hook
 }
 
+// SetTenantID sets the "tenant_id" field.
+func (_c *TagPreferenceCreate) SetTenantID(v int64) *TagPreferenceCreate {
+	_c.mutation.SetTenantID(v)
+	return _c
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_c *TagPreferenceCreate) SetNillableTenantID(v *int64) *TagPreferenceCreate {
+	if v != nil {
+		_c.SetTenantID(*v)
+	}
+	return _c
+}
+
 // SetAction sets the "action" field.
 func (_c *TagPreferenceCreate) SetAction(v string) *TagPreferenceCreate {
 	_c.mutation.SetAction(v)
@@ -109,6 +123,10 @@ func (_c *TagPreferenceCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *TagPreferenceCreate) defaults() {
+	if _, ok := _c.mutation.TenantID(); !ok {
+		v := tagpreference.DefaultTenantID
+		_c.mutation.SetTenantID(v)
+	}
 	if _, ok := _c.mutation.Weight(); !ok {
 		v := tagpreference.DefaultWeight
 		_c.mutation.SetWeight(v)
@@ -125,6 +143,9 @@ func (_c *TagPreferenceCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *TagPreferenceCreate) check() error {
+	if _, ok := _c.mutation.TenantID(); !ok {
+		return &ValidationError{Name: "tenant_id", err: errors.New(`ent: missing required field "TagPreference.tenant_id"`)}
+	}
 	if _, ok := _c.mutation.Action(); !ok {
 		return &ValidationError{Name: "action", err: errors.New(`ent: missing required field "TagPreference.action"`)}
 	}
@@ -141,6 +162,9 @@ func (_c *TagPreferenceCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "TagPreference.updated_at"`)}
+	}
+	if _, ok := _c.mutation.ID(); !ok {
+		return &ValidationError{Name: "id", err: errors.New(`ent: missing required field "TagPreference.id"`)}
 	}
 	if v, ok := _c.mutation.ID(); ok {
 		if err := tagpreference.IDValidator(v); err != nil {
@@ -161,26 +185,17 @@ func (_c *TagPreferenceCreate) sqlSave(ctx context.Context) (*TagPreference, err
 		}
 		return nil, err
 	}
-	if _spec.ID.Value != nil {
-		if id, ok := _spec.ID.Value.(string); ok {
-			_node.ID = id
-		} else {
-			return nil, fmt.Errorf("unexpected TagPreference.ID type: %T", _spec.ID.Value)
-		}
-	}
-	_c.mutation.id = &_node.ID
-	_c.mutation.done = true
 	return _node, nil
 }
 
 func (_c *TagPreferenceCreate) createSpec() (*TagPreference, *sqlgraph.CreateSpec) {
 	var (
 		_node = &TagPreference{config: _c.config}
-		_spec = sqlgraph.NewCreateSpec(tagpreference.Table, sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeString))
+		_spec = sqlgraph.NewCreateSpec(tagpreference.Table, nil)
 	)
-	if id, ok := _c.mutation.ID(); ok {
-		_node.ID = id
-		_spec.ID.Value = id
+	if value, ok := _c.mutation.TenantID(); ok {
+		_spec.SetField(tagpreference.FieldTenantID, field.TypeInt64, value)
+		_node.TenantID = value
 	}
 	if value, ok := _c.mutation.Action(); ok {
 		_spec.SetField(tagpreference.FieldAction, field.TypeString, value)
@@ -197,6 +212,10 @@ func (_c *TagPreferenceCreate) createSpec() (*TagPreference, *sqlgraph.CreateSpe
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(tagpreference.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.ID(); ok {
+		_spec.SetField(tagpreference.FieldID, field.TypeString, value)
+		_node.ID = value
 	}
 	return _node, _spec
 }
@@ -245,7 +264,6 @@ func (_c *TagPreferenceCreateBulk) Save(ctx context.Context) ([]*TagPreference, 
 				if err != nil {
 					return nil, err
 				}
-				mutation.id = &nodes[i].ID
 				mutation.done = true
 				return nodes[i], nil
 			})

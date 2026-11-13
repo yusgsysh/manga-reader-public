@@ -9,6 +9,56 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// ID filters vertices based on their ID field.
+func ID(id int) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldEQ(FieldID, id))
+}
+
+// IDEQ applies the EQ predicate on the ID field.
+func IDEQ(id int) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldEQ(FieldID, id))
+}
+
+// IDNEQ applies the NEQ predicate on the ID field.
+func IDNEQ(id int) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldNEQ(FieldID, id))
+}
+
+// IDIn applies the In predicate on the ID field.
+func IDIn(ids ...int) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldIn(FieldID, ids...))
+}
+
+// IDNotIn applies the NotIn predicate on the ID field.
+func IDNotIn(ids ...int) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldNotIn(FieldID, ids...))
+}
+
+// IDGT applies the GT predicate on the ID field.
+func IDGT(id int) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldGT(FieldID, id))
+}
+
+// IDGTE applies the GTE predicate on the ID field.
+func IDGTE(id int) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldGTE(FieldID, id))
+}
+
+// IDLT applies the LT predicate on the ID field.
+func IDLT(id int) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldLT(FieldID, id))
+}
+
+// IDLTE applies the LTE predicate on the ID field.
+func IDLTE(id int) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldLTE(FieldID, id))
+}
+
+// TenantID applies equality check predicate on the "tenant_id" field. It's identical to TenantIDEQ.
+func TenantID(v int64) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldEQ(FieldTenantID, v))
+}
+
 // GalleryID applies equality check predicate on the "gallery_id" field. It's identical to GalleryIDEQ.
 func GalleryID(v int64) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldEQ(FieldGalleryID, v))
@@ -27,6 +77,46 @@ func CreatedAt(v time.Time) predicate.Bookshelf {
 // UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
 func UpdatedAt(v time.Time) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldEQ(FieldUpdatedAt, v))
+}
+
+// TenantIDEQ applies the EQ predicate on the "tenant_id" field.
+func TenantIDEQ(v int64) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldEQ(FieldTenantID, v))
+}
+
+// TenantIDNEQ applies the NEQ predicate on the "tenant_id" field.
+func TenantIDNEQ(v int64) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldNEQ(FieldTenantID, v))
+}
+
+// TenantIDIn applies the In predicate on the "tenant_id" field.
+func TenantIDIn(vs ...int64) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldIn(FieldTenantID, vs...))
+}
+
+// TenantIDNotIn applies the NotIn predicate on the "tenant_id" field.
+func TenantIDNotIn(vs ...int64) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldNotIn(FieldTenantID, vs...))
+}
+
+// TenantIDGT applies the GT predicate on the "tenant_id" field.
+func TenantIDGT(v int64) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldGT(FieldTenantID, v))
+}
+
+// TenantIDGTE applies the GTE predicate on the "tenant_id" field.
+func TenantIDGTE(v int64) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldGTE(FieldTenantID, v))
+}
+
+// TenantIDLT applies the LT predicate on the "tenant_id" field.
+func TenantIDLT(v int64) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldLT(FieldTenantID, v))
+}
+
+// TenantIDLTE applies the LTE predicate on the "tenant_id" field.
+func TenantIDLTE(v int64) predicate.Bookshelf {
+	return predicate.Bookshelf(sql.FieldLTE(FieldTenantID, v))
 }
 
 // GalleryIDEQ applies the EQ predicate on the "gallery_id" field.

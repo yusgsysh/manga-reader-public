@@ -28,6 +28,10 @@ type Tx struct {
 	TagPreference *TagPreferenceClient
 	// TagSyncBaseline is the client for interacting with the TagSyncBaseline builders.
 	TagSyncBaseline *TagSyncBaselineClient
+	// Tenant is the client for interacting with the Tenant builders.
+	Tenant *TenantClient
+	// User is the client for interacting with the User builders.
+	User *UserClient
 
 	// lazily loaded.
 	client     *Client
@@ -167,6 +171,8 @@ func (tx *Tx) init() {
 	tx.SyncState = NewSyncStateClient(tx.config)
 	tx.TagPreference = NewTagPreferenceClient(tx.config)
 	tx.TagSyncBaseline = NewTagSyncBaselineClient(tx.config)
+	tx.Tenant = NewTenantClient(tx.config)
+	tx.User = NewUserClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.

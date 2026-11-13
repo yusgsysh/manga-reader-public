@@ -105,6 +105,107 @@ Search / Homepage / Watched 支持上游 ExHentai 的 Jump/Seek 定位，通过�
 
 ---
 
+## Authentication (JWT)
+
+JWT auth is opt-in: set `JWT_SECRET` (at least 32 random bytes) to enable it. Without it the API keeps the legacy anonymous behaviour. Basic Auth, if enabled, runs **before** JWT and will block `/login` and the SPA.
+
+### Public vs protected
+
+Public (no JWT): `/api/auth/login`, `/api/auth/status`, `/api/search`, `/api/galleries`, `/api/watched`, `/api/popular`, `/api/gallery/*`, `/api/gallery-cache/*`, `/api/image/*`, `/api/image-cache/*`, and the peer sync endpoints (which require `X-Sync-Token` instead).
+
+Every other `/api/*` route requires a valid JWT: `/api/auth/me`, `/api/auth/logout`, `/api/bookshelf*`, `/api/progress*`, `/api/recently-read`, `/api/reading-progress/cleanup`, `/api/tag-settings*`, `/api/prefill*`, `/api/sync/config`, `/api/sync/status`, `/api/dev/*`, `/api/admin/*`, `/api/tenant/*`. The middleware is default-deny, so new API routes are protected unless explicitly listed as public.
+
+### Tenancy
+
+Isolation is Shared Database + Shared Schema: tenant-owned rows carry `tenant_id` and every data-access path takes that ID from the verified JWT, never from a path, query or body parameter. `gallery_cache` remains global because it is upstream metadata shared by every tenant.
+
+The JWT carries `sub` (user id), `tenant_id`, `role`, `iss`, `iat`, `exp` and `jti`. After signature validation, the tenant middleware loads the tenant and rejects a missing/disabled one with `403`. Roles are `platform_admin`, `tenant_admin` and `user`.
+
+Send the token as `Authorization: Bearer <access_token>`. Browsers may use the `manga_reader_auth` HttpOnly cookie set by login instead; this covers page refreshes and direct ZIP download links, where JavaScript cannot attach a header.
+
+### 0.1 Login
+
+`POST /api/auth/login`
+
+```json
+{ "tenant": "default", "username": "admin", "password": "password" }
+```
+
+`tenant` is the tenant slug. It may be omitted for backwards compatibility and falls back to `default`; the server always resolves it itself.
+
+Success `200`:
+
+```json
+{ "access_token": "<JWT>", "token_type": "Bearer", "expires_in": 3600 }
+```
+
+Failure `401` uses one message for unknown user and wrong password: `{"error":"invalid username or password"}`. Excessive attempts return `429`.
+
+The JWT contains `iss`, `sub` (user id), `iat`, `exp`, `jti`, `username` and `ver` (logout generation). Only HS256 is accepted.
+
+### 0.2 Status (public)
+
+`GET /api/auth/status`
+
+```json
+{ "enabled": true, "initialized": true }
+```
+
+`enabled=false` means the deployment intentionally runs in anonymous mode; the SPA skips the login page.
+
+### 0.3 Current user
+
+`GET /api/auth/me` (requires JWT)
+
+```json
+{
+  "id": 1,
+  "tenant_id": 1,
+  "username": "admin",
+  "role": "platform_admin",
+  "tenant": { "id": 1, "name": "Default", "slug": "default", "status": "active" }
+}
+```
+
+### 0.4 Logout
+
+`POST /api/auth/logout` (requires JWT)
+
+Increments `users.token_version` and clears the auth cookie. All tokens issued before logout return `401` immediately; this is server-side revocation, not just client-side token deletion.
+
+```json
+{ "success": true }
+```
+
+### 0.5 Platform administration (platform_admin)
+
+All routes require a platform administrator JWT.
+
+| Method | Path | Body |
+|--------|------|------|
+| POST | `/api/admin/tenants` | `{ "name", "slug", "admin_username"?, "admin_password"? }` |
+| GET | `/api/admin/tenants` | - |
+| GET | `/api/admin/tenants/:id` | - |
+| PUT | `/api/admin/tenants/:id` | `{ "name"?, "slug"? }` |
+| PATCH | `/api/admin/tenants/:id/status` | `{ "status": "active" \| "disabled" }` |
+
+Tenant admins are optional at creation time and must be provided together. `slug` is globally unique.
+
+### 0.6 Tenant administration (tenant_admin)
+
+All routes require a tenant administrator JWT and are always scoped to that JWT's tenant; a user ID belonging to another tenant returns `404`.
+
+| Method | Path | Body |
+|--------|------|------|
+| GET | `/api/tenant/users` | - |
+| POST | `/api/tenant/users` | `{ "username", "password", "role": "user" \| "tenant_admin" }` |
+| PUT | `/api/tenant/users/:id` | `{ "username"?, "password"?, "role"?, "status"? }` |
+| PATCH | `/api/tenant/users/:id/status` | `{ "status": "active" \| "disabled" }` |
+
+Reset password and role/status changes increment `token_version`, revoking that user's existing tokens.
+
+---
+
 ## Endpoints
 
 ### 1. Search

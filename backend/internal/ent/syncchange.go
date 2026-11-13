@@ -17,6 +17,8 @@ type SyncChange struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID int `json:"id,omitempty"`
+	// TenantID holds the value of the "tenant_id" field.
+	TenantID int64 `json:"tenant_id,omitempty"`
 	// Entity holds the value of the "entity" field.
 	Entity string `json:"entity,omitempty"`
 	// GalleryID holds the value of the "gallery_id" field.
@@ -35,7 +37,7 @@ func (*SyncChange) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case syncchange.FieldID, syncchange.FieldGalleryID:
+		case syncchange.FieldID, syncchange.FieldTenantID, syncchange.FieldGalleryID:
 			values[i] = new(sql.NullInt64)
 		case syncchange.FieldEntity, syncchange.FieldToken, syncchange.FieldOp:
 			values[i] = new(sql.NullString)
@@ -62,6 +64,12 @@ func (_m *SyncChange) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field id", value)
 			}
 			_m.ID = int(value.Int64)
+		case syncchange.FieldTenantID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field tenant_id", values[i])
+			} else if value.Valid {
+				_m.TenantID = value.Int64
+			}
 		case syncchange.FieldEntity:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field entity", values[i])
@@ -128,6 +136,9 @@ func (_m *SyncChange) String() string {
 	var builder strings.Builder
 	builder.WriteString("SyncChange(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
+	builder.WriteString("tenant_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TenantID))
+	builder.WriteString(", ")
 	builder.WriteString("entity=")
 	builder.WriteString(_m.Entity)
 	builder.WriteString(", ")

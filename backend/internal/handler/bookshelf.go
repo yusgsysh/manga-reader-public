@@ -88,11 +88,17 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 		return
 	}
 
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
 	pageSize := 25
 	offset := page * pageSize
 
-	total, err := s.DB.Client.Bookshelf.Query().Count(ctx)
+	total, err := s.DB.Client.Bookshelf.Query().
+		Where(bookshelf.TenantIDEQ(tid)).
+		Count(ctx)
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("count bookshelf failed: %v", err)})
 		return
@@ -101,6 +107,7 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 	totalPages := (total + pageSize - 1) / pageSize
 
 	items, err := s.DB.Client.Bookshelf.Query().
+		Where(bookshelf.TenantIDEQ(tid)).
 		Order(
 			ent.Desc(bookshelf.FieldUpdatedAt),
 			ent.Desc(bookshelf.FieldGalleryID),
@@ -124,7 +131,7 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 	progressByKey := make(map[galleryRef]*ent.ReadingProgress, len(ids))
 	if len(ids) > 0 {
 		progressRows, err := s.DB.Client.ReadingProgress.Query().
-			Where(readingprogress.GalleryIDIn(ids...)).
+			Where(readingprogress.TenantIDEQ(tid), readingprogress.GalleryIDIn(ids...)).
 			All(ctx)
 		if err != nil {
 			web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list reading progress failed: %v", err)})
@@ -206,10 +213,15 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 		return
 	}
 
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
 
 	exists, err := s.DB.Client.Bookshelf.Query().
 		Where(
+			bookshelf.TenantIDEQ(tid),
 			bookshelf.GalleryID(id),
 			bookshelf.Token(token),
 		).
@@ -233,6 +245,7 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 	}
 
 	_, err = s.DB.Client.Bookshelf.Create().
+		SetTenantID(tid).
 		SetGalleryID(id).
 		SetToken(token).
 		Save(ctx)
@@ -243,7 +256,7 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 
 	if s.syncSvc != nil {
 		synclib.LogRecordError(
-			s.syncSvc.RecordUpsert(ctx, synclib.EntityBookshelf, id, token),
+			s.syncSvc.RecordUpsertForTenant(ctx, tid, synclib.EntityBookshelf, id, token),
 			synclib.EntityBookshelf, id, token)
 	}
 
@@ -296,9 +309,14 @@ func (s *Server) handleBookshelfRemove(c *gin.Context) {
 		return
 	}
 
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
 	_, err = s.DB.Client.Bookshelf.Delete().
 		Where(
+			bookshelf.TenantIDEQ(tid),
 			bookshelf.GalleryID(id),
 			bookshelf.Token(token),
 		).
@@ -312,7 +330,7 @@ func (s *Server) handleBookshelfRemove(c *gin.Context) {
 	// removes a stale copy on the peer, matching the user's intent.
 	if s.syncSvc != nil {
 		synclib.LogRecordError(
-			s.syncSvc.RecordDelete(ctx, synclib.EntityBookshelf, id, token),
+			s.syncSvc.RecordDeleteForTenant(ctx, tid, synclib.EntityBookshelf, id, token),
 			synclib.EntityBookshelf, id, token)
 	}
 
@@ -335,10 +353,15 @@ func (s *Server) handleBookshelfStatus(c *gin.Context) {
 		return
 	}
 
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
 
 	b, err := s.DB.Client.Bookshelf.Query().
 		Where(
+			bookshelf.TenantIDEQ(tid),
 			bookshelf.GalleryID(id),
 			bookshelf.Token(token),
 		).

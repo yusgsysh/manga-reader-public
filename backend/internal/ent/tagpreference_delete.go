@@ -9,7 +9,6 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"entgo.io/ent/schema/field"
 )
 
 // TagPreferenceDelete is the builder for deleting a TagPreference entity.
@@ -40,7 +39,7 @@ func (_d *TagPreferenceDelete) ExecX(ctx context.Context) int {
 }
 
 func (_d *TagPreferenceDelete) sqlExec(ctx context.Context) (int, error) {
-	_spec := sqlgraph.NewDeleteSpec(tagpreference.Table, sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeString))
+	_spec := sqlgraph.NewDeleteSpec(tagpreference.Table, nil)
 	if ps := _d.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {

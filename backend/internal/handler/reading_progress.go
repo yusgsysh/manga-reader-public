@@ -32,10 +32,15 @@ func (s *Server) handleGetProgress(c *gin.Context) {
 		return
 	}
 
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
 
 	p, err := s.DB.Client.ReadingProgress.Query().
 		Where(
+			readingprogress.TenantIDEQ(tid),
 			readingprogress.GalleryID(id),
 			readingprogress.Token(token),
 		).
@@ -98,12 +103,17 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 		req.Progress = 1
 	}
 
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
 	now := time.Now().UTC()
 
 	update := func() (int, error) {
 		return s.DB.Client.ReadingProgress.Update().
 			Where(
+				readingprogress.TenantIDEQ(tid),
 				readingprogress.GalleryID(id),
 				readingprogress.Token(token),
 			).
@@ -125,6 +135,7 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 	}
 	if updated == 0 {
 		_, createErr := s.DB.Client.ReadingProgress.Create().
+			SetTenantID(tid).
 			SetGalleryID(id).
 			SetToken(token).
 			SetCurrentPage(req.CurrentPage).
@@ -143,7 +154,7 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 
 	if s.syncSvc != nil {
 		synclib.LogRecordError(
-			s.syncSvc.RecordUpsert(ctx, synclib.EntityReadingProgress, id, token),
+			s.syncSvc.RecordUpsertForTenant(ctx, tid, synclib.EntityReadingProgress, id, token),
 			synclib.EntityReadingProgress, id, token)
 	}
 
@@ -152,6 +163,7 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 	// bookshelf affect zero rows.
 	if n, bErr := s.DB.Client.Bookshelf.Update().
 		Where(
+			bookshelf.TenantIDEQ(tid),
 			bookshelf.GalleryID(id),
 			bookshelf.Token(token),
 		).
@@ -160,12 +172,13 @@ func (s *Server) handleUpdateProgress(c *gin.Context) {
 		slog.Warn("bump bookshelf updated_at failed", "error", bErr)
 	} else if n > 0 && s.syncSvc != nil {
 		synclib.LogRecordError(
-			s.syncSvc.RecordUpsert(ctx, synclib.EntityBookshelf, id, token),
+			s.syncSvc.RecordUpsertForTenant(ctx, tid, synclib.EntityBookshelf, id, token),
 			synclib.EntityBookshelf, id, token)
 	}
 
 	p, err := s.DB.Client.ReadingProgress.Query().
 		Where(
+			readingprogress.TenantIDEQ(tid),
 			readingprogress.GalleryID(id),
 			readingprogress.Token(token),
 		).
@@ -195,6 +208,10 @@ func (s *Server) handleReadingProgressCleanup(c *gin.Context) {
 		return
 	}
 
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
 
 	// Collect the keys first so the purge can be replicated as tombstones;
@@ -205,7 +222,7 @@ func (s *Server) handleReadingProgressCleanup(c *gin.Context) {
 		if days == 0 {
 			pred = nil
 		}
-		q := s.DB.Client.ReadingProgress.Query()
+		q := s.DB.Client.ReadingProgress.Query().Where(readingprogress.TenantIDEQ(tid))
 		if pred != nil {
 			q = q.Where(pred)
 		}
@@ -222,11 +239,13 @@ func (s *Server) handleReadingProgressCleanup(c *gin.Context) {
 
 	var deleted int
 	if days == 0 {
-		deleted, err = s.DB.Client.ReadingProgress.Delete().Exec(ctx)
+		deleted, err = s.DB.Client.ReadingProgress.Delete().
+			Where(readingprogress.TenantIDEQ(tid)).
+			Exec(ctx)
 	} else {
 		cutoff := time.Now().UTC().AddDate(0, 0, -days)
 		deleted, err = s.DB.Client.ReadingProgress.Delete().
-			Where(readingprogress.UpdatedAtLT(cutoff)).
+			Where(readingprogress.TenantIDEQ(tid), readingprogress.UpdatedAtLT(cutoff)).
 			Exec(ctx)
 	}
 	if err != nil {
@@ -235,7 +254,7 @@ func (s *Server) handleReadingProgressCleanup(c *gin.Context) {
 	}
 
 	if s.syncSvc != nil && len(purgeKeys) > 0 {
-		if recErr := s.syncSvc.RecordDeletes(ctx, synclib.EntityReadingProgress, purgeKeys); recErr != nil {
+		if recErr := s.syncSvc.RecordDeletesForTenant(ctx, tid, synclib.EntityReadingProgress, purgeKeys); recErr != nil {
 			slog.Warn("record sync purge failed", "error", recErr)
 		}
 	}

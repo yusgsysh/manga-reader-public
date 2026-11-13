@@ -15,8 +15,8 @@ import (
 // TagSyncBaseline is the model entity for the TagSyncBaseline schema.
 type TagSyncBaseline struct {
 	config `json:"-"`
-	// ID of the ent.
-	ID string `json:"id,omitempty"`
+	// TenantID holds the value of the "tenant_id" field.
+	TenantID int64 `json:"tenant_id,omitempty"`
 	// Action holds the value of the "action" field.
 	Action string `json:"action,omitempty"`
 	// Weight holds the value of the "weight" field.
@@ -24,7 +24,9 @@ type TagSyncBaseline struct {
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
-	UpdatedAt    time.Time `json:"updated_at,omitempty"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// ID holds the value of the "id" field.
+	ID           string `json:"id,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -33,9 +35,9 @@ func (*TagSyncBaseline) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case tagsyncbaseline.FieldWeight:
+		case tagsyncbaseline.FieldTenantID, tagsyncbaseline.FieldWeight:
 			values[i] = new(sql.NullInt64)
-		case tagsyncbaseline.FieldID, tagsyncbaseline.FieldAction:
+		case tagsyncbaseline.FieldAction, tagsyncbaseline.FieldID:
 			values[i] = new(sql.NullString)
 		case tagsyncbaseline.FieldCreatedAt, tagsyncbaseline.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -54,11 +56,11 @@ func (_m *TagSyncBaseline) assignValues(columns []string, values []any) error {
 	}
 	for i := range columns {
 		switch columns[i] {
-		case tagsyncbaseline.FieldID:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field id", values[i])
+		case tagsyncbaseline.FieldTenantID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field tenant_id", values[i])
 			} else if value.Valid {
-				_m.ID = value.String
+				_m.TenantID = value.Int64
 			}
 		case tagsyncbaseline.FieldAction:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -83,6 +85,12 @@ func (_m *TagSyncBaseline) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case tagsyncbaseline.FieldID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field id", values[i])
+			} else if value.Valid {
+				_m.ID = value.String
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -119,7 +127,9 @@ func (_m *TagSyncBaseline) Unwrap() *TagSyncBaseline {
 func (_m *TagSyncBaseline) String() string {
 	var builder strings.Builder
 	builder.WriteString("TagSyncBaseline(")
-	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
+	builder.WriteString("tenant_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TenantID))
+	builder.WriteString(", ")
 	builder.WriteString("action=")
 	builder.WriteString(_m.Action)
 	builder.WriteString(", ")
@@ -131,6 +141,9 @@ func (_m *TagSyncBaseline) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("id=")
+	builder.WriteString(_m.ID)
 	builder.WriteByte(')')
 	return builder.String()
 }

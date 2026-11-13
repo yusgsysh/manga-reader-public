@@ -30,6 +30,7 @@ func (SyncChange) Annotations() []schema.Annotation {
 // Fields of the SyncChange.
 func (SyncChange) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int64("tenant_id").Default(1),
 		field.String("entity"),
 		field.Int64("gallery_id"),
 		field.String("token"),
@@ -43,6 +44,6 @@ func (SyncChange) Fields() []ent.Field {
 // Indexes of the SyncChange.
 func (SyncChange) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("entity", "gallery_id", "token"),
+		index.Fields("tenant_id", "entity", "gallery_id", "token"),
 	}
 }

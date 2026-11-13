@@ -20,19 +20,19 @@ type TagPreference struct {
 func (TagPreference) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		entsql.Annotation{Table: "tag_preference"},
+		compositeID("tenant_id", "id"),
 	}
 }
 
 // Fields of the TagPreference.
 func (TagPreference) Fields() []ent.Field {
 	return []ent.Field{
-		// The tag itself is the identity: one row per `namespace:name`, so an
-		// auto-increment id would only duplicate the natural key. ent exposes
-		// the primary key as "id" in Go and stores it in the "tag" column.
+		field.Int64("tenant_id").Default(1),
+		// The tag itself is the identity within a tenant: one row per
+		// `namespace:name`; the primary key is (tenant_id, tag).
 		field.String("id").
 			StorageKey("tag").
 			NotEmpty().
-			Unique().
 			Immutable(),
 		field.String("action").NotEmpty(),
 		// Weight mirrors ExHentai My Tags tag weight: like rules are >= 0,

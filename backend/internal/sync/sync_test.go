@@ -258,7 +258,7 @@ func TestReadChangesSinceCoalescesPerRecord(t *testing.T) {
 		t.Fatalf("delete row: %v", err)
 	}
 
-	changes, maxID, err := ReadChangesSince(t.Context(), client, 0)
+	changes, maxID, err := ReadChangesSince(t.Context(), client, 1, 0)
 	if err != nil {
 		t.Fatalf("read changes: %v", err)
 	}
@@ -287,7 +287,7 @@ func TestPushBootstrapAndDelta(t *testing.T) {
 	seedProgress(t, clientClient, 200, "cli", 6, now.Add(-time.Hour))
 
 	// Bootstrap: client snapshot -> server, server snapshot -> client.
-	snap, err := ExportSnapshot(t.Context(), clientClient)
+	snap, err := ExportSnapshot(t.Context(), clientClient, 1)
 	if err != nil {
 		t.Fatalf("export client snapshot: %v", err)
 	}
@@ -330,7 +330,7 @@ func TestPushBootstrapAndDelta(t *testing.T) {
 		Exec(t.Context()); err != nil {
 		t.Fatalf("update client row: %v", err)
 	}
-	delta, _, err := ReadChangesSince(t.Context(), clientClient, 0)
+	delta, _, err := ReadChangesSince(t.Context(), clientClient, 1, 0)
 	if err != nil {
 		t.Fatalf("read delta: %v", err)
 	}
@@ -805,7 +805,7 @@ func TestExportSnapshotIncludesGalleryCache(t *testing.T) {
 	now := time.Now().UTC()
 	seedGalleryCacheRow(t, client, 77, "snapTok", now)
 
-	snap, err := ExportSnapshot(t.Context(), client)
+	snap, err := ExportSnapshot(t.Context(), client, 1)
 	if err != nil {
 		t.Fatalf("export snapshot: %v", err)
 	}
@@ -840,7 +840,7 @@ func TestReadChangesSinceFetchesGalleryCacheRow(t *testing.T) {
 		t.Fatalf("record upsert: %v", err)
 	}
 
-	changes, maxID, err := ReadChangesSince(t.Context(), client, 0)
+	changes, maxID, err := ReadChangesSince(t.Context(), client, 1, 0)
 	if err != nil {
 		t.Fatalf("read changes: %v", err)
 	}

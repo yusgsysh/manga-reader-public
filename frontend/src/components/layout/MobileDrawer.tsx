@@ -1,12 +1,20 @@
 import { useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router";
 import { AnimatePresence, m } from "motion/react";
-import { X } from "@phosphor-icons/react";
+import { SignOut, X } from "@phosphor-icons/react";
 import { cn } from "@cloudflare/kumo";
 import { Logo } from "../ui";
 import { ThemeSwitcher } from "./ThemeSwitcher";
-import { PRIMARY_NAV, SECONDARY_NAV, isNavActive, type NavItem } from "./nav";
+import {
+  PLATFORM_ADMIN_NAV,
+  PRIMARY_NAV,
+  SECONDARY_NAV,
+  TENANT_ADMIN_NAV,
+  isNavActive,
+  type NavItem,
+} from "./nav";
 import { useNavigationContext } from "../../hooks/useNavigationContext";
+import { useAuth } from "../../context/auth";
 
 interface MobileDrawerProps {
   open: boolean;
@@ -45,6 +53,18 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
   const location = useLocation();
   const panelRef = useRef<HTMLDivElement>(null);
   const { lastListRoute } = useNavigationContext();
+  const {
+    enabled: authEnabled,
+    isPlatformAdmin,
+    isTenantAdmin,
+    logout,
+    isLoggingOut,
+  } = useAuth();
+  const adminNav = isPlatformAdmin
+    ? PLATFORM_ADMIN_NAV
+    : isTenantAdmin
+      ? TENANT_ADMIN_NAV
+      : [];
 
   useEffect(() => {
     if (!open) return;
@@ -117,9 +137,35 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
                   onNavigate={onClose}
                 />
               ))}
+
+              {adminNav.length > 0 && (
+                <div className="my-3 border-t border-kumo-hairline" />
+              )}
+              {adminNav.map((item) => (
+                <DrawerLink
+                  key={item.to}
+                  item={item}
+                  active={isNavActive(location.pathname, item.to, lastListRoute)}
+                  onNavigate={onClose}
+                />
+              ))}
             </nav>
 
-            <div className="shrink-0 border-t border-kumo-hairline p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+            <div className="shrink-0 space-y-2 border-t border-kumo-hairline p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+              {authEnabled && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    void logout().catch(() => undefined);
+                  }}
+                  disabled={isLoggingOut}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-kumo-subtle transition-colors hover:bg-kumo-tint hover:text-kumo-default disabled:opacity-50"
+                >
+                  <SignOut className="size-5 shrink-0" />
+                  退出登录
+                </button>
+              )}
               <ThemeSwitcher className="w-full" />
             </div>
           </m.div>

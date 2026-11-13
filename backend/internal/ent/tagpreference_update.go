@@ -28,6 +28,27 @@ func (_u *TagPreferenceUpdate) Where(ps ...predicate.TagPreference) *TagPreferen
 	return _u
 }
 
+// SetTenantID sets the "tenant_id" field.
+func (_u *TagPreferenceUpdate) SetTenantID(v int64) *TagPreferenceUpdate {
+	_u.mutation.ResetTenantID()
+	_u.mutation.SetTenantID(v)
+	return _u
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_u *TagPreferenceUpdate) SetNillableTenantID(v *int64) *TagPreferenceUpdate {
+	if v != nil {
+		_u.SetTenantID(*v)
+	}
+	return _u
+}
+
+// AddTenantID adds value to the "tenant_id" field.
+func (_u *TagPreferenceUpdate) AddTenantID(v int64) *TagPreferenceUpdate {
+	_u.mutation.AddTenantID(v)
+	return _u
+}
+
 // SetAction sets the "action" field.
 func (_u *TagPreferenceUpdate) SetAction(v string) *TagPreferenceUpdate {
 	_u.mutation.SetAction(v)
@@ -124,13 +145,19 @@ func (_u *TagPreferenceUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(tagpreference.Table, tagpreference.Columns, sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeString))
+	_spec := sqlgraph.NewUpdateSpec(tagpreference.Table, tagpreference.Columns, sqlgraph.NewFieldSpec(tagpreference.FieldTenantID, field.TypeInt64), sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeString))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.TenantID(); ok {
+		_spec.SetField(tagpreference.FieldTenantID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTenantID(); ok {
+		_spec.AddField(tagpreference.FieldTenantID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagpreference.FieldAction, field.TypeString, value)
@@ -162,6 +189,27 @@ type TagPreferenceUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *TagPreferenceMutation
+}
+
+// SetTenantID sets the "tenant_id" field.
+func (_u *TagPreferenceUpdateOne) SetTenantID(v int64) *TagPreferenceUpdateOne {
+	_u.mutation.ResetTenantID()
+	_u.mutation.SetTenantID(v)
+	return _u
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_u *TagPreferenceUpdateOne) SetNillableTenantID(v *int64) *TagPreferenceUpdateOne {
+	if v != nil {
+		_u.SetTenantID(*v)
+	}
+	return _u
+}
+
+// AddTenantID adds value to the "tenant_id" field.
+func (_u *TagPreferenceUpdateOne) AddTenantID(v int64) *TagPreferenceUpdateOne {
+	_u.mutation.AddTenantID(v)
+	return _u
 }
 
 // SetAction sets the "action" field.
@@ -273,22 +321,24 @@ func (_u *TagPreferenceUpdateOne) sqlSave(ctx context.Context) (_node *TagPrefer
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(tagpreference.Table, tagpreference.Columns, sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeString))
-	id, ok := _u.mutation.ID()
-	if !ok {
-		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "TagPreference.id" for update`)}
+	_spec := sqlgraph.NewUpdateSpec(tagpreference.Table, tagpreference.Columns, sqlgraph.NewFieldSpec(tagpreference.FieldTenantID, field.TypeInt64), sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeString))
+	if id, ok := _u.mutation.TenantID(); !ok {
+		return nil, &ValidationError{Name: "tenant_id", err: errors.New(`ent: missing "TagPreference.tenant_id" for update`)}
+	} else {
+		_spec.Node.CompositeID[0].Value = id
 	}
-	_spec.Node.ID.Value = id
+	if id, ok := _u.mutation.ID(); !ok {
+		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "TagPreference.id" for update`)}
+	} else {
+		_spec.Node.CompositeID[1].Value = id
+	}
 	if fields := _u.fields; len(fields) > 0 {
-		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, tagpreference.FieldID)
-		for _, f := range fields {
+		_spec.Node.Columns = make([]string, len(fields))
+		for i, f := range fields {
 			if !tagpreference.ValidColumn(f) {
 				return nil, &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 			}
-			if f != tagpreference.FieldID {
-				_spec.Node.Columns = append(_spec.Node.Columns, f)
-			}
+			_spec.Node.Columns[i] = f
 		}
 	}
 	if ps := _u.mutation.predicates; len(ps) > 0 {
@@ -297,6 +347,12 @@ func (_u *TagPreferenceUpdateOne) sqlSave(ctx context.Context) (_node *TagPrefer
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.TenantID(); ok {
+		_spec.SetField(tagpreference.FieldTenantID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTenantID(); ok {
+		_spec.AddField(tagpreference.FieldTenantID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagpreference.FieldAction, field.TypeString, value)

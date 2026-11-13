@@ -12,7 +12,6 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"entgo.io/ent/schema/field"
 )
 
 // TagSyncBaselineQuery is the builder for querying TagSyncBaseline entities.
@@ -80,29 +79,6 @@ func (_q *TagSyncBaselineQuery) FirstX(ctx context.Context) *TagSyncBaseline {
 	return node
 }
 
-// FirstID returns the first TagSyncBaseline ID from the query.
-// Returns a *NotFoundError when no TagSyncBaseline ID was found.
-func (_q *TagSyncBaselineQuery) FirstID(ctx context.Context) (id string, err error) {
-	var ids []string
-	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
-		return
-	}
-	if len(ids) == 0 {
-		err = &NotFoundError{tagsyncbaseline.Label}
-		return
-	}
-	return ids[0], nil
-}
-
-// FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *TagSyncBaselineQuery) FirstIDX(ctx context.Context) string {
-	id, err := _q.FirstID(ctx)
-	if err != nil && !IsNotFound(err) {
-		panic(err)
-	}
-	return id
-}
-
 // Only returns a single TagSyncBaseline entity found by the query, ensuring it only returns one.
 // Returns a *NotSingularError when more than one TagSyncBaseline entity is found.
 // Returns a *NotFoundError when no TagSyncBaseline entities are found.
@@ -130,34 +106,6 @@ func (_q *TagSyncBaselineQuery) OnlyX(ctx context.Context) *TagSyncBaseline {
 	return node
 }
 
-// OnlyID is like Only, but returns the only TagSyncBaseline ID in the query.
-// Returns a *NotSingularError when more than one TagSyncBaseline ID is found.
-// Returns a *NotFoundError when no entities are found.
-func (_q *TagSyncBaselineQuery) OnlyID(ctx context.Context) (id string, err error) {
-	var ids []string
-	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
-		return
-	}
-	switch len(ids) {
-	case 1:
-		id = ids[0]
-	case 0:
-		err = &NotFoundError{tagsyncbaseline.Label}
-	default:
-		err = &NotSingularError{tagsyncbaseline.Label}
-	}
-	return
-}
-
-// OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *TagSyncBaselineQuery) OnlyIDX(ctx context.Context) string {
-	id, err := _q.OnlyID(ctx)
-	if err != nil {
-		panic(err)
-	}
-	return id
-}
-
 // All executes the query and returns a list of TagSyncBaselines.
 func (_q *TagSyncBaselineQuery) All(ctx context.Context) ([]*TagSyncBaseline, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryAll)
@@ -175,27 +123,6 @@ func (_q *TagSyncBaselineQuery) AllX(ctx context.Context) []*TagSyncBaseline {
 		panic(err)
 	}
 	return nodes
-}
-
-// IDs executes the query and returns a list of TagSyncBaseline IDs.
-func (_q *TagSyncBaselineQuery) IDs(ctx context.Context) (ids []string, err error) {
-	if _q.ctx.Unique == nil && _q.path != nil {
-		_q.Unique(true)
-	}
-	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryIDs)
-	if err = _q.Select(tagsyncbaseline.FieldID).Scan(ctx, &ids); err != nil {
-		return nil, err
-	}
-	return ids, nil
-}
-
-// IDsX is like IDs, but panics if an error occurs.
-func (_q *TagSyncBaselineQuery) IDsX(ctx context.Context) []string {
-	ids, err := _q.IDs(ctx)
-	if err != nil {
-		panic(err)
-	}
-	return ids
 }
 
 // Count returns the count of the given query.
@@ -219,7 +146,7 @@ func (_q *TagSyncBaselineQuery) CountX(ctx context.Context) int {
 // Exist returns true if the query has elements in the graph.
 func (_q *TagSyncBaselineQuery) Exist(ctx context.Context) (bool, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryExist)
-	switch _, err := _q.FirstID(ctx); {
+	switch _, err := _q.First(ctx); {
 	case IsNotFound(err):
 		return false, nil
 	case err != nil:
@@ -262,12 +189,12 @@ func (_q *TagSyncBaselineQuery) Clone() *TagSyncBaselineQuery {
 // Example:
 //
 //	var v []struct {
-//		Action string `json:"action,omitempty"`
+//		TenantID int64 `json:"tenant_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.TagSyncBaseline.Query().
-//		GroupBy(tagsyncbaseline.FieldAction).
+//		GroupBy(tagsyncbaseline.FieldTenantID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *TagSyncBaselineQuery) GroupBy(field string, fields ...string) *TagSyncBaselineGroupBy {
@@ -285,11 +212,11 @@ func (_q *TagSyncBaselineQuery) GroupBy(field string, fields ...string) *TagSync
 // Example:
 //
 //	var v []struct {
-//		Action string `json:"action,omitempty"`
+//		TenantID int64 `json:"tenant_id,omitempty"`
 //	}
 //
 //	client.TagSyncBaseline.Query().
-//		Select(tagsyncbaseline.FieldAction).
+//		Select(tagsyncbaseline.FieldTenantID).
 //		Scan(ctx, &v)
 func (_q *TagSyncBaselineQuery) Select(fields ...string) *TagSyncBaselineSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
@@ -357,15 +284,13 @@ func (_q *TagSyncBaselineQuery) sqlAll(ctx context.Context, hooks ...queryHook) 
 
 func (_q *TagSyncBaselineQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
-	_spec.Node.Columns = _q.ctx.Fields
-	if len(_q.ctx.Fields) > 0 {
-		_spec.Unique = _q.ctx.Unique != nil && *_q.ctx.Unique
-	}
+	_spec.Unique = false
+	_spec.Node.Columns = nil
 	return sqlgraph.CountNodes(ctx, _q.driver, _spec)
 }
 
 func (_q *TagSyncBaselineQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
+	_spec := sqlgraph.NewQuerySpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, nil)
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
@@ -374,11 +299,8 @@ func (_q *TagSyncBaselineQuery) querySpec() *sqlgraph.QuerySpec {
 	}
 	if fields := _q.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, tagsyncbaseline.FieldID)
 		for i := range fields {
-			if fields[i] != tagsyncbaseline.FieldID {
-				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
-			}
+			_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

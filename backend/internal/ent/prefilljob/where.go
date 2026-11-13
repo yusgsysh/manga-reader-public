@@ -55,6 +55,11 @@ func IDLTE(id uuid.UUID) predicate.PrefillJob {
 	return predicate.PrefillJob(sql.FieldLTE(FieldID, id))
 }
 
+// TenantID applies equality check predicate on the "tenant_id" field. It's identical to TenantIDEQ.
+func TenantID(v int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldEQ(FieldTenantID, v))
+}
+
 // GalleryID applies equality check predicate on the "gallery_id" field. It's identical to GalleryIDEQ.
 func GalleryID(v int64) predicate.PrefillJob {
 	return predicate.PrefillJob(sql.FieldEQ(FieldGalleryID, v))
@@ -98,6 +103,46 @@ func UpdatedAt(v time.Time) predicate.PrefillJob {
 // FinishedAt applies equality check predicate on the "finished_at" field. It's identical to FinishedAtEQ.
 func FinishedAt(v time.Time) predicate.PrefillJob {
 	return predicate.PrefillJob(sql.FieldEQ(FieldFinishedAt, v))
+}
+
+// TenantIDEQ applies the EQ predicate on the "tenant_id" field.
+func TenantIDEQ(v int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldEQ(FieldTenantID, v))
+}
+
+// TenantIDNEQ applies the NEQ predicate on the "tenant_id" field.
+func TenantIDNEQ(v int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldNEQ(FieldTenantID, v))
+}
+
+// TenantIDIn applies the In predicate on the "tenant_id" field.
+func TenantIDIn(vs ...int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldIn(FieldTenantID, vs...))
+}
+
+// TenantIDNotIn applies the NotIn predicate on the "tenant_id" field.
+func TenantIDNotIn(vs ...int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldNotIn(FieldTenantID, vs...))
+}
+
+// TenantIDGT applies the GT predicate on the "tenant_id" field.
+func TenantIDGT(v int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldGT(FieldTenantID, v))
+}
+
+// TenantIDGTE applies the GTE predicate on the "tenant_id" field.
+func TenantIDGTE(v int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldGTE(FieldTenantID, v))
+}
+
+// TenantIDLT applies the LT predicate on the "tenant_id" field.
+func TenantIDLT(v int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldLT(FieldTenantID, v))
+}
+
+// TenantIDLTE applies the LTE predicate on the "tenant_id" field.
+func TenantIDLTE(v int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldLTE(FieldTenantID, v))
 }
 
 // GalleryIDEQ applies the EQ predicate on the "gallery_id" field.

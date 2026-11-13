@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"manga-reader/internal/ent"
+	"manga-reader/internal/ent/tagpreference"
 	"manga-reader/internal/model"
 	"manga-reader/internal/web"
 )
@@ -66,7 +67,11 @@ func defaultTagWeight(action string) int {
 
 // handleTagSettingsGet returns all stored tag preferences, ordered by tag.
 func (s *Server) handleTagSettingsGet(c *gin.Context) {
-	tags, err := s.loadTagRules(c.Request.Context())
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
+	tags, err := s.loadTagRules(c.Request.Context(), tid)
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list tag settings failed: %v", err)})
 		return
@@ -113,6 +118,10 @@ func (s *Server) handleTagSettingsPut(c *gin.Context) {
 		return normalized[i].Tag < normalized[j].Tag
 	})
 
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
 
 	tx, err := s.DB.Client.Tx(ctx)
@@ -121,7 +130,9 @@ func (s *Server) handleTagSettingsPut(c *gin.Context) {
 		return
 	}
 
-	if _, err := tx.TagPreference.Delete().Exec(ctx); err != nil {
+	if _, err := tx.TagPreference.Delete().
+		Where(tagpreference.TenantIDEQ(tid)).
+		Exec(ctx); err != nil {
 		tx.Rollback()
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("clear tag settings failed: %v", err)})
 		return
@@ -130,7 +141,11 @@ func (s *Server) handleTagSettingsPut(c *gin.Context) {
 	if len(normalized) > 0 {
 		builders := make([]*ent.TagPreferenceCreate, 0, len(normalized))
 		for _, t := range normalized {
-			builders = append(builders, tx.TagPreference.Create().SetID(t.Tag).SetAction(t.Action).SetWeight(t.Weight))
+			builders = append(builders, tx.TagPreference.Create().
+				SetTenantID(tid).
+				SetID(t.Tag).
+				SetAction(t.Action).
+				SetWeight(t.Weight))
 		}
 		if _, err := tx.TagPreference.CreateBulk(builders...).Save(ctx); err != nil {
 			tx.Rollback()

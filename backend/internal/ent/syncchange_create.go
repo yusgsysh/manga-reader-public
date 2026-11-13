@@ -20,6 +20,20 @@ type SyncChangeCreate struct {
 	hooks    []Hook
 }
 
+// SetTenantID sets the "tenant_id" field.
+func (_c *SyncChangeCreate) SetTenantID(v int64) *SyncChangeCreate {
+	_c.mutation.SetTenantID(v)
+	return _c
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_c *SyncChangeCreate) SetNillableTenantID(v *int64) *SyncChangeCreate {
+	if v != nil {
+		_c.SetTenantID(*v)
+	}
+	return _c
+}
+
 // SetEntity sets the "entity" field.
 func (_c *SyncChangeCreate) SetEntity(v string) *SyncChangeCreate {
 	_c.mutation.SetEntity(v)
@@ -101,6 +115,10 @@ func (_c *SyncChangeCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *SyncChangeCreate) defaults() {
+	if _, ok := _c.mutation.TenantID(); !ok {
+		v := syncchange.DefaultTenantID
+		_c.mutation.SetTenantID(v)
+	}
 	if _, ok := _c.mutation.GetOp(); !ok {
 		v := syncchange.DefaultOp
 		_c.mutation.SetOpField(v)
@@ -113,6 +131,9 @@ func (_c *SyncChangeCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *SyncChangeCreate) check() error {
+	if _, ok := _c.mutation.TenantID(); !ok {
+		return &ValidationError{Name: "tenant_id", err: errors.New(`ent: missing required field "SyncChange.tenant_id"`)}
+	}
 	if _, ok := _c.mutation.Entity(); !ok {
 		return &ValidationError{Name: "entity", err: errors.New(`ent: missing required field "SyncChange.entity"`)}
 	}
@@ -154,6 +175,10 @@ func (_c *SyncChangeCreate) createSpec() (*SyncChange, *sqlgraph.CreateSpec) {
 		_node = &SyncChange{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(syncchange.Table, sqlgraph.NewFieldSpec(syncchange.FieldID, field.TypeInt))
 	)
+	if value, ok := _c.mutation.TenantID(); ok {
+		_spec.SetField(syncchange.FieldTenantID, field.TypeInt64, value)
+		_node.TenantID = value
+	}
 	if value, ok := _c.mutation.Entity(); ok {
 		_spec.SetField(syncchange.FieldEntity, field.TypeString, value)
 		_node.Entity = value

@@ -28,6 +28,27 @@ func (_u *TagSyncBaselineUpdate) Where(ps ...predicate.TagSyncBaseline) *TagSync
 	return _u
 }
 
+// SetTenantID sets the "tenant_id" field.
+func (_u *TagSyncBaselineUpdate) SetTenantID(v int64) *TagSyncBaselineUpdate {
+	_u.mutation.ResetTenantID()
+	_u.mutation.SetTenantID(v)
+	return _u
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_u *TagSyncBaselineUpdate) SetNillableTenantID(v *int64) *TagSyncBaselineUpdate {
+	if v != nil {
+		_u.SetTenantID(*v)
+	}
+	return _u
+}
+
+// AddTenantID adds value to the "tenant_id" field.
+func (_u *TagSyncBaselineUpdate) AddTenantID(v int64) *TagSyncBaselineUpdate {
+	_u.mutation.AddTenantID(v)
+	return _u
+}
+
 // SetAction sets the "action" field.
 func (_u *TagSyncBaselineUpdate) SetAction(v string) *TagSyncBaselineUpdate {
 	_u.mutation.SetAction(v)
@@ -124,13 +145,19 @@ func (_u *TagSyncBaselineUpdate) sqlSave(ctx context.Context) (_node int, err er
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
+	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldTenantID, field.TypeInt64), sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.TenantID(); ok {
+		_spec.SetField(tagsyncbaseline.FieldTenantID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTenantID(); ok {
+		_spec.AddField(tagsyncbaseline.FieldTenantID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagsyncbaseline.FieldAction, field.TypeString, value)
@@ -162,6 +189,27 @@ type TagSyncBaselineUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *TagSyncBaselineMutation
+}
+
+// SetTenantID sets the "tenant_id" field.
+func (_u *TagSyncBaselineUpdateOne) SetTenantID(v int64) *TagSyncBaselineUpdateOne {
+	_u.mutation.ResetTenantID()
+	_u.mutation.SetTenantID(v)
+	return _u
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_u *TagSyncBaselineUpdateOne) SetNillableTenantID(v *int64) *TagSyncBaselineUpdateOne {
+	if v != nil {
+		_u.SetTenantID(*v)
+	}
+	return _u
+}
+
+// AddTenantID adds value to the "tenant_id" field.
+func (_u *TagSyncBaselineUpdateOne) AddTenantID(v int64) *TagSyncBaselineUpdateOne {
+	_u.mutation.AddTenantID(v)
+	return _u
 }
 
 // SetAction sets the "action" field.
@@ -273,22 +321,24 @@ func (_u *TagSyncBaselineUpdateOne) sqlSave(ctx context.Context) (_node *TagSync
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
-	id, ok := _u.mutation.ID()
-	if !ok {
-		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "TagSyncBaseline.id" for update`)}
+	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldTenantID, field.TypeInt64), sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
+	if id, ok := _u.mutation.TenantID(); !ok {
+		return nil, &ValidationError{Name: "tenant_id", err: errors.New(`ent: missing "TagSyncBaseline.tenant_id" for update`)}
+	} else {
+		_spec.Node.CompositeID[0].Value = id
 	}
-	_spec.Node.ID.Value = id
+	if id, ok := _u.mutation.ID(); !ok {
+		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "TagSyncBaseline.id" for update`)}
+	} else {
+		_spec.Node.CompositeID[1].Value = id
+	}
 	if fields := _u.fields; len(fields) > 0 {
-		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, tagsyncbaseline.FieldID)
-		for _, f := range fields {
+		_spec.Node.Columns = make([]string, len(fields))
+		for i, f := range fields {
 			if !tagsyncbaseline.ValidColumn(f) {
 				return nil, &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 			}
-			if f != tagsyncbaseline.FieldID {
-				_spec.Node.Columns = append(_spec.Node.Columns, f)
-			}
+			_spec.Node.Columns[i] = f
 		}
 	}
 	if ps := _u.mutation.predicates; len(ps) > 0 {
@@ -297,6 +347,12 @@ func (_u *TagSyncBaselineUpdateOne) sqlSave(ctx context.Context) (_node *TagSync
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.TenantID(); ok {
+		_spec.SetField(tagsyncbaseline.FieldTenantID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTenantID(); ok {
+		_spec.AddField(tagsyncbaseline.FieldTenantID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagsyncbaseline.FieldAction, field.TypeString, value)

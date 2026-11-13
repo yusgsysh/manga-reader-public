@@ -106,6 +106,10 @@ func initClient(conn *sql.DB, dialectName string) (*DB, error) {
 		client.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
+	if err := migrateTenancy(migrateCtx, client); err != nil {
+		client.Close()
+		return nil, fmt.Errorf("migrate tenancy: %w", err)
+	}
 
 	return &DB{Client: client, Conn: conn}, nil
 }

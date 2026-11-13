@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"manga-reader/internal/config"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/gallerycache"
@@ -26,8 +27,13 @@ import (
 // Applying the same change twice is a no-op (equal timestamps are skipped),
 // which makes retries and echoes harmless.
 func ApplyChanges(ctx context.Context, client *ent.Client, changes []Change) (applied, skipped int, err error) {
+	return ApplyChangesForTenant(ctx, client, config.DefaultTenantID, changes)
+}
+
+// ApplyChangesForTenant applies a peer batch to exactly one tenant.
+func ApplyChangesForTenant(ctx context.Context, client *ent.Client, tenantID int64, changes []Change) (applied, skipped int, err error) {
 	for _, ch := range changes {
-		ok, applyErr := applyChange(ctx, client, ch)
+		ok, applyErr := applyChange(ctx, client, tenantID, ch)
 		if applyErr != nil {
 			// A row that fails ent validation (e.g. progress > 1 from a
 			// divergent peer) must not wedge replication: the cursor would
@@ -50,7 +56,7 @@ func ApplyChanges(ctx context.Context, client *ent.Client, changes []Change) (ap
 	return applied, skipped, nil
 }
 
-func applyChange(ctx context.Context, client *ent.Client, ch Change) (bool, error) {
+func applyChange(ctx context.Context, client *ent.Client, tenantID int64, ch Change) (bool, error) {
 	// A peer with a clock ahead of ours would otherwise win every future LWW
 	// comparison and could permanently revert the user's newer local edits.
 	// Clamp incoming timestamps to (approximately) now.
@@ -64,9 +70,9 @@ func applyChange(ctx context.Context, client *ent.Client, ch Change) (bool, erro
 	}
 	switch ch.Entity {
 	case EntityReadingProgress:
-		return applyReadingProgress(ctx, client, ch)
+		return applyReadingProgress(ctx, client, tenantID, ch)
 	case EntityBookshelf:
-		return applyBookshelf(ctx, client, ch)
+		return applyBookshelf(ctx, client, tenantID, ch)
 	case EntityGalleryCache:
 		return applyGalleryCache(ctx, client, ch)
 	default:
@@ -252,9 +258,10 @@ func applyGalleryCache(ctx context.Context, client *ent.Client, ch Change) (bool
 	return true, nil
 }
 
-func applyReadingProgress(ctx context.Context, client *ent.Client, ch Change) (bool, error) {
+func applyReadingProgress(ctx context.Context, client *ent.Client, tenantID int64, ch Change) (bool, error) {
 	existing, err := client.ReadingProgress.Query().
 		Where(
+			readingprogress.TenantIDEQ(tenantID),
 			readingprogress.GalleryID(ch.GalleryID),
 			readingprogress.Token(ch.Token),
 		).
@@ -272,6 +279,7 @@ func applyReadingProgress(ctx context.Context, client *ent.Client, ch Change) (b
 		}
 		if _, err := client.ReadingProgress.Delete().
 			Where(
+				readingprogress.TenantIDEQ(tenantID),
 				readingprogress.GalleryID(ch.GalleryID),
 				readingprogress.Token(ch.Token),
 			).
@@ -286,6 +294,7 @@ func applyReadingProgress(ctx context.Context, client *ent.Client, ch Change) (b
 	}
 	if existing == nil {
 		if _, err := client.ReadingProgress.Create().
+			SetTenantID(tenantID).
 			SetGalleryID(ch.GalleryID).
 			SetToken(ch.Token).
 			SetCurrentPage(ch.Row.CurrentPage).
@@ -305,6 +314,7 @@ func applyReadingProgress(ctx context.Context, client *ent.Client, ch Change) (b
 	// only the replicated fields and updated_at decide the winner.
 	if err := client.ReadingProgress.Update().
 		Where(
+			readingprogress.TenantIDEQ(tenantID),
 			readingprogress.GalleryID(ch.GalleryID),
 			readingprogress.Token(ch.Token),
 		).
@@ -318,9 +328,10 @@ func applyReadingProgress(ctx context.Context, client *ent.Client, ch Change) (b
 	return true, nil
 }
 
-func applyBookshelf(ctx context.Context, client *ent.Client, ch Change) (bool, error) {
+func applyBookshelf(ctx context.Context, client *ent.Client, tenantID int64, ch Change) (bool, error) {
 	existing, err := client.Bookshelf.Query().
 		Where(
+			bookshelf.TenantIDEQ(tenantID),
 			bookshelf.GalleryID(ch.GalleryID),
 			bookshelf.Token(ch.Token),
 		).
@@ -338,6 +349,7 @@ func applyBookshelf(ctx context.Context, client *ent.Client, ch Change) (bool, e
 		}
 		if _, err := client.Bookshelf.Delete().
 			Where(
+				bookshelf.TenantIDEQ(tenantID),
 				bookshelf.GalleryID(ch.GalleryID),
 				bookshelf.Token(ch.Token),
 			).
@@ -352,6 +364,7 @@ func applyBookshelf(ctx context.Context, client *ent.Client, ch Change) (bool, e
 	}
 	if existing == nil {
 		if _, err := client.Bookshelf.Create().
+			SetTenantID(tenantID).
 			SetGalleryID(ch.GalleryID).
 			SetToken(ch.Token).
 			SetCreatedAt(ch.Row.CreatedAt).
@@ -366,6 +379,7 @@ func applyBookshelf(ctx context.Context, client *ent.Client, ch Change) (bool, e
 	}
 	if err := client.Bookshelf.Update().
 		Where(
+			bookshelf.TenantIDEQ(tenantID),
 			bookshelf.GalleryID(ch.GalleryID),
 			bookshelf.Token(ch.Token),
 		).
@@ -378,12 +392,16 @@ func applyBookshelf(ctx context.Context, client *ent.Client, ch Change) (bool, e
 
 // ExportSnapshot returns the current state of all synced tables as upsert
 // changes (bootstrap transfer).
-func ExportSnapshot(ctx context.Context, client *ent.Client) ([]Change, error) {
-	progressRows, err := client.ReadingProgress.Query().All(ctx)
+func ExportSnapshot(ctx context.Context, client *ent.Client, tenantID int64) ([]Change, error) {
+	progressRows, err := client.ReadingProgress.Query().
+		Where(readingprogress.TenantIDEQ(tenantID)).
+		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("export reading progress: %w", err)
 	}
-	bookshelfRows, err := client.Bookshelf.Query().All(ctx)
+	bookshelfRows, err := client.Bookshelf.Query().
+		Where(bookshelf.TenantIDEQ(tenantID)).
+		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("export bookshelf: %w", err)
 	}
@@ -439,14 +457,14 @@ func ExportSnapshot(ctx context.Context, client *ent.Client) ([]Change, error) {
 // its own copy.
 //
 // The second return value is the current outbox maximum (the new cursor).
-func ReadChangesSince(ctx context.Context, client *ent.Client, cursor int) ([]Change, int, error) {
-	maxID, err := maxOutboxID(ctx, client)
+func ReadChangesSince(ctx context.Context, client *ent.Client, tenantID int64, cursor int) ([]Change, int, error) {
+	maxID, err := maxOutboxID(ctx, client, tenantID)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	entries, err := client.SyncChange.Query().
-		Where(syncchange.IDGT(cursor)).
+		Where(syncchange.TenantIDEQ(tenantID), syncchange.IDGT(cursor)).
 		Order(ent.Asc(syncchange.FieldID)).
 		All(ctx)
 	if err != nil {
@@ -487,7 +505,7 @@ func ReadChangesSince(ctx context.Context, client *ent.Client, cursor int) ([]Ch
 			})
 			continue
 		}
-		row, err := fetchRow(ctx, client, e.Entity, e.GalleryID, e.Token)
+		row, err := fetchRow(ctx, client, tenantID, e.Entity, e.GalleryID, e.Token)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -513,11 +531,12 @@ func ReadChangesSince(ctx context.Context, client *ent.Client, cursor int) ([]Ch
 	return changes, maxID, nil
 }
 
-func fetchRow(ctx context.Context, client *ent.Client, entity string, galleryID int64, token string) (*Row, error) {
+func fetchRow(ctx context.Context, client *ent.Client, tenantID int64, entity string, galleryID int64, token string) (*Row, error) {
 	switch entity {
 	case EntityReadingProgress:
 		p, err := client.ReadingProgress.Query().
 			Where(
+				readingprogress.TenantIDEQ(tenantID),
 				readingprogress.GalleryID(galleryID),
 				readingprogress.Token(token),
 			).
@@ -538,6 +557,7 @@ func fetchRow(ctx context.Context, client *ent.Client, entity string, galleryID 
 	case EntityBookshelf:
 		b, err := client.Bookshelf.Query().
 			Where(
+				bookshelf.TenantIDEQ(tenantID),
 				bookshelf.GalleryID(galleryID),
 				bookshelf.Token(token),
 			).
@@ -600,12 +620,12 @@ func galleryCacheRow(g *ent.GalleryCache) *Row {
 
 // pruneOutbox removes pushed entries. Callers must only prune up to a cursor
 // the peer has confirmed holding.
-func pruneOutbox(ctx context.Context, client *ent.Client, cursor int) error {
+func pruneOutbox(ctx context.Context, client *ent.Client, tenantID int64, cursor int) error {
 	if cursor <= 0 {
 		return nil
 	}
 	if _, err := client.SyncChange.Delete().
-		Where(syncchange.IDLTE(cursor)).
+		Where(syncchange.TenantIDEQ(tenantID), syncchange.IDLTE(cursor)).
 		Exec(ctx); err != nil {
 		return fmt.Errorf("prune outbox: %w", err)
 	}

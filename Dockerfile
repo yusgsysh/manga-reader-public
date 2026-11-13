@@ -3,7 +3,8 @@
 # Build (context must be the repository root):
 #   docker build -t manga-reader .
 #
-# Run (bind to loopback; Basic Auth is opt-in via MANGA_READER_BASIC_AUTH_ENABLED):
+# Run (bind to loopback; JWT login is opt-in via JWT_SECRET, Basic Auth via
+# MANGA_READER_BASIC_AUTH_ENABLED):
 #   docker run -d -p 127.0.0.1:5173:8080 --env-file .env manga-reader
 #
 # Stages:
@@ -71,7 +72,7 @@ VOLUME ["/app/data"]
 
 EXPOSE 8080
 
-# /healthz is deliberately exempt from Basic Auth so this works with auth on.
+# /healthz is deliberately exempt from Basic Auth/JWT so this works with auth on.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
 

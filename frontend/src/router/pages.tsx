@@ -45,6 +45,19 @@ export const TagSettingsPage = lazy(() =>
     default: m.TagSettingsPage,
   })),
 );
+export const LoginPage = lazy(() =>
+  import("../pages/LoginPage").then((m) => ({ default: m.LoginPage })),
+);
+export const PlatformAdminPage = lazy(() =>
+  import("../pages/PlatformAdminPage").then((m) => ({
+    default: m.PlatformAdminPage,
+  })),
+);
+export const TenantAdminPage = lazy(() =>
+  import("../pages/TenantAdminPage").then((m) => ({
+    default: m.TenantAdminPage,
+  })),
+);
 
 function PageLoading() {
   return (

@@ -15,6 +15,10 @@ import (
 // ReadingProgress is the model entity for the ReadingProgress schema.
 type ReadingProgress struct {
 	config `json:"-"`
+	// ID of the ent.
+	ID int `json:"id,omitempty"`
+	// TenantID holds the value of the "tenant_id" field.
+	TenantID int64 `json:"tenant_id,omitempty"`
 	// GalleryID holds the value of the "gallery_id" field.
 	GalleryID int64 `json:"gallery_id,omitempty"`
 	// Token holds the value of the "token" field.
@@ -41,7 +45,7 @@ func (*ReadingProgress) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case readingprogress.FieldProgress:
 			values[i] = new(sql.NullFloat64)
-		case readingprogress.FieldGalleryID, readingprogress.FieldCurrentPage:
+		case readingprogress.FieldID, readingprogress.FieldTenantID, readingprogress.FieldGalleryID, readingprogress.FieldCurrentPage:
 			values[i] = new(sql.NullInt64)
 		case readingprogress.FieldToken:
 			values[i] = new(sql.NullString)
@@ -62,6 +66,18 @@ func (_m *ReadingProgress) assignValues(columns []string, values []any) error {
 	}
 	for i := range columns {
 		switch columns[i] {
+		case readingprogress.FieldID:
+			value, ok := values[i].(*sql.NullInt64)
+			if !ok {
+				return fmt.Errorf("unexpected type %T for field id", value)
+			}
+			_m.ID = int(value.Int64)
+		case readingprogress.FieldTenantID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field tenant_id", values[i])
+			} else if value.Valid {
+				_m.TenantID = value.Int64
+			}
 		case readingprogress.FieldGalleryID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field gallery_id", values[i])
@@ -139,6 +155,10 @@ func (_m *ReadingProgress) Unwrap() *ReadingProgress {
 func (_m *ReadingProgress) String() string {
 	var builder strings.Builder
 	builder.WriteString("ReadingProgress(")
+	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
+	builder.WriteString("tenant_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TenantID))
+	builder.WriteString(", ")
 	builder.WriteString("gallery_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.GalleryID))
 	builder.WriteString(", ")

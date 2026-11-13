@@ -8,6 +8,7 @@ import {
   type LinkComponentProps,
 } from "@cloudflare/kumo";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import { AuthProvider } from "./context/AuthContext";
 import { NavigationProvider } from "./context/NavigationContext";
 import { useSyncEvents } from "./hooks/useSyncEvents";
 import { GLOBAL_STALE_TIME } from "./lib/cacheConfig";
@@ -51,16 +52,18 @@ export default function App() {
       <ThemeProvider>
         <MotionProvider>
           <QueryClientProvider client={queryClient}>
-            <SyncEventBridge />
-            <LinkProvider component={AppLink}>
-              <TooltipProvider>
-                <Toasty>
-                  <NavigationProvider>
-                    <RouterProvider router={router} />
-                  </NavigationProvider>
-                </Toasty>
-              </TooltipProvider>
-            </LinkProvider>
+            <AuthProvider>
+              <SyncEventBridge />
+              <LinkProvider component={AppLink}>
+                <TooltipProvider>
+                  <Toasty>
+                    <NavigationProvider>
+                      <RouterProvider router={router} />
+                    </NavigationProvider>
+                  </Toasty>
+                </TooltipProvider>
+              </LinkProvider>
+            </AuthProvider>
           </QueryClientProvider>
         </MotionProvider>
       </ThemeProvider>

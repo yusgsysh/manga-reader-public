@@ -14,8 +14,73 @@ func setRequiredCookies(t *testing.T) {
 		"MANGA_READER_BASIC_AUTH_PASSWORD",
 		"MANGA_READER_BASIC_AUTH_PASSWORD_FILE",
 		"MANGA_READER_BASIC_AUTH_FILE",
+		// JWT auth must be opted into explicitly; shell settings must not
+		// leak into unrelated tests.
+		"JWT_SECRET",
+		"JWT_ISSUER",
+		"JWT_EXPIRES_IN",
+		"ADMIN_USERNAME",
+		"ADMIN_PASSWORD",
+		"MANGA_READER_AUTH_COOKIE_SECURE",
 	} {
 		t.Setenv(key, "")
+	}
+}
+
+func TestLoad_AuthDisabledWithoutSecret(t *testing.T) {
+	setRequiredCookies(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Auth.Enabled {
+		t.Fatal("Auth.Enabled = true, want false")
+	}
+}
+
+func TestLoad_AuthConfig(t *testing.T) {
+	setRequiredCookies(t)
+	t.Setenv("JWT_SECRET", "0123456789abcdef0123456789abcdef")
+	t.Setenv("JWT_ISSUER", "test-issuer")
+	t.Setenv("JWT_EXPIRES_IN", "2h")
+	t.Setenv("ADMIN_USERNAME", "root")
+	t.Setenv("ADMIN_PASSWORD", "correct horse battery staple")
+	t.Setenv("MANGA_READER_AUTH_COOKIE_SECURE", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.Auth.Enabled {
+		t.Fatal("Auth.Enabled = false, want true")
+	}
+	if cfg.Auth.JWTIssuer != "test-issuer" {
+		t.Fatalf("issuer = %q", cfg.Auth.JWTIssuer)
+	}
+	if cfg.Auth.ExpiresInSeconds() != 7200 {
+		t.Fatalf("expires = %d, want 7200", cfg.Auth.ExpiresInSeconds())
+	}
+	if cfg.Auth.AdminUsername != "root" {
+		t.Fatalf("admin username = %q", cfg.Auth.AdminUsername)
+	}
+	if cfg.Auth.CookieSecureAuto || !cfg.Auth.CookieSecure {
+		t.Fatalf("cookie secure mode = %+v, want explicit true", cfg.Auth)
+	}
+}
+
+func TestLoad_AuthRejectsWeakSecret(t *testing.T) {
+	setRequiredCookies(t)
+	t.Setenv("JWT_SECRET", "short")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for a short JWT_SECRET")
+	}
+}
+
+func TestLoad_AdminPasswordWithoutSecretIsAnError(t *testing.T) {
+	setRequiredCookies(t)
+	t.Setenv("ADMIN_PASSWORD", "correct horse battery staple")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for ADMIN_PASSWORD without JWT_SECRET")
 	}
 }
 

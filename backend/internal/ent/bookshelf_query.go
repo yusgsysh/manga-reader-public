@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/schema/field"
 )
 
 // BookshelfQuery is the builder for querying Bookshelf entities.
@@ -79,6 +80,29 @@ func (_q *BookshelfQuery) FirstX(ctx context.Context) *Bookshelf {
 	return node
 }
 
+// FirstID returns the first Bookshelf ID from the query.
+// Returns a *NotFoundError when no Bookshelf ID was found.
+func (_q *BookshelfQuery) FirstID(ctx context.Context) (id int, err error) {
+	var ids []int
+	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
+		return
+	}
+	if len(ids) == 0 {
+		err = &NotFoundError{bookshelf.Label}
+		return
+	}
+	return ids[0], nil
+}
+
+// FirstIDX is like FirstID, but panics if an error occurs.
+func (_q *BookshelfQuery) FirstIDX(ctx context.Context) int {
+	id, err := _q.FirstID(ctx)
+	if err != nil && !IsNotFound(err) {
+		panic(err)
+	}
+	return id
+}
+
 // Only returns a single Bookshelf entity found by the query, ensuring it only returns one.
 // Returns a *NotSingularError when more than one Bookshelf entity is found.
 // Returns a *NotFoundError when no Bookshelf entities are found.
@@ -106,6 +130,34 @@ func (_q *BookshelfQuery) OnlyX(ctx context.Context) *Bookshelf {
 	return node
 }
 
+// OnlyID is like Only, but returns the only Bookshelf ID in the query.
+// Returns a *NotSingularError when more than one Bookshelf ID is found.
+// Returns a *NotFoundError when no entities are found.
+func (_q *BookshelfQuery) OnlyID(ctx context.Context) (id int, err error) {
+	var ids []int
+	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
+		return
+	}
+	switch len(ids) {
+	case 1:
+		id = ids[0]
+	case 0:
+		err = &NotFoundError{bookshelf.Label}
+	default:
+		err = &NotSingularError{bookshelf.Label}
+	}
+	return
+}
+
+// OnlyIDX is like OnlyID, but panics if an error occurs.
+func (_q *BookshelfQuery) OnlyIDX(ctx context.Context) int {
+	id, err := _q.OnlyID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // All executes the query and returns a list of Bookshelves.
 func (_q *BookshelfQuery) All(ctx context.Context) ([]*Bookshelf, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryAll)
@@ -123,6 +175,27 @@ func (_q *BookshelfQuery) AllX(ctx context.Context) []*Bookshelf {
 		panic(err)
 	}
 	return nodes
+}
+
+// IDs executes the query and returns a list of Bookshelf IDs.
+func (_q *BookshelfQuery) IDs(ctx context.Context) (ids []int, err error) {
+	if _q.ctx.Unique == nil && _q.path != nil {
+		_q.Unique(true)
+	}
+	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryIDs)
+	if err = _q.Select(bookshelf.FieldID).Scan(ctx, &ids); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// IDsX is like IDs, but panics if an error occurs.
+func (_q *BookshelfQuery) IDsX(ctx context.Context) []int {
+	ids, err := _q.IDs(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return ids
 }
 
 // Count returns the count of the given query.
@@ -146,7 +219,7 @@ func (_q *BookshelfQuery) CountX(ctx context.Context) int {
 // Exist returns true if the query has elements in the graph.
 func (_q *BookshelfQuery) Exist(ctx context.Context) (bool, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryExist)
-	switch _, err := _q.First(ctx); {
+	switch _, err := _q.FirstID(ctx); {
 	case IsNotFound(err):
 		return false, nil
 	case err != nil:
@@ -189,12 +262,12 @@ func (_q *BookshelfQuery) Clone() *BookshelfQuery {
 // Example:
 //
 //	var v []struct {
-//		GalleryID int64 `json:"gallery_id,omitempty"`
+//		TenantID int64 `json:"tenant_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.Bookshelf.Query().
-//		GroupBy(bookshelf.FieldGalleryID).
+//		GroupBy(bookshelf.FieldTenantID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *BookshelfQuery) GroupBy(field string, fields ...string) *BookshelfGroupBy {
@@ -212,11 +285,11 @@ func (_q *BookshelfQuery) GroupBy(field string, fields ...string) *BookshelfGrou
 // Example:
 //
 //	var v []struct {
-//		GalleryID int64 `json:"gallery_id,omitempty"`
+//		TenantID int64 `json:"tenant_id,omitempty"`
 //	}
 //
 //	client.Bookshelf.Query().
-//		Select(bookshelf.FieldGalleryID).
+//		Select(bookshelf.FieldTenantID).
 //		Scan(ctx, &v)
 func (_q *BookshelfQuery) Select(fields ...string) *BookshelfSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
@@ -284,13 +357,15 @@ func (_q *BookshelfQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Bo
 
 func (_q *BookshelfQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
-	_spec.Unique = false
-	_spec.Node.Columns = nil
+	_spec.Node.Columns = _q.ctx.Fields
+	if len(_q.ctx.Fields) > 0 {
+		_spec.Unique = _q.ctx.Unique != nil && *_q.ctx.Unique
+	}
 	return sqlgraph.CountNodes(ctx, _q.driver, _spec)
 }
 
 func (_q *BookshelfQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(bookshelf.Table, bookshelf.Columns, nil)
+	_spec := sqlgraph.NewQuerySpec(bookshelf.Table, bookshelf.Columns, sqlgraph.NewFieldSpec(bookshelf.FieldID, field.TypeInt))
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
@@ -299,8 +374,11 @@ func (_q *BookshelfQuery) querySpec() *sqlgraph.QuerySpec {
 	}
 	if fields := _q.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
+		_spec.Node.Columns = append(_spec.Node.Columns, bookshelf.FieldID)
 		for i := range fields {
-			_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
+			if fields[i] != bookshelf.FieldID {
+				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
+			}
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

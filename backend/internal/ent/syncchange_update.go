@@ -27,6 +27,27 @@ func (_u *SyncChangeUpdate) Where(ps ...predicate.SyncChange) *SyncChangeUpdate 
 	return _u
 }
 
+// SetTenantID sets the "tenant_id" field.
+func (_u *SyncChangeUpdate) SetTenantID(v int64) *SyncChangeUpdate {
+	_u.mutation.ResetTenantID()
+	_u.mutation.SetTenantID(v)
+	return _u
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_u *SyncChangeUpdate) SetNillableTenantID(v *int64) *SyncChangeUpdate {
+	if v != nil {
+		_u.SetTenantID(*v)
+	}
+	return _u
+}
+
+// AddTenantID adds value to the "tenant_id" field.
+func (_u *SyncChangeUpdate) AddTenantID(v int64) *SyncChangeUpdate {
+	_u.mutation.AddTenantID(v)
+	return _u
+}
+
 // SetEntity sets the "entity" field.
 func (_u *SyncChangeUpdate) SetEntity(v string) *SyncChangeUpdate {
 	_u.mutation.SetEntity(v)
@@ -131,6 +152,12 @@ func (_u *SyncChangeUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 			}
 		}
 	}
+	if value, ok := _u.mutation.TenantID(); ok {
+		_spec.SetField(syncchange.FieldTenantID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTenantID(); ok {
+		_spec.AddField(syncchange.FieldTenantID, field.TypeInt64, value)
+	}
 	if value, ok := _u.mutation.Entity(); ok {
 		_spec.SetField(syncchange.FieldEntity, field.TypeString, value)
 	}
@@ -164,6 +191,27 @@ type SyncChangeUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *SyncChangeMutation
+}
+
+// SetTenantID sets the "tenant_id" field.
+func (_u *SyncChangeUpdateOne) SetTenantID(v int64) *SyncChangeUpdateOne {
+	_u.mutation.ResetTenantID()
+	_u.mutation.SetTenantID(v)
+	return _u
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_u *SyncChangeUpdateOne) SetNillableTenantID(v *int64) *SyncChangeUpdateOne {
+	if v != nil {
+		_u.SetTenantID(*v)
+	}
+	return _u
+}
+
+// AddTenantID adds value to the "tenant_id" field.
+func (_u *SyncChangeUpdateOne) AddTenantID(v int64) *SyncChangeUpdateOne {
+	_u.mutation.AddTenantID(v)
+	return _u
 }
 
 // SetEntity sets the "entity" field.
@@ -299,6 +347,12 @@ func (_u *SyncChangeUpdateOne) sqlSave(ctx context.Context) (_node *SyncChange, 
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.TenantID(); ok {
+		_spec.SetField(syncchange.FieldTenantID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTenantID(); ok {
+		_spec.AddField(syncchange.FieldTenantID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Entity(); ok {
 		_spec.SetField(syncchange.FieldEntity, field.TypeString, value)

@@ -22,6 +22,20 @@ type PrefillJobCreate struct {
 	hooks    []Hook
 }
 
+// SetTenantID sets the "tenant_id" field.
+func (_c *PrefillJobCreate) SetTenantID(v int64) *PrefillJobCreate {
+	_c.mutation.SetTenantID(v)
+	return _c
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_c *PrefillJobCreate) SetNillableTenantID(v *int64) *PrefillJobCreate {
+	if v != nil {
+		_c.SetTenantID(*v)
+	}
+	return _c
+}
+
 // SetGalleryID sets the "gallery_id" field.
 func (_c *PrefillJobCreate) SetGalleryID(v int64) *PrefillJobCreate {
 	_c.mutation.SetGalleryID(v)
@@ -209,6 +223,10 @@ func (_c *PrefillJobCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *PrefillJobCreate) defaults() {
+	if _, ok := _c.mutation.TenantID(); !ok {
+		v := prefilljob.DefaultTenantID
+		_c.mutation.SetTenantID(v)
+	}
 	if _, ok := _c.mutation.Token(); !ok {
 		v := prefilljob.DefaultToken
 		_c.mutation.SetToken(v)
@@ -245,6 +263,9 @@ func (_c *PrefillJobCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *PrefillJobCreate) check() error {
+	if _, ok := _c.mutation.TenantID(); !ok {
+		return &ValidationError{Name: "tenant_id", err: errors.New(`ent: missing required field "PrefillJob.tenant_id"`)}
+	}
 	if _, ok := _c.mutation.Token(); !ok {
 		return &ValidationError{Name: "token", err: errors.New(`ent: missing required field "PrefillJob.token"`)}
 	}
@@ -303,6 +324,10 @@ func (_c *PrefillJobCreate) createSpec() (*PrefillJob, *sqlgraph.CreateSpec) {
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = &id
+	}
+	if value, ok := _c.mutation.TenantID(); ok {
+		_spec.SetField(prefilljob.FieldTenantID, field.TypeInt64, value)
+		_node.TenantID = value
 	}
 	if value, ok := _c.mutation.GalleryID(); ok {
 		_spec.SetField(prefilljob.FieldGalleryID, field.TypeInt64, value)

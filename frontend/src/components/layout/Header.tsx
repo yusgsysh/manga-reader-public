@@ -1,12 +1,20 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { List, MagnifyingGlass } from "@phosphor-icons/react";
+import { List, MagnifyingGlass, SignOut } from "@phosphor-icons/react";
 import { cn } from "@cloudflare/kumo";
 import { IconButton, Logo } from "../ui";
 import { MobileDrawer } from "./MobileDrawer";
 import { ThemeSwitcher } from "./ThemeSwitcher";
-import { PRIMARY_NAV, SECONDARY_NAV, isNavActive, type NavItem } from "./nav";
+import {
+  PLATFORM_ADMIN_NAV,
+  PRIMARY_NAV,
+  SECONDARY_NAV,
+  TENANT_ADMIN_NAV,
+  isNavActive,
+  type NavItem,
+} from "./nav";
 import { useNavigationContext } from "../../hooks/useNavigationContext";
+import { useAuth } from "../../context/auth";
 
 function TopNavLink({
   item,
@@ -47,6 +55,18 @@ export function Header() {
   const navigate = useNavigate();
   const location = useLocation();
   const { lastListRoute } = useNavigationContext();
+  const {
+    enabled: authEnabled,
+    isPlatformAdmin,
+    isTenantAdmin,
+    logout,
+    isLoggingOut,
+  } = useAuth();
+  const adminNav = isPlatformAdmin
+    ? PLATFORM_ADMIN_NAV
+    : isTenantAdmin
+      ? TENANT_ADMIN_NAV
+      : [];
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const isActive = (to: string) =>
@@ -98,7 +118,25 @@ export function Header() {
                 iconOnly
               />
             ))}
+            {adminNav.map((item) => (
+              <TopNavLink
+                key={item.to}
+                item={item}
+                active={isActive(item.to)}
+                iconOnly
+              />
+            ))}
           </nav>
+
+          {authEnabled && (
+            <IconButton
+              label="退出登录"
+              onClick={() => void logout().catch(() => undefined)}
+              disabled={isLoggingOut}
+            >
+              <SignOut className="size-5" weight="bold" />
+            </IconButton>
+          )}
 
           <ThemeSwitcher className="hidden w-[7.5rem] shrink-0 lg:flex" />
 

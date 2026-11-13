@@ -19,6 +19,7 @@ import (
 
 	"manga-reader/internal/cache"
 	"manga-reader/internal/ent"
+	"manga-reader/internal/ent/predicate"
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/metrics"
@@ -155,7 +156,7 @@ func (m *prefillManager) worker(s *Server) {
 
 func (m *prefillManager) drain(s *Server) {
 	for {
-		id, ok := m.nextQueued(s)
+		id, tid, ok := m.nextQueued(s)
 		if !ok {
 			return
 		}
@@ -163,17 +164,17 @@ func (m *prefillManager) drain(s *Server) {
 			defer func() {
 				if r := recover(); r != nil {
 					slog.Error("prefill job panic", "job_id", id, "panic", r)
-					s.finishPrefillJob(id, prefillStatusFailed, 0, nil)
+					s.finishPrefillJob(id, tid, prefillStatusFailed, 0, nil)
 				}
 			}()
-			m.runJob(s, id)
+			m.runJob(s, id, tid)
 		}()
 	}
 }
 
 // nextQueued claims the oldest queued job by atomically flipping it to
 // running. Returns false when the queue is empty.
-func (m *prefillManager) nextQueued(s *Server) (uuid.UUID, bool) {
+func (m *prefillManager) nextQueued(s *Server) (uuid.UUID, int64, bool) {
 	ctx := context.Background()
 	for {
 		row, err := s.DB.Client.PrefillJob.Query().
@@ -184,12 +185,16 @@ func (m *prefillManager) nextQueued(s *Server) (uuid.UUID, bool) {
 			if !ent.IsNotFound(err) {
 				slog.Error("prefill queue query failed", "error", err)
 			}
-			return uuid.UUID{}, false
+			return uuid.UUID{}, 0, false
 		}
 		var lastErr error
 		for attempt := range 3 {
 			n, err := s.DB.Client.PrefillJob.Update().
-				Where(prefilljob.ID(row.ID), prefilljob.Status(prefillStatusQueued)).
+				Where(
+					prefilljob.ID(row.ID),
+					prefilljob.TenantIDEQ(row.TenantID),
+					prefilljob.Status(prefillStatusQueued),
+				).
 				SetStatus(prefillStatusRunning).
 				SetUpdatedAt(time.Now()).
 				Save(ctx)
@@ -197,7 +202,7 @@ func (m *prefillManager) nextQueued(s *Server) (uuid.UUID, bool) {
 				if n == 0 {
 					break // cancelled between query and claim; take the next one
 				}
-				return row.ID, true
+				return row.ID, row.TenantID, true
 			}
 			lastErr = err
 			slog.Warn("prefill claim attempt failed", "attempt", attempt+1, "job_id", row.ID, "error", err)
@@ -210,12 +215,12 @@ func (m *prefillManager) nextQueued(s *Server) (uuid.UUID, bool) {
 	}
 }
 
-func (m *prefillManager) runJob(s *Server, id uuid.UUID) {
+func (m *prefillManager) runJob(s *Server, id uuid.UUID, tenantID int64) {
 	ctx := context.Background()
 
 	// Guard against missing cache configuration.
 	if s.Cache == nil {
-		s.finishPrefillJob(id, prefillStatusFailed, 0, []model.PrefillItemError{
+		s.finishPrefillJob(id, 0, prefillStatusFailed, 0, []model.PrefillItemError{
 			{Index: 0, URL: "", Error: "cache not configured"},
 		})
 		return
@@ -234,12 +239,14 @@ func (m *prefillManager) runJob(s *Server, id uuid.UUID) {
 		m.mu.Unlock()
 	}()
 
-	row, err := s.DB.Client.PrefillJob.Get(ctx, id)
+	row, err := s.DB.Client.PrefillJob.Query().
+		Where(prefilljob.ID(id), prefilljob.TenantIDEQ(tenantID)).
+		Only(ctx)
 	if err != nil {
 		if !ent.IsNotFound(err) {
 			slog.Error("prefill load failed", "job_id", id, "error", err)
 			// Non-NotFound error: mark as failed so the row doesn't stay running forever.
-			s.finishPrefillJob(id, prefillStatusFailed, 0, []model.PrefillItemError{
+			s.finishPrefillJob(id, tenantID, prefillStatusFailed, 0, []model.PrefillItemError{
 				{Index: 0, URL: "", Error: fmt.Sprintf("load failed: %v", err)},
 			})
 		}
@@ -264,7 +271,7 @@ func (m *prefillManager) runJob(s *Server, id uuid.UUID) {
 		status = prefillStatusFailed
 	}
 
-	s.finishPrefillJob(id, status, failed, errs)
+	s.finishPrefillJob(id, row.TenantID, status, failed, errs)
 	slog.Info("prefill job finished", "job_id", id, "status", status, "failed", failed)
 }
 
@@ -345,18 +352,22 @@ func (m *prefillManager) processPages(s *Server, ctx context.Context, run *prefi
 
 // finishPrefillJob writes the terminal state. The status predicate guarantees
 // it never overwrites a row that was already cancelled or deleted.
-func (s *Server) finishPrefillJob(id uuid.UUID, status string, failed int, errs []model.PrefillItemError) {
+func (s *Server) finishPrefillJob(id uuid.UUID, tenantID int64, status string, failed int, errs []model.PrefillItemError) {
 	if errs == nil {
 		errs = []model.PrefillItemError{}
 	}
 	now := time.Now()
 	var lastErr error
 	for attempt := range 3 {
+		preds := []predicate.PrefillJob{
+			prefilljob.ID(id),
+			prefilljob.StatusIn(prefillStatusQueued, prefillStatusRunning),
+		}
+		if tenantID > 0 {
+			preds = append(preds, prefilljob.TenantIDEQ(tenantID))
+		}
 		n, err := s.DB.Client.PrefillJob.Update().
-			Where(
-				prefilljob.ID(id),
-				prefilljob.StatusIn(prefillStatusQueued, prefillStatusRunning),
-			).
+			Where(preds...).
 			SetStatus(status).
 			SetFailedCount(failed).
 			SetErrors(errs).
@@ -527,12 +538,17 @@ func (s *Server) handlePrefillStart(c *gin.Context) {
 		return
 	}
 	m := s.ensurePrefill()
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
 
 	// Deduplicate: an already queued/running job for the same gallery wins.
 	if req.GalleryID != 0 && req.Token != "" {
 		existing, err := s.DB.Client.PrefillJob.Query().
 			Where(
+				prefilljob.TenantIDEQ(tid),
 				prefilljob.GalleryID(req.GalleryID),
 				prefilljob.Token(req.Token),
 				prefilljob.StatusIn(prefillStatusQueued, prefillStatusRunning),
@@ -551,6 +567,7 @@ func (s *Server) handlePrefillStart(c *gin.Context) {
 	}
 
 	create := s.DB.Client.PrefillJob.Create().
+		SetTenantID(tid).
 		SetUrls(req.URLs).
 		SetToken(req.Token).
 		SetTitle(req.Title).
@@ -576,10 +593,15 @@ func (s *Server) handlePrefillList(c *gin.Context) {
 	if m == nil {
 		return
 	}
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
 	// Snapshot active runs once to avoid per-row locking.
 	runSnapshot := m.snapshotRuns()
 
 	rows, err := s.DB.Client.PrefillJob.Query().
+		Where(prefilljob.TenantIDEQ(tid)).
 		Select(
 			prefilljob.FieldID,
 			prefilljob.FieldGalleryID,
@@ -618,7 +640,11 @@ func (s *Server) handlePrefillGet(c *gin.Context) {
 	if !ok {
 		return
 	}
-	row, err := s.DB.Client.PrefillJob.Get(c.Request.Context(), id)
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
+	row, err := s.getPrefillJob(c.Request.Context(), tid, id)
 	if err != nil {
 		if ent.IsNotFound(err) {
 			web.JSON(c, http.StatusNotFound, gin.H{"error": "prefill job not found"})
@@ -644,10 +670,14 @@ func (s *Server) handlePrefillCancel(c *gin.Context) {
 	if !ok {
 		return
 	}
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
 
 	for range 3 {
-		row, err := s.DB.Client.PrefillJob.Get(ctx, id)
+		row, err := s.getPrefillJob(ctx, tid, id)
 		if err != nil {
 			if ent.IsNotFound(err) {
 				web.JSON(c, http.StatusNotFound, gin.H{"error": "prefill job not found"})
@@ -668,7 +698,7 @@ func (s *Server) handlePrefillCancel(c *gin.Context) {
 
 		now := time.Now()
 		n, err := s.DB.Client.PrefillJob.Update().
-			Where(prefilljob.ID(id), prefilljob.Status(row.Status)).
+			Where(prefilljob.ID(id), prefilljob.TenantIDEQ(tid), prefilljob.Status(row.Status)).
 			SetStatus(prefillStatusCancelled).
 			SetFinishedAt(now).
 			SetUpdatedAt(now).
@@ -703,8 +733,12 @@ func (s *Server) handlePrefillDelete(c *gin.Context) {
 	if !ok {
 		return
 	}
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
-	row, err := s.DB.Client.PrefillJob.Get(ctx, id)
+	row, err := s.getPrefillJob(ctx, tid, id)
 	if err != nil {
 		if ent.IsNotFound(err) {
 			web.JSON(c, http.StatusNotFound, gin.H{"error": "prefill job not found"})
@@ -721,6 +755,7 @@ func (s *Server) handlePrefillDelete(c *gin.Context) {
 	n, err := s.DB.Client.PrefillJob.Delete().
 		Where(
 			prefilljob.ID(id),
+			prefilljob.TenantIDEQ(tid),
 			prefilljob.StatusIn(prefillStatusCompleted, prefillStatusCancelled, prefillStatusFailed),
 		).
 		Exec(ctx)
@@ -749,8 +784,15 @@ func (s *Server) handlePrefillCleanup(c *gin.Context) {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid days"})
 		return
 	}
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
 	q := s.DB.Client.PrefillJob.Delete().
-		Where(prefilljob.StatusIn(prefillStatusCompleted, prefillStatusCancelled, prefillStatusFailed))
+		Where(
+			prefilljob.TenantIDEQ(tid),
+			prefilljob.StatusIn(prefillStatusCompleted, prefillStatusCancelled, prefillStatusFailed),
+		)
 	if days > 0 {
 		cutoff := time.Now().AddDate(0, 0, -days)
 		q.Where(prefilljob.FinishedAtLT(cutoff))
@@ -783,7 +825,11 @@ func (s *Server) handlePrefillZip(c *gin.Context) {
 	if !ok {
 		return
 	}
-	row, err := s.DB.Client.PrefillJob.Get(c.Request.Context(), id)
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
+	row, err := s.getPrefillJob(c.Request.Context(), tid, id)
 	if err != nil {
 		if ent.IsNotFound(err) {
 			web.JSON(c, http.StatusNotFound, gin.H{"error": "prefill job not found"})
@@ -879,7 +925,11 @@ func (s *Server) handlePrefillZipHead(c *gin.Context) {
 	if !ok {
 		return
 	}
-	_, err := s.DB.Client.PrefillJob.Get(c.Request.Context(), id)
+	tid, ok := s.requireTenant(c)
+	if !ok {
+		return
+	}
+	_, err := s.getPrefillJob(c.Request.Context(), tid, id)
 	if err != nil {
 		if ent.IsNotFound(err) {
 			web.JSON(c, http.StatusNotFound, gin.H{"error": "prefill job not found"})
@@ -893,6 +943,14 @@ func (s *Server) handlePrefillZipHead(c *gin.Context) {
 }
 
 // ==================== Helpers ====================
+
+// getPrefillJob is the only handler-side job lookup: ID alone is never enough,
+// because job IDs from another tenant must look indistinguishable from 404.
+func (s *Server) getPrefillJob(ctx context.Context, tenantID int64, id uuid.UUID) (*ent.PrefillJob, error) {
+	return s.DB.Client.PrefillJob.Query().
+		Where(prefilljob.ID(id), prefilljob.TenantIDEQ(tenantID)).
+		Only(ctx)
+}
 
 func prefillImageExt(contentType, pageURL string) string {
 	ct := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))

@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"manga-reader/internal/auth"
 	"manga-reader/internal/basicauth"
 	"manga-reader/internal/cache"
 	"manga-reader/internal/config"
@@ -22,6 +23,7 @@ import (
 	"manga-reader/internal/handler"
 	"manga-reader/internal/metrics"
 	synclib "manga-reader/internal/sync"
+	"manga-reader/internal/tenant"
 	"manga-reader/internal/web"
 )
 
@@ -75,7 +77,7 @@ func CORSMiddleware(extra map[string]struct{}) gin.HandlerFunc {
 			c.Header("Access-Control-Allow-Credentials", "true")
 			c.Header("Vary", "Origin")
 		}
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
 
 		if c.Request.Method == http.MethodOptions {
@@ -193,6 +195,19 @@ func run() error {
 	}
 	defer db.Close()
 
+	authSvc := auth.New(db.Client, cfg.Auth)
+	createdAdmin, err := authSvc.EnsureAdmin(context.Background())
+	if err != nil {
+		logger.Error("auth initialization failed", "error", err)
+		return err
+	}
+	if createdAdmin {
+		logger.Info("administrator account initialized", "username", cfg.Auth.AdminUsername)
+	}
+	if authSvc.Enabled() {
+		logger.Info("JWT auth enabled", "issuer", cfg.Auth.JWTIssuer, "expires_in", cfg.Auth.ExpiresInSeconds())
+	}
+
 	syncSvc := synclib.NewService(db.Client, synclib.Options{
 		HostToken:             cfg.SyncToken,
 		DisableInactiveOutbox: true,
@@ -208,10 +223,11 @@ func run() error {
 	// purge) still runs and propagates deletions.
 
 	handlerCfg := handler.Config{
-		Client:   client,
-		DB:       db,
-		DevTools: cfg.DevTools,
-		Sync:     syncSvc,
+		Client:      client,
+		DB:          db,
+		DevTools:    cfg.DevTools,
+		Sync:        syncSvc,
+		AuthEnabled: cfg.Auth.Enabled,
 	}
 
 	if cfg.MinIO.IsValid() {
@@ -265,6 +281,11 @@ func run() error {
 	r.Use(securityHeadersMiddleware())
 	r.Use(csrfGuard(corsOrigins))
 	r.Use(basicauth.Middleware(cfg.BasicAuth))
+	// Default-deny for /api/*: only publicAPIs pass without a valid JWT.
+	r.Use(authSvc.Middleware())
+	// Turns the verified JWT tenant into the trusted request scope. Runs
+	// after auth; legacy anonymous mode stays on the default tenant.
+	r.Use(tenant.New(db.Client, cfg.Auth.Enabled).Middleware())
 
 	if cfg.BasicAuth.Enabled {
 		logger.Info("basic auth enabled", "source", map[bool]string{true: "htpasswd file", false: "environment"}[cfg.BasicAuth.File != ""])
@@ -279,6 +300,7 @@ func run() error {
 	// the API (gin applies Use handlers to routes registered afterwards).
 	r.GET("/metrics", gin.WrapH(metrics.Handler()))
 
+	authSvc.RegisterRoutes(r)
 	srv.RegisterRoutes(r)
 
 	// Static frontend: embedded at build time (see internal/web). A binary

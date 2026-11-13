@@ -20,6 +20,20 @@ type BookshelfCreate struct {
 	hooks    []Hook
 }
 
+// SetTenantID sets the "tenant_id" field.
+func (_c *BookshelfCreate) SetTenantID(v int64) *BookshelfCreate {
+	_c.mutation.SetTenantID(v)
+	return _c
+}
+
+// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
+func (_c *BookshelfCreate) SetNillableTenantID(v *int64) *BookshelfCreate {
+	if v != nil {
+		_c.SetTenantID(*v)
+	}
+	return _c
+}
+
 // SetGalleryID sets the "gallery_id" field.
 func (_c *BookshelfCreate) SetGalleryID(v int64) *BookshelfCreate {
 	_c.mutation.SetGalleryID(v)
@@ -95,6 +109,10 @@ func (_c *BookshelfCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *BookshelfCreate) defaults() {
+	if _, ok := _c.mutation.TenantID(); !ok {
+		v := bookshelf.DefaultTenantID
+		_c.mutation.SetTenantID(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := bookshelf.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -107,6 +125,9 @@ func (_c *BookshelfCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *BookshelfCreate) check() error {
+	if _, ok := _c.mutation.TenantID(); !ok {
+		return &ValidationError{Name: "tenant_id", err: errors.New(`ent: missing required field "Bookshelf.tenant_id"`)}
+	}
 	if _, ok := _c.mutation.GalleryID(); !ok {
 		return &ValidationError{Name: "gallery_id", err: errors.New(`ent: missing required field "Bookshelf.gallery_id"`)}
 	}
@@ -133,14 +154,22 @@ func (_c *BookshelfCreate) sqlSave(ctx context.Context) (*Bookshelf, error) {
 		}
 		return nil, err
 	}
+	id := _spec.ID.Value.(int64)
+	_node.ID = int(id)
+	_c.mutation.id = &_node.ID
+	_c.mutation.done = true
 	return _node, nil
 }
 
 func (_c *BookshelfCreate) createSpec() (*Bookshelf, *sqlgraph.CreateSpec) {
 	var (
 		_node = &Bookshelf{config: _c.config}
-		_spec = sqlgraph.NewCreateSpec(bookshelf.Table, nil)
+		_spec = sqlgraph.NewCreateSpec(bookshelf.Table, sqlgraph.NewFieldSpec(bookshelf.FieldID, field.TypeInt))
 	)
+	if value, ok := _c.mutation.TenantID(); ok {
+		_spec.SetField(bookshelf.FieldTenantID, field.TypeInt64, value)
+		_node.TenantID = value
+	}
 	if value, ok := _c.mutation.GalleryID(); ok {
 		_spec.SetField(bookshelf.FieldGalleryID, field.TypeInt64, value)
 		_node.GalleryID = value
@@ -203,6 +232,11 @@ func (_c *BookshelfCreateBulk) Save(ctx context.Context) ([]*Bookshelf, error) {
 				}
 				if err != nil {
 					return nil, err
+				}
+				mutation.id = &nodes[i].ID
+				if specs[i].ID.Value != nil {
+					id := specs[i].ID.Value.(int64)
+					nodes[i].ID = int(id)
 				}
 				mutation.done = true
 				return nodes[i], nil

@@ -27,6 +27,7 @@ import (
 	json "encoding/json/v2"
 	"fmt"
 	"log"
+	"strings"
 
 	"entgo.io/ent/entc"
 	"entgo.io/ent/entc/gen"
@@ -90,12 +91,23 @@ func applyCompositeIDs(g *gen.Graph) error {
 			return fmt.Errorf("schema %s: composite primary key %q needs at least 2 fields", n.Name, ant.ID)
 		}
 		ids := make([]*gen.Field, 0, len(ant.ID))
+		idUsed := false
 		for _, name := range ant.ID {
 			f, ok := findField(n, name)
 			if !ok {
 				return fmt.Errorf("schema %s: primary key field %q is not declared in Fields()", n.Name, name)
 			}
+			if n.ID != nil && f == n.ID {
+				idUsed = true
+			}
 			ids = append(ids, f)
+		}
+		// A composite key may intentionally promote the former implicit ID
+		// (e.g. tag_preference's string "id" stored as "tag"). Ent keeps that
+		// field in Type.ID rather than Type.Fields, so put it back into the
+		// field list before clearing ID or its column would disappear.
+		if idUsed {
+			n.Fields = append(n.Fields, n.ID)
 		}
 		n.ID = nil
 		// HasCompositeID() is "IsEdgeSchema() && len(EdgeSchema.ID) > 1".
@@ -125,8 +137,13 @@ func fieldAnnotation(annotations map[string]any) (*field.Annotation, bool) {
 }
 
 func findField(n *gen.Type, name string) (*gen.Field, bool) {
+	if name == "id" && n.ID != nil {
+		return n.ID, true
+	}
 	for _, f := range n.Fields {
-		if f.Name == name {
+		// Ent exposes field.String("id") as the exported struct field "ID"
+		// while the annotation uses the schema name "id"; accept both.
+		if f.Name == name || strings.EqualFold(f.StructField(), name) {
 			return f, true
 		}
 	}

@@ -14,6 +14,8 @@ import (
 	"manga-reader/internal/ent/syncstate"
 	"manga-reader/internal/ent/tagpreference"
 	"manga-reader/internal/ent/tagsyncbaseline"
+	"manga-reader/internal/ent/tenant"
+	"manga-reader/internal/ent/user"
 	"reflect"
 	"sync"
 
@@ -88,6 +90,8 @@ func checkColumn(t, c string) error {
 			syncstate.Table:       syncstate.ValidColumn,
 			tagpreference.Table:   tagpreference.ValidColumn,
 			tagsyncbaseline.Table: tagsyncbaseline.ValidColumn,
+			tenant.Table:          tenant.ValidColumn,
+			user.Table:            user.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)
