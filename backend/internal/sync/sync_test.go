@@ -7,6 +7,7 @@ import (
 	json "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 	_ "modernc.org/sqlite"
 
+	"manga-reader/internal/config"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/gallerycache"
 	"manga-reader/internal/ent/readingprogress"
@@ -962,39 +964,153 @@ func TestApplyChangesSkipsInvalidRow(t *testing.T) {
 	}
 }
 
-func testNodeAuthTenant(validToken string, tenantID int64) func(...string) gin.HandlerFunc {
-	return func(scopes ...string) gin.HandlerFunc {
-		return func(c *gin.Context) {
-			if c.GetHeader("Authorization") != "Bearer "+validToken {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-				return
-			}
-			nodeauth.WithGin(c, nodeauth.Identity{NodeID: 9, TenantID: tenantID, Scopes: []string{nodeauth.ScopeSyncRead, nodeauth.ScopeSyncWrite}})
-			c.Next()
-		}
+// seedNodeKey creates an active node in tenantID and returns a one-time
+// plaintext key carrying exactly the requested scopes.
+func seedNodeKey(t *testing.T, client *ent.Client, tenantID int64, scopes []string) string {
+	t.Helper()
+	nodeRow, err := client.Node.Create().
+		SetName("node-" + strconv.FormatInt(tenantID, 10) + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)).
+		SetTenantID(tenantID).SetStatus(config.StatusActive).Save(t.Context())
+	if err != nil {
+		t.Fatalf("create node: %v", err)
 	}
+	material, err := nodeauth.GenerateKey()
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	if _, err := client.NodeAPIKey.Create().
+		SetNodeID(nodeRow.ID).SetKeyHash(material.Hash).SetKeyPrefix(material.Prefix).
+		SetScopes(scopes).SetStatus(config.StatusActive).Save(t.Context()); err != nil {
+		t.Fatalf("create key: %v", err)
+	}
+	return material.Plaintext
 }
 
 func TestPushIsScopedToNodeTenant(t *testing.T) {
 	serverClient := newTestClient(t)
+	t1, err := serverClient.Tenant.Create().
+		SetName("T1").SetSlug("t1").SetStatus(config.StatusActive).Save(t.Context())
+	if err != nil {
+		t.Fatalf("tenant 1: %v", err)
+	}
+	t2, err := serverClient.Tenant.Create().
+		SetName("T2").SetSlug("t2").SetStatus(config.StatusActive).Save(t.Context())
+	if err != nil {
+		t.Fatalf("tenant 2: %v", err)
+	}
+	seedNodeKey(t, serverClient, int64(t1.ID), nodeauth.DefaultScopes)
+	key := seedNodeKey(t, serverClient, int64(t2.ID), nodeauth.DefaultScopes)
 	now := time.Now().UTC()
-	seedProgress(t, serverClient, 1, "tenant-1", 1, now)
-	if _, err := serverClient.ReadingProgress.Create().
-		SetTenantID(2).SetGalleryID(2).SetToken("tenant-2").
-		SetCurrentPage(2).SetProgress(0.2).SetCreatedAt(now).SetUpdatedAt(now).
-		Save(t.Context()); err != nil {
-		t.Fatalf("seed tenant 2: %v", err)
+	for _, tc := range []struct {
+		tenantID int64
+		gallery  int64
+		token    string
+	}{
+		{int64(t1.ID), 1, "tenant-1"},
+		{int64(t2.ID), 2, "tenant-2"},
+	} {
+		if _, err := serverClient.ReadingProgress.Create().
+			SetTenantID(tc.tenantID).SetGalleryID(tc.gallery).SetToken(tc.token).
+			SetCurrentPage(1).SetProgress(0.1).SetCreatedAt(now).SetUpdatedAt(now).
+			Save(t.Context()); err != nil {
+			t.Fatalf("seed tenant %d: %v", tc.tenantID, err)
+		}
 	}
 	svc := NewService(serverClient, Options{
 		HostEnabled: true,
-		NodeAuth:    testNodeAuthTenant("node-2-key", 2),
+		NodeAuth:    nodeauth.New(serverClient).Middleware,
 	})
 	router := newTestRouter(svc)
-	w, resp := doPush(t, router, "node-2-key", PushRequest{Cursor: 0, Snapshot: true})
+	w, resp := doPush(t, router, key, PushRequest{Cursor: 0, Snapshot: true})
 	if w.Code != http.StatusOK {
 		t.Fatalf("push = %d %s", w.Code, w.Body.String())
 	}
 	if len(resp.Changes) != 1 || resp.Changes[0].GalleryID != 2 {
 		t.Fatalf("node tenant snapshot = %+v, want only gallery 2", resp.Changes)
+	}
+}
+
+func TestPushRequiresNodeScopeAndActiveKey(t *testing.T) {
+	client := newTestClient(t)
+	tenantRow, err := client.Tenant.Create().
+		SetName("T").SetSlug("t").SetStatus(config.StatusActive).Save(t.Context())
+	if err != nil {
+		t.Fatalf("tenant: %v", err)
+	}
+	readOnly := seedNodeKey(t, client, int64(tenantRow.ID), []string{nodeauth.ScopeSyncRead})
+	valid := seedNodeKey(t, client, int64(tenantRow.ID), nodeauth.DefaultScopes)
+	svc := NewService(client, Options{
+		HostEnabled: true,
+		NodeAuth:    nodeauth.New(client).Middleware,
+	})
+	router := newTestRouter(svc)
+
+	if w, _ := doPush(t, router, "", PushRequest{}); w.Code != http.StatusUnauthorized {
+		t.Fatalf("no key = %d, want 401", w.Code)
+	}
+	if w, _ := doPush(t, router, readOnly, PushRequest{}); w.Code != http.StatusForbidden {
+		t.Fatalf("read-only key = %d, want 403", w.Code)
+	}
+	if w, _ := doPush(t, router, valid, PushRequest{}); w.Code != http.StatusOK {
+		t.Fatalf("write key = %d, want 200", w.Code)
+	}
+
+	if _, err := client.NodeAPIKey.Update().
+		SetStatus("revoked").Save(t.Context()); err != nil {
+		t.Fatalf("revoke keys: %v", err)
+	}
+	if w, _ := doPush(t, router, valid, PushRequest{}); w.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked write key = %d, want 401", w.Code)
+	}
+}
+
+// A failed push must leave the cursor/watermark and outbox untouched so the
+// next cycle retries the same batch; only a successful exchange advances them.
+func TestPushCycleRetriesAfterFailure(t *testing.T) {
+	client := newTestClient(t)
+	now := time.Now().UTC()
+	seedProgress(t, client, 77, "retry", 3, now)
+	svc := NewService(client, Options{})
+	if err := svc.RecordUpsert(t.Context(), EntityReadingProgress, 77, "retry"); err != nil {
+		t.Fatalf("record upsert: %v", err)
+	}
+
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"cursor":1,"changes":[],"applied":0,"skipped":0}`))
+	}))
+	defer server.Close()
+
+	engine := newEngine(svc)
+	cfg := ClientConfig{ServerURL: server.URL, Token: "node-key", Enabled: true}
+	engine.pushCycle(t.Context(), cfg)
+
+	state, err := svc.LoadEngineState(t.Context())
+	if err != nil {
+		t.Fatalf("load state after failure: %v", err)
+	}
+	if state.Bootstrapped || state.LastPushedID != 0 || state.LastError == "" {
+		t.Fatalf("state after failed push = %+v, want unadvanced with last_error", state)
+	}
+	if n, _ := client.SyncChange.Query().Count(t.Context()); n != 1 {
+		t.Fatalf("outbox after failed push = %d, want the change retained", n)
+	}
+
+	engine.pushCycle(t.Context(), cfg)
+	state, err = svc.LoadEngineState(t.Context())
+	if err != nil {
+		t.Fatalf("load state after retry: %v", err)
+	}
+	if !state.Bootstrapped || state.LastPushedID != 1 || state.LastError != "" {
+		t.Fatalf("state after successful retry = %+v", state)
+	}
+	if n, _ := client.SyncChange.Query().Count(t.Context()); n != 0 {
+		t.Fatalf("outbox after successful retry = %d, want pruned", n)
 	}
 }

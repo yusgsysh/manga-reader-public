@@ -183,30 +183,11 @@ func TestLoginWrongPasswordAndUnknownUser(t *testing.T) {
 	}
 }
 
-func TestMiddlewareRejectsMissingInvalidAndWrongSignatureTokens(t *testing.T) {
-	svc, _ := newTestService(t)
-	r := newTestRouter(svc)
-
-	valid, _ := login(t, r, "admin", "password123")
-	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", "not-a-jwt"); got.Code != http.StatusUnauthorized {
-		t.Fatalf("invalid token = %d, want 401", got.Code)
-	}
-
-	other := newTokenManager(strings.Repeat("x", 32), svc.cfg.JWTIssuer, time.Hour)
-	wrongSig, _, err := other.issue(1, 1, "admin", config.RolePlatformAdmin, 0)
-	if err != nil {
-		t.Fatalf("issue wrong-signature token: %v", err)
-	}
-	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", wrongSig); got.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong signature = %d, want 401", got.Code)
-	}
-
-	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", valid); got.Code != http.StatusOK {
-		t.Fatalf("valid token = %d, want 200", got.Code)
-	}
-}
-
-func TestMiddlewareRejectsExpiredAndWrongIssuerTokens(t *testing.T) {
+// TestMiddlewareRejectsInvalidTokens covers every credential failure mode at
+// the HTTP boundary: malformed, wrong signature, expired, wrong issuer and
+// algorithm confusion. The valid case is the control so a failed setup cannot
+// make the whole table pass.
+func TestMiddlewareRejectsInvalidTokens(t *testing.T) {
 	svc, _ := newTestService(t)
 	r := newTestRouter(svc)
 	u, err := svc.db.User.Query().Only(t.Context())
@@ -214,30 +195,51 @@ func TestMiddlewareRejectsExpiredAndWrongIssuerTokens(t *testing.T) {
 		t.Fatalf("load user: %v", err)
 	}
 
-	expired := newTokenManager(svc.cfg.JWTSecret, svc.cfg.JWTIssuer, time.Minute)
-	expired.now = func() time.Time { return time.Now().Add(-2 * time.Hour) }
-	expiredToken, _, err := expired.issue(u.ID, u.TenantID, u.Username, u.Role, u.TokenVersion)
-	if err != nil {
-		t.Fatalf("issue expired: %v", err)
-	}
-	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", expiredToken); got.Code != http.StatusUnauthorized {
-		t.Fatalf("expired token = %d, want 401", got.Code)
+	valid, _ := login(t, r, "admin", "password123")
+	if valid == "" {
+		t.Fatal("control login failed")
 	}
 
-	wrongIssuer := newTokenManager(svc.cfg.JWTSecret, "someone-else", time.Hour)
-	issuerToken, _, err := wrongIssuer.issue(u.ID, u.TenantID, u.Username, u.Role, u.TokenVersion)
+	wrongSigManager := newTokenManager(strings.Repeat("x", 32), svc.cfg.JWTIssuer, time.Hour)
+	wrongSig, _, err := wrongSigManager.issue(u.ID, u.TenantID, u.Username, u.Role, u.TokenVersion)
 	if err != nil {
-		t.Fatalf("issue wrong issuer: %v", err)
+		t.Fatalf("issue wrong-signature token: %v", err)
 	}
-	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", issuerToken); got.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong issuer = %d, want 401", got.Code)
+	expiredManager := newTokenManager(svc.cfg.JWTSecret, svc.cfg.JWTIssuer, time.Minute)
+	expiredManager.now = func() time.Time { return time.Now().Add(-2 * time.Hour) }
+	expired, _, err := expiredManager.issue(u.ID, u.TenantID, u.Username, u.Role, u.TokenVersion)
+	if err != nil {
+		t.Fatalf("issue expired token: %v", err)
+	}
+	wrongIssuerManager := newTokenManager(svc.cfg.JWTSecret, "someone-else", time.Hour)
+	wrongIssuer, _, err := wrongIssuerManager.issue(u.ID, u.TenantID, u.Username, u.Role, u.TokenVersion)
+	if err != nil {
+		t.Fatalf("issue wrong-issuer token: %v", err)
 	}
 
-	// An explicit non-HS256 variant must be rejected even if signed with the
-	// same secret (algorithm confusion / "none").
-	none := "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJpc3MiOiJtYW5nYS1yZWFkZXItdGVzdCIsInN1YiI6IjEiLCJleHAiOjk5OTk5OTk5OTl9."
-	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", none); got.Code != http.StatusUnauthorized {
-		t.Fatalf("alg=none token = %d, want 401", got.Code)
+	tests := []struct {
+		name  string
+		token string
+	}{
+		{"missing", ""},
+		{"not a jwt", "not-a-jwt"},
+		{"wrong signature", wrongSig},
+		{"expired", expired},
+		{"wrong issuer", wrongIssuer},
+		// Explicit non-HS256 variant signed with the same secret
+		// (algorithm confusion / "none").
+		{"alg none", "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJpc3MiOiJtYW5nYS1yZWFkZXItdGVzdCIsInN1YiI6IjEiLCJleHAiOjk5OTk5OTk5OTl9."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", tt.token); got.Code != http.StatusUnauthorized {
+				t.Fatalf("token = %d, want 401 (%s)", got.Code, got.Body.String())
+			}
+		})
+	}
+
+	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", valid); got.Code != http.StatusOK {
+		t.Fatalf("valid token = %d, want 200", got.Code)
 	}
 }
 

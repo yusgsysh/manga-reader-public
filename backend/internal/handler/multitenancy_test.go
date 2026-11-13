@@ -239,6 +239,43 @@ func TestMultiTenant_DataIsolation(t *testing.T) {
 		t.Fatalf("prefill isolation: A=%d B=%d", len(jobsA.Jobs), len(jobsB.Jobs))
 	}
 
+	// Tag/subscription preferences are tenant-private too.
+	if _, err := f.db.Client.TagPreference.Create().
+		SetTenantID(int64(f.tenantA.ID)).SetID("female:yuri").
+		SetAction("like").SetWeight(10).Save(ctx); err != nil {
+		t.Fatalf("seed tag preference: %v", err)
+	}
+	var tagsA, tagsB struct {
+		Tags []struct {
+			Tag string `json:"tag"`
+		} `json:"tags"`
+	}
+	if err := json.Unmarshal(f.do(t, http.MethodGet, "/api/tag-settings", nil, tokenA).Body.Bytes(), &tagsA); err != nil {
+		t.Fatalf("decode A tags: %v", err)
+	}
+	if err := json.Unmarshal(f.do(t, http.MethodGet, "/api/tag-settings", nil, tokenB).Body.Bytes(), &tagsB); err != nil {
+		t.Fatalf("decode B tags: %v", err)
+	}
+	if len(tagsA.Tags) != 1 || tagsA.Tags[0].Tag != "female:yuri" || len(tagsB.Tags) != 0 {
+		t.Fatalf("tag isolation: A=%+v B=%+v", tagsA.Tags, tagsB.Tags)
+	}
+	if got := f.do(t, http.MethodPut, "/api/tag-settings", map[string]any{
+		"tags": []map[string]any{{"tag": "male:sole male", "action": "like"}},
+	}, tokenB); got.Code != http.StatusOK {
+		t.Fatalf("B update tags = %d %s", got.Code, got.Body.String())
+	}
+	tagsA = struct {
+		Tags []struct {
+			Tag string `json:"tag"`
+		} `json:"tags"`
+	}{}
+	if err := json.Unmarshal(f.do(t, http.MethodGet, "/api/tag-settings", nil, tokenA).Body.Bytes(), &tagsA); err != nil {
+		t.Fatalf("decode A tags after B update: %v", err)
+	}
+	if len(tagsA.Tags) != 1 || tagsA.Tags[0].Tag != "female:yuri" {
+		t.Fatalf("tenant B changed tenant A tags: %+v", tagsA.Tags)
+	}
+
 	// A client-supplied tenant_id is ignored.
 	got := f.do(t, http.MethodGet, "/api/bookshelf?tenant_id=2", nil, tokenA)
 	if got.Code != http.StatusOK || !strings.Contains(got.Body.String(), `"total":2`) {
@@ -296,6 +333,20 @@ func TestMultiTenant_SameUsernameAndRoles(t *testing.T) {
 	if got := f.do(t, http.MethodGet, "/api/tenant/users", nil, tenantAdminToken); got.Code != http.StatusOK {
 		t.Fatalf("tenant admin users = %d, want 200", got.Code)
 	}
+	// A tenant admin cannot escalate a user to platform admin.
+	if got := f.do(t, http.MethodPost, "/api/tenant/users", map[string]any{
+		"username": "escalated", "password": "password123", "role": "platform_admin",
+	}, tenantAdminToken); got.Code != http.StatusBadRequest {
+		t.Fatalf("role escalation = %d, want 400", got.Code)
+	}
+
+	// A tenant admin cannot modify the tenant's platform administrator.
+	if got := f.do(t, http.MethodPut, "/api/tenant/users/"+strconv.Itoa(f.adminA.ID), map[string]any{
+		"username": "hijacked",
+	}, tenantAdminToken); got.Code != http.StatusForbidden {
+		t.Fatalf("platform admin update = %d, want 403", got.Code)
+	}
+
 	// Tenant admin A cannot touch tenant B's user through the path id.
 	if got := f.do(t, http.MethodPut, "/api/tenant/users/"+strconv.Itoa(f.userB.ID), map[string]any{
 		"username": "hijacked",
@@ -499,11 +550,31 @@ func TestMultiTenant_NodeAndAPIKeyAdmin(t *testing.T) {
 		t.Fatalf("rotate key = %d %s", w.Code, w.Body.String())
 	}
 	var rotated struct {
-		Key string `json:"key"`
+		Key        string `json:"key"`
+		RevokedOld bool   `json:"revoked_old"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &rotated)
 	if rotated.Key == "" || rotated.Key == createdKey.Key {
 		t.Fatal("rotation did not return a fresh key")
+	}
+	if rotated.RevokedOld {
+		t.Fatal("rotation revoked the old key without being asked")
+	}
+	oldRow, err := f.db.Client.NodeAPIKey.Get(t.Context(), createdKey.APIKey.ID)
+	if err != nil || oldRow.Status != "active" {
+		t.Fatalf("old key after non-revoking rotation = %+v (err %v), want active", oldRow, err)
+	}
+
+	// Rotating again with revoke_old=true retires the old key immediately.
+	w = f.do(t, http.MethodPost, "/api/admin/nodes/"+strconv.Itoa(createdNode.ID)+"/keys/"+strconv.Itoa(createdKey.APIKey.ID)+"/rotate", map[string]any{
+		"revoke_old": true,
+	}, platformToken)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("rotating revoke = %d %s", w.Code, w.Body.String())
+	}
+	oldRow, err = f.db.Client.NodeAPIKey.Get(t.Context(), createdKey.APIKey.ID)
+	if err != nil || oldRow.Status != "revoked" || oldRow.RevokedAt == nil {
+		t.Fatalf("old key after revoking rotation = %+v (err %v), want revoked", oldRow, err)
 	}
 
 	// Revoking the old key is explicit.

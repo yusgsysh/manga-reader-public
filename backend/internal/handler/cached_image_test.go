@@ -22,54 +22,39 @@ import (
 
 // ==================== URL Validation Tests ====================
 
-func TestValidatePageURL_Valid(t *testing.T) {
+func TestValidatePageURL(t *testing.T) {
 	tests := []struct {
-		name string
-		url  string
+		name    string
+		url     string
+		wantErr bool
 	}{
-		{"exhentai page", "https://exhentai.org/s/51d1aa689c/4153369-29"},
-		{"e-hentai page", "https://e-hentai.org/s/859299c9ef/3138775-7"},
-		{"exhentai with query", "https://exhentai.org/s/abc/123-1?nl=SZF-483294"},
+		{"exhentai page", "https://exhentai.org/s/51d1aa689c/4153369-29", false},
+		{"e-hentai page", "https://e-hentai.org/s/859299c9ef/3138775-7", false},
+		{"exhentai with query", "https://exhentai.org/s/abc/123-1?nl=SZF-483294", false},
+		{"empty", "", true},
+		{"no scheme", "exhentai.org/s/abc/123-1", true},
+		{"ftp scheme", "ftp://exhentai.org/s/abc/123-1", true},
+		{"http scheme", "http://exhentai.org/s/abc/123-1", true},
+		{"file scheme", "file:///etc/passwd", true},
+		{"gopher scheme", "gopher://exhentai.org", true},
+		{"localhost", "https://localhost/s/abc/123-1", true},
+		{"loopback", "https://127.0.0.1/s/abc/123-1", true},
+		{"ipv6 loopback", "https://[::1]/s/abc/123-1", true},
+		{"private ip 10.x", "https://10.0.0.1/s/abc/123-1", true},
+		{"private ip 172.16.x", "https://172.16.0.1/s/abc/123-1", true},
+		{"private ip 192.168.x", "https://192.168.1.1/s/abc/123-1", true},
+		{"link-local", "https://169.254.1.1/s/abc/123-1", true},
+		{"wrong domain", "https://example.com/s/abc/123-1", true},
+		{"subdomain exhentai", "https://evil.exhentai.org/s/abc/123-1", true},
+		{"subdomain e-hentai", "https://evil.e-hentai.org/s/abc/123-1", true},
+		{"metadata aws", "http://169.254.169.254/latest/meta-data/", true},
+		{"metadata gcp", "http://metadata.google.internal/computeMetadata/v1/", true},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := exhentai.ValidatePageURL(tt.url); err != nil {
-				t.Errorf("validatePageURL(%q) = %v, want nil", tt.url, err)
-			}
-		})
-	}
-}
-
-func TestValidatePageURL_Invalid(t *testing.T) {
-	tests := []struct {
-		name string
-		url  string
-	}{
-		{"empty", ""},
-		{"no scheme", "exhentai.org/s/abc/123-1"},
-		{"ftp scheme", "ftp://exhentai.org/s/abc/123-1"},
-		{"http scheme", "http://exhentai.org/s/abc/123-1"},
-		{"file scheme", "file:///etc/passwd"},
-		{"gopher scheme", "gopher://exhentai.org"},
-		{"localhost", "https://localhost/s/abc/123-1"},
-		{"loopback", "https://127.0.0.1/s/abc/123-1"},
-		{"ipv6 loopback", "https://[::1]/s/abc/123-1"},
-		{"private ip 10.x", "https://10.0.0.1/s/abc/123-1"},
-		{"private ip 172.16.x", "https://172.16.0.1/s/abc/123-1"},
-		{"private ip 192.168.x", "https://192.168.1.1/s/abc/123-1"},
-		{"link-local", "https://169.254.1.1/s/abc/123-1"},
-		{"wrong domain", "https://example.com/s/abc/123-1"},
-		{"subdomain exhentai", "https://evil.exhentai.org/s/abc/123-1"},
-		{"subdomain e-hentai", "https://evil.e-hentai.org/s/abc/123-1"},
-		{"metadata aws", "http://169.254.169.254/latest/meta-data/"},
-		{"metadata gcp", "http://metadata.google.internal/computeMetadata/v1/"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := exhentai.ValidatePageURL(tt.url); err == nil {
-				t.Errorf("validatePageURL(%q) = nil, want error", tt.url)
+			err := exhentai.ValidatePageURL(tt.url)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ValidatePageURL(%q) error = %v, wantErr %v", tt.url, err, tt.wantErr)
 			}
 		})
 	}

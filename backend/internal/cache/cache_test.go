@@ -11,33 +11,26 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
-func TestCacheKey_Format(t *testing.T) {
+// TestCacheKey pins the two externally visible properties of the cache key:
+// it is a stable SHA-256 of the URL and uses the package prefix/hex encoding.
+func TestCacheKey(t *testing.T) {
 	u := "https://exhentai.org/s/51d1aa689c/4153369-29"
 	key := CacheKey(u)
 
 	if !strings.HasPrefix(key, ImageCachePrefix) {
 		t.Errorf("key should start with %q, got %q", ImageCachePrefix, key)
 	}
-
 	hexPart := strings.TrimPrefix(key, ImageCachePrefix)
 	if len(hexPart) != CacheKeyLength {
 		t.Errorf("hex part length = %d, want %d", len(hexPart), CacheKeyLength)
 	}
-
 	if _, err := hex.DecodeString(hexPart); err != nil {
 		t.Errorf("hex part should be valid hex: %v", err)
 	}
-}
-
-func TestCacheKey_MatchesSHA256(t *testing.T) {
-	u := "https://exhentai.org/s/51d1aa689c/4153369-29"
-	key := CacheKey(u)
 
 	sum := sha256.Sum256([]byte(u))
-	expected := ImageCachePrefix + hex.EncodeToString(sum[:])
-
-	if key != expected {
-		t.Errorf("key = %q, want %q", key, expected)
+	if want := ImageCachePrefix + hex.EncodeToString(sum[:]); key != want {
+		t.Errorf("key = %q, want %q", key, want)
 	}
 }
 

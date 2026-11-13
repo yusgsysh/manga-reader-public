@@ -26,77 +26,62 @@ const testThumbURL = "https://s.exhentai.org/w/00/999/15582-3owak8q3.webp"
 
 // ==================== Cache Key Tests ====================
 
-func TestThumbnailCacheKey_Format(t *testing.T) {
+// TestThumbnailCacheKey pins the stable key format and SHA-256 derivation.
+func TestThumbnailCacheKey(t *testing.T) {
 	key := ThumbnailCacheKey(testThumbURL)
 
 	if !strings.HasPrefix(key, thumbnailCachePrefix) {
 		t.Errorf("key should start with %q, got %q", thumbnailCachePrefix, key)
 	}
-
 	hexPart := strings.TrimPrefix(key, thumbnailCachePrefix)
 	if len(hexPart) != cache.CacheKeyLength {
 		t.Errorf("hex part length = %d, want %d", len(hexPart), cache.CacheKeyLength)
 	}
-
 	if _, err := hex.DecodeString(hexPart); err != nil {
 		t.Errorf("hex part should be valid hex: %v", err)
 	}
-}
 
-func TestThumbnailCacheKey_MatchesSHA256(t *testing.T) {
 	sum := sha256.Sum256([]byte(testThumbURL))
-	expected := thumbnailCachePrefix + hex.EncodeToString(sum[:])
-
-	if key := ThumbnailCacheKey(testThumbURL); key != expected {
-		t.Errorf("key = %q, want %q", key, expected)
+	if want := thumbnailCachePrefix + hex.EncodeToString(sum[:]); key != want {
+		t.Errorf("key = %q, want %q", key, want)
 	}
 }
 
 // ==================== URL Validation Tests ====================
 
-func TestValidateThumbnailURL_Valid(t *testing.T) {
-	valid := []string{
-		testThumbURL,
-		"https://s.exhentai.org/w/00/999/15582-3owak8q3.webp?x=1",
-		"https://ehgt.org/w/00/999/thumb.jpg",
-		"https://ul.e-hentai.org/w/00/999/thumb.png",
-	}
-
-	for _, u := range valid {
-		if err := exhentai.ValidateThumbnailURL(u); err != nil {
-			t.Errorf("validateThumbnailURL(%q) = %v, want nil", u, err)
-		}
-	}
-}
-
-func TestValidateThumbnailURL_Invalid(t *testing.T) {
+func TestValidateThumbnailURL(t *testing.T) {
 	tests := []struct {
-		name string
-		url  string
+		name    string
+		url     string
+		wantErr bool
 	}{
-		{"empty", ""},
-		{"http scheme", "http://s.exhentai.org/w/00/999/t.webp"},
-		{"no scheme", "s.exhentai.org/w/00/999/t.webp"},
-		{"ftp scheme", "ftp://s.exhentai.org/x"},
-		{"file scheme", "file:///etc/passwd"},
-		{"localhost", "https://localhost/x"},
-		{"loopback", "https://127.0.0.1/x"},
-		{"ipv6 loopback", "https://[::1]/x"},
-		{"private ip 10.x", "https://10.0.0.1/x"},
-		{"private ip 172.x", "https://172.16.0.1/x"},
-		{"private ip 192.168.x", "https://192.168.1.1/x"},
-		{"link-local", "https://169.254.169.254/latest/meta-data/"},
-		{"metadata gcp", "https://metadata.google.internal/computeMetadata/v1/"},
-		{"wrong domain", "https://example.com/x"},
-		{"base exhentai.org", "https://exhentai.org/w/00/999/t.webp"},
-		{"subdomain not allowed", "https://evil.exhentai.org/x"},
-		{"suffix trick", "https://s.exhentai.org.evil.com/x"},
+		{"exhentai thumb", testThumbURL, false},
+		{"query string", "https://s.exhentai.org/w/00/999/15582-3owak8q3.webp?x=1", false},
+		{"ehgt thumb", "https://ehgt.org/w/00/999/thumb.jpg", false},
+		{"e-hentai thumb", "https://ul.e-hentai.org/w/00/999/thumb.png", false},
+		{"empty", "", true},
+		{"http scheme", "http://s.exhentai.org/w/00/999/t.webp", true},
+		{"no scheme", "s.exhentai.org/w/00/999/t.webp", true},
+		{"ftp scheme", "ftp://s.exhentai.org/x", true},
+		{"file scheme", "file:///etc/passwd", true},
+		{"localhost", "https://localhost/x", true},
+		{"loopback", "https://127.0.0.1/x", true},
+		{"ipv6 loopback", "https://[::1]/x", true},
+		{"private ip 10.x", "https://10.0.0.1/x", true},
+		{"private ip 172.x", "https://172.16.0.1/x", true},
+		{"private ip 192.168.x", "https://192.168.1.1/x", true},
+		{"link-local", "https://169.254.169.254/latest/meta-data/", true},
+		{"metadata gcp", "https://metadata.google.internal/computeMetadata/v1/", true},
+		{"wrong domain", "https://example.com/x", true},
+		{"base exhentai.org", "https://exhentai.org/w/00/999/t.webp", true},
+		{"subdomain not allowed", "https://evil.exhentai.org/x", true},
+		{"suffix trick", "https://s.exhentai.org.evil.com/x", true},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := exhentai.ValidateThumbnailURL(tt.url); err == nil {
-				t.Errorf("validateThumbnailURL(%q) = nil, want error", tt.url)
+			err := exhentai.ValidateThumbnailURL(tt.url)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ValidateThumbnailURL(%q) error = %v, wantErr %v", tt.url, err, tt.wantErr)
 			}
 		})
 	}

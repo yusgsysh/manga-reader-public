@@ -222,3 +222,108 @@ func TestGeneratedKeyPrefixMatchesPlaintext(t *testing.T) {
 		}
 	}
 }
+
+func TestNodeAPIKeyExpiryAndTenantStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	client := newTestDB(t)
+	tenantRow, _ := client.Tenant.Create().SetName("T").SetSlug("t").SetStatus(config.StatusActive).Save(t.Context())
+	nodeRow, _ := client.Node.Create().SetName("n").SetTenantID(int64(tenantRow.ID)).SetStatus(config.StatusActive).Save(t.Context())
+
+	newKey := func(expiresAt *time.Time, status string) string {
+		t.Helper()
+		m, err := GenerateKey()
+		if err != nil {
+			t.Fatalf("key: %v", err)
+		}
+		create := client.NodeAPIKey.Create().
+			SetNodeID(nodeRow.ID).SetKeyHash(m.Hash).SetKeyPrefix(m.Prefix).
+			SetScopes(DefaultScopes).SetStatus(status)
+		if expiresAt != nil {
+			create.SetExpiresAt(*expiresAt)
+		}
+		if _, err := create.Save(t.Context()); err != nil {
+			t.Fatalf("key row: %v", err)
+		}
+		return m.Plaintext
+	}
+
+	r := gin.New()
+	r.POST("/sync", New(client).Middleware(ScopeSyncWrite), func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	do := func(key string) int {
+		req := httptest.NewRequest(http.MethodPost, "/sync", nil)
+		req.Header.Set("Authorization", "Bearer "+key)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	past := time.Now().Add(-time.Hour)
+	if code := do(newKey(&past, config.StatusActive)); code != http.StatusUnauthorized {
+		t.Fatalf("expired key = %d, want 401", code)
+	}
+	future := time.Now().Add(time.Hour)
+	if code := do(newKey(&future, config.StatusActive)); code != http.StatusNoContent {
+		t.Fatalf("non-expired key = %d, want 204", code)
+	}
+
+	if _, err := client.Tenant.UpdateOneID(tenantRow.ID).SetStatus(config.StatusDisabled).Save(t.Context()); err != nil {
+		t.Fatalf("disable tenant: %v", err)
+	}
+	if code := do(newKey(nil, config.StatusActive)); code != http.StatusUnauthorized {
+		t.Fatalf("key for disabled tenant = %d, want 401", code)
+	}
+}
+
+func TestNodeAPIKeyPersistsOnlyHashAndPrefix(t *testing.T) {
+	client := newTestDB(t)
+	tenantRow, _ := client.Tenant.Create().SetName("T").SetSlug("t").SetStatus(config.StatusActive).Save(t.Context())
+	nodeRow, _ := client.Node.Create().SetName("n").SetTenantID(int64(tenantRow.ID)).SetStatus(config.StatusActive).Save(t.Context())
+	m, err := GenerateKey()
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	row, err := client.NodeAPIKey.Create().
+		SetNodeID(nodeRow.ID).SetKeyHash(m.Hash).SetKeyPrefix(m.Prefix).
+		SetScopes(DefaultScopes).SetStatus(config.StatusActive).Save(t.Context())
+	if err != nil {
+		t.Fatalf("create key: %v", err)
+	}
+
+	if row.KeyHash == m.Plaintext || row.KeyPrefix == m.Plaintext {
+		t.Fatal("plaintext API key was persisted")
+	}
+	if row.KeyHash != HashKey(m.Plaintext) {
+		t.Fatalf("stored hash = %q, want HashKey(plaintext)", row.KeyHash)
+	}
+	if len(row.KeyHash) != 64 {
+		t.Fatalf("hash length = %d, want 64 hex chars", len(row.KeyHash))
+	}
+	if !strings.HasPrefix(m.Plaintext, row.KeyPrefix) || len(row.KeyPrefix) >= len(m.Plaintext) {
+		t.Fatalf("prefix %q must be a short prefix of the plaintext", row.KeyPrefix)
+	}
+}
+
+func TestNodeAPIKeyInvalidAttemptsAreRateLimited(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	client := newTestDB(t)
+	r := gin.New()
+	r.POST("/sync", New(client).Middleware(ScopeSyncWrite), func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	sawTooMany := false
+	for range 30 {
+		req := httptest.NewRequest(http.MethodPost, "/sync", nil)
+		req.Header.Set("Authorization", "Bearer mrk_invalid")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code == http.StatusTooManyRequests {
+			sawTooMany = true
+			break
+		}
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("invalid key = %d, want 401 or 429", w.Code)
+		}
+	}
+	if !sawTooMany {
+		t.Fatal("repeated invalid keys were never rate limited")
+	}
+}
