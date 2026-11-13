@@ -13,7 +13,9 @@ export interface AuthContextValue {
   error: Error | null;
   isLoggingIn: boolean;
   isLoggingOut: boolean;
+  isRegistering: boolean;
   login: (username: string, password: string) => Promise<void>;
+  register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<unknown>;
 }

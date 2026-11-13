@@ -57,6 +57,10 @@ type Service struct {
 
 	loginMu      sync.Mutex
 	loginClients map[string]*loginBucket
+
+	// setupMu serializes first-boot admin registration so two concurrent
+	// requests cannot both observe an empty users table and create admins.
+	setupMu sync.Mutex
 }
 
 type loginBucket struct {
@@ -77,7 +81,10 @@ func New(db *ent.Client, cfg config.AuthConfig) *Service {
 
 // EnsureAdmin seeds the first administrator when the users table is empty.
 // Existing rows are never modified, so changing ADMIN_PASSWORD in the
-// environment cannot silently reset an operator's password.
+// environment cannot silently reset an operator's password. When no admin
+// credentials are configured the instance is left uninitialized instead: the
+// operator then creates the first administrator through the web setup page
+// (POST /api/auth/register).
 func (s *Service) EnsureAdmin(ctx context.Context) (bool, error) {
 	if s.db == nil {
 		return false, errors.New("auth database is nil")
@@ -91,11 +98,12 @@ func (s *Service) EnsureAdmin(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
-	if s.cfg.AdminUsername == "" {
-		return false, errors.New("no administrator exists and ADMIN_USERNAME is empty")
-	}
+	// No env-configured password: skip seeding so the web setup page can run.
 	if s.cfg.AdminPassword == "" {
-		return false, errors.New("no administrator exists; set ADMIN_USERNAME and ADMIN_PASSWORD for the first startup")
+		return false, nil
+	}
+	if s.cfg.AdminUsername == "" {
+		return false, errors.New("ADMIN_PASSWORD is set but ADMIN_USERNAME is empty")
 	}
 	if len(s.cfg.AdminPassword) < 8 {
 		return false, errors.New("ADMIN_PASSWORD must be at least 8 characters")
@@ -117,14 +125,29 @@ func (s *Service) EnsureAdmin(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+// IsInitialized reports whether at least one account exists, i.e. whether the
+// first administrator has already been created (via env vars or the web setup
+// page).
+func (s *Service) IsInitialized(ctx context.Context) (bool, error) {
+	if s.db == nil {
+		return false, errors.New("auth database is nil")
+	}
+	count, err := s.db.User.Query().Count(ctx)
+	if err != nil {
+		return false, fmt.Errorf("count users: %w", err)
+	}
+	return count > 0, nil
+}
+
 // publicAPIs are the only routes reachable without a JWT. Every route that
 // touches user data, including gallery/search/image proxies (which need the
 // caller's ExHentai cookie and are reachable from <img>/EventSource through the
 // HttpOnly session cookie), requires an authenticated user. Sync peer endpoints
 // keep their own Node API Key middleware and never accept a user JWT.
 var publicAPIs = map[string]struct{}{
-	"/api/auth/login":  {},
-	"/api/auth/status": {},
+	"/api/auth/login":    {},
+	"/api/auth/register": {},
+	"/api/auth/status":   {},
 
 	// Peer sync is authenticated by Node API Key middleware in the sync service.
 	"/api/sync/push":   {},
@@ -229,6 +252,7 @@ func PrincipalFrom(c *gin.Context) (Principal, bool) {
 // are protected by the same default-deny rule as the rest of the API.
 func (s *Service) RegisterRoutes(r gin.IRouter) {
 	r.POST("/api/auth/login", noStore, s.handleLogin)
+	r.POST("/api/auth/register", noStore, s.handleRegister)
 	r.GET("/api/auth/status", noStore, s.handleStatus)
 	r.POST("/api/auth/logout", noStore, s.handleLogout)
 	r.GET("/api/auth/me", noStore, s.handleMe)
@@ -240,17 +264,92 @@ func noStore(c *gin.Context) {
 }
 
 func (s *Service) handleStatus(c *gin.Context) {
-	initialized := false
-	if s.db != nil {
-		count, err := s.db.User.Query().Count(c.Request.Context())
-		if err != nil {
-			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "failed to read auth status"})
-			return
-		}
-		initialized = count > 0
+	initialized, err := s.IsInitialized(c.Request.Context())
+	if err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "failed to read auth status"})
+		return
 	}
 	web.JSON(c, http.StatusOK, gin.H{
 		"initialized": initialized,
+	})
+}
+
+// handleRegister creates the first administrator through the web setup page. It
+// only runs while the users table is empty; once any account exists it returns
+// 409 so the endpoint cannot be used to mint additional administrators.
+func (s *Service) handleRegister(c *gin.Context) {
+	if !s.allowLogin(c.ClientIP()) {
+		c.Header("Retry-After", "60")
+		web.JSON(c, http.StatusTooManyRequests, gin.H{"error": "too many requests"})
+		return
+	}
+
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
+	var body struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := web.BindJSON(c, &body); err != nil {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	body.Username = strings.TrimSpace(body.Username)
+	if body.Username == "" || len(body.Password) < 8 {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "username and a password of at least 8 characters are required"})
+		return
+	}
+
+	// Hash before taking the lock: Argon2id is deliberately slow and must not
+	// extend the critical section.
+	hash, err := HashPassword(body.Password)
+	if err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "password hashing failed"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	s.setupMu.Lock()
+	defer s.setupMu.Unlock()
+
+	initialized, err := s.IsInitialized(ctx)
+	if err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "failed to read auth status"})
+		return
+	}
+	if initialized {
+		web.JSON(c, http.StatusConflict, gin.H{"error": "already initialized"})
+		return
+	}
+
+	u, err := s.db.User.Create().
+		SetUsername(body.Username).
+		SetPasswordHash(hash).
+		SetRole(config.RoleAdmin).
+		SetStatus(config.StatusActive).
+		Save(ctx)
+	if err != nil {
+		if ent.IsConstraintError(err) {
+			web.JSON(c, http.StatusConflict, gin.H{"error": "username already exists"})
+			return
+		}
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create administrator failed"})
+		return
+	}
+
+	token, expires, err := s.tokens.issue(u.ID, u.Username, u.Role, u.TokenVersion)
+	if err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "registration failed"})
+		return
+	}
+	s.setCookie(c, token, expires)
+	slog.Info("administrator registered",
+		"request_id", requestid.From(c),
+		"username", u.Username,
+	)
+	web.JSON(c, http.StatusOK, gin.H{
+		"access_token": token,
+		"token_type":   "Bearer",
+		"expires_in":   s.cfg.ExpiresInSeconds(),
 	})
 }
 

@@ -228,6 +228,11 @@ func run() error {
 	}
 	if createdAdmin {
 		logger.Info("administrator account initialized", "username", cfg.Auth.AdminUsername)
+	} else if initialized, err := authSvc.IsInitialized(context.Background()); err != nil {
+		logger.Error("check initialization failed", "error", err)
+		return err
+	} else if !initialized {
+		logger.Info("no administrator yet; create the first admin account through the web setup page")
 	}
 	logger.Info("JWT auth enabled", "issuer", cfg.Auth.JWTIssuer, "expires_in", cfg.Auth.ExpiresInSeconds())
 	if secretGenerated {

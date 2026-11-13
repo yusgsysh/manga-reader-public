@@ -86,6 +86,27 @@ export async function login(
   }
 }
 
+/**
+ * Creates the first administrator while the instance is still uninitialized.
+ * On success the backend also issues a session, so the caller is logged in.
+ */
+export async function register(
+  username: string,
+  password: string,
+): Promise<AuthIdentity> {
+  const result = await apiPostJson<LoginResponse>("/api/auth/register", {
+    username,
+    password,
+  });
+  setAccessToken(result.access_token);
+  try {
+    return await fetchCurrentUser();
+  } catch (error) {
+    setAccessToken(null);
+    throw error;
+  }
+}
+
 export async function logout(): Promise<void> {
   try {
     await apiPostJson("/api/auth/logout");

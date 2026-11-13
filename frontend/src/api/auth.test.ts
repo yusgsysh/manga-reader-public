@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   fetchAuthSession,
   login,
+  register,
   logout,
 } from "./auth";
 import {
@@ -126,6 +127,50 @@ describe("authenticated requests", () => {
     const bookshelf = calls.find((call) => call.url.endsWith("/api/bookshelf"));
     const headers = new Headers(bookshelf?.init?.headers);
     expect(headers.get("Authorization")).toBe("Bearer signed.jwt.token");
+  });
+
+  it("registers the first administrator and attaches the Bearer token", async () => {
+    const calls = mockFetch((url) => {
+      if (url.endsWith("/api/auth/register")) {
+        return json({
+          access_token: "signed.jwt.token",
+          token_type: "Bearer",
+          expires_in: 3600,
+        });
+      }
+      if (url.endsWith("/api/auth/me")) {
+        return json({
+          id: 1,
+          user_id: 1,
+          username: "admin",
+          role: "admin",
+        });
+      }
+      return json({ ok: true });
+    });
+
+    await expect(register("admin", "password123")).resolves.toEqual({
+      user: {
+        id: 1,
+        user_id: 1,
+        username: "admin",
+        role: "admin",
+      },
+    });
+
+    const registerCall = calls.find((call) =>
+      call.url.endsWith("/api/auth/register"),
+    );
+    expect(JSON.parse(String(registerCall?.init?.body))).toMatchObject({
+      username: "admin",
+      password: "password123",
+    });
+
+    await apiGet("/api/bookshelf");
+    const bookshelf = calls.find((call) => call.url.endsWith("/api/bookshelf"));
+    expect(new Headers(bookshelf?.init?.headers).get("Authorization")).toBe(
+      "Bearer signed.jwt.token",
+    );
   });
 
   it("clears the in-memory token on logout", async () => {

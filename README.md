@@ -81,7 +81,10 @@ backend/
    cp .env.example .env
    ```
 
-   只需设置管理员初始密码；`JWT_SECRET` 可留空（后端首次启动自动生成并存入数据库，重启后继续复用）：
+   管理员账户有两种初始化方式（任选其一）：
+
+   - **Web 端初始化（推荐）**：`ADMIN_PASSWORD` 留空，启动后打开页面会自动进入「创建管理员账户」页面，首次访问者填写用户名与密码即可完成初始化。
+   - **环境变量初始化**：设置 `ADMIN_USERNAME` + `ADMIN_PASSWORD`，后端在首次启动（users 表为空）时创建管理员。`JWT_SECRET` 可留空（后端首次启动自动生成并存入数据库，重启后继续复用）：
 
    ```env
    JWT_SECRET=<可选，openssl rand -hex 32>
@@ -145,13 +148,13 @@ JWT_SECRET=<可选，粘贴上一步输出>
 JWT_ISSUER=manga-reader
 JWT_EXPIRES_IN=1h
 ADMIN_USERNAME=admin
-ADMIN_PASSWORD=change-me-strong-password   # 仅首次启动、users 表为空时创建管理员
+ADMIN_PASSWORD=change-me-strong-password   # 可选；留空则通过 Web 端 /setup 页面初始化管理员
 MANGA_READER_AUTH_COOKIE_SECURE=auto
 ```
 
 > 密钥解析顺序：`JWT_SECRET` 环境变量 → 数据库 `app_setting`（键 `auth.jwt_secret`）→ 首次启动生成并写库。清空环境变量后回落到数据库中的密钥，不会重新生成。
 
-- **首个管理员**：首次启动用 `ADMIN_USERNAME` + `ADMIN_PASSWORD` 创建一个实例级管理员；密码以 Argon2id PHC 哈希写入数据库。之后启动**不会覆盖**已有密码，可清空 `ADMIN_PASSWORD`。
+- **首个管理员**：两种方式。① 首次启动时通过 Web 端「创建管理员账户」页面（`/setup`，`POST /api/auth/register`）创建，仅在 users 表为空时可用，创建后自动登录；② 设置 `ADMIN_USERNAME` + `ADMIN_PASSWORD`，后端在 users 表为空时创建。密码以 Argon2id PHC 哈希写入数据库，之后启动**不会覆盖**已有密码，可清空 `ADMIN_PASSWORD`。
 - **忘记管理员密码**：不要通过改 `.env` 的 `ADMIN_PASSWORD` 来重置。镜像内置 `reset-admin`（密码从 stdin 读取，不出现在进程列表）：
 
   ```bash
@@ -176,7 +179,7 @@ MANGA_READER_AUTH_COOKIE_SECURE=auto
 - **CSRF**：Cookie 仅用于同源请求；`csrfGuard` 会拒绝跨站 `Origin` / `Sec-Fetch-Site` 的写请求。反向代理必须透传 `Origin` / `Sec-Fetch-Site`，并保持应用与前端同源；HTTPS 终止在反代时还要设置 `X-Forwarded-Proto: https`，否则 `auto` 模式不会给 Cookie 加 `Secure`。
 - **登出**：`POST /api/auth/logout` 会递增 `users.token_version` 并清除 Cookie，所有已签发 Token 立即失效。
 - **Token 校验**：只接受 `Authorization: Bearer <JWT>`（或同源 Cookie），严格校验 HS256 签名、`iss`、`iat`、`exp`、`user_id` 与 `token_version`；缺失/无效/过期/签名错误统一返回 `401`。
-- **公开 API**：只有 `/api/auth/login`、`/api/auth/status` 和节点同步端点无需用户 JWT。搜索、画廊、图片代理（`<img>`/EventSource 会携带同源 HttpOnly Cookie）也需要登录，因为它们必须使用当前用户的 ExHentai Cookie。
+- **公开 API**：只有 `/api/auth/login`、`/api/auth/register`、`/api/auth/status` 和节点同步端点无需用户 JWT。搜索、画廊、图片代理（`<img>`/EventSource 会携带同源 HttpOnly Cookie）也需要登录，因为它们必须使用当前用户的 ExHentai Cookie。
 - **管理 API**：`/api/admin/users*`、`/api/admin/nodes*` 仅管理员可用；用户只能修改自己的数据。
 
 ### 节点同步与 API Key
@@ -282,8 +285,8 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `JWT_SECRET` | 否 | - | JWT 签名与用户 Cookie 加密密钥的派生来源；留空时后端首次启动自动生成随机密钥并存入数据库（`app_setting`），重启后复用。显式设置时至少 32 字节随机值（`openssl rand -hex 32`），且优先于数据库 |
 | `JWT_ISSUER` | 否 | `manga-reader` | JWT 的 `iss`，校验时必须一致 |
 | `JWT_EXPIRES_IN` | 否 | `1h` | Token 有效期（Go duration，范围 1m–720h） |
-| `ADMIN_USERNAME` | 否 | `admin` | 首次初始化（users 表为空）的管理员用户名 |
-| `ADMIN_PASSWORD` | 否 | - | 首次初始化管理员密码（至少 8 位）；仅在 users 表为空时使用，不覆盖已有密码 |
+| `ADMIN_USERNAME` | 否 | `admin` | 首次初始化（users 表为空）的管理员用户名（环境变量方式） |
+| `ADMIN_PASSWORD` | 否 | - | 首次初始化管理员密码（至少 8 位）；仅在 users 表为空时使用，不覆盖已有密码。留空则不启动期创建管理员，改为通过 Web 端 `/setup` 页面初始化 |
 | `MANGA_READER_AUTH_COOKIE_SECURE` | 否 | `auto` | 认证 Cookie 的 `Secure`：`auto`（TLS 或 `X-Forwarded-Proto=https` 时开启）/`true`/`false` |
 | `MANGA_READER_METRICS_ENABLED` | 否 | `true` | 启用 `/metrics`；未配置 Token 时仅回环可访问 |
 | `MANGA_READER_METRICS_TOKEN` | 否 | - | 独立 Metrics Token（至少 32 字符）；与 JWT/节点 API Key 不共用 |

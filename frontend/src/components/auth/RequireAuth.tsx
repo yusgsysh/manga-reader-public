@@ -9,7 +9,7 @@ import { ErrorState } from "../common/ErrorState";
  * /login with the original destination in location state.
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isLoading, error, refresh } = useAuth();
+  const { session, isAuthenticated, isLoading, error, refresh } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -29,6 +29,12 @@ export function RequireAuth({ children }: { children: ReactNode }) {
         />
       </div>
     );
+  }
+
+  // First-run: no account exists yet, so send the visitor to the admin setup
+  // page instead of the login form.
+  if (session && !session.initialized) {
+    return <Navigate to="/setup" replace />;
   }
 
   if (!isAuthenticated) {

@@ -28,7 +28,9 @@ function authValue(overrides: Partial<AuthContextValue> = {}): AuthContextValue 
     error: null,
     isLoggingIn: false,
     isLoggingOut: false,
+    isRegistering: false,
     login: vi.fn(),
+    register: vi.fn(),
     logout: vi.fn(),
     refresh: vi.fn(),
     ...overrides,
@@ -47,6 +49,10 @@ function LoginProbe() {
   );
 }
 
+function SetupProbe() {
+  return <span>setup-page</span>;
+}
+
 function renderGuard(value: AuthContextValue, initialPath: string) {
   return render(
     <AuthContext.Provider value={value}>
@@ -62,6 +68,7 @@ function renderGuard(value: AuthContextValue, initialPath: string) {
           />
           <Route path="/" element={<div>home-marker</div>} />
           <Route path="/login" element={<LoginProbe />} />
+          <Route path="/setup" element={<SetupProbe />} />
         </Routes>
       </MemoryRouter>
     </AuthContext.Provider>,
@@ -97,6 +104,15 @@ describe("RequireAuth", () => {
     screen.getByRole("button").click();
     expect(refresh).toHaveBeenCalledTimes(1);
   });
+
+  it("redirects to the setup page when the instance is uninitialized", () => {
+    renderGuard(
+      authValue({ session: { initialized: false, user: null } }),
+      "/private",
+    );
+    expect(screen.getByText("setup-page")).toBeTruthy();
+    expect(screen.queryByText("private-content")).toBeNull();
+  });
 });
 
 function renderLogin(
@@ -111,6 +127,7 @@ function renderLogin(
             <Route path="/login" element={<LoginPage />} />
             <Route path="/" element={<div>home-marker</div>} />
             <Route path="/bookshelf" element={<div>bookshelf-marker</div>} />
+            <Route path="/setup" element={<SetupProbe />} />
           </Routes>
         </MemoryRouter>
       </ThemeProvider>
@@ -200,5 +217,10 @@ describe("LoginPage", () => {
       }),
     );
     expect(screen.getByText("home-marker")).toBeTruthy();
+  });
+
+  it("redirects to the setup page when the instance is uninitialized", () => {
+    renderLogin(authValue({ session: { initialized: false, user: null } }));
+    expect(screen.getByText("setup-page")).toBeTruthy();
   });
 });

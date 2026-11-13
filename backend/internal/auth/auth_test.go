@@ -260,6 +260,108 @@ func TestLogoutRevokesOutstandingTokens(t *testing.T) {
 	}
 }
 
+func TestEnsureAdminSkipsWhenNoPasswordConfigured(t *testing.T) {
+	client := newTestClient(t)
+	cfg := testConfig(strings.Repeat("k", 32))
+	cfg.AdminPassword = ""
+	svc := New(client, cfg)
+
+	created, err := svc.EnsureAdmin(t.Context())
+	if err != nil {
+		t.Fatalf("EnsureAdmin: %v", err)
+	}
+	if created {
+		t.Fatal("EnsureAdmin created an administrator without ADMIN_PASSWORD")
+	}
+	count, err := client.User.Query().Count(t.Context())
+	if err != nil {
+		t.Fatalf("count users: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("users = %d, want 0 (instance left uninitialized)", count)
+	}
+}
+
+func TestRegisterCreatesFirstAdmin(t *testing.T) {
+	client := newTestClient(t)
+	svc := New(client, testConfig(strings.Repeat("k", 32)))
+	r := newTestRouter(svc)
+
+	w := doJSON(r, http.MethodGet, "/api/auth/status", "", "")
+	var status struct {
+		Initialized bool `json:"initialized"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &status); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	if status.Initialized {
+		t.Fatal("status = initialized, want uninitialized")
+	}
+
+	body, _ := json.Marshal(map[string]string{"username": "root", "password": "correct horse battery"})
+	w = doJSON(r, http.MethodPost, "/api/auth/register", string(body), "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("register = %d, want 200 (%s)", w.Code, w.Body.String())
+	}
+	var res struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil || res.AccessToken == "" {
+		t.Fatalf("register response missing access_token: %s", w.Body.String())
+	}
+
+	u, err := client.User.Query().Only(t.Context())
+	if err != nil {
+		t.Fatalf("query user: %v", err)
+	}
+	if u.Username != "root" || u.Role != config.RoleAdmin || u.Status != config.StatusActive {
+		t.Fatalf("unexpected admin: username=%q role=%q status=%q", u.Username, u.Role, u.Status)
+	}
+	if !VerifyPassword(u.PasswordHash, "correct horse battery") {
+		t.Fatal("registered password does not verify")
+	}
+
+	// The new admin's token authenticates immediately.
+	if got := doJSON(r, http.MethodGet, "/api/auth/me", "", res.AccessToken); got.Code != http.StatusOK {
+		t.Fatalf("/me with registration token = %d, want 200", got.Code)
+	}
+
+	// A second registration is rejected once initialized.
+	body2, _ := json.Marshal(map[string]string{"username": "other", "password": "another strong pass"})
+	if got := doJSON(r, http.MethodPost, "/api/auth/register", string(body2), ""); got.Code != http.StatusConflict {
+		t.Fatalf("second register = %d, want 409 (%s)", got.Code, got.Body.String())
+	}
+}
+
+func TestRegisterValidatesInput(t *testing.T) {
+	client := newTestClient(t)
+	svc := New(client, testConfig(strings.Repeat("k", 32)))
+	r := newTestRouter(svc)
+
+	for _, tc := range []struct {
+		name string
+		body map[string]string
+	}{
+		{"empty username", map[string]string{"username": "  ", "password": "correct horse battery"}},
+		{"short password", map[string]string{"username": "root", "password": "short"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			payload, _ := json.Marshal(tc.body)
+			if got := doJSON(r, http.MethodPost, "/api/auth/register", string(payload), ""); got.Code != http.StatusBadRequest {
+				t.Fatalf("register = %d, want 400 (%s)", got.Code, got.Body.String())
+			}
+		})
+	}
+
+	count, err := client.User.Query().Count(t.Context())
+	if err != nil {
+		t.Fatalf("count users: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("users = %d, want 0 after rejected registrations", count)
+	}
+}
+
 func TestEnsureAdminDoesNotOverwriteExistingPassword(t *testing.T) {
 	svc, client := newTestService(t)
 

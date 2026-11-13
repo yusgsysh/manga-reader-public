@@ -43,6 +43,9 @@ export const SettingsPage = lazy(() =>
 export const LoginPage = lazy(() =>
   import("../pages/LoginPage").then((m) => ({ default: m.LoginPage })),
 );
+export const SetupPage = lazy(() =>
+  import("../pages/SetupPage").then((m) => ({ default: m.SetupPage })),
+);
 
 function PageLoading() {
   return (

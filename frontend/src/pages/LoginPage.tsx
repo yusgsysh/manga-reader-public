@@ -39,7 +39,7 @@ function safeReturnPath(value: unknown): string {
 }
 
 export function LoginPage() {
-  const { isAuthenticated, isLoading, login, isLoggingIn } = useAuth();
+  const { session, isAuthenticated, isLoading, login, isLoggingIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const returnTo = safeReturnPath(
@@ -61,6 +61,7 @@ export function LoginPage() {
     );
   }
 
+  if (session && !session.initialized) return <Navigate to="/setup" replace />;
   if (isAuthenticated) return <Navigate to={returnTo} replace />;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {

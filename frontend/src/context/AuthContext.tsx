@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchAuthSession,
   login as loginRequest,
+  register as registerRequest,
   logout as logoutRequest,
   type AuthSession,
 } from "../api/auth";
@@ -36,6 +37,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username: string;
       password: string;
     }) => loginRequest(username, password),
+    onSuccess: (identity) => {
+      queryClient.setQueryData<AuthSession>(AUTH_QUERY_KEY, {
+        initialized: true,
+        user: identity.user,
+      });
+    },
+  });
+
+  const registerMutation = useMutation({
+    mutationFn: ({
+      username,
+      password,
+    }: {
+      username: string;
+      password: string;
+    }) => registerRequest(username, password),
     onSuccess: (identity) => {
       queryClient.setQueryData<AuthSession>(AUTH_QUERY_KEY, {
         initialized: true,
@@ -80,6 +97,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loginMutation],
   );
 
+  const register = useCallback(
+    async (username: string, password: string) => {
+      await registerMutation.mutateAsync({ username, password });
+    },
+    [registerMutation],
+  );
+
   const logout = useCallback(async () => {
     await logoutMutation.mutateAsync();
   }, [logoutMutation]);
@@ -98,7 +122,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       error: sessionQuery.error instanceof Error ? sessionQuery.error : null,
       isLoggingIn: loginMutation.isPending,
       isLoggingOut: logoutMutation.isPending,
+      isRegistering: registerMutation.isPending,
       login,
+      register,
       logout,
       refresh: sessionQuery.refetch,
     };
@@ -109,7 +135,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionQuery.refetch,
     loginMutation.isPending,
     logoutMutation.isPending,
+    registerMutation.isPending,
     login,
+    register,
     logout,
   ]);
 

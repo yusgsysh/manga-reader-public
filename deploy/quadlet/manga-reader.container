@@ -35,8 +35,10 @@ Environment=HTTPS_PROXY=socks5://127.0.0.1:1080
 Environment=EHENTAI_PORT=:8080
 Environment=MANGA_READER_DB_PATH=/app/data/manga-reader.db
 
-# JWT 登录认证（推荐；生产置于 HTTPS 之后）。设置 JWT_SECRET 即启用登录页，
-# 首次启动还需 ADMIN_PASSWORD 以创建管理员（之后不会覆盖数据库中的哈希）。
+# JWT 登录认证（推荐；生产置于 HTTPS 之后）。管理员账户有两种初始化方式：
+# 留空 ADMIN_PASSWORD 时，首次启动后由 Web 端「创建管理员账户」页面（/setup）完成初始化；
+# 或显式设置 ADMIN_USERNAME + ADMIN_PASSWORD，由后端在首次启动（users 表为空）创建。
+# 密码之后保存在数据库的 Argon2id 哈希中，不会覆盖已有密码。
 # 生成密钥：openssl rand -hex 32
 #Environment=JWT_SECRET=<paste output of: openssl rand -hex 32>
 #Environment=JWT_ISSUER=manga-reader
