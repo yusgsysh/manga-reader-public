@@ -11,7 +11,6 @@ import {
 import { ApiRequestError } from "../api/client";
 import { ErrorBanner } from "../components/common/ErrorBanner";
 import { Logo } from "../components/ui";
-import { ThemeSwitcher } from "../components/layout/ThemeSwitcher";
 import { useAuth } from "../context/auth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
@@ -85,10 +84,6 @@ export function LoginPage() {
 
   return (
     <div className="login-backdrop relative flex min-h-dvh flex-col bg-kumo-base text-kumo-default">
-      <div className="absolute right-4 top-4 z-10">
-        <ThemeSwitcher className="w-[7.5rem] border border-kumo-hairline/60 bg-kumo-elevated/70 shadow-sm backdrop-blur-md" />
-      </div>
-
       <main className="page-enter relative flex flex-1 items-center justify-center px-4 py-16">
         <div className="w-full max-w-[24rem]">
           <form

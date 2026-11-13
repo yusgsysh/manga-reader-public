@@ -4,7 +4,6 @@ import { AnimatePresence, m } from "motion/react";
 import { SignOut, X } from "@phosphor-icons/react";
 import { cn } from "@cloudflare/kumo";
 import { Logo } from "../ui";
-import { ThemeSwitcher } from "./ThemeSwitcher";
 import {
   PRIMARY_NAV,
   SECONDARY_NAV,
@@ -130,8 +129,8 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
               ))}
             </nav>
 
-            <div className="shrink-0 space-y-2 border-t border-kumo-hairline p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-              {authEnabled && (
+            {authEnabled && (
+              <div className="shrink-0 space-y-2 border-t border-kumo-hairline p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
                 <button
                   type="button"
                   onClick={() => {
@@ -144,9 +143,8 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
                   <SignOut className="size-5 shrink-0" />
                   退出登录
                 </button>
-              )}
-              <ThemeSwitcher className="w-full" />
-            </div>
+              </div>
+            )}
           </m.div>
         </div>
       )}

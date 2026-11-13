@@ -25,7 +25,8 @@ function getInitialMode(): ThemeMode {
   if (stored === "light" || stored === "dark" || stored === "system") {
     return stored;
   }
-  return "light";
+  // No explicit choice: follow the system preference (login page included).
+  return "system";
 }
 
 function getInitialAccent(): string | null {

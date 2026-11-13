@@ -4,7 +4,6 @@ import { List, MagnifyingGlass, SignOut } from "@phosphor-icons/react";
 import { cn } from "@cloudflare/kumo";
 import { IconButton, Logo } from "../ui";
 import { MobileDrawer } from "./MobileDrawer";
-import { ThemeSwitcher } from "./ThemeSwitcher";
 import {
   PRIMARY_NAV,
   SECONDARY_NAV,
@@ -120,8 +119,6 @@ export function Header() {
               <SignOut className="size-5" weight="bold" />
             </IconButton>
           )}
-
-          <ThemeSwitcher className="hidden w-[7.5rem] shrink-0 lg:flex" />
 
           <IconButton
             label="搜索"
