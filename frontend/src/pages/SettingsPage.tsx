@@ -38,6 +38,9 @@ import type { ThemeMode } from "../lib/theme";
 import { PageHeader, Section, useToast } from "../components/ui";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAuth } from "../context/auth";
+import { TagRulesSection } from "../components/settings/TagRulesSection";
+import { UserManagementSection } from "../components/settings/UserManagementSection";
+import { ApiManagementSection } from "../components/settings/ApiManagementSection";
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
   { mode: "light", label: "浅色", icon: Sun },
@@ -579,7 +582,7 @@ function SyncSection() {
                     type="password"
                     autoComplete="off"
                     placeholder={
-                      tokenStored ? "留空保持现有令牌" : "在「节点管理」创建的 API Key"
+                      tokenStored ? "留空保持现有令牌" : "在下方「API Key」创建的密钥"
                     }
                     aria-label="节点 API Key"
                     value={token}
@@ -606,7 +609,7 @@ function SyncSection() {
                   保存
                 </Button>
                 <p className="text-xs text-kumo-subtle">
-                  双向同步阅读进度与书架；API Key 在「节点管理」创建。
+                  双向同步阅读进度与书架；密钥在下方「API Key」创建。
                 </p>
               </div>
             </>
@@ -660,11 +663,14 @@ export function SettingsPage() {
         title="设置"
       />
       <div className="space-y-8">
-        <CookieSection />
         <AppearanceSection />
+        <CookieSection />
+        <TagRulesSection />
         <TagDatabaseSection />
         {canManageGlobal && <SyncSection />}
         {canManageGlobal && <DevToolsSection />}
+        {isAdmin && <UserManagementSection />}
+        {isAdmin && <ApiManagementSection />}
       </div>
     </div>
   );

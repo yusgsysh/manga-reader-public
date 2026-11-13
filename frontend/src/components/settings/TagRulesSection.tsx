@@ -1,22 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Dialog, Input, cn } from "@cloudflare/kumo";
 import { CircleNotch, X } from "@phosphor-icons/react";
-import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import {
   useTagPreferences,
   useSaveTagPreferences,
   useSyncTagPreferences,
   TAG_ACTION_CHIP_CLASS,
   type TagAction,
-} from "../hooks/useTagPreferences";
+} from "../../hooks/useTagPreferences";
 import type {
   SyncTagSettingsOptions,
   TagSyncConflict,
   TagSyncResult,
   TagSyncSide,
-} from "../api/tagSettings";
-import { useTagTranslation } from "../hooks/useTagTranslation";
-import { PageHeader, Section, useToast } from "../components/ui";
+} from "../../api/tagSettings";
+import { useTagTranslation } from "../../hooks/useTagTranslation";
+import { Section, useToast } from "../ui";
 
 type TagSuggestion = { namespace: string; tag: string; translation: string };
 
@@ -294,8 +293,7 @@ function ConflictSide({ label, side }: { label: string; side: TagSyncSide }) {
   );
 }
 
-export function TagSettingsPage() {
-  useDocumentTitle("标签设置");
+export function TagRulesSection() {
   const toast = useToast();
   const { preferences, isLoading, isError } = useTagPreferences();
   const saveMutation = useSaveTagPreferences();
@@ -424,7 +422,7 @@ export function TagSettingsPage() {
     });
   };
 
-  // Full sync on page open: pull source changes, push local ones, report conflicts.
+  // Full sync on mount: pull source changes, push local ones, report conflicts.
   useEffect(() => {
     if (!seeded || isError || syncStartedRef.current) return;
     syncStartedRef.current = true;
@@ -502,10 +500,21 @@ export function TagSettingsPage() {
   };
 
   return (
-    <div className="max-w-3xl">
-      <PageHeader
-        title="标签设置"
-        actions={
+    <>
+      <Section
+        title={
+          <span className="inline-flex items-center gap-2">
+            标签规则
+            {syncMutation.isPending && (
+              <span className="inline-flex items-center gap-1 text-xs font-normal text-kumo-subtle">
+                <CircleNotch className="size-3 animate-spin" />
+                正在同步源站…
+              </span>
+            )}
+          </span>
+        }
+        description="喜欢/不喜欢互斥；点已勾选的框可删除该规则。"
+        action={
           <>
             {dirty && (
               <span className="text-xs text-kumo-subtle">有未保存的修改</span>
@@ -518,32 +527,17 @@ export function TagSettingsPage() {
             </Button>
           </>
         }
-      />
-
-      {isLoading ? (
-        <div className="flex items-center gap-2 text-kumo-subtle">
-          <CircleNotch className="size-4 animate-spin" />
-          正在读取标签设置…
-        </div>
-      ) : isError ? (
-        <p className="text-sm text-kumo-subtle">
-          无法读取标签设置，请稍后重试。
-        </p>
-      ) : (
-        <Section
-          title={
-            <span className="inline-flex items-center gap-2">
-              标签规则
-              {syncMutation.isPending && (
-                <span className="inline-flex items-center gap-1 text-xs font-normal text-kumo-subtle">
-                  <CircleNotch className="size-3 animate-spin" />
-                  正在同步源站…
-                </span>
-              )}
-            </span>
-          }
-          description="喜欢/不喜欢互斥；点已勾选的框可删除该规则。"
-        >
+      >
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-sm text-kumo-subtle">
+            <CircleNotch className="size-4 animate-spin" />
+            正在读取标签设置…
+          </div>
+        ) : isError ? (
+          <p className="text-sm text-kumo-subtle">
+            无法读取标签设置，请稍后重试。
+          </p>
+        ) : (
           <div className="space-y-3">
             <TagPicker
               placeholder="搜索并添加标签（默认：喜欢 +10）"
@@ -568,8 +562,8 @@ export function TagSettingsPage() {
               </div>
             )}
           </div>
-        </Section>
-      )}
+        )}
+      </Section>
 
       <Dialog.Root
         open={conflicts !== null}
@@ -662,6 +656,6 @@ export function TagSettingsPage() {
           </div>
         </Dialog>
       </Dialog.Root>
-    </div>
+    </>
   );
 }

@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { createBrowserRouter } from "react-router";
 import { AppLayout } from "../components/layout/AppLayout";
 import { RequireAuth } from "../components/auth/RequireAuth";
-import { RequireRole } from "../components/auth/RequireRole";
 import {
   BookshelfPage,
   DownloadManagerPage,
@@ -10,8 +9,6 @@ import {
   HomePage,
   LazyPage,
   LoginPage,
-  UserAdminPage,
-  NodeAdminPage,
   PopularPage,
   ReaderLoading,
   ReaderRoute,
@@ -19,7 +16,6 @@ import {
   SearchPage,
   SettingsPage,
   SubscriptionsPage,
-  TagSettingsPage,
 } from "./pages";
 
 export const router = createBrowserRouter([
@@ -100,34 +96,6 @@ export const router = createBrowserRouter([
         element: (
           <LazyPage>
             <SettingsPage />
-          </LazyPage>
-        ),
-      },
-      {
-        path: "admin/users",
-        element: (
-          <RequireRole role="admin">
-            <LazyPage>
-              <UserAdminPage />
-            </LazyPage>
-          </RequireRole>
-        ),
-      },
-      {
-        path: "admin/nodes",
-        element: (
-          <RequireRole role="admin">
-            <LazyPage>
-              <NodeAdminPage />
-            </LazyPage>
-          </RequireRole>
-        ),
-      },
-      {
-        path: "tag-settings",
-        element: (
-          <LazyPage>
-            <TagSettingsPage />
           </LazyPage>
         ),
       },

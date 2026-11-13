@@ -6,7 +6,6 @@ import { cn } from "@cloudflare/kumo";
 import { Logo } from "../ui";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import {
-  ADMIN_NAV,
   PRIMARY_NAV,
   SECONDARY_NAV,
   isNavActive,
@@ -54,11 +53,9 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
   const { lastListRoute } = useNavigationContext();
   const {
     enabled: authEnabled,
-    isAdmin,
     logout,
     isLoggingOut,
   } = useAuth();
-  const adminNav = isAdmin ? ADMIN_NAV : [];
 
   useEffect(() => {
     if (!open) return;
@@ -124,18 +121,6 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
               <div className="my-3 border-t border-kumo-hairline" />
 
               {SECONDARY_NAV.map((item) => (
-                <DrawerLink
-                  key={item.to}
-                  item={item}
-                  active={isNavActive(location.pathname, item.to, lastListRoute)}
-                  onNavigate={onClose}
-                />
-              ))}
-
-              {adminNav.length > 0 && (
-                <div className="my-3 border-t border-kumo-hairline" />
-              )}
-              {adminNav.map((item) => (
                 <DrawerLink
                   key={item.to}
                   item={item}

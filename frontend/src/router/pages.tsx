@@ -40,23 +40,8 @@ const ReaderPage = lazy(() =>
 export const SettingsPage = lazy(() =>
   import("../pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
-export const TagSettingsPage = lazy(() =>
-  import("../pages/TagSettingsPage").then((m) => ({
-    default: m.TagSettingsPage,
-  })),
-);
 export const LoginPage = lazy(() =>
   import("../pages/LoginPage").then((m) => ({ default: m.LoginPage })),
-);
-export const UserAdminPage = lazy(() =>
-  import("../pages/UserAdminPage").then((m) => ({
-    default: m.UserAdminPage,
-  })),
-);
-export const NodeAdminPage = lazy(() =>
-  import("../pages/NodeAdminPage").then((m) => ({
-    default: m.NodeAdminPage,
-  })),
 );
 
 function PageLoading() {

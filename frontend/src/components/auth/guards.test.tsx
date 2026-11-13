@@ -15,7 +15,6 @@ import {
 } from "../../context/auth";
 import { ApiRequestError } from "../../api/client";
 import { RequireAuth } from "./RequireAuth";
-import { RequireRole } from "./RequireRole";
 import { LoginPage } from "../../pages/LoginPage";
 
 function authValue(overrides: Partial<AuthContextValue> = {}): AuthContextValue {
@@ -62,14 +61,6 @@ function renderGuard(value: AuthContextValue, initialPath: string) {
               </RequireAuth>
             }
           />
-          <Route
-            path="/admin"
-            element={
-              <RequireRole role="admin">
-                <div>admin-content</div>
-              </RequireRole>
-            }
-          />
           <Route path="/" element={<div>home-marker</div>} />
           <Route path="/login" element={<LoginProbe />} />
         </Routes>
@@ -111,19 +102,6 @@ describe("RequireAuth", () => {
     expect(screen.getByText(/无法连接服务器/)).toBeTruthy();
     screen.getByRole("button").click();
     expect(refresh).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("RequireRole", () => {
-  it("allows administrators into admin routes", () => {
-    renderGuard(authValue({ isAdmin: true, role: "admin" }), "/admin");
-    expect(screen.getByText("admin-content")).toBeTruthy();
-  });
-
-  it("keeps ordinary users out of admin routes", () => {
-    renderGuard(authValue({ role: "user" }), "/admin");
-    expect(screen.getByText("home-marker")).toBeTruthy();
-    expect(screen.queryByText("admin-content")).toBeNull();
   });
 });
 

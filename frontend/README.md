@@ -2,13 +2,13 @@
 
 ExHentai Web 漫画客户端的前端。
 
-多用户、自托管、Docker 部署。页面：登录 / 首页 / 订阅 / 热门 / 搜索 / 书架 / 最近阅读 / 下载管理 / 设置 / Gallery 详情 / 阅读器 / 用户管理 / 节点与 API Key 管理。
+多用户、自托管、Docker 部署。页面：登录 / 首页 / 订阅 / 热门 / 搜索 / 书架 / 最近阅读 / 下载管理 / 设置 / Gallery 详情 / 阅读器。
 
 ## 登录与认证
 
 后端始终启用多用户 JWT。未登录访问受保护页面时会跳转至 `/login`；登录表单只需要用户名和密码。登录成功后 JWT 由后端写入 `HttpOnly; SameSite=Lax` Cookie（前端只保留内存副本用于同标签页的 `Authorization` 头），刷新页面通过 `/api/auth/me` 恢复用户和角色。任何 API 返回 `401` 都会统一清理认证状态并跳回登录页。
 
-管理员可从导航进入 `/admin/users` 管理账号、`/admin/nodes` 管理同步节点与一次性 API Key。普通用户不会看到这些入口，后端也会独立校验角色；每个用户的 ExHentai Cookie 与个人设置在「设置」页独立维护。
+「设置」页集中了个人设置（外观、ExHentai Cookie、标签规则、标签翻译数据库、数据同步）与管理员功能（用户管理、API Key）；管理员登录后才会看到「用户管理」与「API Key」两个区块，后端也会独立校验角色。每个用户的 ExHentai Cookie 与个人设置在「设置」页独立维护。
 
 ## 技术栈
 
@@ -313,8 +313,7 @@ Gallery 详情页也提供页面缩略图网格（`PageThumbnailGrid`，每页 2
 | `/bookshelf` | 书架 |
 | `/recently-read` | 最近阅读 |
 | `/downloads` | 下载管理 |
-| `/tag-settings` | 标签设置 |
-| `/settings` | 设置 |
+| `/settings` | 设置（含标签规则、用户管理、API Key） |
 | `/gallery/:id/:token` | Gallery Detail |
 | `/reader/:id/:token` | Reader |
 

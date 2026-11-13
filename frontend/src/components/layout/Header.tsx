@@ -6,7 +6,6 @@ import { IconButton, Logo } from "../ui";
 import { MobileDrawer } from "./MobileDrawer";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import {
-  ADMIN_NAV,
   PRIMARY_NAV,
   SECONDARY_NAV,
   isNavActive,
@@ -56,11 +55,9 @@ export function Header() {
   const { lastListRoute } = useNavigationContext();
   const {
     enabled: authEnabled,
-    isAdmin,
     logout,
     isLoggingOut,
   } = useAuth();
-  const adminNav = isAdmin ? ADMIN_NAV : [];
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const isActive = (to: string) =>
@@ -105,14 +102,6 @@ export function Header() {
             className="hidden items-center gap-1 lg:flex"
           >
             {SECONDARY_NAV.map((item) => (
-              <TopNavLink
-                key={item.to}
-                item={item}
-                active={isActive(item.to)}
-                iconOnly
-              />
-            ))}
-            {adminNav.map((item) => (
               <TopNavLink
                 key={item.to}
                 item={item}

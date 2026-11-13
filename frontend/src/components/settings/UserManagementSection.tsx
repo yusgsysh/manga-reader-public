@@ -10,11 +10,10 @@ import {
   updateUser,
   type AdminUser,
   type UserRole,
-} from "../api/admin";
-import { ErrorState } from "../components/common/ErrorState";
-import { PageHeader, Section, useToast } from "../components/ui";
-import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { useAuth } from "../context/auth";
+} from "../../api/admin";
+import { ErrorState } from "../common/ErrorState";
+import { Section, useToast } from "../ui";
+import { useAuth } from "../../context/auth";
 
 const QUERY_KEY = ["admin", "users"] as const;
 
@@ -163,8 +162,7 @@ function UserRow({ user }: { user: AdminUser }) {
   );
 }
 
-export function UserAdminPage() {
-  useDocumentTitle("用户管理");
+export function UserManagementSection() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const usersQuery = useQuery({
@@ -195,14 +193,13 @@ export function UserAdminPage() {
     username.trim() !== "" && password.length >= 8 && !create.isPending;
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="用户管理" />
-      <p className="text-sm text-kumo-subtle">
-        每个账号拥有独立的 ExHentai Cookie、个人设置、书架、阅读记录和下载任务；数据不会跨账号共享。
-      </p>
-
-      <Section title="创建用户">
+    <Section
+      title="用户管理"
+      description="每个账号拥有独立的 ExHentai Cookie、个人设置、书架、阅读记录和下载任务；数据不会跨账号共享。"
+    >
+      <div className="space-y-4">
         <div className="card-surface space-y-3 p-4">
+          <h3 className="text-xs font-medium text-kumo-subtle">创建用户</h3>
           <div className="grid gap-3 sm:grid-cols-3">
             <Input
               aria-label="用户名"
@@ -236,26 +233,25 @@ export function UserAdminPage() {
             创建用户
           </Button>
         </div>
-      </Section>
 
-      <Section title="用户列表">
-        {usersQuery.isLoading ? (
-          <div className="flex justify-center py-10">
-            <Loader size={24} />
-          </div>
-        ) : usersQuery.isError ? (
-          <ErrorState
-            message="加载用户列表失败"
-            onRetry={() => void usersQuery.refetch()}
-          />
-        ) : (
-          <div className="space-y-3">
-            {usersQuery.data?.users.map((user) => (
+        <div className="space-y-3">
+          <h3 className="text-xs font-medium text-kumo-subtle">用户列表</h3>
+          {usersQuery.isLoading ? (
+            <div className="flex justify-center py-10">
+              <Loader size={24} />
+            </div>
+          ) : usersQuery.isError ? (
+            <ErrorState
+              message="加载用户列表失败"
+              onRetry={() => void usersQuery.refetch()}
+            />
+          ) : (
+            usersQuery.data?.users.map((user) => (
               <UserRow key={user.id} user={user} />
-            ))}
-          </div>
-        )}
-      </Section>
-    </div>
+            ))
+          )}
+        </div>
+      </div>
+    </Section>
   );
 }

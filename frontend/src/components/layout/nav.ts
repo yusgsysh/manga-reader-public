@@ -8,9 +8,6 @@ import {
   Gear,
   House,
   MagnifyingGlass,
-  Tag,
-  HardDrives,
-  UsersThree,
 } from "@phosphor-icons/react";
 
 export interface NavItem {
@@ -30,13 +27,7 @@ export const PRIMARY_NAV: NavItem[] = [
 export const SECONDARY_NAV: NavItem[] = [
   { to: "/recently-read", label: "阅读历史", icon: ClockCounterClockwise },
   { to: "/downloads", label: "下载管理", icon: DownloadSimple },
-  { to: "/tag-settings", label: "标签设置", icon: Tag },
   { to: "/settings", label: "设置", icon: Gear },
-];
-
-export const ADMIN_NAV: NavItem[] = [
-  { to: "/admin/users", label: "用户管理", icon: UsersThree },
-  { to: "/admin/nodes", label: "节点管理", icon: HardDrives },
 ];
 
 export function isNavActive(pathname: string, to: string, lastListRoute?: string): boolean {

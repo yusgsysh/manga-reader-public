@@ -21,11 +21,10 @@ import {
   type NodeAPIKey,
   type NodeScope,
   type SyncNode,
-} from "../api/nodes";
-import { ErrorState } from "../components/common/ErrorState";
-import { PageHeader, Section, useToast } from "../components/ui";
-import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { formatDateTime } from "../lib/time";
+} from "../../api/nodes";
+import { ErrorState } from "../common/ErrorState";
+import { Section, useToast } from "../ui";
+import { formatDateTime } from "../../lib/time";
 
 const NODES_KEY = ["admin", "nodes"] as const;
 
@@ -330,8 +329,7 @@ function NodeRow({ node }: { node: SyncNode }) {
   );
 }
 
-export function NodeAdminPage() {
-  useDocumentTitle("节点管理");
+export function ApiManagementSection() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const nodesQuery = useQuery({
@@ -352,17 +350,13 @@ export function NodeAdminPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="节点管理" />
-      <div>
-        <h1 className="text-lg font-semibold tracking-tight">同步节点与 API Key</h1>
-        <p className="mt-1 text-sm text-kumo-subtle">
-          节点 API Key 只用于 <code>/api/sync/*</code>，与用户 JWT 完全独立。
-        </p>
-      </div>
-
-      <Section title="创建节点" description="节点是受信任的同步对端；同步数据保留各自的 user_id，不会合并不同用户的数据。">
+    <Section
+      title="API Key"
+      description="管理同步节点的 API Key（每个节点可有多把 Key）。节点 API Key 只用于 /api/sync/*，与用户 JWT 完全独立。"
+    >
+      <div className="space-y-4">
         <div className="card-surface space-y-3 p-4">
+          <h3 className="text-xs font-medium text-kumo-subtle">创建节点</h3>
           <div className="grid gap-3 sm:grid-cols-2">
             <Input
               aria-label="节点名称"
@@ -384,26 +378,25 @@ export function NodeAdminPage() {
             创建节点
           </Button>
         </div>
-      </Section>
 
-      <Section title="节点列表">
-        {nodesQuery.isLoading ? (
-          <div className="flex justify-center py-10">
-            <Loader size={24} />
-          </div>
-        ) : nodesQuery.isError ? (
-          <ErrorState
-            message="加载节点列表失败"
-            onRetry={() => void nodesQuery.refetch()}
-          />
-        ) : (
-          <div className="space-y-3">
-            {nodesQuery.data?.nodes.map((node) => (
+        <div className="space-y-3">
+          <h3 className="text-xs font-medium text-kumo-subtle">节点列表</h3>
+          {nodesQuery.isLoading ? (
+            <div className="flex justify-center py-10">
+              <Loader size={24} />
+            </div>
+          ) : nodesQuery.isError ? (
+            <ErrorState
+              message="加载节点列表失败"
+              onRetry={() => void nodesQuery.refetch()}
+            />
+          ) : (
+            nodesQuery.data?.nodes.map((node) => (
               <NodeRow key={node.id} node={node} />
-            ))}
-          </div>
-        )}
-      </Section>
-    </div>
+            ))
+          )}
+        </div>
+      </div>
+    </Section>
   );
 }
