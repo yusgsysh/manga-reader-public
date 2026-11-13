@@ -261,7 +261,10 @@ func run() error {
 		handlerCfg.Cache = minioCache
 		logger.Info("minio cache enabled", "bucket", cfg.MinIO.Bucket)
 	} else {
-		logger.Warn("minio config not set, cached-image/cached-thumbnail endpoints will return 503")
+		// The /api/image-cache/* handlers delegate to their live /api/image/*
+		// counterparts when Cache is nil (see handler/image.go), so a MinIO-less
+		// deployment still serves images; only the object-store caching is off.
+		logger.Warn("minio config not set, image-cache endpoints will fall back to live upstream proxies")
 	}
 
 	srv := handler.New(handlerCfg)
