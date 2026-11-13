@@ -86,106 +86,112 @@ export function LoginPage() {
   return (
     <div className="login-backdrop relative flex min-h-dvh flex-col bg-kumo-base text-kumo-default">
       <div className="absolute right-4 top-4 z-10">
-        <ThemeSwitcher className="w-[7.5rem] shadow-sm" />
+        <ThemeSwitcher className="w-[7.5rem] border border-kumo-hairline/60 bg-kumo-elevated/70 shadow-sm backdrop-blur-md" />
       </div>
 
       <main className="page-enter relative flex flex-1 items-center justify-center px-4 py-16">
-        <div className="w-full max-w-sm">
-          <div className="mb-8 flex flex-col items-center text-center">
-            <div className="login-mark">
-              <Logo className="[&_svg]:size-8" />
-            </div>
-            <h1 className="mt-5 text-2xl font-semibold tracking-tight">
-              Manga Reader
-            </h1>
-            <p className="mt-1.5 text-sm text-kumo-subtle">
-              登录以访问你的书架与阅读进度
-            </p>
-          </div>
-
+        <div className="w-full max-w-[24rem]">
           <form
             noValidate
             onSubmit={handleSubmit}
-            className="card-surface login-card space-y-5 p-6 sm:p-7"
+            className="login-card px-6 py-8 sm:px-8 sm:py-9"
           >
-            <div className="space-y-1.5">
-              <label htmlFor="username" className="text-sm font-medium">
-                用户名
-              </label>
-              <div className="relative">
-                <User
-                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-kumo-subtle"
-                  aria-hidden
-                />
-                <Input
-                  id="username"
-                  name="username"
-                  autoComplete="username"
-                  spellCheck={false}
-                  size="lg"
-                  aria-label="用户名"
-                  className="pl-9"
-                  placeholder="请输入用户名"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  disabled={isLoggingIn}
-                />
+            <div className="flex flex-col items-center text-center">
+              <div className="login-mark">
+                <Logo className="[&_svg]:size-8" />
               </div>
+              <h1 className="mt-4 text-[1.375rem] font-semibold tracking-tight">
+                Manga Reader
+              </h1>
             </div>
 
-            <div className="space-y-1.5">
-              <label htmlFor="password" className="text-sm font-medium">
-                密码
-              </label>
-              <div className="relative">
-                <LockSimple
-                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-kumo-subtle"
-                  aria-hidden
-                />
-                <Input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  size="lg"
-                  aria-label="密码"
-                  className="px-9"
-                  placeholder="请输入密码"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  disabled={isLoggingIn}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((visible) => !visible)}
-                  aria-label={showPassword ? "隐藏密码" : "显示密码"}
-                  title={showPassword ? "隐藏密码" : "显示密码"}
-                  className="absolute right-1.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-kumo-subtle transition-colors hover:bg-kumo-tint hover:text-kumo-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)]"
+            <div className="mt-8 space-y-4">
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="username"
+                  className="block text-[0.8125rem] font-medium text-kumo-default"
                 >
-                  {showPassword ? (
-                    <EyeSlash className="size-4" />
-                  ) : (
-                    <Eye className="size-4" />
-                  )}
-                </button>
+                  用户名
+                </label>
+                <div className="relative">
+                  <User
+                    className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-kumo-subtle"
+                    aria-hidden
+                  />
+                  <Input
+                    id="username"
+                    name="username"
+                    autoComplete="username"
+                    spellCheck={false}
+                    size="lg"
+                    aria-label="用户名"
+                    className="h-11 w-full rounded-xl pl-10 pr-3.5 text-[0.9375rem] disabled:text-kumo-default"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    disabled={isLoggingIn}
+                  />
+                </div>
               </div>
-            </div>
 
-            {error && (
-              <p
-                role="alert"
-                className="flex items-start gap-2 rounded-lg border border-kumo-danger/30 bg-kumo-danger/10 px-3 py-2 text-sm text-kumo-danger"
-              >
-                <WarningCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
-                <span>{error}</span>
-              </p>
-            )}
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="password"
+                  className="block text-[0.8125rem] font-medium text-kumo-default"
+                >
+                  密码
+                </label>
+                <div className="relative">
+                  <LockSimple
+                    className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-kumo-subtle"
+                    aria-hidden
+                  />
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    size="lg"
+                    aria-label="密码"
+                    className="h-11 w-full rounded-xl pl-10 pr-11 text-[0.9375rem] disabled:text-kumo-default"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    disabled={isLoggingIn}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                    title={showPassword ? "隐藏密码" : "显示密码"}
+                    className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-kumo-subtle transition-colors hover:bg-kumo-tint hover:text-kumo-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)]"
+                  >
+                    {showPassword ? (
+                      <EyeSlash className="size-4" />
+                    ) : (
+                      <Eye className="size-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <p
+                  role="alert"
+                  className="login-error flex items-start gap-2 rounded-xl border border-kumo-danger/25 bg-kumo-danger/10 px-3.5 py-2.5 text-[0.8125rem] leading-5 text-kumo-danger"
+                >
+                  <WarningCircle
+                    className="mt-px size-4 shrink-0"
+                    aria-hidden
+                  />
+                  <span>{error}</span>
+                </p>
+              )}
+            </div>
 
             <Button
               type="submit"
               variant="primary"
               size="lg"
-              className="w-full"
+              className="mt-6 h-11 w-full justify-center rounded-xl text-[0.9375rem] font-medium shadow-[0_10px_24px_-12px_var(--app-ring)] disabled:opacity-70"
               disabled={isLoggingIn}
               aria-busy={isLoggingIn}
             >
@@ -199,10 +205,6 @@ export function LoginPage() {
               )}
             </Button>
           </form>
-
-          <p className="mt-6 text-center text-xs text-kumo-subtle/90">
-            JWT 身份认证 · Token 保存在 HttpOnly Cookie 中
-          </p>
         </div>
       </main>
     </div>

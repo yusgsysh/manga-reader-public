@@ -112,35 +112,159 @@ body {
 }
 
 /*
- * Login page backdrop: two soft accent glows baked into a single background
- * image (no extra DOM layers or filters), so it costs one paint and adapts to
- * both themes through --app-accent.
+ * Login page backdrop: a faint accent grid plus two soft accent glows, all
+ * baked into one background (no extra DOM layers or filters), so it costs a
+ * single paint and adapts to both themes through --app-accent.
  */
 .login-backdrop {
+  background-color: color-mix(
+    in oklab,
+    var(--color-kumo-base) 96%,
+    var(--app-accent)
+  );
   background-image:
-    radial-gradient(
-      42rem 26rem at 14% -8%,
-      color-mix(in oklab, var(--app-accent) 16%, transparent),
-      transparent 68%
+    linear-gradient(
+      to right,
+      color-mix(in oklab, var(--app-accent) 5.5%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--app-accent) 5.5%, transparent) 1px,
+      transparent 1px
     ),
     radial-gradient(
-      34rem 22rem at 86% 106%,
-      color-mix(in oklab, var(--app-accent) 12%, transparent),
-      transparent 70%
+      44rem 28rem at 8% -14%,
+      color-mix(in oklab, var(--app-accent) 20%, transparent),
+      transparent 64%
+    ),
+    radial-gradient(
+      38rem 26rem at 94% 114%,
+      color-mix(in oklab, var(--app-accent) 15%, transparent),
+      transparent 68%
     );
+  background-size:
+    2.75rem 2.75rem,
+    2.75rem 2.75rem,
+    100% 100%,
+    100% 100%;
+  background-position:
+    -1px -1px,
+    -1px -1px,
+    0 0,
+    0 0;
+}
+
+/* Fade the grid out towards the middle so the card sits on clean space. */
+.login-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    46rem 34rem at 50% 50%,
+    var(--color-kumo-base) 12%,
+    color-mix(in oklab, var(--color-kumo-base) 70%, transparent) 58%,
+    transparent 100%
+  );
+}
+
+[data-mode="dark"] .login-backdrop {
+  background-color: var(--color-kumo-base);
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in oklab, var(--app-accent) 5%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--app-accent) 5%, transparent) 1px,
+      transparent 1px
+    ),
+    radial-gradient(
+      44rem 28rem at 8% -14%,
+      color-mix(in oklab, var(--app-accent) 32%, transparent),
+      transparent 64%
+    ),
+    radial-gradient(
+      38rem 26rem at 94% 114%,
+      color-mix(in oklab, var(--app-accent) 24%, transparent),
+      transparent 68%
+    );
+  background-size:
+    2.75rem 2.75rem,
+    2.75rem 2.75rem,
+    100% 100%,
+    100% 100%;
+  background-position:
+    -1px -1px,
+    -1px -1px,
+    0 0,
+    0 0;
+}
+
+[data-mode="dark"] .login-backdrop::before {
+  background: radial-gradient(
+    44rem 32rem at 50% 50%,
+    var(--color-kumo-base) 14%,
+    color-mix(in oklab, var(--color-kumo-base) 62%, transparent) 54%,
+    transparent 92%
+  );
 }
 
 /* The login card floats above the glow with a soft, layered shadow. */
 .login-card {
+  position: relative;
+  border-radius: 1.5rem;
+  border: 1px solid var(--color-kumo-hairline);
+  background-color: var(--color-kumo-base);
   box-shadow:
-    0 1px 2px rgb(15 23 42 / 0.05),
-    0 12px 32px -12px rgb(15 23 42 / 0.18);
+    0 1px 1px rgb(15 23 42 / 0.04),
+    0 2px 6px -2px rgb(15 23 42 / 0.06),
+    0 24px 56px -28px rgb(15 23 42 / 0.28),
+    0 8px 20px -12px rgb(15 23 42 / 0.12);
+}
+
+/* Hairline highlight along the top edge, like a lit bevel. */
+.login-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  border-radius: 1.5rem 1.5rem 0 0;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgb(255 255 255 / 0.9),
+    transparent
+  );
 }
 
 [data-mode="dark"] .login-card {
+  background-color: color-mix(
+    in oklab,
+    var(--color-kumo-base) 92%,
+    var(--color-white)
+  );
+  border-color: color-mix(
+    in oklab,
+    var(--color-kumo-hairline) 60%,
+    transparent
+  );
   box-shadow:
     0 1px 2px rgb(0 0 0 / 0.45),
-    0 12px 32px -12px rgb(0 0 0 / 0.55);
+    0 28px 64px -32px rgb(0 0 0 / 0.8),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.05);
+}
+
+[data-mode="dark"] .login-card::before {
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgb(255 255 255 / 0.1),
+    transparent
+  );
 }
 
 /* App-icon style brand mark above the login title. */
@@ -150,12 +274,37 @@ body {
   justify-content: center;
   width: 3.5rem;
   height: 3.5rem;
-  border-radius: 1rem;
+  border-radius: 1.125rem;
   background-color: var(--color-kumo-elevated);
   border: 1px solid var(--color-kumo-hairline);
   box-shadow:
     0 1px 2px rgb(15 23 42 / 0.06),
-    0 10px 24px -10px color-mix(in oklab, var(--app-accent) 45%, transparent);
+    0 0 0 0.3125rem color-mix(in oklab, var(--app-accent) 6%, transparent),
+    0 12px 26px -14px color-mix(in oklab, var(--app-accent) 60%, transparent);
+}
+
+[data-mode="dark"] .login-mark {
+  background-color: var(--color-kumo-recessed);
+  border-color: color-mix(
+    in oklab,
+    var(--color-kumo-hairline) 80%,
+    transparent
+  );
+  box-shadow:
+    0 0 0 0.3125rem color-mix(in oklab, var(--app-accent) 8%, transparent),
+    0 12px 30px -12px color-mix(in oklab, var(--app-accent) 55%, transparent);
+}
+
+/* Error banner rises into place instead of snapping the layout. */
+@keyframes login-error-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.login-error {
+  animation: login-error-in 0.16s ease-out;
 }
 
 .gallery-grid {
