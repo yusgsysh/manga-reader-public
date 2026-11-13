@@ -659,7 +659,7 @@ type SectionShow = "always" | "global" | "admin";
 interface SectionDef {
   id: string;
   label: string;
-  group: "general" | "tags" | "sync" | "admin";
+  group: "general" | "tags" | "sync" | "debug" | "admin";
   show: SectionShow;
   element: ReactNode;
 }
@@ -703,7 +703,7 @@ const SECTION_DEFS: SectionDef[] = [
   {
     id: "dev-tools",
     label: "调试工具",
-    group: "sync",
+    group: "debug",
     show: "global",
     element: <DevToolsSection />,
   },
@@ -723,12 +723,13 @@ const SECTION_DEFS: SectionDef[] = [
   },
 ];
 
-const GROUP_ORDER = ["general", "tags", "sync", "admin"] as const;
+const GROUP_ORDER = ["general", "tags", "sync", "debug", "admin"] as const;
 
 const GROUP_LABELS: Record<(typeof GROUP_ORDER)[number], string> = {
   general: "通用",
   tags: "标签",
   sync: "同步",
+  debug: "调试",
   admin: "管理",
 };
 
