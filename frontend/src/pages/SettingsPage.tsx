@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowsClockwise,
   CircleNotch,
@@ -41,6 +41,7 @@ import { useAuth } from "../context/auth";
 import { TagRulesSection } from "../components/settings/TagRulesSection";
 import { UserManagementSection } from "../components/settings/UserManagementSection";
 import { ApiManagementSection } from "../components/settings/ApiManagementSection";
+import { SettingsSidebar } from "../components/settings/SettingsSidebar";
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
   { mode: "light", label: "浅色", icon: Sun },
@@ -653,24 +654,188 @@ function SyncSection() {
   );
 }
 
+type SectionShow = "always" | "global" | "admin";
+
+interface SectionDef {
+  id: string;
+  label: string;
+  group: "general" | "tags" | "sync" | "admin";
+  show: SectionShow;
+  element: ReactNode;
+}
+
+const SECTION_DEFS: SectionDef[] = [
+  {
+    id: "appearance",
+    label: "外观",
+    group: "general",
+    show: "always",
+    element: <AppearanceSection />,
+  },
+  {
+    id: "cookie",
+    label: "ExHentai 账号",
+    group: "general",
+    show: "always",
+    element: <CookieSection />,
+  },
+  {
+    id: "tag-rules",
+    label: "标签规则",
+    group: "tags",
+    show: "always",
+    element: <TagRulesSection />,
+  },
+  {
+    id: "tag-database",
+    label: "标签翻译数据库",
+    group: "tags",
+    show: "always",
+    element: <TagDatabaseSection />,
+  },
+  {
+    id: "sync",
+    label: "数据同步",
+    group: "sync",
+    show: "global",
+    element: <SyncSection />,
+  },
+  {
+    id: "dev-tools",
+    label: "调试工具",
+    group: "sync",
+    show: "global",
+    element: <DevToolsSection />,
+  },
+  {
+    id: "users",
+    label: "用户管理",
+    group: "admin",
+    show: "admin",
+    element: <UserManagementSection />,
+  },
+  {
+    id: "api-keys",
+    label: "API Key",
+    group: "admin",
+    show: "admin",
+    element: <ApiManagementSection />,
+  },
+];
+
+const GROUP_ORDER = ["general", "tags", "sync", "admin"] as const;
+
+const GROUP_LABELS: Record<(typeof GROUP_ORDER)[number], string> = {
+  general: "通用",
+  tags: "标签",
+  sync: "同步",
+  admin: "管理",
+};
+
 export function SettingsPage() {
   useDocumentTitle("设置");
   const { enabled: authEnabled, isAdmin } = useAuth();
   const canManageGlobal = !authEnabled || isAdmin;
+
+  const { sections, groups } = useMemo(() => {
+    const visible = SECTION_DEFS.filter(
+      (d) =>
+        d.show === "always" ||
+        (d.show === "global" && canManageGlobal) ||
+        (d.show === "admin" && isAdmin),
+    );
+    const groups = GROUP_ORDER.map((groupId) => ({
+      id: groupId,
+      label: GROUP_LABELS[groupId],
+      items: visible
+        .filter((d) => d.group === groupId)
+        .map((d) => ({ id: d.id, label: d.label })),
+    })).filter((group) => group.items.length > 0);
+    return { sections: visible, groups };
+  }, [canManageGlobal, isAdmin]);
+
+  const sectionIds = useMemo(
+    () => sections.map((d) => d.id),
+    [sections],
+  );
+
+  const [activeId, setActiveId] = useState<string>(sectionIds[0] ?? "");
+
+  // Highlight the section currently under the sticky header as the user
+  // scrolls, so the sidebar stays in sync with the visible content.
+  useEffect(() => {
+    const onScroll = () => {
+      const offset = 100;
+      let current = sectionIds[0] ?? "";
+      for (const id of sectionIds) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= offset) {
+          current = id;
+        }
+      }
+      const scrolledToBottom =
+        window.innerHeight + window.scrollY >=
+        document.documentElement.scrollHeight - 4;
+      if (scrolledToBottom && sectionIds.length > 0) {
+        current = sectionIds[sectionIds.length - 1];
+      }
+      setActiveId(current);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [sectionIds]);
+
+  const navigateTo = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
-    <div className="max-w-3xl">
-      <PageHeader
-        title="设置"
-      />
-      <div className="space-y-8">
-        <AppearanceSection />
-        <CookieSection />
-        <TagRulesSection />
-        <TagDatabaseSection />
-        {canManageGlobal && <SyncSection />}
-        {canManageGlobal && <DevToolsSection />}
-        {isAdmin && <UserManagementSection />}
-        {isAdmin && <ApiManagementSection />}
+    <div className="mx-auto max-w-6xl">
+      <PageHeader title="设置" />
+
+      {/* Mobile: grouped dropdown to jump between sections. */}
+      <div className="mb-4 lg:hidden">
+        <select
+          aria-label="跳转到设置区块"
+          value={activeId}
+          onChange={(event) => navigateTo(event.target.value)}
+          className="w-full rounded-lg border border-kumo-hairline bg-kumo-base px-3 py-2 text-sm text-kumo-default"
+        >
+          {groups.map((group) => (
+            <optgroup key={group.id} label={group.label}>
+              {group.items.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+
+      <div className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-10">
+        <aside className="hidden lg:block">
+          <div className="sticky top-20">
+            <SettingsSidebar
+              groups={groups}
+              activeId={activeId}
+              onNavigate={navigateTo}
+            />
+          </div>
+        </aside>
+
+        <div className="min-w-0 space-y-10">
+          {sections.map((def) => (
+            <div key={def.id} id={def.id} className="scroll-mt-24">
+              {def.element}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
