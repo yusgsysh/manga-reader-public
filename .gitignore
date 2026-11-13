@@ -2,6 +2,9 @@ backend/manga-reader
 # local `go build`/`go test -c` output
 backend/manga
 backend/app.test
+backend/fetchhtml
+backend/desktop-native
+backend/desktop-native.exe
 backend/data/*
 backend/EHentai-go/*
 backend/cmd/desktop/build/bin/manga-reader-desktop
@@ -11,11 +14,15 @@ frontend/wailsjs/runtime/runtime.d.ts
 frontend/wailsjs/runtime/runtime.js
 .task/*
 backend/desktop
-backend/cmd
+backend/cmd/*
+!backend/cmd/reset-admin
 manga-reader-desktop.apk
 build/android/gen/main_android.gen.go
 frontend/frontend
 build/android/overlay.json
+
+# Go build cache snapshots (never commit)
+.gocache/
 
 # Local environment files (cookies, passwords) — never commit
 .env
