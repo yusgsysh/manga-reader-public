@@ -65,7 +65,6 @@ type Config struct {
 	Cache       ImageCache
 	DevTools    bool
 	Sync        *synclib.Service
-	RequireAuth bool
 	UserCookies *usercookie.Service
 }
 

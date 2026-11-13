@@ -53,7 +53,6 @@ export function Header() {
   const location = useLocation();
   const { lastListRoute } = useNavigationContext();
   const {
-    enabled: authEnabled,
     logout,
     isLoggingOut,
   } = useAuth();
@@ -108,15 +107,13 @@ export function Header() {
               ))}
             </nav>
 
-            {authEnabled && (
-              <IconButton
-                label="退出登录"
-                onClick={() => void logout().catch(() => undefined)}
-                disabled={isLoggingOut}
-              >
-                <SignOut className="size-5" weight="bold" />
-              </IconButton>
-            )}
+            <IconButton
+              label="退出登录"
+              onClick={() => void logout().catch(() => undefined)}
+              disabled={isLoggingOut}
+            >
+              <SignOut className="size-5" weight="bold" />
+            </IconButton>
           </div>
 
           <IconButton

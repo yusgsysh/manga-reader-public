@@ -5,12 +5,11 @@ import { useAuth } from "../../context/auth";
 import { ErrorState } from "../common/ErrorState";
 
 /**
- * Route guard for all application pages. When JWT auth is disabled the app
- * keeps its legacy anonymous behaviour; otherwise an unauthenticated visitor
- * is sent to /login with the original destination in location state.
+ * Route guard for all application pages. An unauthenticated visitor is sent to
+ * /login with the original destination in location state.
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { enabled, isAuthenticated, isLoading, error, refresh } = useAuth();
+  const { isAuthenticated, isLoading, error, refresh } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -32,7 +31,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     );
   }
 
-  if (enabled && !isAuthenticated) {
+  if (!isAuthenticated) {
     return (
       <Navigate
         to="/login"

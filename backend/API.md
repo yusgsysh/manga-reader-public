@@ -107,7 +107,7 @@ Search / Homepage / Watched 支持上游 ExHentai 的 Jump/Seek 定位，通过�
 
 ## Authentication (JWT)
 
-Multi-user mode is always on: set `JWT_SECRET` (at least 32 random bytes). The API refuses to start without it. HTTP Basic Authentication is not supported anywhere.
+Multi-user mode is always on. `JWT_SECRET` is optional: when unset the API generates a 32-byte random secret on first boot and persists it in the database (`app_setting`, key `auth.jwt_secret`), reusing it on later restarts so sessions and at-rest encrypted cookies survive. Set it explicitly (at least 32 random bytes) for a fixed key — e.g. multiple instances sharing one database — which takes precedence over the stored value. HTTP Basic Authentication is not supported anywhere.
 
 ### Public vs protected
 
@@ -148,7 +148,7 @@ Failure `401` uses one message for unknown user and wrong password: `{"error":"i
 `GET /api/auth/status`
 
 ```json
-{ "enabled": true, "initialized": true }
+{ "initialized": true }
 ```
 
 ### 0.3 Current user

@@ -21,7 +21,7 @@
 - 严格数据隔离：书架、阅读进度、标签规则、Prefill 任务、同步 outbox 全部带 `user_id`，查询/更新/删除均附加当前用户谓词
 - 每用户独立 ExHentai Cookie：AES-256-GCM 加密存储、独立 Cookie Jar/HTTP Client、单独验证状态，绝不跨账号共享
 - 每用户个人设置：ExHentai 站点、搜索默认参数、标签过滤、显示/阅读器/预加载偏好集中保存在 `user_setting`
-- JWT 登录页（Argon2id 密码哈希、HttpOnly Cookie、服务端登出撤销），匿名模式已移除
+- JWT 登录页（Argon2id 密码哈希、HttpOnly Cookie、服务端登出撤销）
 - 节点同步使用数据库管理的独立 Node API Key（SHA-256 哈希、Scopes、轮换/撤销），与用户 JWT 完全分离；同步变更保留 `user_id`
 
 ## 目录结构
@@ -81,10 +81,10 @@ backend/
    cp .env.example .env
    ```
 
-   必须设置随机 `JWT_SECRET` 与管理员的初始密码：
+   只需设置管理员初始密码；`JWT_SECRET` 可留空（后端首次启动自动生成并存入数据库，重启后继续复用）：
 
    ```env
-   JWT_SECRET=<openssl rand -hex 32>
+   JWT_SECRET=<可选，openssl rand -hex 32>
    ADMIN_USERNAME=admin
    ADMIN_PASSWORD=change-me-strong-password
    ```
@@ -134,20 +134,22 @@ backend/
 
 ### JWT 登录认证与多用户
 
-多用户模式始终启用。设置随机 `JWT_SECRET`（至少 32 字节）：
+多用户模式始终启用。`JWT_SECRET` 可留空：后端在首次启动时自动生成一个 32 字节随机密钥并存入数据库（`app_setting` 表），之后重启复用同一密钥，会话与加密 Cookie 不受影响，无需手动设置。需要固定密钥（如多实例共享同一数据库）时显式设置随机值（至少 32 字节），环境变量优先于数据库：
 
 ```bash
 openssl rand -hex 32
 ```
 
 ```env
-JWT_SECRET=<粘贴上一步输出>
+JWT_SECRET=<可选，粘贴上一步输出>
 JWT_ISSUER=manga-reader
 JWT_EXPIRES_IN=1h
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change-me-strong-password   # 仅首次启动、users 表为空时创建管理员
 MANGA_READER_AUTH_COOKIE_SECURE=auto
 ```
+
+> 密钥解析顺序：`JWT_SECRET` 环境变量 → 数据库 `app_setting`（键 `auth.jwt_secret`）→ 首次启动生成并写库。清空环境变量后回落到数据库中的密钥，不会重新生成。
 
 - **首个管理员**：首次启动用 `ADMIN_USERNAME` + `ADMIN_PASSWORD` 创建一个实例级管理员；密码以 Argon2id PHC 哈希写入数据库。之后启动**不会覆盖**已有密码，可清空 `ADMIN_PASSWORD`。
 - **忘记管理员密码**：不要通过改 `.env` 的 `ADMIN_PASSWORD` 来重置。镜像内置 `reset-admin`（密码从 stdin 读取，不出现在进程列表）：
@@ -277,7 +279,7 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `MINIO_BUCKET` | 否 | - | MinIO Bucket |
 | `MINIO_USE_SSL` | 否 | `false` | 是否启用 SSL |
 | `MINIO_REGION` | 否 | - | MinIO Region |
-| `JWT_SECRET` | 是 | - | JWT 签名与用户 Cookie 加密密钥的派生来源；至少 32 字节随机值（`openssl rand -hex 32`）。为空时拒绝启动 |
+| `JWT_SECRET` | 否 | - | JWT 签名与用户 Cookie 加密密钥的派生来源；留空时后端首次启动自动生成随机密钥并存入数据库（`app_setting`），重启后复用。显式设置时至少 32 字节随机值（`openssl rand -hex 32`），且优先于数据库 |
 | `JWT_ISSUER` | 否 | `manga-reader` | JWT 的 `iss`，校验时必须一致 |
 | `JWT_EXPIRES_IN` | 否 | `1h` | Token 有效期（Go duration，范围 1m–720h） |
 | `ADMIN_USERNAME` | 否 | `admin` | 首次初始化（users 表为空）的管理员用户名 |

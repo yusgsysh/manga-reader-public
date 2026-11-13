@@ -48,7 +48,7 @@ describe("auth session", () => {
   it("restores a logged-in user from the HttpOnly cookie", async () => {
     mockFetch((url) => {
       if (url.endsWith("/api/auth/status")) {
-        return json({ enabled: true, initialized: true });
+        return json({ initialized: true });
       }
       if (url.endsWith("/api/auth/me")) {
         return json({
@@ -62,7 +62,6 @@ describe("auth session", () => {
     });
 
     await expect(fetchAuthSession()).resolves.toEqual({
-      enabled: true,
       initialized: true,
       user: {
         id: 1,
@@ -76,24 +75,13 @@ describe("auth session", () => {
   it("treats a 401 from /me as an expired session", async () => {
     mockFetch((url) => {
       if (url.endsWith("/api/auth/status")) {
-        return json({ enabled: true, initialized: true });
+        return json({ initialized: true });
       }
       return json({ error: "unauthorized" }, 401);
     });
 
     await expect(fetchAuthSession()).resolves.toEqual({
-      enabled: true,
       initialized: true,
-      user: null,
-    });
-  });
-
-  it("skips the login wall when auth is disabled", async () => {
-    mockFetch(() => json({ enabled: false, initialized: false }));
-
-    await expect(fetchAuthSession()).resolves.toEqual({
-      enabled: false,
-      initialized: false,
       user: null,
     });
   });

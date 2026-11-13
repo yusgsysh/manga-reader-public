@@ -738,8 +738,8 @@ const GROUP_LABELS: Record<(typeof GROUP_ORDER)[number], string> = {
 
 export function SettingsPage() {
   useDocumentTitle("设置");
-  const { enabled: authEnabled, isAdmin } = useAuth();
-  const canManageGlobal = !authEnabled || isAdmin;
+  const { isAdmin } = useAuth();
+  const canManageGlobal = isAdmin;
 
   const { sections, groups } = useMemo(() => {
     const visible = SECTION_DEFS.filter(

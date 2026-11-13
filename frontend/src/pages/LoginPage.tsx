@@ -39,7 +39,7 @@ function safeReturnPath(value: unknown): string {
 }
 
 export function LoginPage() {
-  const { enabled, isAuthenticated, isLoading, login, isLoggingIn } = useAuth();
+  const { isAuthenticated, isLoading, login, isLoggingIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const returnTo = safeReturnPath(
@@ -61,8 +61,6 @@ export function LoginPage() {
     );
   }
 
-  // Legacy anonymous deployments have no login wall.
-  if (!enabled) return <Navigate to={returnTo} replace />;
   if (isAuthenticated) return <Navigate to={returnTo} replace />;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {

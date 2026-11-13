@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"manga-reader/internal/ent/appsetting"
 	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/gallerycache"
 	"manga-reader/internal/ent/node"
@@ -25,6 +26,22 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	appsettingFields := schema.AppSetting{}.Fields()
+	_ = appsettingFields
+	// appsettingDescValue is the schema descriptor for value field.
+	appsettingDescValue := appsettingFields[1].Descriptor()
+	// appsetting.DefaultValue holds the default value on creation for the value field.
+	appsetting.DefaultValue = appsettingDescValue.Default.(string)
+	// appsettingDescUpdatedAt is the schema descriptor for updated_at field.
+	appsettingDescUpdatedAt := appsettingFields[2].Descriptor()
+	// appsetting.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	appsetting.DefaultUpdatedAt = appsettingDescUpdatedAt.Default.(func() time.Time)
+	// appsetting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	appsetting.UpdateDefaultUpdatedAt = appsettingDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// appsettingDescID is the schema descriptor for id field.
+	appsettingDescID := appsettingFields[0].Descriptor()
+	// appsetting.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	appsetting.IDValidator = appsettingDescID.Validators[0].(func(string) error)
 	bookshelfFields := schema.Bookshelf{}.Fields()
 	_ = bookshelfFields
 	// bookshelfDescUserID is the schema descriptor for user_id field.

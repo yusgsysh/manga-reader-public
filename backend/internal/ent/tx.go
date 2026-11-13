@@ -12,6 +12,8 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// AppSetting is the client for interacting with the AppSetting builders.
+	AppSetting *AppSettingClient
 	// Bookshelf is the client for interacting with the Bookshelf builders.
 	Bookshelf *BookshelfClient
 	// GalleryCache is the client for interacting with the GalleryCache builders.
@@ -167,6 +169,7 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.AppSetting = NewAppSettingClient(tx.config)
 	tx.Bookshelf = NewBookshelfClient(tx.config)
 	tx.GalleryCache = NewGalleryCacheClient(tx.config)
 	tx.Node = NewNodeClient(tx.config)
@@ -188,7 +191,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: Bookshelf.QueryXXX(), the query will be executed
+// applies a query, for example: AppSetting.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

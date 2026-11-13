@@ -51,7 +51,6 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const { lastListRoute } = useNavigationContext();
   const {
-    enabled: authEnabled,
     logout,
     isLoggingOut,
   } = useAuth();
@@ -129,22 +128,20 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
               ))}
             </nav>
 
-            {authEnabled && (
-              <div className="shrink-0 space-y-2 border-t border-kumo-hairline p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    void logout().catch(() => undefined);
-                  }}
-                  disabled={isLoggingOut}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-kumo-subtle transition-colors hover:bg-kumo-tint hover:text-kumo-default disabled:opacity-50"
-                >
-                  <SignOut className="size-5 shrink-0" />
-                  退出登录
-                </button>
-              </div>
-            )}
+            <div className="shrink-0 space-y-2 border-t border-kumo-hairline p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  void logout().catch(() => undefined);
+                }}
+                disabled={isLoggingOut}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-kumo-subtle transition-colors hover:bg-kumo-tint hover:text-kumo-default disabled:opacity-50"
+              >
+                <SignOut className="size-5 shrink-0" />
+                退出登录
+              </button>
+            </div>
           </m.div>
         </div>
       )}

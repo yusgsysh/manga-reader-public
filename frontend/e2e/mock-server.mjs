@@ -301,9 +301,13 @@ const server = Bun.serve({
       return new Response("ok", { headers: CORS });
     }
 
-    // E2E runs the legacy anonymous mode: the SPA must skip the login wall.
+    // Auth is always on; mock a signed-in admin so the SPA proceeds past the
+    // login wall without a real backend.
     if (path === "/api/auth/status") {
-      return json({ enabled: false, initialized: false });
+      return json({ initialized: true });
+    }
+    if (path === "/api/auth/me") {
+      return json({ id: 1, user_id: 1, username: "admin", role: "admin" });
     }
 
     // Mocked dev-tools switch (the settings page toggles this).

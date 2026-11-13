@@ -64,32 +64,21 @@ type loginBucket struct {
 	last   time.Time
 }
 
-// New builds the auth service. Authentication is mandatory in multi-user
-// mode; cfg.Enabled is kept for unit tests that build a service directly.
+// New builds the auth service. Authentication is always on: the SPA login page
+// and the default-deny middleware are the only entry points to user data.
 func New(db *ent.Client, cfg config.AuthConfig) *Service {
-	s := &Service{
+	return &Service{
 		db:           db,
 		cfg:          cfg,
+		tokens:       newTokenManager(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTExpiresIn),
 		loginClients: make(map[string]*loginBucket),
 	}
-	if cfg.Enabled {
-		s.tokens = newTokenManager(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTExpiresIn)
-	}
-	return s
-}
-
-// Enabled reports whether JWT authentication is active.
-func (s *Service) Enabled() bool {
-	return s != nil && s.cfg.Enabled && s.tokens != nil
 }
 
 // EnsureAdmin seeds the first administrator when the users table is empty.
 // Existing rows are never modified, so changing ADMIN_PASSWORD in the
 // environment cannot silently reset an operator's password.
 func (s *Service) EnsureAdmin(ctx context.Context) (bool, error) {
-	if !s.Enabled() {
-		return false, nil
-	}
 	if s.db == nil {
 		return false, errors.New("auth database is nil")
 	}
@@ -151,9 +140,6 @@ func IsPublicAPI(route string) bool {
 // Middleware verifies Authorization: Bearer <jwt> (or the HttpOnly cookie)
 // for every non-public /api/* route and injects a Principal into context.
 func (s *Service) Middleware() gin.HandlerFunc {
-	if !s.Enabled() {
-		return func(c *gin.Context) { c.Next() }
-	}
 	return func(c *gin.Context) {
 		route := c.FullPath()
 		if route == "" {
@@ -264,16 +250,11 @@ func (s *Service) handleStatus(c *gin.Context) {
 		initialized = count > 0
 	}
 	web.JSON(c, http.StatusOK, gin.H{
-		"enabled":     s.Enabled(),
 		"initialized": initialized,
 	})
 }
 
 func (s *Service) handleLogin(c *gin.Context) {
-	if !s.Enabled() {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "authentication is disabled"})
-		return
-	}
 	if !s.allowLogin(c.ClientIP()) {
 		c.Header("Retry-After", "60")
 		web.JSON(c, http.StatusTooManyRequests, gin.H{"error": "too many login attempts"})

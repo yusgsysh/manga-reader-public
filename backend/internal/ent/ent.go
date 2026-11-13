@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"manga-reader/internal/ent/appsetting"
 	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/gallerycache"
 	"manga-reader/internal/ent/node"
@@ -84,6 +85,7 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
+			appsetting.Table:      appsetting.ValidColumn,
 			bookshelf.Table:       bookshelf.ValidColumn,
 			gallerycache.Table:    gallerycache.ValidColumn,
 			node.Table:            node.ValidColumn,

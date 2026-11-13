@@ -12,7 +12,6 @@ export interface AuthIdentity {
 }
 
 export interface AuthStatus {
-  enabled: boolean;
   initialized: boolean;
 }
 
@@ -57,9 +56,6 @@ export async function fetchCurrentUser(): Promise<AuthIdentity> {
  */
 export async function fetchAuthSession(): Promise<AuthSession> {
   const status = await fetchAuthStatus();
-  if (!status.enabled) {
-    return { ...status, user: null };
-  }
   try {
     const identity = await fetchCurrentUser();
     return { ...status, ...identity };

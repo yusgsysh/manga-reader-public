@@ -23,8 +23,7 @@ type Config struct {
 	// Metrics configures the internal Prometheus endpoint.
 	Metrics MetricsConfig
 	// Auth is the JWT authentication setup used by the SPA login page. Every
-	// request that touches user data is authenticated; there is no anonymous
-	// mode.
+	// request that touches user data is authenticated.
 	Auth AuthConfig
 }
 
@@ -33,11 +32,11 @@ type Config struct {
 // when the users table is empty, so changing the environment later never
 // overwrites an existing password.
 type AuthConfig struct {
-	Enabled bool
-	// JWTSecret signs HS256 tokens. It must be a high-entropy value of at
-	// least 32 bytes; auth refuses to start with a weak/empty secret. The
-	// same secret derives the AES-GCM key that seals per-user ExHentai
-	// cookies in the database.
+	// JWTSecret signs HS256 tokens. It may be empty at load time: main.go then
+	// resolves it from the database (a generated secret persisted on first
+	// boot) via auth.ResolveSecret, or from the environment when set. The same
+	// secret derives the AES-GCM key that seals per-user ExHentai cookies in
+	// the database.
 	JWTSecret string
 	JWTIssuer string
 	// JWTExpiresIn is embedded in exp/iat and returned as expires_in.
@@ -201,19 +200,17 @@ func loadMetrics() (MetricsConfig, error) {
 }
 
 // loadAuth reads the JWT/admin settings. Authentication is mandatory: every
-// user-private API needs an identity, so a missing JWT_SECRET is a startup
-// error rather than a silently anonymous deployment.
+// user-private API needs an identity. JWT_SECRET may be empty here — main.go
+// then resolves the signing key from the database (or generates and persists
+// one on first boot) via auth.ResolveSecret.
 func loadAuth() (AuthConfig, error) {
 	secret := strings.TrimSpace(getEnv("JWT_SECRET", ""))
 	adminPassword := getEnv("ADMIN_PASSWORD", "")
 
-	if secret == "" {
-		return AuthConfig{}, fmt.Errorf("JWT_SECRET is required: multi-user mode needs signed sessions (for example: openssl rand -hex 32)")
-	}
-
 	// HMAC-SHA256 keys shorter than the 32-byte output weaken the signature.
 	// Requiring 32 bytes also rejects placeholder values such as "change-me".
-	if len(secret) < 32 {
+	// An empty secret is allowed: it is resolved from the database at startup.
+	if secret != "" && len(secret) < 32 {
 		return AuthConfig{}, fmt.Errorf("JWT_SECRET must be at least 32 bytes of random data (for example: openssl rand -hex 32)")
 	}
 
@@ -248,7 +245,6 @@ func loadAuth() (AuthConfig, error) {
 
 	secureMode := strings.ToLower(strings.TrimSpace(getEnv("MANGA_READER_AUTH_COOKIE_SECURE", "auto")))
 	cfg := AuthConfig{
-		Enabled:       true,
 		JWTSecret:     secret,
 		JWTIssuer:     issuer,
 		JWTExpiresIn:  expires,

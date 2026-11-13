@@ -7,8 +7,6 @@ export interface AuthContextValue {
   session: AuthSession | null;
   user: AuthUser | null;
   role: string | null;
-  /** Auth is enabled server-side (JWT login required). */
-  enabled: boolean;
   isAuthenticated: boolean;
   isAdmin: boolean;
   isLoading: boolean;

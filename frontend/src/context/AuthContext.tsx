@@ -37,11 +37,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: string;
     }) => loginRequest(username, password),
     onSuccess: (identity) => {
-      queryClient.setQueryData<AuthSession>(AUTH_QUERY_KEY, (previous) => ({
-        enabled: previous?.enabled ?? true,
+      queryClient.setQueryData<AuthSession>(AUTH_QUERY_KEY, {
         initialized: true,
         user: identity.user,
-      }));
+      });
     },
   });
 
@@ -93,7 +92,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       user,
       role,
-      enabled: session?.enabled ?? false,
       isAuthenticated: user !== null,
       isAdmin: role === "admin",
       isLoading: sessionQuery.isPending,

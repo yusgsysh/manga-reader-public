@@ -10,6 +10,7 @@ func setTestEnv(t *testing.T) {
 	// Auth/metrics/sync settings must be opted into explicitly; shell
 	// settings must not leak into unrelated tests.
 	for _, key := range []string{
+		"JWT_SECRET",
 		"JWT_ISSUER",
 		"JWT_EXPIRES_IN",
 		"ADMIN_USERNAME",
@@ -23,15 +24,16 @@ func setTestEnv(t *testing.T) {
 	} {
 		t.Setenv(key, "")
 	}
-	// Multi-user mode always requires signed sessions.
-	t.Setenv("JWT_SECRET", "0123456789abcdef0123456789abcdef")
 }
 
-func TestLoad_RequiresJWTSecret(t *testing.T) {
+func TestLoad_EmptyJWTSecretIsAllowed(t *testing.T) {
 	setTestEnv(t)
-	t.Setenv("JWT_SECRET", "")
-	if _, err := Load(); err == nil {
-		t.Fatal("expected an error: multi-user mode requires JWT_SECRET")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Auth.JWTSecret != "" {
+		t.Fatalf("JWTSecret = %q, want empty (resolved later from the database)", cfg.Auth.JWTSecret)
 	}
 }
 
@@ -48,8 +50,8 @@ func TestLoad_AuthConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if !cfg.Auth.Enabled {
-		t.Fatal("Auth.Enabled = false, want true")
+	if cfg.Auth.JWTSecret != "0123456789abcdef0123456789abcdef" {
+		t.Fatalf("JWTSecret = %q", cfg.Auth.JWTSecret)
 	}
 	if cfg.Auth.JWTIssuer != "test-issuer" {
 		t.Fatalf("issuer = %q", cfg.Auth.JWTIssuer)
@@ -73,12 +75,15 @@ func TestLoad_AuthRejectsWeakSecret(t *testing.T) {
 	}
 }
 
-func TestLoad_AdminPasswordWithoutSecretIsAnError(t *testing.T) {
+func TestLoad_AdminPasswordWithoutSecretStillStarts(t *testing.T) {
 	setTestEnv(t)
-	t.Setenv("JWT_SECRET", "")
 	t.Setenv("ADMIN_PASSWORD", "correct horse battery staple")
-	if _, err := Load(); err == nil {
-		t.Fatal("expected error for ADMIN_PASSWORD without JWT_SECRET")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Auth.JWTSecret != "" {
+		t.Fatal("JWTSecret = non-empty, want empty when JWT_SECRET is unset")
 	}
 }
 

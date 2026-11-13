@@ -39,7 +39,6 @@ func newTestClient(t *testing.T) *ent.Client {
 
 func testConfig(secret string) config.AuthConfig {
 	return config.AuthConfig{
-		Enabled:       true,
 		JWTSecret:     secret,
 		JWTIssuer:     "manga-reader-test",
 		JWTExpiresIn:  time.Hour,
@@ -298,14 +297,13 @@ func TestStatusIsPublicAndReportsInitialized(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 	var res struct {
-		Enabled     bool `json:"enabled"`
 		Initialized bool `json:"initialized"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
 		t.Fatalf("decode status: %v", err)
 	}
-	if !res.Enabled || !res.Initialized {
-		t.Fatalf("status = %+v, want enabled+initialized", res)
+	if !res.Initialized {
+		t.Fatalf("status = %+v, want initialized", res)
 	}
 }
 

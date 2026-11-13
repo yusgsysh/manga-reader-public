@@ -6,6 +6,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// AppSetting is the predicate function for appsetting builders.
+type AppSetting func(*sql.Selector)
+
 // Bookshelf is the predicate function for bookshelf builders.
 type Bookshelf func(*sql.Selector)
 

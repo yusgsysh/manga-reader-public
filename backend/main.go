@@ -207,6 +207,17 @@ func run() error {
 	}
 	defer db.Close()
 
+	// Resolve the JWT signing key. JWT_SECRET in the environment wins; without
+	// it the key is loaded from the database (generated and persisted on the
+	// very first boot), so sessions and encrypted ExHentai cookies survive
+	// restarts with no operator configuration.
+	secret, secretGenerated, err := auth.ResolveSecret(context.Background(), db.Client, cfg.Auth.JWTSecret)
+	if err != nil {
+		logger.Error("resolve JWT secret failed", "error", err)
+		return err
+	}
+	cfg.Auth.JWTSecret = secret
+
 	// ExHentai sessions are per user, stored encrypted in user_setting.
 	userCookies := usercookie.New(db.Client, cfg.Auth.JWTSecret)
 	authSvc := auth.New(db.Client, cfg.Auth)
@@ -219,6 +230,9 @@ func run() error {
 		logger.Info("administrator account initialized", "username", cfg.Auth.AdminUsername)
 	}
 	logger.Info("JWT auth enabled", "issuer", cfg.Auth.JWTIssuer, "expires_in", cfg.Auth.ExpiresInSeconds())
+	if secretGenerated {
+		logger.Info("generated and persisted a new JWT secret (JWT_SECRET was not set)")
+	}
 
 	nodeSvc := node.New(db.Client)
 	syncSvc := synclib.NewService(db.Client, synclib.Options{
@@ -241,7 +255,6 @@ func run() error {
 		DB:          db,
 		DevTools:    cfg.DevTools,
 		Sync:        syncSvc,
-		RequireAuth: true,
 		UserCookies: userCookies,
 	}
 

@@ -22,7 +22,6 @@ function authValue(overrides: Partial<AuthContextValue> = {}): AuthContextValue 
     session: null,
     user: null,
     role: null,
-    enabled: true,
     isAuthenticated: false,
     isAdmin: false,
     isLoading: false,
@@ -85,11 +84,6 @@ describe("RequireAuth", () => {
       }),
       "/private",
     );
-    expect(screen.getByText("private-content")).toBeTruthy();
-  });
-
-  it("keeps legacy anonymous deployments open when auth is disabled", () => {
-    renderGuard(authValue({ enabled: false }), "/private");
     expect(screen.getByText("private-content")).toBeTruthy();
   });
 
@@ -198,11 +192,7 @@ describe("LoginPage", () => {
     expect(screen.getByRole("alert").textContent).toContain("尝试次数过多");
   });
 
-  it("skips the form when auth is disabled or the user is already logged in", () => {
-    const { unmount } = renderLogin(authValue({ enabled: false }));
-    expect(screen.getByText("home-marker")).toBeTruthy();
-    unmount();
-
+  it("skips the form when the user is already logged in", () => {
     renderLogin(
       authValue({
         isAuthenticated: true,

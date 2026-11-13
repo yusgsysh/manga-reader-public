@@ -9,6 +9,18 @@ import (
 )
 
 var (
+	// AppSettingColumns holds the columns for the "app_setting" table.
+	AppSettingColumns = []*schema.Column{
+		{Name: "key", Type: field.TypeString, Unique: true},
+		{Name: "value", Type: field.TypeString, Default: ""},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// AppSettingTable holds the schema information for the "app_setting" table.
+	AppSettingTable = &schema.Table{
+		Name:       "app_setting",
+		Columns:    AppSettingColumns,
+		PrimaryKey: []*schema.Column{AppSettingColumns[0]},
+	}
 	// BookshelfColumns holds the columns for the "bookshelf" table.
 	BookshelfColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -297,6 +309,7 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		AppSettingTable,
 		BookshelfTable,
 		GalleryCacheTable,
 		NodeTable,
@@ -313,6 +326,9 @@ var (
 )
 
 func init() {
+	AppSettingTable.Annotation = &entsql.Annotation{
+		Table: "app_setting",
+	}
 	BookshelfTable.Annotation = &entsql.Annotation{
 		Table: "bookshelf",
 	}

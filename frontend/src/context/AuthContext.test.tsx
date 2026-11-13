@@ -96,7 +96,7 @@ describe("AuthProvider", () => {
   it("restores the session from the HttpOnly cookie on refresh", async () => {
     mockFetch((url) => {
       if (url.endsWith("/api/auth/status")) {
-        return json({ enabled: true, initialized: true });
+        return json({ initialized: true });
       }
       if (url.endsWith("/api/auth/me")) return json(meResponse);
       return json({ error: "not found" }, 404);
@@ -125,7 +125,7 @@ describe("AuthProvider", () => {
     let meCalls = 0;
     mockFetch((url, init) => {
       if (url.endsWith("/api/auth/status")) {
-        return json({ enabled: true, initialized: true });
+        return json({ initialized: true });
       }
       if (url.endsWith("/api/auth/login")) {
         return json({
@@ -158,7 +158,7 @@ describe("AuthProvider", () => {
   it("clears user data, cached queries, and the in-memory token on logout", async () => {
     const calls = mockFetch((url) => {
       if (url.endsWith("/api/auth/status")) {
-        return json({ enabled: true, initialized: true });
+        return json({ initialized: true });
       }
       if (url.endsWith("/api/auth/me")) return json(meResponse);
       if (url.endsWith("/api/auth/logout")) return json({ success: true });
@@ -186,7 +186,7 @@ describe("AuthProvider", () => {
   it("resets the session and caches on a 401 from any API call", async () => {
     mockFetch((url) => {
       if (url.endsWith("/api/auth/status")) {
-        return json({ enabled: true, initialized: true });
+        return json({ initialized: true });
       }
       if (url.endsWith("/api/auth/me")) return json(meResponse);
       if (url.endsWith("/api/bookshelf")) return json({ error: "unauthorized" }, 401);

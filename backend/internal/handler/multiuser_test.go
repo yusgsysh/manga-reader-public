@@ -53,7 +53,6 @@ func newMUFixture(t *testing.T) *muFixture {
 
 	secret := strings.Repeat("m", 32)
 	authSvc := auth.New(db, config.AuthConfig{
-		Enabled:       true,
 		JWTSecret:     secret,
 		JWTIssuer:     "mu-test",
 		JWTExpiresIn:  time.Hour,

@@ -8,6 +8,18 @@ import (
 	"manga-reader/internal/ent"
 )
 
+// The AppSettingFunc type is an adapter to allow the use of ordinary
+// function as AppSetting mutator.
+type AppSettingFunc func(context.Context, *ent.AppSettingMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AppSettingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AppSettingMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AppSettingMutation", m)
+}
+
 // The BookshelfFunc type is an adapter to allow the use of ordinary
 // function as Bookshelf mutator.
 type BookshelfFunc func(context.Context, *ent.BookshelfMutation) (ent.Value, error)
