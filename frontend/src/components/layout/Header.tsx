@@ -91,12 +91,12 @@ export function Header() {
           <Link
             to="/"
             aria-label="Manga Reader 首页"
-            className="flex flex-1 items-center justify-center lg:flex-none"
+            className="flex flex-1 items-center justify-center lg:hidden"
           >
             <Logo />
           </Link>
 
-          <div className="hidden flex-1 items-center justify-end gap-1 lg:flex">
+          <div className="hidden items-center gap-1 lg:flex">
             <nav aria-label="辅助导航" className="flex items-center gap-1">
               {SECONDARY_NAV.map((item) => (
                 <TopNavLink
