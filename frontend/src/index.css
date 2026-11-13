@@ -296,15 +296,15 @@ body {
 }
 
 /* Error banner rises into place instead of snapping the layout. */
-@keyframes login-error-in {
+@keyframes error-banner-in {
   from {
     opacity: 0;
     transform: translateY(-4px);
   }
 }
 
-.login-error {
-  animation: login-error-in 0.16s ease-out;
+.error-banner {
+  animation: error-banner-in 0.16s ease-out;
 }
 
 .gallery-grid {

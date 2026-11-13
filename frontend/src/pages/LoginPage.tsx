@@ -7,9 +7,9 @@ import {
   EyeSlash,
   LockSimple,
   User,
-  WarningCircle,
 } from "@phosphor-icons/react";
 import { ApiRequestError } from "../api/client";
+import { ErrorBanner } from "../components/common/ErrorBanner";
 import { Logo } from "../components/ui";
 import { ThemeSwitcher } from "../components/layout/ThemeSwitcher";
 import { useAuth } from "../context/auth";
@@ -173,18 +173,7 @@ export function LoginPage() {
                 </div>
               </div>
 
-              {error && (
-                <p
-                  role="alert"
-                  className="login-error flex items-start gap-2 rounded-xl border border-kumo-danger/25 bg-kumo-danger/10 px-3.5 py-2.5 text-[0.8125rem] leading-5 text-kumo-danger"
-                >
-                  <WarningCircle
-                    className="mt-px size-4 shrink-0"
-                    aria-hidden
-                  />
-                  <span>{error}</span>
-                </p>
-              )}
+              {error && <ErrorBanner message={error} />}
             </div>
 
             <Button

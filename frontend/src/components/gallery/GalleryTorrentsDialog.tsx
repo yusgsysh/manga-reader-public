@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button, Dialog, Loader } from "@cloudflare/kumo";
 import { DownloadSimple, Magnet } from "@phosphor-icons/react";
+import { ErrorBanner } from "../common/ErrorBanner";
 import {
   fetchGalleryTorrentInfo,
   fetchGalleryTorrents,
@@ -89,7 +90,7 @@ function TorrentRow({
               <Loader size={18} />
             </div>
           ) : infoError ? (
-            <p className="text-kumo-danger">{infoError}</p>
+            <ErrorBanner message={infoError} />
           ) : info ? (
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
@@ -182,7 +183,7 @@ export function GalleryTorrentsDialog({
               <Loader size={24} />
             </div>
           )}
-          {error && <p className="py-4 text-sm text-kumo-danger">{error}</p>}
+          {error && <ErrorBanner message={error} />}
           {!loading && !error && torrents && torrents.length === 0 && (
             <p className="py-6 text-center text-sm text-kumo-subtle">
               暂无种子

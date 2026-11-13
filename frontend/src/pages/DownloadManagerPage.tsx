@@ -23,6 +23,7 @@ import {
 } from "../lib/prefill";
 import { formatRelativeTime } from "../lib/time";
 import { EmptyState } from "../components/common/EmptyState";
+import { ErrorBanner } from "../components/common/ErrorBanner";
 import { ErrorState } from "../components/common/ErrorState";
 import { PageHeader, Section } from "../components/ui";
 import type { PrefillJob, PrefillStatus } from "../types/prefill";
@@ -273,13 +274,11 @@ export function DownloadManagerPage() {
       />
 
       {error && data && (
-        <div className="flex items-center gap-2 rounded-xl bg-kumo-danger/10 p-3 text-sm text-kumo-danger">
-          <WarningCircle className="size-4 shrink-0" weight="fill" />
-          <span>刷新失败，正在重试… ({error.message})</span>
-          <Button variant="ghost" size="sm" onClick={() => refetch()}>
-            立即重试
-          </Button>
-        </div>
+        <ErrorBanner
+          message={`刷新失败，正在重试… (${error.message})`}
+          onRetry={() => refetch()}
+          retryLabel="立即重试"
+        />
       )}
 
       {jobs.length === 0 ? (
