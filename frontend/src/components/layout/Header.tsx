@@ -79,46 +79,45 @@ export function Header() {
             <List className="size-5" weight="bold" />
           </IconButton>
 
-          <Link
-            to="/"
-            aria-label="Manga Reader 首页"
-            className="flex flex-1 items-center justify-center lg:flex-none lg:justify-start"
-          >
-            <Logo />
-          </Link>
-
           <nav
             aria-label="主导航"
-            className="hidden min-w-0 flex-1 items-center gap-1 lg:flex lg:pl-3"
+            className="hidden min-w-0 flex-1 items-center gap-1 lg:flex"
           >
             {PRIMARY_NAV.map((item) => (
               <TopNavLink key={item.to} item={item} active={isActive(item.to)} />
             ))}
           </nav>
 
-          <nav
-            aria-label="辅助导航"
-            className="hidden items-center gap-1 lg:flex"
+          <Link
+            to="/"
+            aria-label="Manga Reader 首页"
+            className="flex flex-1 items-center justify-center lg:flex-none"
           >
-            {SECONDARY_NAV.map((item) => (
-              <TopNavLink
-                key={item.to}
-                item={item}
-                active={isActive(item.to)}
-                iconOnly
-              />
-            ))}
-          </nav>
+            <Logo />
+          </Link>
 
-          {authEnabled && (
-            <IconButton
-              label="退出登录"
-              onClick={() => void logout().catch(() => undefined)}
-              disabled={isLoggingOut}
-            >
-              <SignOut className="size-5" weight="bold" />
-            </IconButton>
-          )}
+          <div className="hidden flex-1 items-center justify-end gap-1 lg:flex">
+            <nav aria-label="辅助导航" className="flex items-center gap-1">
+              {SECONDARY_NAV.map((item) => (
+                <TopNavLink
+                  key={item.to}
+                  item={item}
+                  active={isActive(item.to)}
+                  iconOnly
+                />
+              ))}
+            </nav>
+
+            {authEnabled && (
+              <IconButton
+                label="退出登录"
+                onClick={() => void logout().catch(() => undefined)}
+                disabled={isLoggingOut}
+              >
+                <SignOut className="size-5" weight="bold" />
+              </IconButton>
+            )}
+          </div>
 
           <IconButton
             label="搜索"
