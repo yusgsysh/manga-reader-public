@@ -48,7 +48,7 @@ func TestEntTransactionRollbackAndCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
-	if _, err := tx.Bookshelf.Create().SetTenantID(1).SetGalleryID(1).SetToken("rolled-back").Save(ctx); err != nil {
+	if _, err := tx.Bookshelf.Create().SetUserID(1).SetGalleryID(1).SetToken("rolled-back").Save(ctx); err != nil {
 		t.Fatalf("create in tx: %v", err)
 	}
 	if err := tx.Rollback(); err != nil {
@@ -62,7 +62,7 @@ func TestEntTransactionRollbackAndCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
-	if _, err := tx.Bookshelf.Create().SetTenantID(1).SetGalleryID(2).SetToken("committed").Save(ctx); err != nil {
+	if _, err := tx.Bookshelf.Create().SetUserID(1).SetGalleryID(2).SetToken("committed").Save(ctx); err != nil {
 		t.Fatalf("create in tx: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -73,7 +73,7 @@ func TestEntTransactionRollbackAndCommit(t *testing.T) {
 	}
 }
 
-func TestEntTenantScopedQueryIsolation(t *testing.T) {
+func TestEntUserScopedQueryIsolation(t *testing.T) {
 	db, err := NewDB(Options{Driver: DriverSQLite, DSN: filepath.Join(t.TempDir(), "isolation.db")})
 	if err != nil {
 		t.Fatalf("NewDB: %v", err)
@@ -81,21 +81,21 @@ func TestEntTenantScopedQueryIsolation(t *testing.T) {
 	defer db.Close()
 	ctx := t.Context()
 
-	for _, tenantID := range []int64{1, 2} {
+	for _, userID := range []int64{1, 2} {
 		if _, err := db.Client.Bookshelf.Create().
-			SetTenantID(tenantID).SetGalleryID(42).SetToken("same").Save(ctx); err != nil {
-			t.Fatalf("seed tenant %d: %v", tenantID, err)
+			SetUserID(userID).SetGalleryID(42).SetToken("same").Save(ctx); err != nil {
+			t.Fatalf("seed user %d: %v", userID, err)
 		}
 	}
 	rows, err := db.Client.Bookshelf.Query().
-		Where(bookshelf.TenantIDEQ(1), bookshelf.GalleryID(42)).
+		Where(bookshelf.UserIDEQ(1), bookshelf.GalleryID(42)).
 		All(ctx)
-	if err != nil || len(rows) != 1 || rows[0].TenantID != 1 {
-		t.Fatalf("tenant 1 query = %+v (err %v), want only its row", rows, err)
+	if err != nil || len(rows) != 1 || rows[0].UserID != 1 {
+		t.Fatalf("user 1 query = %+v (err %v), want only its row", rows, err)
 	}
-	// The same natural key is allowed once per tenant, not globally.
+	// The same natural key is allowed once per user, not globally.
 	if _, err := db.Client.Bookshelf.Create().
-		SetTenantID(1).SetGalleryID(42).SetToken("same").Save(ctx); err == nil {
-		t.Fatal("duplicate key within one tenant was accepted")
+		SetUserID(1).SetGalleryID(42).SetToken("same").Save(ctx); err == nil {
+		t.Fatal("duplicate key within one user was accepted")
 	}
 }

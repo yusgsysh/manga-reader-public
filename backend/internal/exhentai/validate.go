@@ -1,14 +1,19 @@
 package exhentai
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"strings"
 )
 
-func GalleryURL(id, token string) string {
-	return ExhentaiURL + "/g/" + id + "/" + token + "/"
+// GalleryURLAt builds a gallery page URL on the given site base, so a user
+// browsing e-hentai gets e-hentai pages with the same id/token.
+func GalleryURLAt(base, id, token string) string {
+	return base + "/g/" + id + "/" + token + "/"
 }
 
 func ValidateThumbnailURL(rawURL string) error {
@@ -181,4 +186,24 @@ func isBlockedInternalHost(host string) bool {
 		return ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
 	}
 	return false
+}
+
+// VerifySession performs one authenticated upstream request and reports whether
+// the session in client is accepted. It is used by the per-user cookie
+// verification endpoint; it never logs or returns the cookie itself.
+func VerifySession(ctx context.Context, client *http.Client) error {
+	if client == nil {
+		return errors.New("http client is not configured")
+	}
+	doc, err := httpGetDocDirect(ctx, client, ExhentaiURL+"/")
+	if err != nil {
+		return err
+	}
+	if sadPandaCheck(doc) || ipBannedCheck(doc) {
+		return ErrSadPanda
+	}
+	// A page without the login form / account navigation is not proof of a
+	// valid session, but ExHentai's empty sad-panda page is the authoritative
+	// rejection. Treat a non-empty document as success.
+	return nil
 }

@@ -183,7 +183,7 @@ func (e *Engine) pushCycle(ctx context.Context, cfg ClientConfig) {
 	}
 
 	if len(resp.Changes) > 0 {
-		applied, _, applyErr := ApplyChangesForTenant(ctx, e.svc.client, e.svc.tenantID, resp.Changes)
+		applied, _, applyErr := ApplyChanges(ctx, e.svc.client, resp.Changes)
 		if applyErr != nil {
 			syncSetError(ctx, e.svc, fmt.Sprintf("apply: %v", applyErr))
 			return
@@ -205,7 +205,7 @@ func (e *Engine) pushCycle(ctx context.Context, cfg ClientConfig) {
 		syncSetError(ctx, e.svc, fmt.Sprintf("save state: %v", err))
 		return
 	}
-	if err := pruneOutbox(ctx, e.svc.client, e.svc.tenantID, watermark); err != nil {
+	if err := pruneOutbox(ctx, e.svc.client, watermark); err != nil {
 		slog.Warn("sync: prune local outbox failed", "error", err)
 	}
 }
@@ -222,17 +222,17 @@ func (e *Engine) buildPushChanges(ctx context.Context, st EngineState) ([]Change
 		// keeps an outbox id above the watermark, so the next cycle pushes it
 		// as a delta instead of losing it (the old order could mark such a
 		// row delivered without ever sending it).
-		maxID, err := maxOutboxID(ctx, e.svc.client, e.svc.tenantID)
+		maxID, err := maxOutboxID(ctx, e.svc.client)
 		if err != nil {
 			return nil, 0, err
 		}
-		changes, err := ExportSnapshot(ctx, e.svc.client, e.svc.tenantID)
+		changes, err := ExportSnapshot(ctx, e.svc.client)
 		if err != nil {
 			return nil, 0, err
 		}
 		return changes, maxID, nil
 	}
-	return ReadChangesSince(ctx, e.svc.client, e.svc.tenantID, st.LastPushedID)
+	return ReadChangesSince(ctx, e.svc.client, st.LastPushedID)
 }
 
 func (e *Engine) sendPush(ctx context.Context, cfg ClientConfig, req PushRequest) (PushResponse, error) {

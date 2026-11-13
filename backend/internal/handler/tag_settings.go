@@ -67,11 +67,11 @@ func defaultTagWeight(action string) int {
 
 // handleTagSettingsGet returns all stored tag preferences, ordered by tag.
 func (s *Server) handleTagSettingsGet(c *gin.Context) {
-	tid, ok := s.requireTenant(c)
+	uid, ok := s.requireUser(c)
 	if !ok {
 		return
 	}
-	tags, err := s.loadTagRules(c.Request.Context(), tid)
+	tags, err := s.loadTagRules(c.Request.Context(), uid)
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list tag settings failed: %v", err)})
 		return
@@ -118,7 +118,7 @@ func (s *Server) handleTagSettingsPut(c *gin.Context) {
 		return normalized[i].Tag < normalized[j].Tag
 	})
 
-	tid, ok := s.requireTenant(c)
+	uid, ok := s.requireUser(c)
 	if !ok {
 		return
 	}
@@ -131,7 +131,7 @@ func (s *Server) handleTagSettingsPut(c *gin.Context) {
 	}
 
 	if _, err := tx.TagPreference.Delete().
-		Where(tagpreference.TenantIDEQ(tid)).
+		Where(tagpreference.UserIDEQ(uid)).
 		Exec(ctx); err != nil {
 		tx.Rollback()
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("clear tag settings failed: %v", err)})
@@ -142,7 +142,7 @@ func (s *Server) handleTagSettingsPut(c *gin.Context) {
 		builders := make([]*ent.TagPreferenceCreate, 0, len(normalized))
 		for _, t := range normalized {
 			builders = append(builders, tx.TagPreference.Create().
-				SetTenantID(tid).
+				SetUserID(uid).
 				SetID(t.Tag).
 				SetAction(t.Action).
 				SetWeight(t.Weight))

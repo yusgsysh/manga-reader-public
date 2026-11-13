@@ -30,24 +30,24 @@ func (_u *PrefillJobUpdate) Where(ps ...predicate.PrefillJob) *PrefillJobUpdate 
 	return _u
 }
 
-// SetTenantID sets the "tenant_id" field.
-func (_u *PrefillJobUpdate) SetTenantID(v int64) *PrefillJobUpdate {
-	_u.mutation.ResetTenantID()
-	_u.mutation.SetTenantID(v)
+// SetUserID sets the "user_id" field.
+func (_u *PrefillJobUpdate) SetUserID(v int64) *PrefillJobUpdate {
+	_u.mutation.ResetUserID()
+	_u.mutation.SetUserID(v)
 	return _u
 }
 
-// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
-func (_u *PrefillJobUpdate) SetNillableTenantID(v *int64) *PrefillJobUpdate {
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (_u *PrefillJobUpdate) SetNillableUserID(v *int64) *PrefillJobUpdate {
 	if v != nil {
-		_u.SetTenantID(*v)
+		_u.SetUserID(*v)
 	}
 	return _u
 }
 
-// AddTenantID adds value to the "tenant_id" field.
-func (_u *PrefillJobUpdate) AddTenantID(v int64) *PrefillJobUpdate {
-	_u.mutation.AddTenantID(v)
+// AddUserID adds value to the "user_id" field.
+func (_u *PrefillJobUpdate) AddUserID(v int64) *PrefillJobUpdate {
+	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -268,11 +268,11 @@ func (_u *PrefillJobUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 			}
 		}
 	}
-	if value, ok := _u.mutation.TenantID(); ok {
-		_spec.SetField(prefilljob.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.UserID(); ok {
+		_spec.SetField(prefilljob.FieldUserID, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.AddedTenantID(); ok {
-		_spec.AddField(prefilljob.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.AddedUserID(); ok {
+		_spec.AddField(prefilljob.FieldUserID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(prefilljob.FieldGalleryID, field.TypeInt64, value)
@@ -352,24 +352,24 @@ type PrefillJobUpdateOne struct {
 	mutation *PrefillJobMutation
 }
 
-// SetTenantID sets the "tenant_id" field.
-func (_u *PrefillJobUpdateOne) SetTenantID(v int64) *PrefillJobUpdateOne {
-	_u.mutation.ResetTenantID()
-	_u.mutation.SetTenantID(v)
+// SetUserID sets the "user_id" field.
+func (_u *PrefillJobUpdateOne) SetUserID(v int64) *PrefillJobUpdateOne {
+	_u.mutation.ResetUserID()
+	_u.mutation.SetUserID(v)
 	return _u
 }
 
-// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
-func (_u *PrefillJobUpdateOne) SetNillableTenantID(v *int64) *PrefillJobUpdateOne {
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (_u *PrefillJobUpdateOne) SetNillableUserID(v *int64) *PrefillJobUpdateOne {
 	if v != nil {
-		_u.SetTenantID(*v)
+		_u.SetUserID(*v)
 	}
 	return _u
 }
 
-// AddTenantID adds value to the "tenant_id" field.
-func (_u *PrefillJobUpdateOne) AddTenantID(v int64) *PrefillJobUpdateOne {
-	_u.mutation.AddTenantID(v)
+// AddUserID adds value to the "user_id" field.
+func (_u *PrefillJobUpdateOne) AddUserID(v int64) *PrefillJobUpdateOne {
+	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -620,11 +620,11 @@ func (_u *PrefillJobUpdateOne) sqlSave(ctx context.Context) (_node *PrefillJob, 
 			}
 		}
 	}
-	if value, ok := _u.mutation.TenantID(); ok {
-		_spec.SetField(prefilljob.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.UserID(); ok {
+		_spec.SetField(prefilljob.FieldUserID, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.AddedTenantID(); ok {
-		_spec.AddField(prefilljob.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.AddedUserID(); ok {
+		_spec.AddField(prefilljob.FieldUserID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(prefilljob.FieldGalleryID, field.TypeInt64, value)

@@ -10,8 +10,9 @@ import (
 	"entgo.io/ent/schema/index"
 )
 
-// Node is a trusted sync peer bound to exactly one tenant. Nodes are managed
-// by platform administrators; a node's API keys inherit its tenant scope.
+// Node is a trusted sync peer of this installation. Nodes are managed by
+// administrators. Synchronised rows carry their owner user_id, so a peer
+// replicates every user's data without losing per-user isolation.
 type Node struct {
 	ent.Schema
 }
@@ -27,7 +28,6 @@ func (Node) Annotations() []schema.Annotation {
 func (Node) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("name").NotEmpty(),
-		field.Int64("tenant_id"),
 		field.String("status").Default("active"),
 		field.Time("last_seen_at").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
@@ -38,7 +38,7 @@ func (Node) Fields() []ent.Field {
 // Indexes of the Node.
 func (Node) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("tenant_id", "name").Unique(),
+		index.Fields("name").Unique(),
 		index.Fields("status"),
 	}
 }

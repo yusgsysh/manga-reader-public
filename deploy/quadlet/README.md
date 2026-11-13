@@ -118,5 +118,5 @@ sudo podman ps --filter name=manga-reader
 2. `systemctl restart manga-reader-warp.service`：在有出网的情况下重新注册并连接 WARP。
 3. 冷启动验证：`manga-reader.service`、`manga-reader-warp.service`、
    `manga-reader-pod.service` 均 active，WARP `Connected`，trace 为 `warp=on`。
-4. ExHentai 仍 sad panda；宿主机直连同样如此，先按 Cookie 失效处理（刷新 `.env`
-   中的 `EHENTAI_COOKIE_*`），暂不归因于 WARP 出口。
+4. ExHentai 仍 sad panda；宿主机直连同样如此，先按 Cookie 失效处理（在应用内重新保存该账号的
+   Cookie），暂不归因于 WARP 出口。

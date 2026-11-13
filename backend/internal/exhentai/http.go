@@ -20,7 +20,25 @@ import (
 
 const (
 	ExhentaiURL = "https://exhentai.org"
+	EHentaiURL  = "https://e-hentai.org"
 
+	// Site preference values stored per user. ExHentai is the default.
+	SiteExHentai = "exhentai"
+	SiteEHentai  = "e-hentai"
+)
+
+// SiteBaseURL maps a user's preferred site to its upstream base URL. The two
+// sites share gallery IDs, tokens and the metadata API, so only the browsing
+// host changes; tag synchronisation stays on exhentai (the s.exhentai.org
+// mutation API is account-scoped and has no e-hentai equivalent).
+func SiteBaseURL(site string) string {
+	if site == SiteEHentai {
+		return EHentaiURL
+	}
+	return ExhentaiURL
+}
+
+const (
 	// upstreamDocTimeout bounds each HTML document fetch so a hung
 	// upstream connection cannot stall a request indefinitely.
 	upstreamDocTimeout = 15 * time.Second
@@ -74,7 +92,9 @@ func fetchDoc(ctx context.Context, client *http.Client, target string) (*goquery
 // otherwise fire twice.
 const igneousHealCooldown = 10 * time.Minute
 
-var healGate healGateState
+// healGates tracks the retry window per client. Sessions are per user; a
+// failing account must not suppress another user's recovery attempt.
+var healGates sync.Map // map[*http.Client]*healGateState
 
 // healGateState tracks when retries are allowed again after a failed heal.
 type healGateState struct {
@@ -90,6 +110,11 @@ func (g *healGateState) allow() bool {
 }
 
 // record closes or reopens the gate depending on whether the heal worked.
+func healGateFor(client *http.Client) *healGateState {
+	value, _ := healGates.LoadOrStore(client, &healGateState{})
+	return value.(*healGateState)
+}
+
 func (g *healGateState) record(ok bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -107,19 +132,20 @@ func (g *healGateState) record(ok bool) {
 // against the account's current session and serves the sad panda page when it no
 // longer matches, even though ipb_member_id/ipb_pass_hash are still valid. That
 // happens routinely after signing in again elsewhere, which rotates igneous and
-// leaves the value in .env dead. Without the cookie the same credentials
+// leaves the stored per-user value dead. Without the cookie the same credentials
 // authenticate and the response's Set-Cookie installs a fresh igneous in the
-// jar, so the deployment recovers without editing .env or restarting.
+// jar, so the user recovers without re-entering the cookie.
 func doDoc(ctx context.Context, client *http.Client, target string, do func(context.Context) (*http.Response, error)) (*goquery.Document, error) {
 	doc, err := doDocOnce(ctx, target, do)
-	if !errors.Is(err, ErrSadPanda) || !healGate.allow() || !dropIgneous(client, target) {
+	gate := healGateFor(client)
+	if !errors.Is(err, ErrSadPanda) || !gate.allow() || !dropIgneous(client, target) {
 		return doc, err
 	}
 	slog.Warn("exhentai rejected the igneous cookie; retrying without it",
 		"url", target,
-		"hint", "refresh EHENTAI_COOKIE_IGNEOUS to stop the extra round trip")
+		"hint", "the user should re-save the cookie in settings to stop the extra round trip")
 	healed, healErr := doDocOnce(ctx, target, do)
-	healGate.record(healErr == nil)
+	gate.record(healErr == nil)
 	return healed, healErr
 }
 

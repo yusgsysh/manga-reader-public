@@ -11,8 +11,8 @@ import (
 const (
 	// Label holds the string label denoting the tagpreference type in the database.
 	Label = "tag_preference"
-	// FieldTenantID holds the string denoting the tenant_id field in the database.
-	FieldTenantID = "tenant_id"
+	// FieldUserID holds the string denoting the user_id field in the database.
+	FieldUserID = "user_id"
 	// FieldAction holds the string denoting the action field in the database.
 	FieldAction = "action"
 	// FieldWeight holds the string denoting the weight field in the database.
@@ -29,7 +29,7 @@ const (
 
 // Columns holds all SQL columns for tagpreference fields.
 var Columns = []string{
-	FieldTenantID,
+	FieldUserID,
 	FieldAction,
 	FieldWeight,
 	FieldCreatedAt,
@@ -48,8 +48,8 @@ func ValidColumn(column string) bool {
 }
 
 var (
-	// DefaultTenantID holds the default value on creation for the "tenant_id" field.
-	DefaultTenantID int64
+	// DefaultUserID holds the default value on creation for the "user_id" field.
+	DefaultUserID int64
 	// ActionValidator is a validator for the "action" field. It is called by the builders before save.
 	ActionValidator func(string) error
 	// DefaultWeight holds the default value on creation for the "weight" field.
@@ -67,9 +67,9 @@ var (
 // OrderOption defines the ordering options for the TagPreference queries.
 type OrderOption func(*sql.Selector)
 
-// ByTenantID orders the results by the tenant_id field.
-func ByTenantID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldTenantID, opts...).ToFunc()
+// ByUserID orders the results by the user_id field.
+func ByUserID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUserID, opts...).ToFunc()
 }
 
 // ByAction orders the results by the action field.

@@ -189,12 +189,12 @@ func (_q *TagPreferenceQuery) Clone() *TagPreferenceQuery {
 // Example:
 //
 //	var v []struct {
-//		TenantID int64 `json:"tenant_id,omitempty"`
+//		UserID int64 `json:"user_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.TagPreference.Query().
-//		GroupBy(tagpreference.FieldTenantID).
+//		GroupBy(tagpreference.FieldUserID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *TagPreferenceQuery) GroupBy(field string, fields ...string) *TagPreferenceGroupBy {
@@ -212,11 +212,11 @@ func (_q *TagPreferenceQuery) GroupBy(field string, fields ...string) *TagPrefer
 // Example:
 //
 //	var v []struct {
-//		TenantID int64 `json:"tenant_id,omitempty"`
+//		UserID int64 `json:"user_id,omitempty"`
 //	}
 //
 //	client.TagPreference.Query().
-//		Select(tagpreference.FieldTenantID).
+//		Select(tagpreference.FieldUserID).
 //		Scan(ctx, &v)
 func (_q *TagPreferenceQuery) Select(fields ...string) *TagPreferenceSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

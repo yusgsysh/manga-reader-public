@@ -22,6 +22,7 @@ import (
 	"manga-reader/internal/membudget"
 	"manga-reader/internal/metrics"
 	"manga-reader/internal/model"
+	"manga-reader/internal/usercookie"
 	"manga-reader/internal/web"
 )
 
@@ -146,12 +147,12 @@ func queryDimension(c *gin.Context, key string) (int, error) {
 
 // resolveLiveRect resolves a request to a sprite + rectangle, scraping upstream
 // for the gallery-index form. Live resolution never reads local caches.
-func (s *Server) resolveLiveRect(ctx context.Context, req pageThumbRequest) (string, image.Rectangle, bool, error) {
+func (s *Server) resolveLiveRect(ctx context.Context, client *http.Client, userID int64, req pageThumbRequest) (string, image.Rectangle, bool, error) {
 	if !req.byIndex {
 		return req.spriteURL, req.rect, true, nil
 	}
-	u := exhentai.GalleryURL(strconv.FormatInt(req.galleryID, 10), req.token)
-	thumb, found, err := exhentai.ScrapeGalleryPageThumb(ctx, s.Client, u, req.index)
+	u := exhentai.GalleryURLAt(s.upstreamBase(ctx, userID), strconv.FormatInt(req.galleryID, 10), req.token)
+	thumb, found, err := exhentai.ScrapeGalleryPageThumb(ctx, client, u, req.index)
 	if err != nil || !found {
 		return "", image.Rectangle{}, false, err
 	}
@@ -172,7 +173,11 @@ func (s *Server) handlePageThumbnail(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	spriteURL, rect, found, err := s.resolveLiveRect(ctx, req)
+	client, uid, ok := s.upstreamClientForRequest(c)
+	if !ok {
+		return
+	}
+	spriteURL, rect, found, err := s.resolveLiveRect(ctx, client, uid, req)
 	if err != nil {
 		slog.Error("page-thumbnail resolve failed", "index", req.byIndex, "error", err)
 		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("resolve page thumbnail failed: %v", err)})
@@ -183,7 +188,7 @@ func (s *Server) handlePageThumbnail(c *gin.Context) {
 		return
 	}
 
-	data, err := s.cropLive(ctx, spriteURL, rect)
+	data, err := s.cropLive(ctx, uid, client, spriteURL, rect)
 	if err != nil {
 		if errors.Is(err, imageproc.ErrOutOfBounds) {
 			web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -244,11 +249,24 @@ func (s *Server) handleCachedPageThumbnail(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	uid, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
+	client, err := s.upstreamClient(ctx, uid)
+	if err != nil {
+		if errors.Is(err, usercookie.ErrNotConfigured) {
+			web.JSON(c, http.StatusPreconditionFailed, gin.H{"error": "exhentai cookie is not configured"})
+			return
+		}
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": "exhentai session unavailable"})
+		return
+	}
 	var data []byte
 	if req.byIndex {
-		data, err = s.loadCachedIndexThumbnail(ctx, req)
+		data, err = s.loadCachedIndexThumbnail(ctx, uid, client, req)
 	} else {
-		data, err = s.loadOrCropThumbnail(ctx, req.spriteURL, req.rect)
+		data, err = s.loadOrCropThumbnail(ctx, uid, client, req.spriteURL, req.rect)
 	}
 	if err != nil {
 		s.writeCachedThumbError(c, req, err)
@@ -276,12 +294,12 @@ func (s *Server) writeCachedThumbError(c *gin.Context, req pageThumbRequest, err
 // coalescing the whole flow per page. Coalescing the resolution too (not just
 // the sprite fetch) is what keeps a burst of expired-sprite requests down to a
 // single gallery refresh.
-func (s *Server) loadCachedIndexThumbnail(ctx context.Context, req pageThumbRequest) ([]byte, error) {
-	key := fmt.Sprintf("%d:%s:%d", req.galleryID, req.token, req.index)
+func (s *Server) loadCachedIndexThumbnail(ctx context.Context, userID int64, client *http.Client, req pageThumbRequest) ([]byte, error) {
+	key := fmt.Sprintf("%d/%d:%s:%d", userID, req.galleryID, req.token, req.index)
 	v, err, _ := pageThumbGroup.Do(key, func() (any, error) {
 		flowCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), pageThumbFlowTimeout)
 		defer cancel()
-		return s.loadCachedIndexThumbnailOnce(flowCtx, req)
+		return s.loadCachedIndexThumbnailOnce(flowCtx, userID, client, req)
 	})
 	if err != nil {
 		return nil, err
@@ -293,8 +311,8 @@ func (s *Server) loadCachedIndexThumbnail(ctx context.Context, req pageThumbRequ
 // self-healing an expired sprite URL: it refreshes the gallery cache, and when
 // the shared document cache still serves the expired reference, forces a fresh
 // single-page scrape that bypasses that cache before retrying once.
-func (s *Server) loadCachedIndexThumbnailOnce(ctx context.Context, req pageThumbRequest) ([]byte, error) {
-	thumb, found, err := s.resolveGalleryPageThumb(ctx, req.galleryID, req.token, req.index)
+func (s *Server) loadCachedIndexThumbnailOnce(ctx context.Context, userID int64, client *http.Client, req pageThumbRequest) ([]byte, error) {
+	thumb, found, err := s.resolveGalleryPageThumb(ctx, userID, client, req.galleryID, req.token, req.index)
 	if err != nil {
 		return nil, err
 	}
@@ -303,7 +321,7 @@ func (s *Server) loadCachedIndexThumbnailOnce(ctx context.Context, req pageThumb
 	}
 
 	expiredURL := thumb.SpriteURL
-	data, err := s.loadOrCropThumbnail(ctx, expiredURL, thumbRect(thumb))
+	data, err := s.loadOrCropThumbnail(ctx, userID, client, expiredURL, thumbRect(thumb))
 	if err == nil {
 		return data, nil
 	}
@@ -316,18 +334,18 @@ func (s *Server) loadCachedIndexThumbnailOnce(ctx context.Context, req pageThumb
 
 	refreshCtx, cancel := context.WithTimeout(ctx, spriteRecoveryTimeout)
 	defer cancel()
-	if rerr := s.refreshPagesSync(refreshCtx, req.galleryID, req.token); rerr != nil {
+	if rerr := s.refreshPagesSync(refreshCtx, userID, req.galleryID, req.token); rerr != nil {
 		slog.Warn("sprite expiry refresh failed", "id", req.galleryID, "error", rerr)
 	}
 
-	if refreshed, found, rerr := s.resolveGalleryPageThumb(ctx, req.galleryID, req.token, req.index); rerr == nil && found {
+	if refreshed, found, rerr := s.resolveGalleryPageThumb(ctx, userID, client, req.galleryID, req.token, req.index); rerr == nil && found {
 		thumb = refreshed
 	}
 	if thumb.SpriteURL == expiredURL {
 		// The gallery document is still inside its short-lived dedup window, so
 		// the refresh saw the expired reference. Force a fresh single-page
 		// scrape, which bypasses that window.
-		fresh, ok, ferr := s.scrapeFreshPageThumb(ctx, req.galleryID, req.token, req.index)
+		fresh, ok, ferr := s.scrapeFreshPageThumb(ctx, client, userID, req.galleryID, req.token, req.index)
 		if ferr != nil {
 			slog.Warn("sprite expiry fresh scrape failed", "id", req.galleryID, "error", ferr)
 		} else if ok {
@@ -338,15 +356,15 @@ func (s *Server) loadCachedIndexThumbnailOnce(ctx context.Context, req pageThumb
 	if thumb.SpriteURL == expiredURL {
 		return nil, err
 	}
-	return s.loadOrCropThumbnail(ctx, thumb.SpriteURL, thumbRect(thumb))
+	return s.loadOrCropThumbnail(ctx, userID, client, thumb.SpriteURL, thumbRect(thumb))
 }
 
 // scrapeFreshPageThumb fetches the geometry for one page index directly,
 // bypassing the shared document dedup window so an expired sprite reference is
 // never re-read.
-func (s *Server) scrapeFreshPageThumb(ctx context.Context, galleryID int64, token string, index int) (model.GalleryPageThumb, bool, error) {
-	u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
-	return exhentai.ScrapeGalleryPageThumb(ctx, s.Client, u, index)
+func (s *Server) scrapeFreshPageThumb(ctx context.Context, client *http.Client, userID, galleryID int64, token string, index int) (model.GalleryPageThumb, bool, error) {
+	u := exhentai.GalleryURLAt(s.upstreamBase(ctx, userID), strconv.FormatInt(galleryID, 10), token)
+	return exhentai.ScrapeGalleryPageThumb(ctx, client, u, index)
 }
 
 // pageThumbResolveTimeout bounds how long an index resolve waits for the
@@ -366,7 +384,7 @@ var errThumbResolved = errors.New("page thumbnail resolved from pages stream")
 // also backfills the cache once complete. Only when the walk does not reach
 // the page within pageThumbResolveTimeout does it fall back to a direct
 // one-page scrape, so a cold, far-away index cannot stall the request.
-func (s *Server) resolveGalleryPageThumb(ctx context.Context, galleryID int64, token string, index int) (model.GalleryPageThumb, bool, error) {
+func (s *Server) resolveGalleryPageThumb(ctx context.Context, userID int64, client *http.Client, galleryID int64, token string, index int) (model.GalleryPageThumb, bool, error) {
 	if db := s.cacheDB(); db != nil {
 		row, found, err := gallerycache.Get(ctx, db, galleryID, token)
 		if err != nil {
@@ -399,15 +417,15 @@ func (s *Server) resolveGalleryPageThumb(ctx context.Context, galleryID int64, t
 	// Cache miss or missing geometry: fill the cache in the background from the
 	// same shared walk this resolve subscribes to, so the verified list is
 	// persisted even though the resolve itself only waits for one page.
-	go s.refreshPages(ctx, galleryID, token)
+	go s.refreshPages(ctx, userID, galleryID, token)
 
 	resolveCtx, cancel := context.WithTimeout(ctx, pageThumbResolveTimeout)
 	defer cancel()
 
-	thumb, found, err := s.resolveGalleryPageThumbFromStream(resolveCtx, galleryID, token, index)
+	thumb, found, err := s.resolveGalleryPageThumbFromStream(resolveCtx, userID, galleryID, token, index)
 	if errors.Is(err, context.DeadlineExceeded) {
-		u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
-		scraped, scrapedFound, scrapedErr := exhentai.ScrapeGalleryPageThumb(ctx, s.Client, u, index)
+		u := exhentai.GalleryURLAt(s.upstreamBase(ctx, userID), strconv.FormatInt(galleryID, 10), token)
+		scraped, scrapedFound, scrapedErr := exhentai.ScrapeGalleryPageThumb(ctx, client, u, index)
 		if scrapedErr == nil && scrapedFound {
 			s.backfillThumbnail(ctx, galleryID, token, index, scraped)
 		}
@@ -444,14 +462,14 @@ func (s *Server) backfillThumbnail(ctx context.Context, galleryID int64, token s
 // page or the page carries no thumbnail geometry.
 func (s *Server) resolveGalleryPageThumbFromStream(
 	ctx context.Context,
-	galleryID int64,
+	userID, galleryID int64,
 	token string,
 	index int,
 ) (model.GalleryPageThumb, bool, error) {
 	var thumb model.GalleryPageThumb
 	found := false
 
-	_, err := s.scrapeGalleryPages(ctx, galleryID, token, func(total int, pageURLs []string, thumbnails []model.GalleryPageThumb) error {
+	_, err := s.scrapeGalleryPages(ctx, userID, galleryID, token, func(total int, pageURLs []string, thumbnails []model.GalleryPageThumb) error {
 		if total > 0 && index >= total {
 			// The walk already knows the gallery size: no need to wait for the
 			// remaining pages to conclude the index does not exist.
@@ -528,14 +546,14 @@ func (s *Server) cropSprite(ctx context.Context, spriteURL string, sprite []byte
 
 // cropLive fetches the sprite from upstream and crops it, without touching
 // MinIO. Concurrent identical requests are coalesced.
-func (s *Server) cropLive(ctx context.Context, spriteURL string, rect image.Rectangle) ([]byte, error) {
-	key := "live:" + cropSingleflightKey(spriteURL, rect)
+func (s *Server) cropLive(ctx context.Context, userID int64, client *http.Client, spriteURL string, rect image.Rectangle) ([]byte, error) {
+	key := fmt.Sprintf("%d|live:", userID) + cropSingleflightKey(spriteURL, rect)
 	v, sfErr, _ := cachedImageGroup.Do(key, func() (any, error) {
 		fetchCtx := context.WithoutCancel(ctx)
 		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
 		defer cancel()
 
-		sprite, _, err := fetchThumbnail(fetchCtx, s.Client, spriteURL)
+		sprite, _, err := fetchThumbnail(fetchCtx, client, spriteURL)
 		if err != nil {
 			return nil, err
 		}
@@ -552,8 +570,8 @@ func (s *Server) cropLive(ctx context.Context, spriteURL string, rect image.Rect
 // sprite; otherwise the sprite is read through the MinIO cache and cropped,
 // and the result is persisted. Concurrent calls for the same crop are
 // coalesced.
-func (s *Server) loadOrCropThumbnail(ctx context.Context, spriteURL string, rect image.Rectangle) ([]byte, error) {
-	key := cropSingleflightKey(spriteURL, rect)
+func (s *Server) loadOrCropThumbnail(ctx context.Context, userID int64, client *http.Client, spriteURL string, rect image.Rectangle) ([]byte, error) {
+	key := fmt.Sprintf("%d|", userID) + cropSingleflightKey(spriteURL, rect)
 	v, sfErr, _ := cachedImageGroup.Do(key, func() (any, error) {
 		fetchCtx := context.WithoutCancel(ctx)
 		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
@@ -573,7 +591,7 @@ func (s *Server) loadOrCropThumbnail(ctx context.Context, spriteURL string, rect
 			}
 		}
 
-		sprite, err := s.loadOrFetchSprite(fetchCtx, spriteURL)
+		sprite, err := s.loadOrFetchSprite(fetchCtx, userID, client, spriteURL)
 		if err != nil {
 			return nil, err
 		}
@@ -604,10 +622,10 @@ func (s *Server) loadOrCropThumbnail(ctx context.Context, spriteURL string, rect
 // cache hits — run inside the singleflight, so concurrent crops of different
 // cells of one sprite share a single buffered copy instead of each holding
 // its own.
-func (s *Server) loadOrFetchSprite(ctx context.Context, spriteURL string) ([]byte, error) {
+func (s *Server) loadOrFetchSprite(ctx context.Context, userID int64, client *http.Client, spriteURL string) ([]byte, error) {
 	key := spriteCacheKey(spriteURL)
 
-	v, sfErr, _ := cachedImageGroup.Do("sprite:"+key, func() (any, error) {
+	v, sfErr, _ := cachedImageGroup.Do(fmt.Sprintf("%d|sprite:", userID)+key, func() (any, error) {
 		fetchCtx := context.WithoutCancel(ctx)
 		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
 		defer cancel()
@@ -623,7 +641,7 @@ func (s *Server) loadOrFetchSprite(ctx context.Context, spriteURL string) ([]byt
 			}
 		}
 
-		data, contentType, err := fetchThumbnail(fetchCtx, s.Client, spriteURL)
+		data, contentType, err := fetchThumbnail(fetchCtx, client, spriteURL)
 		if err != nil {
 			return nil, err
 		}

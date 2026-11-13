@@ -20,16 +20,16 @@ type TagPreferenceCreate struct {
 	hooks    []Hook
 }
 
-// SetTenantID sets the "tenant_id" field.
-func (_c *TagPreferenceCreate) SetTenantID(v int64) *TagPreferenceCreate {
-	_c.mutation.SetTenantID(v)
+// SetUserID sets the "user_id" field.
+func (_c *TagPreferenceCreate) SetUserID(v int64) *TagPreferenceCreate {
+	_c.mutation.SetUserID(v)
 	return _c
 }
 
-// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
-func (_c *TagPreferenceCreate) SetNillableTenantID(v *int64) *TagPreferenceCreate {
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (_c *TagPreferenceCreate) SetNillableUserID(v *int64) *TagPreferenceCreate {
 	if v != nil {
-		_c.SetTenantID(*v)
+		_c.SetUserID(*v)
 	}
 	return _c
 }
@@ -123,9 +123,9 @@ func (_c *TagPreferenceCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *TagPreferenceCreate) defaults() {
-	if _, ok := _c.mutation.TenantID(); !ok {
-		v := tagpreference.DefaultTenantID
-		_c.mutation.SetTenantID(v)
+	if _, ok := _c.mutation.UserID(); !ok {
+		v := tagpreference.DefaultUserID
+		_c.mutation.SetUserID(v)
 	}
 	if _, ok := _c.mutation.Weight(); !ok {
 		v := tagpreference.DefaultWeight
@@ -143,8 +143,8 @@ func (_c *TagPreferenceCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *TagPreferenceCreate) check() error {
-	if _, ok := _c.mutation.TenantID(); !ok {
-		return &ValidationError{Name: "tenant_id", err: errors.New(`ent: missing required field "TagPreference.tenant_id"`)}
+	if _, ok := _c.mutation.UserID(); !ok {
+		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "TagPreference.user_id"`)}
 	}
 	if _, ok := _c.mutation.Action(); !ok {
 		return &ValidationError{Name: "action", err: errors.New(`ent: missing required field "TagPreference.action"`)}
@@ -193,9 +193,9 @@ func (_c *TagPreferenceCreate) createSpec() (*TagPreference, *sqlgraph.CreateSpe
 		_node = &TagPreference{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(tagpreference.Table, nil)
 	)
-	if value, ok := _c.mutation.TenantID(); ok {
-		_spec.SetField(tagpreference.FieldTenantID, field.TypeInt64, value)
-		_node.TenantID = value
+	if value, ok := _c.mutation.UserID(); ok {
+		_spec.SetField(tagpreference.FieldUserID, field.TypeInt64, value)
+		_node.UserID = value
 	}
 	if value, ok := _c.mutation.Action(); ok {
 		_spec.SetField(tagpreference.FieldAction, field.TypeString, value)

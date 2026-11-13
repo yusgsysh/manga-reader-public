@@ -16,12 +16,14 @@ import (
 // signature, algorithm, issuer or expiry failed.
 var ErrInvalidToken = errors.New("invalid token")
 
-// Claims is the JWT payload. RegisteredClaims carries iss/sub/iat/exp/jti;
-// username and ver make /me readable without a database lookup and let logout
-// revoke every outstanding token by bumping users.token_version.
+// Claims is the JWT payload. The user identifier is carried both in the
+// standard "sub" claim and as an explicit "user_id" claim so clients and
+// servers can read it without parsing the subject. username and ver make /me
+// readable without a database lookup and let logout revoke every outstanding
+// token by bumping users.token_version.
 type Claims struct {
+	UserID       int64  `json:"user_id"`
 	Username     string `json:"username"`
-	TenantID     int64  `json:"tenant_id"`
 	Role         string `json:"role"`
 	TokenVersion int    `json:"ver"`
 	jwt.RegisteredClaims
@@ -43,12 +45,12 @@ func newTokenManager(secret, issuer string, ttl time.Duration) *tokenManager {
 	}
 }
 
-func (m *tokenManager) issue(userID int, tenantID int64, username, role string, tokenVersion int) (string, time.Time, error) {
+func (m *tokenManager) issue(userID int, username, role string, tokenVersion int) (string, time.Time, error) {
 	now := m.now()
 	expires := now.Add(m.ttl)
 	claims := Claims{
+		UserID:       int64(userID),
 		Username:     username,
-		TenantID:     tenantID,
 		Role:         role,
 		TokenVersion: tokenVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -91,11 +93,15 @@ func (m *tokenManager) parse(raw string) (*Claims, error) {
 	if err != nil || !token.Valid {
 		return nil, ErrInvalidToken
 	}
-	if claims.Subject == "" || claims.Username == "" || claims.TenantID <= 0 {
+	if claims.Subject == "" || claims.Username == "" || claims.UserID <= 0 {
+		return nil, ErrInvalidToken
+	}
+	subjectID, err := strconv.ParseInt(claims.Subject, 10, 64)
+	if err != nil || subjectID != claims.UserID {
 		return nil, ErrInvalidToken
 	}
 	switch claims.Role {
-	case config.RolePlatformAdmin, config.RoleTenantAdmin, config.RoleUser:
+	case config.RoleAdmin, config.RoleUser:
 	default:
 		return nil, ErrInvalidToken
 	}
@@ -103,9 +109,6 @@ func (m *tokenManager) parse(raw string) (*Claims, error) {
 		return nil, ErrInvalidToken
 	}
 	if !claims.ExpiresAt.After(claims.IssuedAt.Time) {
-		return nil, ErrInvalidToken
-	}
-	if _, err := strconv.Atoi(claims.Subject); err != nil {
 		return nil, ErrInvalidToken
 	}
 	if claims.TokenVersion < 0 {

@@ -128,6 +128,10 @@ func (s *Server) handleThumbnail(c *gin.Context) {
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
+	client, _, ok := s.upstreamClientForRequest(c)
+	if !ok {
+		return
+	}
 
 	// Thumbnails are small, but the reservation keeps the concurrent sum of
 	// live thumbnail buffers inside the global budget.
@@ -144,7 +148,7 @@ func (s *Server) handleThumbnail(c *gin.Context) {
 	}
 	defer lease.Release()
 
-	data, contentType, err := fetchThumbnail(ctx, s.Client, rawURL)
+	data, contentType, err := fetchThumbnail(ctx, client, rawURL)
 	if err != nil {
 		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download thumbnail failed: %v", err)})
 		return
@@ -170,6 +174,10 @@ func (s *Server) handleCachedThumbnail(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	uid, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
 	key := ThumbnailCacheKey(rawURL)
 
 	if s.Cache == nil {
@@ -182,7 +190,7 @@ func (s *Server) handleCachedThumbnail(c *gin.Context) {
 		return
 	}
 
-	result, err := s.loadOrFetchThumbnail(ctx, key, rawURL)
+	result, err := s.loadOrFetchThumbnail(ctx, uid, key, rawURL)
 	if err != nil {
 		if cache.IsNotFound(err) {
 			web.JSON(c, http.StatusNotFound, gin.H{"error": "thumbnail not found"})
@@ -211,6 +219,10 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	uid, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
 	key := cache.CacheKey(rawURL)
 
 	if s.Cache == nil {
@@ -223,7 +235,7 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 		return
 	}
 
-	result, err := s.loadOrFetchImage(ctx, key, rawURL)
+	result, err := s.loadOrFetchImage(ctx, uid, key, rawURL)
 	if err != nil {
 		if cache.IsNotFound(err) {
 			web.JSON(c, http.StatusNotFound, gin.H{"error": "image not found"})
@@ -253,9 +265,14 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 // is charged for the buffer once, not once per request. Only the leader proves
 // its own flag true because singleflight runs the closure on the leader's
 // goroutine; each caller has a private copy of the variable.
-func (s *Server) loadOrFetchImage(ctx context.Context, key string, decodedURL string) (*imageResult, error) {
+func (s *Server) loadOrFetchImage(ctx context.Context, userID int64, key string, decodedURL string) (*imageResult, error) {
+	client, err := s.upstreamClient(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	flightKey := fmt.Sprintf("%d|%s", userID, key)
 	var leader bool
-	v, sfErr, _ := cachedImageGroup.Do(key, func() (any, error) {
+	v, sfErr, _ := cachedImageGroup.Do(flightKey, func() (any, error) {
 		leader = true
 		// Use a context that won't be cancelled by the leader's cancellation
 		// (e.g., client disconnect) so that the fetch and its reservation are
@@ -282,10 +299,10 @@ func (s *Server) loadOrFetchImage(ctx context.Context, key string, decodedURL st
 		}
 		metrics.ObserveImageCache("page_image", "miss")
 
-		data, contentType, fetchErr := exhentai.FetchPageImage(flightCtx, s.Client, decodedURL)
+		data, contentType, fetchErr := exhentai.FetchPageImage(flightCtx, client, decodedURL)
 		if fetchErr != nil {
 			lease.Release()
-			s.triggerPageRefresh(flightCtx, decodedURL, fetchErr)
+			s.triggerPageRefresh(flightCtx, userID, decodedURL, fetchErr)
 			return nil, fetchErr
 		}
 		if rerr := lease.Resize(flightCtx, int64(len(data))); rerr != nil {
@@ -323,9 +340,14 @@ const pageFetchRetryDelay = 500 * time.Millisecond
 // the upstream on a cache miss. Concurrent calls for the same key are coalesced.
 // The reservation is taken once by the leader and shared by waiters, exactly as
 // in loadOrFetchImage; the caller owns one reference and must release() it.
-func (s *Server) loadOrFetchThumbnail(ctx context.Context, key string, rawURL string) (*imageResult, error) {
+func (s *Server) loadOrFetchThumbnail(ctx context.Context, userID int64, key string, rawURL string) (*imageResult, error) {
+	client, err := s.upstreamClient(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	flightKey := fmt.Sprintf("%d|%s", userID, key)
 	var leader bool
-	v, sfErr, _ := cachedImageGroup.Do(key, func() (any, error) {
+	v, sfErr, _ := cachedImageGroup.Do(flightKey, func() (any, error) {
 		leader = true
 		flightCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 60*time.Second)
 		defer cancel()
@@ -349,7 +371,7 @@ func (s *Server) loadOrFetchThumbnail(ctx context.Context, key string, rawURL st
 		}
 		metrics.ObserveImageCache("thumbnail", "miss")
 
-		data, contentType, fetchErr := fetchThumbnail(flightCtx, s.Client, rawURL)
+		data, contentType, fetchErr := fetchThumbnail(flightCtx, client, rawURL)
 		if fetchErr != nil {
 			lease.Release()
 			return nil, fetchErr
@@ -387,7 +409,7 @@ func (s *Server) loadOrFetchThumbnail(ctx context.Context, key string, rawURL st
 // Transient upstream errors are ignored. The refresh is best-effort: it never
 // blocks or fails the image request, and concurrent failures for the same
 // gallery collapse into one walk via the fill group.
-func (s *Server) triggerPageRefresh(ctx context.Context, pageURL string, fetchErr error) {
+func (s *Server) triggerPageRefresh(ctx context.Context, userID int64, pageURL string, fetchErr error) {
 	if !exhentai.IsPermanentUpstreamError(fetchErr) {
 		return
 	}
@@ -403,5 +425,5 @@ func (s *Server) triggerPageRefresh(ctx context.Context, pageURL string, fetchEr
 		return
 	}
 	slog.Info("cached page URL failed; refreshing gallery cache", "id", galleryID, "error", fetchErr)
-	go s.refreshPages(ctx, galleryID, row.Token)
+	go s.refreshPages(ctx, userID, galleryID, row.Token)
 }

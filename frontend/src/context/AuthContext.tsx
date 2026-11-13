@@ -30,20 +30,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginMutation = useMutation({
     mutationFn: ({
-      tenant,
       username,
       password,
     }: {
-      tenant: string;
       username: string;
       password: string;
-    }) => loginRequest(tenant, username, password),
+    }) => loginRequest(username, password),
     onSuccess: (identity) => {
       queryClient.setQueryData<AuthSession>(AUTH_QUERY_KEY, (previous) => ({
         enabled: previous?.enabled ?? true,
         initialized: true,
         user: identity.user,
-        tenant: identity.tenant,
       }));
     },
   });
@@ -58,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         predicate: (query) => query.queryKey[0] !== "auth",
       });
       queryClient.setQueryData<AuthSession>(AUTH_QUERY_KEY, (previous) =>
-        previous ? { ...previous, user: null, tenant: null } : previous,
+        previous ? { ...previous, user: null } : previous,
       );
     },
   });
@@ -71,15 +68,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         predicate: (query) => query.queryKey[0] !== "auth",
       });
       queryClient.setQueryData<AuthSession>(AUTH_QUERY_KEY, (previous) =>
-        previous ? { ...previous, user: null, tenant: null } : previous,
+        previous ? { ...previous, user: null } : previous,
       );
     });
     return () => setUnauthorizedHandler(null);
   }, [queryClient]);
 
   const login = useCallback(
-    async (tenant: string, username: string, password: string) => {
-      await loginMutation.mutateAsync({ tenant, username, password });
+    async (username: string, password: string) => {
+      await loginMutation.mutateAsync({ username, password });
     },
     [loginMutation],
   );
@@ -95,12 +92,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {
       session,
       user,
-      tenant: session?.tenant ?? null,
       role,
       enabled: session?.enabled ?? false,
       isAuthenticated: user !== null,
-      isPlatformAdmin: role === "platform_admin",
-      isTenantAdmin: role === "tenant_admin",
+      isAdmin: role === "admin",
       isLoading: sessionQuery.isPending,
       error: sessionQuery.error instanceof Error ? sessionQuery.error : null,
       isLoggingIn: loginMutation.isPending,

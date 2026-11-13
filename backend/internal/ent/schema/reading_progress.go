@@ -25,7 +25,7 @@ func (ReadingProgress) Annotations() []schema.Annotation {
 // Fields of the ReadingProgress.
 func (ReadingProgress) Fields() []ent.Field {
 	return []ent.Field{
-		field.Int64("tenant_id").Default(1),
+		field.Int64("user_id").Default(0),
 		field.Int64("gallery_id"),
 		field.String("token"),
 		field.Int("current_page").Default(0).NonNegative(),
@@ -39,6 +39,6 @@ func (ReadingProgress) Fields() []ent.Field {
 // Indexes of the ReadingProgress.
 func (ReadingProgress) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("tenant_id", "gallery_id", "token").Unique(),
+		index.Fields("user_id", "gallery_id", "token").Unique(),
 	}
 }

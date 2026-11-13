@@ -48,14 +48,9 @@ export const TagSettingsPage = lazy(() =>
 export const LoginPage = lazy(() =>
   import("../pages/LoginPage").then((m) => ({ default: m.LoginPage })),
 );
-export const PlatformAdminPage = lazy(() =>
-  import("../pages/PlatformAdminPage").then((m) => ({
-    default: m.PlatformAdminPage,
-  })),
-);
-export const TenantAdminPage = lazy(() =>
-  import("../pages/TenantAdminPage").then((m) => ({
-    default: m.TenantAdminPage,
+export const UserAdminPage = lazy(() =>
+  import("../pages/UserAdminPage").then((m) => ({
+    default: m.UserAdminPage,
   })),
 );
 export const NodeAdminPage = lazy(() =>

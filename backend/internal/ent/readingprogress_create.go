@@ -20,16 +20,16 @@ type ReadingProgressCreate struct {
 	hooks    []Hook
 }
 
-// SetTenantID sets the "tenant_id" field.
-func (_c *ReadingProgressCreate) SetTenantID(v int64) *ReadingProgressCreate {
-	_c.mutation.SetTenantID(v)
+// SetUserID sets the "user_id" field.
+func (_c *ReadingProgressCreate) SetUserID(v int64) *ReadingProgressCreate {
+	_c.mutation.SetUserID(v)
 	return _c
 }
 
-// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
-func (_c *ReadingProgressCreate) SetNillableTenantID(v *int64) *ReadingProgressCreate {
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (_c *ReadingProgressCreate) SetNillableUserID(v *int64) *ReadingProgressCreate {
 	if v != nil {
-		_c.SetTenantID(*v)
+		_c.SetUserID(*v)
 	}
 	return _c
 }
@@ -151,9 +151,9 @@ func (_c *ReadingProgressCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *ReadingProgressCreate) defaults() {
-	if _, ok := _c.mutation.TenantID(); !ok {
-		v := readingprogress.DefaultTenantID
-		_c.mutation.SetTenantID(v)
+	if _, ok := _c.mutation.UserID(); !ok {
+		v := readingprogress.DefaultUserID
+		_c.mutation.SetUserID(v)
 	}
 	if _, ok := _c.mutation.CurrentPage(); !ok {
 		v := readingprogress.DefaultCurrentPage
@@ -179,8 +179,8 @@ func (_c *ReadingProgressCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *ReadingProgressCreate) check() error {
-	if _, ok := _c.mutation.TenantID(); !ok {
-		return &ValidationError{Name: "tenant_id", err: errors.New(`ent: missing required field "ReadingProgress.tenant_id"`)}
+	if _, ok := _c.mutation.UserID(); !ok {
+		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "ReadingProgress.user_id"`)}
 	}
 	if _, ok := _c.mutation.GalleryID(); !ok {
 		return &ValidationError{Name: "gallery_id", err: errors.New(`ent: missing required field "ReadingProgress.gallery_id"`)}
@@ -239,9 +239,9 @@ func (_c *ReadingProgressCreate) createSpec() (*ReadingProgress, *sqlgraph.Creat
 		_node = &ReadingProgress{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(readingprogress.Table, sqlgraph.NewFieldSpec(readingprogress.FieldID, field.TypeInt))
 	)
-	if value, ok := _c.mutation.TenantID(); ok {
-		_spec.SetField(readingprogress.FieldTenantID, field.TypeInt64, value)
-		_node.TenantID = value
+	if value, ok := _c.mutation.UserID(); ok {
+		_spec.SetField(readingprogress.FieldUserID, field.TypeInt64, value)
+		_node.UserID = value
 	}
 	if value, ok := _c.mutation.GalleryID(); ok {
 		_spec.SetField(readingprogress.FieldGalleryID, field.TypeInt64, value)

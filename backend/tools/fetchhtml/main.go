@@ -10,9 +10,16 @@ import (
 	"strings"
 )
 
+// fetchhtml is a debugging helper: it fetches one ExHentai page with a session
+// supplied on the command line, so scrapers can be checked against the real
+// upstream HTML. The session is per user now and never read from the
+// environment; pass it explicitly as a cookie header, e.g.
+//
+//	EH_COOKIE='ipb_member_id=...; ipb_pass_hash=...' go run ./tools/fetchhtml https://exhentai.org/
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <url> [page]\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s <url>\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Set EH_COOKIE to the browser cookie header (never commit or log it).\n")
 		fmt.Fprintf(os.Stderr, "Examples:\n")
 		fmt.Fprintf(os.Stderr, "  %s https://exhentai.org/\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s https://exhentai.org/watched\n", os.Args[0])
@@ -23,53 +30,32 @@ func main() {
 
 	targetURL := os.Args[1]
 
-	// Load cookies from environment variables (no content printing)
-	memberID := os.Getenv("EHENTAI_COOKIE_IPB_MEMBER_ID")
-	passHash := os.Getenv("EHENTAI_COOKIE_IPB_PASS_HASH")
-	igneous := os.Getenv("EHENTAI_COOKIE_IGNEOUS")
-	sk := os.Getenv("EHENTAI_COOKIE_SK")
-
-	// Also support EHENTAI_COOKIE="ipb_member_id=xxx; ipb_pass_hash=xxx"
-	if cookieStr := os.Getenv("EHENTAI_COOKIE"); cookieStr != "" && memberID == "" {
-		pairs := strings.SplitSeq(cookieStr, ";")
-		for pair := range pairs {
-			pair = strings.TrimSpace(pair)
-			parts := strings.SplitN(pair, "=", 2)
-			if len(parts) != 2 {
-				continue
-			}
-			key := strings.TrimSpace(parts[0])
-			value := strings.TrimSpace(parts[1])
-			switch key {
-			case "ipb_member_id":
-				memberID = value
-			case "ipb_pass_hash":
-				passHash = value
-			case "igneous":
-				igneous = value
-			case "sk":
-				sk = value
-			}
-		}
-	}
-
-	if memberID == "" || passHash == "" {
-		fmt.Fprintln(os.Stderr, "Error: missing required cookies")
-		fmt.Fprintln(os.Stderr, "Set EHENTAI_COOKIE or EHENTAI_COOKIE_IPB_MEMBER_ID + EHENTAI_COOKIE_IPB_PASS_HASH")
+	// The session is a per-user secret, so it is passed in the environment of
+	// this one command (EH_COOKIE) rather than configured on the server.
+	raw := strings.TrimSpace(os.Getenv("EH_COOKIE"))
+	if raw == "" {
+		fmt.Fprintln(os.Stderr, "Error: EH_COOKIE is empty")
+		fmt.Fprintln(os.Stderr, "Example: EH_COOKIE='ipb_member_id=1; ipb_pass_hash=...'")
 		os.Exit(1)
 	}
 
 	jar, _ := cookiejar.New(nil)
 	u, _ := url.Parse(targetURL)
-	cookies := []*http.Cookie{
-		{Name: "ipb_member_id", Value: memberID},
-		{Name: "ipb_pass_hash", Value: passHash},
+	var cookies []*http.Cookie
+	for pair := range strings.SplitSeq(raw, ";") {
+		pair = strings.TrimSpace(pair)
+		name, value, found := strings.Cut(pair, "=")
+		if !found {
+			continue
+		}
+		cookies = append(cookies, &http.Cookie{
+			Name:  strings.TrimSpace(name),
+			Value: strings.TrimSpace(value),
+		})
 	}
-	if igneous != "" {
-		cookies = append(cookies, &http.Cookie{Name: "igneous", Value: igneous})
-	}
-	if sk != "" {
-		cookies = append(cookies, &http.Cookie{Name: "sk", Value: sk})
+	if len(cookies) == 0 {
+		fmt.Fprintln(os.Stderr, "Error: EH_COOKIE has no k=v pairs")
+		os.Exit(1)
 	}
 	jar.SetCookies(u, cookies)
 

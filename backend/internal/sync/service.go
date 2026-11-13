@@ -12,7 +12,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"manga-reader/internal/config"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/syncchange"
 	"manga-reader/internal/metrics"
@@ -34,10 +33,7 @@ type Service struct {
 	hub         *Hub
 	hostEnabled bool
 	nodeAuth    func(scopes ...string) gin.HandlerFunc
-	// tenantID is the tenant used by the local client engine. Host requests
-	// take their tenant from the authenticated node instead.
-	tenantID int64
-	engine   *Engine
+	engine      *Engine
 	// clientActive mirrors ClientConfig.Active(); the outbox is only written
 	// when this instance can actually exchange changes with a peer.
 	clientActive atomic.Bool
@@ -68,25 +64,17 @@ type Options struct {
 	// DisableInactiveOutbox stops appending outbox rows when no peer is
 	// configured, so a single-instance deployment does not grow sync_change.
 	DisableInactiveOutbox bool
-	// TenantID selects the tenant used by the client engine. Zero means the
-	// default tenant (1). Host requests use the authenticated node tenant.
-	TenantID int64
 	// RequestTimeout bounds one push exchange (default 30s).
 	RequestTimeout time.Duration
 }
 
 // NewService builds a Service. The engine must be started with RunEngine.
 func NewService(client *ent.Client, opts Options) *Service {
-	tenantID := opts.TenantID
-	if tenantID == 0 {
-		tenantID = config.DefaultTenantID
-	}
 	s := &Service{
 		client:                client,
 		hub:                   NewHub(),
 		hostEnabled:           opts.HostEnabled,
 		nodeAuth:              opts.NodeAuth,
-		tenantID:              tenantID,
 		disableInactiveOutbox: opts.DisableInactiveOutbox,
 	}
 	s.engine = newEngine(s)
@@ -133,9 +121,7 @@ func (s *Service) handlePush(c *gin.Context) {
 		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "node identity missing"})
 		return
 	}
-	nodeTenantID := identity.TenantID
-
-	applied, skipped, err := ApplyChangesForTenant(ctx, s.client, nodeTenantID, req.Changes)
+	applied, skipped, err := ApplyChanges(ctx, s.client, req.Changes)
 	if err != nil {
 		slog.Error("apply sync changes failed", "error", err)
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "apply changes failed"})
@@ -153,14 +139,14 @@ func (s *Service) handlePush(c *gin.Context) {
 		// Read the watermark before the export so a row written in between
 		// keeps an outbox id above the returned cursor instead of landing in
 		// neither the snapshot nor the delta.
-		cursor, err = maxOutboxID(ctx, s.client, nodeTenantID)
+		cursor, err = maxOutboxID(ctx, s.client)
 		if err != nil {
 			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "collect cursor failed"})
 			return
 		}
-		changes, err = ExportSnapshot(ctx, s.client, nodeTenantID)
+		changes, err = ExportSnapshot(ctx, s.client)
 	} else {
-		changes, cursor, err = ReadChangesSince(ctx, s.client, nodeTenantID, req.Cursor)
+		changes, cursor, err = ReadChangesSince(ctx, s.client, req.Cursor)
 	}
 	if err != nil {
 		slog.Error("collect sync changes failed", "error", err)
@@ -173,7 +159,7 @@ func (s *Service) handlePush(c *gin.Context) {
 	// outbox max means the host was reset (rewind) or the client is stale, and
 	// pruning then would destroy changes the client has never seen.
 	if req.Cursor > 0 && req.Cursor <= cursor {
-		if err := pruneOutbox(ctx, s.client, nodeTenantID, req.Cursor); err != nil {
+		if err := pruneOutbox(ctx, s.client, req.Cursor); err != nil {
 			slog.Warn("prune sync outbox failed", "error", err)
 		}
 	}
@@ -181,7 +167,6 @@ func (s *Service) handlePush(c *gin.Context) {
 	slog.Info("node sync push",
 		"request_id", requestid.From(c),
 		"node_id", identity.NodeID,
-		"tenant_id", nodeTenantID,
 		"applied", applied,
 		"skipped", skipped,
 		"changes_in", len(req.Changes),
@@ -201,12 +186,11 @@ func (s *Service) handlePush(c *gin.Context) {
 func (s *Service) handlePeerEvents(c *gin.Context) {
 	if identity, ok := nodeauth.From(c); ok {
 		slog.Info("node sync events connected",
-			"request_id", requestid.From(c), "node_id", identity.NodeID, "tenant_id", identity.TenantID)
+			"request_id", requestid.From(c), "node_id", identity.NodeID)
 	}
 	sub, cancel := s.hub.SubscribePeer()
 	s.serveEvents(c, sub, cancel, func() any {
-		identity, _ := nodeauth.From(c)
-		cursor, err := maxOutboxID(c.Request.Context(), s.client, identity.TenantID)
+		cursor, err := maxOutboxID(c.Request.Context(), s.client)
 		if err != nil {
 			return nil
 		}
@@ -355,7 +339,7 @@ func (s *Service) handleStatus(c *gin.Context) {
 	pending := 0
 	if cfg.Active() {
 		pending, err = s.client.SyncChange.Query().
-			Where(syncchange.IDGT(st.LastPushedID), syncchange.TenantIDEQ(s.tenantID)).
+			Where(syncchange.IDGT(st.LastPushedID)).
 			Count(ctx)
 		if err != nil {
 			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "count pending changes failed"})

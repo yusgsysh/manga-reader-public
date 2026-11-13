@@ -28,24 +28,24 @@ func (_u *TagSyncBaselineUpdate) Where(ps ...predicate.TagSyncBaseline) *TagSync
 	return _u
 }
 
-// SetTenantID sets the "tenant_id" field.
-func (_u *TagSyncBaselineUpdate) SetTenantID(v int64) *TagSyncBaselineUpdate {
-	_u.mutation.ResetTenantID()
-	_u.mutation.SetTenantID(v)
+// SetUserID sets the "user_id" field.
+func (_u *TagSyncBaselineUpdate) SetUserID(v int64) *TagSyncBaselineUpdate {
+	_u.mutation.ResetUserID()
+	_u.mutation.SetUserID(v)
 	return _u
 }
 
-// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
-func (_u *TagSyncBaselineUpdate) SetNillableTenantID(v *int64) *TagSyncBaselineUpdate {
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (_u *TagSyncBaselineUpdate) SetNillableUserID(v *int64) *TagSyncBaselineUpdate {
 	if v != nil {
-		_u.SetTenantID(*v)
+		_u.SetUserID(*v)
 	}
 	return _u
 }
 
-// AddTenantID adds value to the "tenant_id" field.
-func (_u *TagSyncBaselineUpdate) AddTenantID(v int64) *TagSyncBaselineUpdate {
-	_u.mutation.AddTenantID(v)
+// AddUserID adds value to the "user_id" field.
+func (_u *TagSyncBaselineUpdate) AddUserID(v int64) *TagSyncBaselineUpdate {
+	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -145,7 +145,7 @@ func (_u *TagSyncBaselineUpdate) sqlSave(ctx context.Context) (_node int, err er
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldTenantID, field.TypeInt64), sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
+	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldUserID, field.TypeInt64), sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -153,11 +153,11 @@ func (_u *TagSyncBaselineUpdate) sqlSave(ctx context.Context) (_node int, err er
 			}
 		}
 	}
-	if value, ok := _u.mutation.TenantID(); ok {
-		_spec.SetField(tagsyncbaseline.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.UserID(); ok {
+		_spec.SetField(tagsyncbaseline.FieldUserID, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.AddedTenantID(); ok {
-		_spec.AddField(tagsyncbaseline.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.AddedUserID(); ok {
+		_spec.AddField(tagsyncbaseline.FieldUserID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagsyncbaseline.FieldAction, field.TypeString, value)
@@ -191,24 +191,24 @@ type TagSyncBaselineUpdateOne struct {
 	mutation *TagSyncBaselineMutation
 }
 
-// SetTenantID sets the "tenant_id" field.
-func (_u *TagSyncBaselineUpdateOne) SetTenantID(v int64) *TagSyncBaselineUpdateOne {
-	_u.mutation.ResetTenantID()
-	_u.mutation.SetTenantID(v)
+// SetUserID sets the "user_id" field.
+func (_u *TagSyncBaselineUpdateOne) SetUserID(v int64) *TagSyncBaselineUpdateOne {
+	_u.mutation.ResetUserID()
+	_u.mutation.SetUserID(v)
 	return _u
 }
 
-// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
-func (_u *TagSyncBaselineUpdateOne) SetNillableTenantID(v *int64) *TagSyncBaselineUpdateOne {
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (_u *TagSyncBaselineUpdateOne) SetNillableUserID(v *int64) *TagSyncBaselineUpdateOne {
 	if v != nil {
-		_u.SetTenantID(*v)
+		_u.SetUserID(*v)
 	}
 	return _u
 }
 
-// AddTenantID adds value to the "tenant_id" field.
-func (_u *TagSyncBaselineUpdateOne) AddTenantID(v int64) *TagSyncBaselineUpdateOne {
-	_u.mutation.AddTenantID(v)
+// AddUserID adds value to the "user_id" field.
+func (_u *TagSyncBaselineUpdateOne) AddUserID(v int64) *TagSyncBaselineUpdateOne {
+	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -321,9 +321,9 @@ func (_u *TagSyncBaselineUpdateOne) sqlSave(ctx context.Context) (_node *TagSync
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldTenantID, field.TypeInt64), sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
-	if id, ok := _u.mutation.TenantID(); !ok {
-		return nil, &ValidationError{Name: "tenant_id", err: errors.New(`ent: missing "TagSyncBaseline.tenant_id" for update`)}
+	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldUserID, field.TypeInt64), sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
+	if id, ok := _u.mutation.UserID(); !ok {
+		return nil, &ValidationError{Name: "user_id", err: errors.New(`ent: missing "TagSyncBaseline.user_id" for update`)}
 	} else {
 		_spec.Node.CompositeID[0].Value = id
 	}
@@ -348,11 +348,11 @@ func (_u *TagSyncBaselineUpdateOne) sqlSave(ctx context.Context) (_node *TagSync
 			}
 		}
 	}
-	if value, ok := _u.mutation.TenantID(); ok {
-		_spec.SetField(tagsyncbaseline.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.UserID(); ok {
+		_spec.SetField(tagsyncbaseline.FieldUserID, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.AddedTenantID(); ok {
-		_spec.AddField(tagsyncbaseline.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.AddedUserID(); ok {
+		_spec.AddField(tagsyncbaseline.FieldUserID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagsyncbaseline.FieldAction, field.TypeString, value)

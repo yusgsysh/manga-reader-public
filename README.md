@@ -1,6 +1,6 @@
 # Manga Reader
 
-单用户、自托管的 ExHentai Web 漫画客户端。
+多用户、自托管的 ExHentai Web 漫画客户端。每个账号拥有独立的 Cookie、个人设置、业务数据和任务状态。
 
 - Backend：Go / Gin / Ent (ORM) / SQLite 或 PostgreSQL / MinIO (S3)
 - Frontend：Bun / React / Vite / TypeScript
@@ -17,9 +17,12 @@
 - 离线下载任务（Prefill）：后台排队预填充图片缓存、下载管理页、流式 ZIP 下载
 - 缩略图源站代理与 MinIO 缓存
 - 页面图片 MinIO 缓存（可选）
-- 多租户：Shared Database + Shared Schema + `tenant_id` 隔离；平台管理员 / 租户管理员 / 普通用户三级角色
-- 默认匿名访问（默认租户），可选 JWT 登录页（内置管理员、Argon2id 密码哈希、HttpOnly Cookie、服务端登出撤销）
-- 节点同步使用数据库管理的独立 Node API Key（SHA-256 哈希、Scopes、轮换/撤销），与用户 JWT 完全分离
+- 多用户：实例级账号体系，JWT 中的 `user_id` 是唯一数据归属；管理员 / 普通用户两级角色
+- 严格数据隔离：书架、阅读进度、标签规则、Prefill 任务、同步 outbox 全部带 `user_id`，查询/更新/删除均附加当前用户谓词
+- 每用户独立 ExHentai Cookie：AES-256-GCM 加密存储、独立 Cookie Jar/HTTP Client、单独验证状态，绝不跨账号共享
+- 每用户个人设置：ExHentai 站点、搜索默认参数、标签过滤、显示/阅读器/预加载偏好集中保存在 `user_setting`
+- JWT 登录页（Argon2id 密码哈希、HttpOnly Cookie、服务端登出撤销），匿名模式已移除
+- 节点同步使用数据库管理的独立 Node API Key（SHA-256 哈希、Scopes、轮换/撤销），与用户 JWT 完全分离；同步变更保留 `user_id`
 
 ## 目录结构
 
@@ -54,7 +57,7 @@ backend/
 │   │   ├── gallerycache/         # GalleryCache 字段常量与查询辅助
 │   │   └── migrate/              # 数据库迁移逻辑
 │   ├── auth/                     # JWT 登录（Argon2id / HS256 / Gin 中间件）
-│   ├── tenant/                   # 租户上下文与租户中间件
+│   ├── usercookie/               # 每用户 ExHentai Cookie 加密存储与客户端池
 │   ├── node/                     # Node API Key 认证与 Scopes
 │   ├── exhentai/                 # ExHentai API / 页面抓取（含 10 秒请求去重）
 │   ├── gallerycache/             # gallery_cache 读写
@@ -78,18 +81,16 @@ backend/
    cp .env.example .env
    ```
 
-   至少设置 ExHentai Cookie（两种方式任选其一）：
+   必须设置随机 `JWT_SECRET` 与管理员的初始密码：
 
    ```env
-   # 方式一：完整 Cookie 字符串
-   EHENTAI_COOKIE=ipb_member_id=xxx; ipb_pass_hash=xxx
-   # 方式二：单独变量
-   EHENTAI_COOKIE_IPB_MEMBER_ID=xxx
-   EHENTAI_COOKIE_IPB_PASS_HASH=xxx
+   JWT_SECRET=<openssl rand -hex 32>
+   ADMIN_USERNAME=admin
+   ADMIN_PASSWORD=change-me-strong-password
    ```
 
-   `.env.example` 默认匿名访问（默认租户）。如果要把服务暴露到公网，
-   必须设置 `JWT_SECRET` 开启登录认证（见「公网部署」）。
+   启动后登录，在「设置 → ExHentai 账号」为每个账号分别填写 Cookie。
+   服务端加密存储并按用户隔离；Cookie 不再通过环境变量配置。
 
 2. 启动服务（单镜像：Gin API + 内嵌前端由 GitHub Actions 构建推送到 `ghcr.io/yusgsysh/manga-reader`，compose 直接拉取，仓库内无 `build:` 配置）。GHCR 包为私有时先登录（PAT 需 `read:packages`）：
 
@@ -122,7 +123,7 @@ backend/
 
 | 接口类型 | 认证机制 |
 |----------|----------|
-| 用户业务 API（登录、书架、进度、Prefill、租户/用户管理） | `Authorization: Bearer <JWT>` |
+| 用户业务 API（登录、书架、进度、Prefill、个人设置、用户管理） | `Authorization: Bearer <JWT>` |
 | 节点同步 API（`/api/sync/push`、`/api/sync/events`） | `Authorization: Bearer <Node API Key>` |
 | Metrics 内部接口 | 回环限制或独立 `MANGA_READER_METRICS_TOKEN` |
 | Health / Readiness | 最小信息公开：`/healthz`、`/readyz` |
@@ -131,9 +132,9 @@ backend/
 - **应用端口不暴露公网**：容器 `:8080`、PostgreSQL `:5432`、MinIO `:9000/:9001` 不发布到公网；compose 与 quadlet 默认发布到 `127.0.0.1:5173:8080`，公网只经过带 TLS 的前置反代。确实需要局域网直连时才改成 `0.0.0.0:5173:8080`。
 - **Basic Auth 已完全移除**：后端、前端、compose/quadlet、observability 和文档都不再接受或配置 HTTP Basic Authentication。
 
-### JWT 登录认证与多租户
+### JWT 登录认证与多用户
 
-多租户场景。设置随机 `JWT_SECRET` 即启用（至少 32 字节）：
+多用户模式始终启用。设置随机 `JWT_SECRET`（至少 32 字节）：
 
 ```bash
 openssl rand -hex 32
@@ -144,44 +145,45 @@ JWT_SECRET=<粘贴上一步输出>
 JWT_ISSUER=manga-reader
 JWT_EXPIRES_IN=1h
 ADMIN_USERNAME=admin
-ADMIN_PASSWORD=change-me-strong-password   # 仅首次启动用于创建平台管理员
+ADMIN_PASSWORD=change-me-strong-password   # 仅首次启动、users 表为空时创建管理员
 MANGA_READER_AUTH_COOKIE_SECURE=auto
 ```
 
-- **默认租户与平台管理员**：首次启动创建 `default` 租户（ID 1），并用 `ADMIN_USERNAME` + `ADMIN_PASSWORD` 创建该租户的**平台管理员**；密码以 Argon2id PHC 哈希写入数据库。之后启动**不会覆盖**已有密码，可清空 `ADMIN_PASSWORD`。
-- **忘记管理员密码**：不要通过改 `.env` 的 `ADMIN_PASSWORD` 来重置。新镜像内置 `reset-admin` 命令（密码从 stdin 读取，不出现在进程列表）：
+- **首个管理员**：首次启动用 `ADMIN_USERNAME` + `ADMIN_PASSWORD` 创建一个实例级管理员；密码以 Argon2id PHC 哈希写入数据库。之后启动**不会覆盖**已有密码，可清空 `ADMIN_PASSWORD`。
+- **忘记管理员密码**：不要通过改 `.env` 的 `ADMIN_PASSWORD` 来重置。镜像内置 `reset-admin`（密码从 stdin 读取，不出现在进程列表）：
 
   ```bash
   printf '%s\n' 'new-strong-password' | \
-    docker compose exec -T backend /app/reset-admin -tenant default -username admin
+    docker compose exec -T backend /app/reset-admin -username admin
   ```
 
   从源码运行：
 
   ```bash
   cd backend
-  printf '%s\n' 'new-strong-password' | go run ./cmd/reset-admin -tenant default -username admin
+  printf '%s\n' 'new-strong-password' | go run ./cmd/reset-admin -username admin
   ```
 
   命令会递增 `token_version` 撤销旧 Token，并把用户状态恢复为 `active`。
-- **登录接口**：`POST /api/auth/login` 需要 `tenant`（租户 slug，可省略并回退到 `default`）+ `username` + `password`。成功后返回 `access_token` / `token_type` / `expires_in`，同时写入 `HttpOnly; SameSite=Lax; Secure(auto)` Cookie；JWT 中含有 `sub`、`tenant_id`、`role`、`iss`、`iat`、`exp`、`jti`。前端不把 Token 放进 `localStorage`（降低 XSS 窃取风险），页面刷新后由 Cookie + `GET /api/auth/me` 恢复登录态。
-- **角色**：`platform_admin` 管理全局租户/节点；`tenant_admin` 管理本租户用户和业务数据；`user` 只使用业务功能。角色校验同时在前端路由与后端 handler 执行。
-- **数据隔离**：`bookshelf`、`reading_progress`、`prefill_job`、`tag_preference`、`tag_sync_baseline` 全部带 `tenant_id`；它们按租户共享，所有查询/创建/更新/删除都从 JWT 租户上下文取 ID。`gallery_cache` 是全局共享的上游元数据缓存。`tenant_id` 请求参数/Header 一律被忽略。
-- **租户中间件**：JWT 验证后加载租户并检查 `status=active`；不存在/禁用返回 403，删除或禁用用户的 Token 会在下一次请求失效。平台管理员与租户管理员也不能跨租户访问用户或业务数据。
-- **数据迁移**：旧单用户数据库启动时自动创建 `default` 租户，把旧管理员提升为平台管理员、把所有租户业务行归入租户 1；`gallery_cache` 保留。迁移在事务中执行且可重复运行。
+- **登录接口**：`POST /api/auth/login` 只需要 `username` + `password`。成功后返回 `access_token` / `token_type` / `expires_in`，同时写入 `HttpOnly; SameSite=Lax; Secure(auto)` Cookie；JWT 的 `sub` 与 `user_id` 都是当前用户 ID。前端不把 Token 放进 `localStorage`，页面刷新后由 Cookie + `GET /api/auth/me` 恢复登录态。
+- **角色**：`admin` 管理实例级用户、节点和系统同步配置；`user` 只能使用业务功能和个人设置。普通用户的 JWT 调用 `/api/admin/*`、`/api/sync/config`、`/api/sync/status`、`/api/dev/*` 会得到 403。
+- **数据隔离**：`bookshelf`、`reading_progress`、`prefill_job`、`tag_preference`、`tag_sync_baseline`、`sync_change` 全部带 `user_id`，所有查询/创建/更新/删除都从 JWT 取用户 ID 并附加谓词。客户端传入的 `user_id`（路径、查询、Header、Body）一律被忽略。`gallery_cache`、缩略图等公共上游元数据继续全局共享。
+- **Cookie 与个人设置**：`user_setting` 每个用户一行，`cookie_ciphertext` 使用由 `JWT_SECRET` 派生的 AES-256-GCM 密钥加密；接口只返回是否配置、验证状态、站点等非敏感摘要。每个用户使用独立 HTTP Client / Cookie Jar（会话 Cookie 同时写入 exhentai.org 与 e-hentai.org 两个域），日志只记录长度不记录值。每用户可选浏览站点（`exhentai` 默认 / `e-hentai`）：搜索、列表、画廊页与种子页按所选站点抓取（两站 gallery id/token 通用）；标签同步固定走 exhentai（`s.exhentai.org` 变更 API 无 e-hentai 对应端点）。
+- **系统级接口**：`/api/sync/push`、`/api/sync/events` 只接受 Node API Key；Metrics 使用独立 Token；用户 JWT 不能调用这些系统接口。
+- **数据迁移**：旧多租户数据库启动时按“每个旧租户的最早管理员（没有管理员则最早用户）”把租户业务数据迁移到该账号；没有账号的租户数据保留为 `user_id = 0`（不可被任何登录用户读取，等待运维显式归属）。跨租户重复用户名、映射后业务键冲突会中止迁移并给出明确错误，不会随机改名或丢弃数据。迁移可重复运行；升级前请备份数据库。`tenant` 表和 `tenant_id` 列在迁移完成后删除。旧部署的全局 ExHentai Cookie 不会自动导入：升级后请各账号在「设置 → ExHentai 账号」重新填写。
 - **CSRF**：Cookie 仅用于同源请求；`csrfGuard` 会拒绝跨站 `Origin` / `Sec-Fetch-Site` 的写请求。反向代理必须透传 `Origin` / `Sec-Fetch-Site`，并保持应用与前端同源；HTTPS 终止在反代时还要设置 `X-Forwarded-Proto: https`，否则 `auto` 模式不会给 Cookie 加 `Secure`。
 - **登出**：`POST /api/auth/logout` 会递增 `users.token_version` 并清除 Cookie，所有已签发 Token 立即失效。
-- **Token 校验**：只接受 `Authorization: Bearer <JWT>`（或同源 Cookie），严格校验 HS256 签名、`iss`、`iat`、`exp` 和 `token_version`；缺失/无效/过期/签名错误统一返回 `401`。
-- **公开 API**：`/api/auth/login`、`/api/auth/status`、搜索/画廊/图片代理。**其余 `/api/*` 默认要求 JWT**（书架、阅读进度、最近阅读、标签设置、Prefill、同步配置、Dev Tools、`/api/admin/*`、`/api/tenant/*` 等）。
-- **管理 API**：`/api/admin/tenants*` 与 `/api/admin/nodes*` 仅平台管理员；`/api/tenant/users*` 仅租户管理员，且路径中的用户 ID 必须同时匹配 JWT 租户。
+- **Token 校验**：只接受 `Authorization: Bearer <JWT>`（或同源 Cookie），严格校验 HS256 签名、`iss`、`iat`、`exp`、`user_id` 与 `token_version`；缺失/无效/过期/签名错误统一返回 `401`。
+- **公开 API**：只有 `/api/auth/login`、`/api/auth/status` 和节点同步端点无需用户 JWT。搜索、画廊、图片代理（`<img>`/EventSource 会携带同源 HttpOnly Cookie）也需要登录，因为它们必须使用当前用户的 ExHentai Cookie。
+- **管理 API**：`/api/admin/users*`、`/api/admin/nodes*` 仅管理员可用；用户只能修改自己的数据。
 
 ### 节点同步与 API Key
 
-- **节点**：`/api/admin/nodes` 由平台管理员管理，每个节点绑定一个租户；节点状态支持启用/禁用。
+- **节点**：`/api/admin/nodes` 由管理员管理，节点是受信任的同步对端，不再绑定租户；节点状态支持启用/禁用。
 - **API Key**：按节点独立生成（至少 256 bit 随机熵），数据库只保存 SHA-256 哈希和显示前缀；完整明文只在创建/轮换响应中出现一次。
 - **Scopes**：`sync:read`、`sync:write`、`sync:events`。`POST /api/sync/push` 需要 `sync:write`；`GET /api/sync/events` 需要 `sync:events`；越权返回 403。
-- **轮换**：新 Key 创建后旧 Key 默认保持有效，确认后可显式 DELETE 撤销；撤销、禁用节点或禁用租户会立即拒绝认证。
-- **隔离**：节点 API Key 只能访问其绑定租户；请求中的 `node_id`/`tenant_id` 不能扩大范围。同步请求记录 `request_id` 审计日志，数据合并本身按行 LWW 幂等。
+- **轮换**：新 Key 创建后旧 Key 默认保持有效，确认后可显式 DELETE 撤销；撤销或禁用节点会立即拒绝认证。
+- **隔离**：节点 API Key 是系统级凭证，可交换同步 outbox；每条变更都携带 `user_id`，对端按用户写入并保持隔离。请求中的 `node_id`/`user_id` 不能扩大范围。同步请求记录 `request_id` 审计日志，数据合并本身按行 LWW 幂等。
 - **客户端配置**：桌面端设置页填写服务器地址 + 该节点的 API Key；请求使用 `Authorization: Bearer <API Key>`。用户 JWT 不能访问同步端点。
 
 ### Metrics 与健康检查
@@ -205,7 +207,7 @@ go test ./internal/auth/ ./internal/node/ ./internal/metrics/ ./internal/sync/ .
 cd ../frontend && bun run test
 ```
 
-覆盖：JWT 登录/失效/篡改、Basic Auth 头被拒绝、节点 API Key 认证/撤销/Scopes/禁用、同步租户隔离、Metrics 回环与独立 Token、跨租户书架/进度/Prefill 隔离、角色权限与数据迁移。
+覆盖：JWT 登录/失效/篡改、节点 API Key 认证/撤销/Scopes/禁用、同步用户归属、Metrics 回环与独立 Token、跨用户书架/进度/Prefill/标签/设置/Cookie 隔离、管理员权限与数据迁移。
 
 ## CI 与部署
 
@@ -264,11 +266,6 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 
 | 变量 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
-| `EHENTAI_COOKIE` | 可选* | - | ExHentai 完整 Cookie 字符串；与单独变量同时存在时只用于补齐空缺字段 |
-| `EHENTAI_COOKIE_IPB_MEMBER_ID` | 可选* | - | 登录凭据（单独设置方式，优先于完整字符串） |
-| `EHENTAI_COOKIE_IPB_PASS_HASH` | 可选* | - | 登录凭据（单独设置方式，优先于完整字符串） |
-| `EHENTAI_COOKIE_IGNEOUS` | 否 | - | ExHentai 会话 Cookie；过期值会被自动丢弃并重试（见「ExHentai 返回 sad panda」） |
-| `EHENTAI_COOKIE_SK` | 否 | - | 标签过滤用的设置键，不参与登录 |
 | `EHENTAI_PORT` | 否 | `127.0.0.1:8080` | 后端监听地址；裸跑默认仅回环，容器内由镜像/compose 覆盖为 `:8080` |
 | `MANGA_READER_DB_DRIVER` | 否 | `sqlite` | 数据库类型：`sqlite` 或 `postgres` |
 | `MANGA_READER_DB_PATH` | 否 | `data/manga-reader.db` | SQLite 路径（Docker 内 `/app/data/manga-reader.db`） |
@@ -280,11 +277,11 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `MINIO_BUCKET` | 否 | - | MinIO Bucket |
 | `MINIO_USE_SSL` | 否 | `false` | 是否启用 SSL |
 | `MINIO_REGION` | 否 | - | MinIO Region |
-| `JWT_SECRET` | 否 | - | 设置后启用 JWT 登录页；至少 32 字节随机值（`openssl rand -hex 32`）。为空则保持匿名模式 |
+| `JWT_SECRET` | 是 | - | JWT 签名与用户 Cookie 加密密钥的派生来源；至少 32 字节随机值（`openssl rand -hex 32`）。为空时拒绝启动 |
 | `JWT_ISSUER` | 否 | `manga-reader` | JWT 的 `iss`，校验时必须一致 |
 | `JWT_EXPIRES_IN` | 否 | `1h` | Token 有效期（Go duration，范围 1m–720h） |
-| `ADMIN_USERNAME` | 否 | `admin` | 首次初始化默认租户（`default`）的平台管理员用户名 |
-| `ADMIN_PASSWORD` | 否 | - | 首次初始化平台管理员密码（至少 8 位）；仅在默认租户没有用户时使用，不覆盖已有密码 |
+| `ADMIN_USERNAME` | 否 | `admin` | 首次初始化（users 表为空）的管理员用户名 |
+| `ADMIN_PASSWORD` | 否 | - | 首次初始化管理员密码（至少 8 位）；仅在 users 表为空时使用，不覆盖已有密码 |
 | `MANGA_READER_AUTH_COOKIE_SECURE` | 否 | `auto` | 认证 Cookie 的 `Secure`：`auto`（TLS 或 `X-Forwarded-Proto=https` 时开启）/`true`/`false` |
 | `MANGA_READER_METRICS_ENABLED` | 否 | `true` | 启用 `/metrics`；未配置 Token 时仅回环可访问 |
 | `MANGA_READER_METRICS_TOKEN` | 否 | - | 独立 Metrics Token（至少 32 字符）；与 JWT/节点 API Key 不共用 |
@@ -297,14 +294,14 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `HTTPS_PROXY` | 否 | - | 同上，用于 `https://` 目标（ExHentai 等） |
 | `NO_PROXY` | 否 | - | 绕过代理的主机/网段（内网 MinIO、数据库、compose 服务名等） |
 
-> \* `EHENTAI_COOKIE` 与 `EHENTAI_COOKIE_IPB_MEMBER_ID` + `EHENTAI_COOKIE_IPB_PASS_HASH` 至少配置一种，否则后端无法启动。
+> ExHentai Cookie 完全按用户配置：登录后在「设置 → ExHentai 账号」为每个用户单独填写，服务端加密存库。没有任何 ExHentai Cookie 相关的环境变量（`MANGA_READER_AUTH_COOKIE_SECURE` 只控制登录 JWT 的 HttpOnly Cookie 属性）。
 
 ### ExHentai 返回 sad panda
 
 sad panda 是 ExHentai 拒绝会话的响应（HTTP 200 + 空白页面），不是网络故障。按顺序排查：
 
 1. `ipb_member_id` / `ipb_pass_hash` 是否还有效：改过密码或在别处退出登录都会让它们失效，需要重新从浏览器复制。
-2. `igneous` 是否过期：它随每次登录轮换，旧值会让 ExHentai 直接返回 sad panda，即使 `ipb_pass_hash` 仍然有效。后端检测到 sad panda 时会丢弃该 cookie 并重试一次，成功后由响应写入新的 `igneous`，日志里会出现 `exhentai rejected the igneous cookie; retrying without it`；更新 `.env` 中的值可以省掉这次往返。
+2. `igneous` 是否过期：它随每次登录轮换，旧值会让 ExHentai 直接返回 sad panda，即使 `ipb_pass_hash` 仍然有效。后端检测到 sad panda 时会丢弃该 cookie 并重试一次，成功后由响应写入新的 `igneous`，日志里会出现 `exhentai rejected the igneous cookie; retrying without it`；在「设置 → ExHentai 账号」重新保存 Cookie 可以省掉这次往返。
 3. 出口 IP 是否被限制：ExHentai 对机房 IP、公共代理常返回 sad panda 或 IP 封禁页，可换出口或配置 `HTTPS_PROXY`。
 4. `sk` 只影响标签过滤，与登录无关，缺它不会导致 sad panda。
 
@@ -479,15 +476,15 @@ curl -X POST http://localhost:8080/api/reading-progress/cleanup?days=0
 
 多实例双向同步**阅读进度、书架与画廊缓存**（settings 不同步），所有连接由桌面端主动发起（NAT 友好）：
 
-- **服务端**：`MANGA_READER_SYNC_ENABLED=true` 时挂载节点同步端点；节点和 API Key 由平台管理员在 `/admin/nodes` 创建，API Key 只保存 SHA-256 哈希。
+- **服务端**：`MANGA_READER_SYNC_ENABLED=true` 时挂载节点同步端点；节点和 API Key 由管理员在 `/admin/nodes` 创建，API Key 只保存 SHA-256 哈希。
 - **桌面端 / 客户端**：设置页「数据同步」填服务端地址 + 该节点的一次性 API Key 并启用（配置存 `sync_state` 表）。请求使用 `Authorization: Bearer <Node API Key>`，不再使用 Basic Auth 或全局同步令牌。
 - 双方通过 `POST /api/sync/push` 推送 + 拉取，`GET /api/sync/events` SSE 监听对端新变更（写后 2s 去抖推送，心跳 25s，断线退避 1s→60s，60s 轮询兜底）。节点 API Key 需要 `sync:write`（push）或 `sync:events`（SSE）。
 - 合并规则：按行 LWW（`updated_at` 新者胜），删除用 tombstone；首次连接返回全量快照；更换 `server_url` 会自动重置同步游标与引导标记，对新对端重新全量（`gallery_cache` 行在 LWW 胜出时按字段合并，空值不覆盖，镜像本地 upsert 语义）。
-- 节点只能访问其绑定租户的 outbox/snapshot；请求里的 `node_id`/`tenant_id` 不会扩大范围。同步请求带 `request_id` 写入审计日志。
+- 节点是受信任的同步对端，交换全实例 outbox/snapshot；每条变更携带 `user_id`，对端按用户写入并保持隔离。请求里的 `node_id`/`user_id` 不会扩大范围，同步请求带 `request_id` 写入审计日志。
 - 桌面端本地通过 `GET /api/events/changes` SSE 通知前端刷新（该端点使用用户 JWT）。
 
 ```bash
-# 平台管理员在 /admin/nodes 创建节点与 API Key 后，桌面端配置：
+# 管理员在 /admin/nodes 创建节点与 API Key 后，桌面端配置：
 curl -X PUT http://localhost:8080/api/sync/config -H 'Content-Type: application/json' \
   -d '{"enabled":true,"server_url":"http://server:8080","token":"mrk_..."}'
 

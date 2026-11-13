@@ -2,13 +2,13 @@
 
 ExHentai Web 漫画客户端的前端。
 
-单用户、自托管、Docker 部署。页面：登录 / 首页 / 订阅 / 热门 / 搜索 / 书架 / 最近阅读 / 下载管理 / 设置 / Gallery 详情 / 阅读器 / 平台租户管理 / 节点与 API Key 管理 / 租户用户管理。
+多用户、自托管、Docker 部署。页面：登录 / 首页 / 订阅 / 热门 / 搜索 / 书架 / 最近阅读 / 下载管理 / 设置 / Gallery 详情 / 阅读器 / 用户管理 / 节点与 API Key 管理。
 
 ## 登录与认证
 
-后端设置 `JWT_SECRET` 后，前端在未登录访问受保护页面时会跳转至 `/login`。登录表单需要租户 slug、用户名和密码；登录成功后 JWT 由后端写入 `HttpOnly; SameSite=Lax` Cookie（前端只保留内存副本用于同标签页的 `Authorization` 头），刷新页面通过 `/api/auth/me` 恢复用户、租户和角色。任何 API 返回 `401` 都会统一清理认证状态并跳回登录页。后端未启用 JWT 时保持匿名模式，不显示登录页。
+后端始终启用多用户 JWT。未登录访问受保护页面时会跳转至 `/login`；登录表单只需要用户名和密码。登录成功后 JWT 由后端写入 `HttpOnly; SameSite=Lax` Cookie（前端只保留内存副本用于同标签页的 `Authorization` 头），刷新页面通过 `/api/auth/me` 恢复用户和角色。任何 API 返回 `401` 都会统一清理认证状态并跳回登录页。
 
-平台管理员可从导航进入 `/admin/tenants` 管理租户、`/admin/nodes` 管理同步节点与一次性 API Key；租户管理员进入 `/tenant/users` 管理本租户用户。普通用户不会看到这些入口，后端也会独立校验角色。
+管理员可从导航进入 `/admin/users` 管理账号、`/admin/nodes` 管理同步节点与一次性 API Key。普通用户不会看到这些入口，后端也会独立校验角色；每个用户的 ExHentai Cookie 与个人设置在「设置」页独立维护。
 
 ## 技术栈
 

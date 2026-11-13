@@ -17,7 +17,8 @@ const ExhentaiBase = "https://exhentai.org"
 // exhentaiCookieDomain scopes the session cookies to every *.exhentai.org
 // host. Without it the jar stores them host-only for exhentai.org, and the
 // setusertag API calls to s.exhentai.org go out unauthenticated (the server
-// rejects them with errors like "target not exist").
+// rejects them with errors like "target not exist"). CreateHTTPClient derives
+// the per-domain cookie attributes from each site's host.
 const exhentaiCookieDomain = "exhentai.org"
 
 // CookieConfig stores cookie configuration.
@@ -49,6 +50,20 @@ func (t validatingTransport) CloseIdleConnections() {
 	}
 }
 
+func domainCookies(domain string, cfg *CookieConfig) []*http.Cookie {
+	cookies := []*http.Cookie{
+		{Name: "ipb_member_id", Value: cfg.IpbMemberID, Domain: domain},
+		{Name: "ipb_pass_hash", Value: cfg.IpbPassHash, Domain: domain},
+	}
+	if cfg.Igneous != "" {
+		cookies = append(cookies, &http.Cookie{Name: "igneous", Value: cfg.Igneous, Domain: domain})
+	}
+	if cfg.SK != "" {
+		cookies = append(cookies, &http.Cookie{Name: "sk", Value: cfg.SK, Domain: domain})
+	}
+	return cookies
+}
+
 // CreateHTTPClient creates an HTTP client with ExHentai cookies.
 func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 	if !IsValidCookieConfig(cfg) {
@@ -60,18 +75,14 @@ func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 		return nil, err
 	}
 
-	u, _ := url.Parse(ExhentaiBase)
-	cookies := []*http.Cookie{
-		{Name: "ipb_member_id", Value: cfg.IpbMemberID, Domain: exhentaiCookieDomain},
-		{Name: "ipb_pass_hash", Value: cfg.IpbPassHash, Domain: exhentaiCookieDomain},
+	// The same account works on both sites, and one user may browse either
+	// (the per-user site preference only picks the browsing host), so the jar
+	// carries the session on both domains.
+	for _, base := range []string{ExhentaiBase, EHentaiURL} {
+		u, _ := url.Parse(base)
+		domain := u.Hostname()
+		jar.SetCookies(u, domainCookies(domain, cfg))
 	}
-	if cfg.Igneous != "" {
-		cookies = append(cookies, &http.Cookie{Name: "igneous", Value: cfg.Igneous, Domain: exhentaiCookieDomain})
-	}
-	if cfg.SK != "" {
-		cookies = append(cookies, &http.Cookie{Name: "sk", Value: cfg.SK, Domain: exhentaiCookieDomain})
-	}
-	jar.SetCookies(u, cookies)
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.ResponseHeaderTimeout = 30 * time.Second

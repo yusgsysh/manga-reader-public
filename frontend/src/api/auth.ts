@@ -1,22 +1,14 @@
 import { apiGet, apiPostJson, ApiRequestError, setAccessToken } from "./client";
 
-export interface AuthTenant {
-  id: number;
-  name: string;
-  slug: string;
-  status: string;
-}
-
 export interface AuthUser {
   id: number;
-  tenant_id: number;
+  user_id: number;
   username: string;
   role: string;
 }
 
 export interface AuthIdentity {
   user: AuthUser;
-  tenant: AuthTenant;
 }
 
 export interface AuthStatus {
@@ -26,7 +18,6 @@ export interface AuthStatus {
 
 export interface AuthSession extends AuthStatus {
   user: AuthUser | null;
-  tenant: AuthTenant | null;
 }
 
 interface LoginResponse {
@@ -37,10 +28,9 @@ interface LoginResponse {
 
 interface MeResponse {
   id: number;
-  tenant_id: number;
+  user_id: number;
   username: string;
   role: string;
-  tenant: AuthTenant;
 }
 
 export function fetchAuthStatus(): Promise<AuthStatus> {
@@ -52,11 +42,10 @@ export async function fetchCurrentUser(): Promise<AuthIdentity> {
   return {
     user: {
       id: response.id,
-      tenant_id: response.tenant_id,
+      user_id: response.user_id ?? response.id,
       username: response.username,
       role: response.role,
     },
-    tenant: response.tenant,
   };
 }
 
@@ -69,26 +58,24 @@ export async function fetchCurrentUser(): Promise<AuthIdentity> {
 export async function fetchAuthSession(): Promise<AuthSession> {
   const status = await fetchAuthStatus();
   if (!status.enabled) {
-    return { ...status, user: null, tenant: null };
+    return { ...status, user: null };
   }
   try {
     const identity = await fetchCurrentUser();
     return { ...status, ...identity };
   } catch (error) {
     if (error instanceof ApiRequestError && error.status === 401) {
-      return { ...status, user: null, tenant: null };
+      return { ...status, user: null };
     }
     throw error;
   }
 }
 
 export async function login(
-  tenant: string,
   username: string,
   password: string,
 ): Promise<AuthIdentity> {
   const result = await apiPostJson<LoginResponse>("/api/auth/login", {
-    tenant,
     username,
     password,
   });

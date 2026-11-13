@@ -22,7 +22,6 @@ import {
   type NodeScope,
   type SyncNode,
 } from "../api/nodes";
-import { fetchTenants } from "../api/admin";
 import { ErrorState } from "../components/common/ErrorState";
 import { PageHeader, Section, useToast } from "../components/ui";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -280,9 +279,6 @@ function NodeRow({ node }: { node: SyncNode }) {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{node.name}</span>
-              <span className="rounded-full bg-kumo-tint px-2 py-0.5 text-xs text-kumo-subtle">
-                tenant {node.tenant_id}
-              </span>
               <span
                 className={
                   node.status === "active"
@@ -344,21 +340,11 @@ export function NodeAdminPage() {
     retry: false,
     staleTime: 0,
   });
-  const tenantsQuery = useQuery({
-    queryKey: ["admin", "tenants"],
-    queryFn: fetchTenants,
-    retry: false,
-    staleTime: 0,
-  });
-
   const [name, setName] = useState("");
-  const [tenantID, setTenantID] = useState("");
   const create = useMutation({
-    mutationFn: () =>
-      createNode({ name: name.trim(), tenant_id: Number(tenantID) }),
+    mutationFn: () => createNode({ name: name.trim() }),
     onSuccess: () => {
       setName("");
-      setTenantID("");
       void queryClient.invalidateQueries({ queryKey: NODES_KEY });
       toast.success("节点已创建");
     },
@@ -375,7 +361,7 @@ export function NodeAdminPage() {
         </p>
       </div>
 
-      <Section title="创建节点" description="节点绑定一个租户，其 API Key 只能同步该租户的数据。">
+      <Section title="创建节点" description="节点是受信任的同步对端；同步数据保留各自的 user_id，不会合并不同用户的数据。">
         <div className="card-surface space-y-3 p-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <Input
@@ -384,24 +370,11 @@ export function NodeAdminPage() {
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
-            <select
-              aria-label="所属租户"
-              value={tenantID}
-              onChange={(event) => setTenantID(event.target.value)}
-              className="rounded-lg border border-kumo-hairline bg-kumo-base px-3 py-2 text-sm text-kumo-default"
-            >
-              <option value="">选择租户</option>
-              {tenantsQuery.data?.tenants.map((tenant) => (
-                <option key={tenant.id} value={tenant.id}>
-                  {tenant.name} ({tenant.slug})
-                </option>
-              ))}
-            </select>
           </div>
           <Button
             size="sm"
             onClick={() => create.mutate()}
-            disabled={!name.trim() || !tenantID || create.isPending}
+            disabled={!name.trim() || create.isPending}
           >
             {create.isPending ? (
               <CircleNotch className="mr-1 size-3.5 animate-spin" />

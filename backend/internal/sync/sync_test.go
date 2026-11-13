@@ -68,7 +68,7 @@ func testNodeAuth(validToken string) func(...string) gin.HandlerFunc {
 				return
 			}
 			allowed := append([]string{nodeauth.ScopeSyncRead, nodeauth.ScopeSyncWrite, nodeauth.ScopeSyncEvent}, scopes...)
-			nodeauth.WithGin(c, nodeauth.Identity{NodeID: 1, TenantID: 1, Scopes: allowed})
+			nodeauth.WithGin(c, nodeauth.Identity{NodeID: 1, Scopes: allowed})
 			c.Next()
 		}
 	}
@@ -81,6 +81,7 @@ func newHostService(client *ent.Client, token string) *Service {
 func seedProgress(t *testing.T, client *ent.Client, galleryID int64, token string, page int, updatedAt time.Time) {
 	t.Helper()
 	_, err := client.ReadingProgress.Create().
+		SetUserID(1).
 		SetGalleryID(galleryID).
 		SetToken(token).
 		SetCurrentPage(page).
@@ -137,7 +138,7 @@ func TestApplyChangesLastWriteWins(t *testing.T) {
 	seedProgress(t, client, 1, "tok", 1, base)
 
 	older := Change{
-		Entity: EntityReadingProgress, GalleryID: 1, Token: "tok", Op: OpUpsert,
+		UserID: 1, Entity: EntityReadingProgress, GalleryID: 1, Token: "tok", Op: OpUpsert,
 		Row: &Row{CurrentPage: 3, Progress: 0.3, CreatedAt: base, UpdatedAt: base.Add(-time.Minute)},
 	}
 	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{older})
@@ -152,7 +153,7 @@ func TestApplyChangesLastWriteWins(t *testing.T) {
 	}
 
 	newer := Change{
-		Entity: EntityReadingProgress, GalleryID: 1, Token: "tok", Op: OpUpsert,
+		UserID: 1, Entity: EntityReadingProgress, GalleryID: 1, Token: "tok", Op: OpUpsert,
 		Row: &Row{CurrentPage: 7, Progress: 0.7, CreatedAt: base, UpdatedAt: base.Add(time.Minute)},
 	}
 	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{newer})
@@ -171,7 +172,7 @@ func TestApplyChangesIdempotent(t *testing.T) {
 	client := newTestClient(t)
 	now := time.Now().UTC()
 	ch := Change{
-		Entity: EntityReadingProgress, GalleryID: 5, Token: "abc", Op: OpUpsert,
+		UserID: 1, Entity: EntityReadingProgress, GalleryID: 5, Token: "abc", Op: OpUpsert,
 		Row: &Row{CurrentPage: 2, Progress: 0.2, CreatedAt: now, UpdatedAt: now},
 	}
 	applied, _, err := ApplyChanges(t.Context(), client, []Change{ch})
@@ -196,7 +197,7 @@ func TestApplyDeleteTombstoneLWW(t *testing.T) {
 	// Tombstone older than the row: keep the row.
 	old := base.Add(-time.Minute)
 	delOld := Change{
-		Entity: EntityReadingProgress, GalleryID: 9, Token: "tok",
+		UserID: 1, Entity: EntityReadingProgress, GalleryID: 9, Token: "tok",
 		Op: OpDelete, DeletedAt: &old,
 	}
 	applied, _, err := ApplyChanges(t.Context(), client, []Change{delOld})
@@ -213,7 +214,7 @@ func TestApplyDeleteTombstoneLWW(t *testing.T) {
 	// Tombstone newer than the row: delete.
 	fresh := base.Add(time.Hour)
 	delNew := Change{
-		Entity: EntityReadingProgress, GalleryID: 9, Token: "tok",
+		UserID: 1, Entity: EntityReadingProgress, GalleryID: 9, Token: "tok",
 		Op: OpDelete, DeletedAt: &fresh,
 	}
 	applied, _, err = ApplyChanges(t.Context(), client, []Change{delNew})
@@ -237,7 +238,7 @@ func TestRecordNotifiesHub(t *testing.T) {
 	localCh, unsubLocal := svc.hub.SubscribeLocal()
 	defer unsubLocal()
 
-	if err := svc.RecordUpsert(t.Context(), EntityBookshelf, 1, "tok"); err != nil {
+	if err := svc.RecordUpsert(t.Context(), 1, EntityBookshelf, 1, "tok"); err != nil {
 		t.Fatalf("record: %v", err)
 	}
 	assertSignaled(t, peerCh, "peer subscriber")
@@ -268,13 +269,13 @@ func TestReadChangesSinceCoalescesPerRecord(t *testing.T) {
 
 	base := time.Now().UTC()
 	seedProgress(t, client, 1, "tok", 1, base)
-	if err := svc.RecordUpsert(t.Context(), EntityReadingProgress, 1, "tok"); err != nil {
+	if err := svc.RecordUpsert(t.Context(), 1, EntityReadingProgress, 1, "tok"); err != nil {
 		t.Fatalf("record upsert: %v", err)
 	}
-	if err := svc.RecordUpsert(t.Context(), EntityReadingProgress, 1, "tok"); err != nil {
+	if err := svc.RecordUpsert(t.Context(), 1, EntityReadingProgress, 1, "tok"); err != nil {
 		t.Fatalf("record upsert 2: %v", err)
 	}
-	if err := svc.RecordDelete(t.Context(), EntityReadingProgress, 1, "tok"); err != nil {
+	if err := svc.RecordDelete(t.Context(), 1, EntityReadingProgress, 1, "tok"); err != nil {
 		t.Fatalf("record delete: %v", err)
 	}
 	if _, err := client.ReadingProgress.Delete().
@@ -283,7 +284,7 @@ func TestReadChangesSinceCoalescesPerRecord(t *testing.T) {
 		t.Fatalf("delete row: %v", err)
 	}
 
-	changes, maxID, err := ReadChangesSince(t.Context(), client, 1, 0)
+	changes, maxID, err := ReadChangesSince(t.Context(), client, 0)
 	if err != nil {
 		t.Fatalf("read changes: %v", err)
 	}
@@ -312,7 +313,7 @@ func TestPushBootstrapAndDelta(t *testing.T) {
 	seedProgress(t, clientClient, 200, "cli", 6, now.Add(-time.Hour))
 
 	// Bootstrap: client snapshot -> server, server snapshot -> client.
-	snap, err := ExportSnapshot(t.Context(), clientClient, 1)
+	snap, err := ExportSnapshot(t.Context(), clientClient)
 	if err != nil {
 		t.Fatalf("export client snapshot: %v", err)
 	}
@@ -345,7 +346,7 @@ func TestPushBootstrapAndDelta(t *testing.T) {
 	}
 
 	// Delta: client records a local change and pushes with its cursor.
-	if err := NewService(clientClient, Options{}).RecordUpsert(t.Context(), EntityReadingProgress, 200, "cli"); err != nil {
+	if err := NewService(clientClient, Options{}).RecordUpsert(t.Context(), 1, EntityReadingProgress, 200, "cli"); err != nil {
 		t.Fatalf("record delta: %v", err)
 	}
 	if err := clientClient.ReadingProgress.Update().
@@ -355,7 +356,7 @@ func TestPushBootstrapAndDelta(t *testing.T) {
 		Exec(t.Context()); err != nil {
 		t.Fatalf("update client row: %v", err)
 	}
-	delta, _, err := ReadChangesSince(t.Context(), clientClient, 1, 0)
+	delta, _, err := ReadChangesSince(t.Context(), clientClient, 0)
 	if err != nil {
 		t.Fatalf("read delta: %v", err)
 	}
@@ -634,7 +635,7 @@ func TestEngineSnapshotWatermark(t *testing.T) {
 
 	now := time.Now().UTC()
 	seedProgress(t, client, 1, "a", 1, now)
-	if err := svc.RecordUpsert(t.Context(), EntityReadingProgress, 1, "a"); err != nil {
+	if err := svc.RecordUpsert(t.Context(), 1, EntityReadingProgress, 1, "a"); err != nil {
 		t.Fatalf("record: %v", err)
 	}
 
@@ -830,7 +831,7 @@ func TestExportSnapshotIncludesGalleryCache(t *testing.T) {
 	now := time.Now().UTC()
 	seedGalleryCacheRow(t, client, 77, "snapTok", now)
 
-	snap, err := ExportSnapshot(t.Context(), client, 1)
+	snap, err := ExportSnapshot(t.Context(), client)
 	if err != nil {
 		t.Fatalf("export snapshot: %v", err)
 	}
@@ -861,11 +862,11 @@ func TestReadChangesSinceFetchesGalleryCacheRow(t *testing.T) {
 
 	// Seed a cache row and record its upsert so it appears in the outbox.
 	seedGalleryCacheRow(t, client, 55, "tok", now)
-	if err := svc.RecordUpsert(t.Context(), EntityGalleryCache, 55, "tok"); err != nil {
+	if err := svc.RecordUpsert(t.Context(), 1, EntityGalleryCache, 55, "tok"); err != nil {
 		t.Fatalf("record upsert: %v", err)
 	}
 
-	changes, maxID, err := ReadChangesSince(t.Context(), client, 1, 0)
+	changes, maxID, err := ReadChangesSince(t.Context(), client, 0)
 	if err != nil {
 		t.Fatalf("read changes: %v", err)
 	}
@@ -902,7 +903,7 @@ func TestPushPruneSkipsRewoundCursor(t *testing.T) {
 	now := time.Now().UTC()
 	seedProgress(t, serverClient, 1, "a", 1, now)
 	for range 3 {
-		if err := svc.RecordUpsert(t.Context(), EntityReadingProgress, 1, "a"); err != nil {
+		if err := svc.RecordUpsert(t.Context(), 1, EntityReadingProgress, 1, "a"); err != nil {
 			t.Fatalf("record: %v", err)
 		}
 	}
@@ -944,11 +945,11 @@ func TestApplyChangesSkipsInvalidRow(t *testing.T) {
 	base := time.Now().UTC()
 
 	valid := Change{
-		Entity: EntityReadingProgress, GalleryID: 1, Token: "tok", Op: OpUpsert,
+		UserID: 1, Entity: EntityReadingProgress, GalleryID: 1, Token: "tok", Op: OpUpsert,
 		Row: &Row{CurrentPage: 2, Progress: 0.2, CreatedAt: base, UpdatedAt: base},
 	}
 	invalid := Change{
-		Entity: EntityReadingProgress, GalleryID: 2, Token: "tok", Op: OpUpsert,
+		UserID: 1, Entity: EntityReadingProgress, GalleryID: 2, Token: "tok", Op: OpUpsert,
 		Row: &Row{CurrentPage: 1, Progress: 1.5, CreatedAt: base, UpdatedAt: base},
 	}
 
@@ -964,13 +965,13 @@ func TestApplyChangesSkipsInvalidRow(t *testing.T) {
 	}
 }
 
-// seedNodeKey creates an active node in tenantID and returns a one-time
+// seedNodeKey creates an active node and returns a one-time
 // plaintext key carrying exactly the requested scopes.
-func seedNodeKey(t *testing.T, client *ent.Client, tenantID int64, scopes []string) string {
+func seedNodeKey(t *testing.T, client *ent.Client, scopes []string) string {
 	t.Helper()
 	nodeRow, err := client.Node.Create().
-		SetName("node-" + strconv.FormatInt(tenantID, 10) + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)).
-		SetTenantID(tenantID).SetStatus(config.StatusActive).Save(t.Context())
+		SetName("node-" + strconv.FormatInt(time.Now().UnixNano(), 10)).
+		SetStatus(config.StatusActive).Save(t.Context())
 	if err != nil {
 		t.Fatalf("create node: %v", err)
 	}
@@ -986,34 +987,23 @@ func seedNodeKey(t *testing.T, client *ent.Client, tenantID int64, scopes []stri
 	return material.Plaintext
 }
 
-func TestPushIsScopedToNodeTenant(t *testing.T) {
+func TestPushPreservesUserOwnership(t *testing.T) {
 	serverClient := newTestClient(t)
-	t1, err := serverClient.Tenant.Create().
-		SetName("T1").SetSlug("t1").SetStatus(config.StatusActive).Save(t.Context())
-	if err != nil {
-		t.Fatalf("tenant 1: %v", err)
-	}
-	t2, err := serverClient.Tenant.Create().
-		SetName("T2").SetSlug("t2").SetStatus(config.StatusActive).Save(t.Context())
-	if err != nil {
-		t.Fatalf("tenant 2: %v", err)
-	}
-	seedNodeKey(t, serverClient, int64(t1.ID), nodeauth.DefaultScopes)
-	key := seedNodeKey(t, serverClient, int64(t2.ID), nodeauth.DefaultScopes)
+	key := seedNodeKey(t, serverClient, nodeauth.DefaultScopes)
 	now := time.Now().UTC()
 	for _, tc := range []struct {
-		tenantID int64
-		gallery  int64
-		token    string
+		userID  int64
+		gallery int64
+		token   string
 	}{
-		{int64(t1.ID), 1, "tenant-1"},
-		{int64(t2.ID), 2, "tenant-2"},
+		{1, 1, "user-1"},
+		{2, 2, "user-2"},
 	} {
 		if _, err := serverClient.ReadingProgress.Create().
-			SetTenantID(tc.tenantID).SetGalleryID(tc.gallery).SetToken(tc.token).
+			SetUserID(tc.userID).SetGalleryID(tc.gallery).SetToken(tc.token).
 			SetCurrentPage(1).SetProgress(0.1).SetCreatedAt(now).SetUpdatedAt(now).
 			Save(t.Context()); err != nil {
-			t.Fatalf("seed tenant %d: %v", tc.tenantID, err)
+			t.Fatalf("seed user %d: %v", tc.userID, err)
 		}
 	}
 	svc := NewService(serverClient, Options{
@@ -1025,20 +1015,19 @@ func TestPushIsScopedToNodeTenant(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("push = %d %s", w.Code, w.Body.String())
 	}
-	if len(resp.Changes) != 1 || resp.Changes[0].GalleryID != 2 {
-		t.Fatalf("node tenant snapshot = %+v, want only gallery 2", resp.Changes)
+	owners := map[int64]bool{}
+	for _, ch := range resp.Changes {
+		owners[ch.UserID] = true
+	}
+	if len(resp.Changes) != 2 || !owners[1] || !owners[2] {
+		t.Fatalf("snapshot = %+v, want both users' rows with their user_id", resp.Changes)
 	}
 }
 
 func TestPushRequiresNodeScopeAndActiveKey(t *testing.T) {
 	client := newTestClient(t)
-	tenantRow, err := client.Tenant.Create().
-		SetName("T").SetSlug("t").SetStatus(config.StatusActive).Save(t.Context())
-	if err != nil {
-		t.Fatalf("tenant: %v", err)
-	}
-	readOnly := seedNodeKey(t, client, int64(tenantRow.ID), []string{nodeauth.ScopeSyncRead})
-	valid := seedNodeKey(t, client, int64(tenantRow.ID), nodeauth.DefaultScopes)
+	readOnly := seedNodeKey(t, client, []string{nodeauth.ScopeSyncRead})
+	valid := seedNodeKey(t, client, nodeauth.DefaultScopes)
 	svc := NewService(client, Options{
 		HostEnabled: true,
 		NodeAuth:    nodeauth.New(client).Middleware,
@@ -1071,7 +1060,7 @@ func TestPushCycleRetriesAfterFailure(t *testing.T) {
 	now := time.Now().UTC()
 	seedProgress(t, client, 77, "retry", 3, now)
 	svc := NewService(client, Options{})
-	if err := svc.RecordUpsert(t.Context(), EntityReadingProgress, 77, "retry"); err != nil {
+	if err := svc.RecordUpsert(t.Context(), 1, EntityReadingProgress, 77, "retry"); err != nil {
 		t.Fatalf("record upsert: %v", err)
 	}
 

@@ -10,13 +10,17 @@ import (
 	"entgo.io/ent/schema/index"
 )
 
-// User is an account inside one tenant. Usernames are unique per tenant, so
-// two tenants may both have an "admin" account.
+// User is an account of the installation. Usernames are unique across the
+// whole instance: a user is no longer scoped to a tenant.
 //
 // Passwords are stored as Argon2id PHC strings (never plaintext). TokenVersion
 // is embedded in every JWT as the "ver" claim; logout increments it so all
 // previously issued tokens are rejected by the middleware without keeping a
 // list of revoked token IDs.
+//
+// Every private row (bookshelf, reading progress, prefill jobs, tag rules,
+// sync outbox, personal settings and ExHentai cookie) carries this user's ID
+// and is only ever queried with it in the predicate.
 type User struct {
 	ent.Schema
 }
@@ -31,15 +35,14 @@ func (User) Annotations() []schema.Annotation {
 // Fields of the User.
 func (User) Fields() []ent.Field {
 	return []ent.Field{
-		field.Int64("tenant_id").Default(1),
 		field.String("username").
-			NotEmpty(),
+			NotEmpty().
+			Unique(),
 		field.String("password_hash").
 			NotEmpty().
 			Sensitive(),
-		// platform_admin: global tenant management.
-		// tenant_admin: users and business data inside one tenant.
-		// user: business data only.
+		// admin: manages users, nodes and instance-wide settings.
+		// user: owns business data and personal settings only.
 		field.String("role").
 			Default("user"),
 		field.String("status").
@@ -58,7 +61,7 @@ func (User) Fields() []ent.Field {
 // Indexes of the User.
 func (User) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("tenant_id", "username").Unique(),
-		index.Fields("tenant_id", "role"),
+		index.Fields("role"),
+		index.Fields("status"),
 	}
 }

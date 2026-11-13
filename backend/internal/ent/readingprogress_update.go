@@ -28,24 +28,24 @@ func (_u *ReadingProgressUpdate) Where(ps ...predicate.ReadingProgress) *Reading
 	return _u
 }
 
-// SetTenantID sets the "tenant_id" field.
-func (_u *ReadingProgressUpdate) SetTenantID(v int64) *ReadingProgressUpdate {
-	_u.mutation.ResetTenantID()
-	_u.mutation.SetTenantID(v)
+// SetUserID sets the "user_id" field.
+func (_u *ReadingProgressUpdate) SetUserID(v int64) *ReadingProgressUpdate {
+	_u.mutation.ResetUserID()
+	_u.mutation.SetUserID(v)
 	return _u
 }
 
-// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
-func (_u *ReadingProgressUpdate) SetNillableTenantID(v *int64) *ReadingProgressUpdate {
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (_u *ReadingProgressUpdate) SetNillableUserID(v *int64) *ReadingProgressUpdate {
 	if v != nil {
-		_u.SetTenantID(*v)
+		_u.SetUserID(*v)
 	}
 	return _u
 }
 
-// AddTenantID adds value to the "tenant_id" field.
-func (_u *ReadingProgressUpdate) AddTenantID(v int64) *ReadingProgressUpdate {
-	_u.mutation.AddTenantID(v)
+// AddUserID adds value to the "user_id" field.
+func (_u *ReadingProgressUpdate) AddUserID(v int64) *ReadingProgressUpdate {
+	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -214,11 +214,11 @@ func (_u *ReadingProgressUpdate) sqlSave(ctx context.Context) (_node int, err er
 			}
 		}
 	}
-	if value, ok := _u.mutation.TenantID(); ok {
-		_spec.SetField(readingprogress.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.UserID(); ok {
+		_spec.SetField(readingprogress.FieldUserID, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.AddedTenantID(); ok {
-		_spec.AddField(readingprogress.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.AddedUserID(); ok {
+		_spec.AddField(readingprogress.FieldUserID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(readingprogress.FieldGalleryID, field.TypeInt64, value)
@@ -267,24 +267,24 @@ type ReadingProgressUpdateOne struct {
 	mutation *ReadingProgressMutation
 }
 
-// SetTenantID sets the "tenant_id" field.
-func (_u *ReadingProgressUpdateOne) SetTenantID(v int64) *ReadingProgressUpdateOne {
-	_u.mutation.ResetTenantID()
-	_u.mutation.SetTenantID(v)
+// SetUserID sets the "user_id" field.
+func (_u *ReadingProgressUpdateOne) SetUserID(v int64) *ReadingProgressUpdateOne {
+	_u.mutation.ResetUserID()
+	_u.mutation.SetUserID(v)
 	return _u
 }
 
-// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
-func (_u *ReadingProgressUpdateOne) SetNillableTenantID(v *int64) *ReadingProgressUpdateOne {
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (_u *ReadingProgressUpdateOne) SetNillableUserID(v *int64) *ReadingProgressUpdateOne {
 	if v != nil {
-		_u.SetTenantID(*v)
+		_u.SetUserID(*v)
 	}
 	return _u
 }
 
-// AddTenantID adds value to the "tenant_id" field.
-func (_u *ReadingProgressUpdateOne) AddTenantID(v int64) *ReadingProgressUpdateOne {
-	_u.mutation.AddTenantID(v)
+// AddUserID adds value to the "user_id" field.
+func (_u *ReadingProgressUpdateOne) AddUserID(v int64) *ReadingProgressUpdateOne {
+	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -483,11 +483,11 @@ func (_u *ReadingProgressUpdateOne) sqlSave(ctx context.Context) (_node *Reading
 			}
 		}
 	}
-	if value, ok := _u.mutation.TenantID(); ok {
-		_spec.SetField(readingprogress.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.UserID(); ok {
+		_spec.SetField(readingprogress.FieldUserID, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.AddedTenantID(); ok {
-		_spec.AddField(readingprogress.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.AddedUserID(); ok {
+		_spec.AddField(readingprogress.FieldUserID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(readingprogress.FieldGalleryID, field.TypeInt64, value)

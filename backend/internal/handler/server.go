@@ -12,6 +12,7 @@ import (
 
 	"manga-reader/internal/database"
 	synclib "manga-reader/internal/sync"
+	"manga-reader/internal/usercookie"
 )
 
 type ImageCache interface {
@@ -30,10 +31,15 @@ type Server struct {
 	DB     *database.DB
 	Cache  ImageCache
 
-	// authEnabled mirrors JWT auth. When false (legacy anonymous single-user
-	// mode or handler unit tests), tenant-owned handlers fall back to the
-	// default tenant instead of failing closed.
-	authEnabled bool
+	// requireAuth is set by New for every production server. Handler unit tests
+	// that build Server directly leave it false and may supply a principal in
+	// another way; production requests without a verified JWT fail closed.
+	requireAuth bool
+
+	// UserCookies resolves each user's encrypted ExHentai session and the
+	// dedicated HTTP client built from it. When nil (unit tests), Client is
+	// used as a fallback upstream client.
+	UserCookies *usercookie.Service
 
 	// syncSvc serves the sync protocol endpoints and records outbox entries
 	// for local mutations of synced tables. Optional (nil disables sync).
@@ -59,7 +65,8 @@ type Config struct {
 	Cache       ImageCache
 	DevTools    bool
 	Sync        *synclib.Service
-	AuthEnabled bool
+	RequireAuth bool
+	UserCookies *usercookie.Service
 }
 
 func New(cfg Config) *Server {
@@ -69,7 +76,8 @@ func New(cfg Config) *Server {
 		Cache:       cfg.Cache,
 		syncSvc:     cfg.Sync,
 		devTools:    cfg.DevTools,
-		authEnabled: cfg.AuthEnabled,
+		requireAuth: true,
+		UserCookies: cfg.UserCookies,
 	}
 }
 
@@ -86,21 +94,23 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 		r.PUT("/api/dev/upstream-down", s.handleDevUpstreamDownPut)
 	}
 
-	// Platform administration (global; platform_admin only).
-	r.POST("/api/admin/tenants", s.handleAdminTenantCreate)
-	r.GET("/api/admin/tenants", s.handleAdminTenantList)
-	r.GET("/api/admin/tenants/:id", s.handleAdminTenantGet)
-	r.PUT("/api/admin/tenants/:id", s.handleAdminTenantUpdate)
-	r.PATCH("/api/admin/tenants/:id/status", s.handleAdminTenantStatus)
+	// Personal settings and the per-user ExHentai session.
+	r.GET("/api/settings", s.handleSettingsGet)
+	r.PUT("/api/settings", s.handleSettingsPut)
+	r.GET("/api/settings/cookie", s.handleCookieGet)
+	r.PUT("/api/settings/cookie", s.handleCookiePut)
+	r.DELETE("/api/settings/cookie", s.handleCookieDelete)
+	r.POST("/api/settings/cookie/verify", s.handleCookieVerify)
 
-	// Tenant administration (tenant_admin only; always scoped to the JWT
-	// tenant, never to a path/query/body tenant id).
-	r.GET("/api/tenant/users", s.handleTenantUserList)
-	r.POST("/api/tenant/users", s.handleTenantUserCreate)
-	r.PUT("/api/tenant/users/:id", s.handleTenantUserUpdate)
-	r.PATCH("/api/tenant/users/:id/status", s.handleTenantUserStatus)
+	// Account administration (admin only).
+	r.GET("/api/admin/users", s.handleAdminUserList)
+	r.POST("/api/admin/users", s.handleAdminUserCreate)
+	r.GET("/api/admin/users/:id", s.handleAdminUserGet)
+	r.PUT("/api/admin/users/:id", s.handleAdminUserUpdate)
+	r.PATCH("/api/admin/users/:id/status", s.handleAdminUserStatus)
+	r.DELETE("/api/admin/users/:id", s.handleAdminUserDelete)
 
-	// Node and node API-key administration (platform_admin only).
+	// Node and node API-key administration (admin only).
 	r.GET("/api/admin/nodes", s.handleAdminNodeList)
 	r.POST("/api/admin/nodes", s.handleAdminNodeCreate)
 	r.GET("/api/admin/nodes/:id", s.handleAdminNodeGet)

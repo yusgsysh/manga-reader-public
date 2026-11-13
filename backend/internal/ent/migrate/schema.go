@@ -12,7 +12,7 @@ var (
 	// BookshelfColumns holds the columns for the "bookshelf" table.
 	BookshelfColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "tenant_id", Type: field.TypeInt64, Default: 1},
+		{Name: "user_id", Type: field.TypeInt64, Default: 0},
 		{Name: "gallery_id", Type: field.TypeInt64},
 		{Name: "token", Type: field.TypeString},
 		{Name: "created_at", Type: field.TypeTime},
@@ -25,7 +25,7 @@ var (
 		PrimaryKey: []*schema.Column{BookshelfColumns[0]},
 		Indexes: []*schema.Index{
 			{
-				Name:    "bookshelf_tenant_id_gallery_id_token",
+				Name:    "bookshelf_user_id_gallery_id_token",
 				Unique:  true,
 				Columns: []*schema.Column{BookshelfColumns[1], BookshelfColumns[2], BookshelfColumns[3]},
 			},
@@ -70,7 +70,6 @@ var (
 	NodeColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "name", Type: field.TypeString},
-		{Name: "tenant_id", Type: field.TypeInt64},
 		{Name: "status", Type: field.TypeString, Default: "active"},
 		{Name: "last_seen_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
@@ -83,14 +82,14 @@ var (
 		PrimaryKey: []*schema.Column{NodeColumns[0]},
 		Indexes: []*schema.Index{
 			{
-				Name:    "node_tenant_id_name",
+				Name:    "node_name",
 				Unique:  true,
-				Columns: []*schema.Column{NodeColumns[2], NodeColumns[1]},
+				Columns: []*schema.Column{NodeColumns[1]},
 			},
 			{
 				Name:    "node_status",
 				Unique:  false,
-				Columns: []*schema.Column{NodeColumns[3]},
+				Columns: []*schema.Column{NodeColumns[2]},
 			},
 		},
 	}
@@ -128,7 +127,7 @@ var (
 	// PrefillJobColumns holds the columns for the "prefill_job" table.
 	PrefillJobColumns = []*schema.Column{
 		{Name: "job_id", Type: field.TypeUUID, Default: map[string]schema.Expr{"postgres": "gen_random_uuid()", "sqlite3": "lower(hex(randomblob(16)))"}, SchemaType: map[string]string{"sqlite3": "text"}},
-		{Name: "tenant_id", Type: field.TypeInt64, Default: 1},
+		{Name: "user_id", Type: field.TypeInt64, Default: 0},
 		{Name: "gallery_id", Type: field.TypeInt64, Nullable: true},
 		{Name: "token", Type: field.TypeString, Default: ""},
 		{Name: "title", Type: field.TypeString, Default: ""},
@@ -148,12 +147,12 @@ var (
 		PrimaryKey: []*schema.Column{PrefillJobColumns[0]},
 		Indexes: []*schema.Index{
 			{
-				Name:    "prefilljob_tenant_id_status_created_at",
+				Name:    "prefilljob_user_id_status_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{PrefillJobColumns[1], PrefillJobColumns[6], PrefillJobColumns[10]},
 			},
 			{
-				Name:    "prefilljob_tenant_id_gallery_id_token",
+				Name:    "prefilljob_user_id_gallery_id_token",
 				Unique:  false,
 				Columns: []*schema.Column{PrefillJobColumns[1], PrefillJobColumns[2], PrefillJobColumns[3]},
 			},
@@ -162,7 +161,7 @@ var (
 	// ReadingProgressColumns holds the columns for the "reading_progress" table.
 	ReadingProgressColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "tenant_id", Type: field.TypeInt64, Default: 1},
+		{Name: "user_id", Type: field.TypeInt64, Default: 0},
 		{Name: "gallery_id", Type: field.TypeInt64},
 		{Name: "token", Type: field.TypeString},
 		{Name: "current_page", Type: field.TypeInt, Default: 0},
@@ -178,7 +177,7 @@ var (
 		PrimaryKey: []*schema.Column{ReadingProgressColumns[0]},
 		Indexes: []*schema.Index{
 			{
-				Name:    "readingprogress_tenant_id_gallery_id_token",
+				Name:    "readingprogress_user_id_gallery_id_token",
 				Unique:  true,
 				Columns: []*schema.Column{ReadingProgressColumns[1], ReadingProgressColumns[2], ReadingProgressColumns[3]},
 			},
@@ -187,7 +186,7 @@ var (
 	// SyncChangeColumns holds the columns for the "sync_change" table.
 	SyncChangeColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "tenant_id", Type: field.TypeInt64, Default: 1},
+		{Name: "user_id", Type: field.TypeInt64, Default: 0},
 		{Name: "entity", Type: field.TypeString},
 		{Name: "gallery_id", Type: field.TypeInt64},
 		{Name: "token", Type: field.TypeString},
@@ -201,7 +200,7 @@ var (
 		PrimaryKey: []*schema.Column{SyncChangeColumns[0]},
 		Indexes: []*schema.Index{
 			{
-				Name:    "syncchange_tenant_id_entity_gallery_id_token",
+				Name:    "syncchange_user_id_entity_gallery_id_token",
 				Unique:  false,
 				Columns: []*schema.Column{SyncChangeColumns[1], SyncChangeColumns[2], SyncChangeColumns[3], SyncChangeColumns[4]},
 			},
@@ -221,7 +220,7 @@ var (
 	}
 	// TagPreferenceColumns holds the columns for the "tag_preference" table.
 	TagPreferenceColumns = []*schema.Column{
-		{Name: "tenant_id", Type: field.TypeInt64, Default: 1},
+		{Name: "user_id", Type: field.TypeInt64, Default: 0},
 		{Name: "action", Type: field.TypeString},
 		{Name: "weight", Type: field.TypeInt, Default: 10},
 		{Name: "created_at", Type: field.TypeTime},
@@ -236,7 +235,7 @@ var (
 	}
 	// TagSyncBaselineColumns holds the columns for the "tag_sync_baseline" table.
 	TagSyncBaselineColumns = []*schema.Column{
-		{Name: "tenant_id", Type: field.TypeInt64, Default: 1},
+		{Name: "user_id", Type: field.TypeInt64, Default: 0},
 		{Name: "action", Type: field.TypeString},
 		{Name: "weight", Type: field.TypeInt, Default: 10},
 		{Name: "created_at", Type: field.TypeTime},
@@ -249,26 +248,10 @@ var (
 		Columns:    TagSyncBaselineColumns,
 		PrimaryKey: []*schema.Column{TagSyncBaselineColumns[0], TagSyncBaselineColumns[5]},
 	}
-	// TenantColumns holds the columns for the "tenant" table.
-	TenantColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "name", Type: field.TypeString},
-		{Name: "slug", Type: field.TypeString, Unique: true},
-		{Name: "status", Type: field.TypeString, Default: "active"},
-		{Name: "created_at", Type: field.TypeTime},
-		{Name: "updated_at", Type: field.TypeTime},
-	}
-	// TenantTable holds the schema information for the "tenant" table.
-	TenantTable = &schema.Table{
-		Name:       "tenant",
-		Columns:    TenantColumns,
-		PrimaryKey: []*schema.Column{TenantColumns[0]},
-	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "tenant_id", Type: field.TypeInt64, Default: 1},
-		{Name: "username", Type: field.TypeString},
+		{Name: "username", Type: field.TypeString, Unique: true},
 		{Name: "password_hash", Type: field.TypeString},
 		{Name: "role", Type: field.TypeString, Default: "user"},
 		{Name: "status", Type: field.TypeString, Default: "active"},
@@ -283,16 +266,34 @@ var (
 		PrimaryKey: []*schema.Column{UsersColumns[0]},
 		Indexes: []*schema.Index{
 			{
-				Name:    "user_tenant_id_username",
-				Unique:  true,
-				Columns: []*schema.Column{UsersColumns[1], UsersColumns[2]},
+				Name:    "user_role",
+				Unique:  false,
+				Columns: []*schema.Column{UsersColumns[3]},
 			},
 			{
-				Name:    "user_tenant_id_role",
+				Name:    "user_status",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[1], UsersColumns[4]},
+				Columns: []*schema.Column{UsersColumns[4]},
 			},
 		},
+	}
+	// UserSettingColumns holds the columns for the "user_setting" table.
+	UserSettingColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "user_id", Type: field.TypeInt, Unique: true},
+		{Name: "cookie_ciphertext", Type: field.TypeString, Default: ""},
+		{Name: "cookie_status", Type: field.TypeString, Default: "unset"},
+		{Name: "cookie_verified_at", Type: field.TypeTime, Nullable: true},
+		{Name: "site", Type: field.TypeString, Default: "exhentai"},
+		{Name: "preferences", Type: field.TypeJSON, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// UserSettingTable holds the schema information for the "user_setting" table.
+	UserSettingTable = &schema.Table{
+		Name:       "user_setting",
+		Columns:    UserSettingColumns,
+		PrimaryKey: []*schema.Column{UserSettingColumns[0]},
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
@@ -306,8 +307,8 @@ var (
 		SyncStateTable,
 		TagPreferenceTable,
 		TagSyncBaselineTable,
-		TenantTable,
 		UsersTable,
+		UserSettingTable,
 	}
 )
 
@@ -342,10 +343,10 @@ func init() {
 	TagSyncBaselineTable.Annotation = &entsql.Annotation{
 		Table: "tag_sync_baseline",
 	}
-	TenantTable.Annotation = &entsql.Annotation{
-		Table: "tenant",
-	}
 	UsersTable.Annotation = &entsql.Annotation{
 		Table: "users",
+	}
+	UserSettingTable.Annotation = &entsql.Annotation{
+		Table: "user_setting",
 	}
 }

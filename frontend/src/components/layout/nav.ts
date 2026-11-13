@@ -9,7 +9,6 @@ import {
   House,
   MagnifyingGlass,
   Tag,
-  Buildings,
   HardDrives,
   UsersThree,
 } from "@phosphor-icons/react";
@@ -35,13 +34,9 @@ export const SECONDARY_NAV: NavItem[] = [
   { to: "/settings", label: "设置", icon: Gear },
 ];
 
-export const PLATFORM_ADMIN_NAV: NavItem[] = [
-  { to: "/admin/tenants", label: "租户管理", icon: Buildings },
+export const ADMIN_NAV: NavItem[] = [
+  { to: "/admin/users", label: "用户管理", icon: UsersThree },
   { to: "/admin/nodes", label: "节点管理", icon: HardDrives },
-];
-
-export const TENANT_ADMIN_NAV: NavItem[] = [
-  { to: "/tenant/users", label: "用户管理", icon: UsersThree },
 ];
 
 export function isNavActive(pathname: string, to: string, lastListRoute?: string): boolean {

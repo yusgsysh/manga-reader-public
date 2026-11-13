@@ -1,6 +1,7 @@
 # Manga Reader - Docker Compose
 #
-# 前置：复制 .env.example 为 .env 并配置 ExHentai Cookie。
+# 前置：复制 .env.example 为 .env，设置 JWT_SECRET 与初始管理员密码。
+# ExHentai Cookie 按用户在应用「设置」中配置。
 #
 # 启动：
 #   docker compose up -d
@@ -13,8 +14,8 @@
 #   backend (Gin :8080, 对外发布 5173)
 #     ├── 静态前端（构建时 embed 进二进制，不外挂静态文件）
 #     ├── /api/* 与 SPA 回退同进程处理
-#     ├── JWT 用户业务认证（设置 JWT_SECRET 启用）
-#     ├── Node API Key 节点同步认证（数据库管理，平台管理员创建）
+#     ├── JWT 多用户认证（JWT_SECRET 必填）
+#     ├── Node API Key 节点同步认证（数据库管理，管理员创建）
 #     ├── Metrics Token / 回环限制（独立凭证）
 #     └── 数据卷 backend_data → /app/data
 #
@@ -38,7 +39,7 @@ services:
       EHENTAI_PORT: ":8080"
       MANGA_READER_DB_PATH: /app/data/manga-reader.db
 
-      # JWT 用户登录（用户业务 API）
+      # JWT 用户登录（多用户，必填）
       # 生成密钥：openssl rand -hex 32
       JWT_SECRET: ${JWT_SECRET:-}
       JWT_ISSUER: ${JWT_ISSUER:-manga-reader}

@@ -40,12 +40,8 @@ func newTestDB(t *testing.T) *ent.Client {
 func TestNodeAPIKeyAuthentication(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	client := newTestDB(t)
-	tenantRow, err := client.Tenant.Create().SetName("T").SetSlug("t").SetStatus(config.StatusActive).Save(t.Context())
-	if err != nil {
-		t.Fatalf("tenant: %v", err)
-	}
 	nodeRow, err := client.Node.Create().
-		SetName("node-a").SetTenantID(int64(tenantRow.ID)).SetStatus(config.StatusActive).Save(t.Context())
+		SetName("node-a").SetStatus(config.StatusActive).Save(t.Context())
 	if err != nil {
 		t.Fatalf("node: %v", err)
 	}
@@ -67,7 +63,7 @@ func TestNodeAPIKeyAuthentication(t *testing.T) {
 			c.Status(http.StatusInternalServerError)
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"node_id": id.NodeID, "tenant_id": id.TenantID})
+		c.JSON(http.StatusOK, gin.H{"node_id": id.NodeID})
 	})
 	do := func(auth string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/sync", nil)
@@ -134,8 +130,7 @@ func TestNodeAPIKeyAuthentication(t *testing.T) {
 func TestNodeAPIKeyNeverLogged(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	client := newTestDB(t)
-	tenantRow, _ := client.Tenant.Create().SetName("T").SetSlug("t").SetStatus(config.StatusActive).Save(t.Context())
-	nodeRow, _ := client.Node.Create().SetName("n").SetTenantID(int64(tenantRow.ID)).SetStatus(config.StatusActive).Save(t.Context())
+	nodeRow, _ := client.Node.Create().SetName("n").SetStatus(config.StatusActive).Save(t.Context())
 	material, _ := GenerateKey()
 	var logs bytes.Buffer
 	previous := slog.Default()
@@ -157,13 +152,11 @@ func TestNodeAPIKeyNeverLogged(t *testing.T) {
 	_ = nodeRow
 }
 
-func TestNodeAPIKeyBindsNodeAndTenant(t *testing.T) {
+func TestNodeAPIKeyBindsNodeIdentity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	client := newTestDB(t)
-	t1, _ := client.Tenant.Create().SetName("T1").SetSlug("t1").SetStatus(config.StatusActive).Save(t.Context())
-	t2, _ := client.Tenant.Create().SetName("T2").SetSlug("t2").SetStatus(config.StatusActive).Save(t.Context())
-	n1, _ := client.Node.Create().SetName("n1").SetTenantID(int64(t1.ID)).SetStatus(config.StatusActive).Save(t.Context())
-	n2, _ := client.Node.Create().SetName("n2").SetTenantID(int64(t2.ID)).SetStatus(config.StatusActive).Save(t.Context())
+	n1, _ := client.Node.Create().SetName("n1").SetStatus(config.StatusActive).Save(t.Context())
+	n2, _ := client.Node.Create().SetName("n2").SetStatus(config.StatusActive).Save(t.Context())
 	makeKey := func(nodeID int) string {
 		m, err := GenerateKey()
 		if err != nil {
@@ -181,9 +174,9 @@ func TestNodeAPIKeyBindsNodeAndTenant(t *testing.T) {
 	r := gin.New()
 	r.POST("/sync", New(client).Middleware(ScopeSyncWrite), func(c *gin.Context) {
 		id, _ := From(c)
-		c.JSON(http.StatusOK, gin.H{"node_id": id.NodeID, "tenant_id": id.TenantID})
+		c.JSON(http.StatusOK, gin.H{"node_id": id.NodeID})
 	})
-	do := func(key string) (int, int64) {
+	do := func(key string) int {
 		req := httptest.NewRequest(http.MethodPost, "/sync", nil)
 		req.Header.Set("Authorization", "Bearer "+key)
 		w := httptest.NewRecorder()
@@ -192,19 +185,18 @@ func TestNodeAPIKeyBindsNodeAndTenant(t *testing.T) {
 			t.Fatalf("auth = %d %s", w.Code, w.Body.String())
 		}
 		var body struct {
-			NodeID   int   `json:"node_id"`
-			TenantID int64 `json:"tenant_id"`
+			NodeID int `json:"node_id"`
 		}
 		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		return body.NodeID, body.TenantID
+		return body.NodeID
 	}
-	if nodeID, tenantID := do(k1); nodeID != n1.ID || tenantID != int64(t1.ID) {
-		t.Fatalf("key1 identity = %d/%d", nodeID, tenantID)
+	if got := do(k1); got != n1.ID {
+		t.Fatalf("key1 node = %d, want %d", got, n1.ID)
 	}
-	if nodeID, tenantID := do(k2); nodeID != n2.ID || tenantID != int64(t2.ID) {
-		t.Fatalf("key2 identity = %d/%d", nodeID, tenantID)
+	if got := do(k2); got != n2.ID {
+		t.Fatalf("key2 node = %d, want %d", got, n2.ID)
 	}
 }
 
@@ -223,11 +215,10 @@ func TestGeneratedKeyPrefixMatchesPlaintext(t *testing.T) {
 	}
 }
 
-func TestNodeAPIKeyExpiryAndTenantStatus(t *testing.T) {
+func TestNodeAPIKeyExpiryAndNodeStatus(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	client := newTestDB(t)
-	tenantRow, _ := client.Tenant.Create().SetName("T").SetSlug("t").SetStatus(config.StatusActive).Save(t.Context())
-	nodeRow, _ := client.Node.Create().SetName("n").SetTenantID(int64(tenantRow.ID)).SetStatus(config.StatusActive).Save(t.Context())
+	nodeRow, _ := client.Node.Create().SetName("n").SetStatus(config.StatusActive).Save(t.Context())
 
 	newKey := func(expiresAt *time.Time, status string) string {
 		t.Helper()
@@ -266,18 +257,17 @@ func TestNodeAPIKeyExpiryAndTenantStatus(t *testing.T) {
 		t.Fatalf("non-expired key = %d, want 204", code)
 	}
 
-	if _, err := client.Tenant.UpdateOneID(tenantRow.ID).SetStatus(config.StatusDisabled).Save(t.Context()); err != nil {
-		t.Fatalf("disable tenant: %v", err)
+	if _, err := client.Node.UpdateOneID(nodeRow.ID).SetStatus(config.StatusDisabled).Save(t.Context()); err != nil {
+		t.Fatalf("disable node: %v", err)
 	}
 	if code := do(newKey(nil, config.StatusActive)); code != http.StatusUnauthorized {
-		t.Fatalf("key for disabled tenant = %d, want 401", code)
+		t.Fatalf("key for disabled node = %d, want 401", code)
 	}
 }
 
 func TestNodeAPIKeyPersistsOnlyHashAndPrefix(t *testing.T) {
 	client := newTestDB(t)
-	tenantRow, _ := client.Tenant.Create().SetName("T").SetSlug("t").SetStatus(config.StatusActive).Save(t.Context())
-	nodeRow, _ := client.Node.Create().SetName("n").SetTenantID(int64(tenantRow.ID)).SetStatus(config.StatusActive).Save(t.Context())
+	nodeRow, _ := client.Node.Create().SetName("n").SetStatus(config.StatusActive).Save(t.Context())
 	m, err := GenerateKey()
 	if err != nil {
 		t.Fatalf("generate: %v", err)

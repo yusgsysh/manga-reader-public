@@ -67,9 +67,9 @@ type tagSyncPlan struct {
 }
 
 // loadTagRules reads all stored tag preferences ordered by tag.
-func (s *Server) loadTagRules(ctx context.Context, tenantID int64) ([]model.TagPreference, error) {
+func (s *Server) loadTagRules(ctx context.Context, userID int64) ([]model.TagPreference, error) {
 	rows, err := s.DB.Client.TagPreference.Query().
-		Where(tagpreference.TenantIDEQ(tenantID)).
+		Where(tagpreference.UserIDEQ(userID)).
 		Order(ent.Asc(tagpreference.FieldID)).
 		All(ctx)
 	if err != nil {
@@ -84,9 +84,9 @@ func (s *Server) loadTagRules(ctx context.Context, tenantID int64) ([]model.TagP
 
 // loadTagBaseline reads the last-synced source snapshot used as the merge
 // common ancestor.
-func (s *Server) loadTagBaseline(ctx context.Context, tenantID int64) ([]model.TagPreference, error) {
+func (s *Server) loadTagBaseline(ctx context.Context, userID int64) ([]model.TagPreference, error) {
 	rows, err := s.DB.Client.TagSyncBaseline.Query().
-		Where(tagsyncbaseline.TenantIDEQ(tenantID)).
+		Where(tagsyncbaseline.UserIDEQ(userID)).
 		Order(ent.Asc(tagsyncbaseline.FieldID)).
 		All(ctx)
 	if err != nil {
@@ -341,34 +341,29 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 		return
 	}
 
-	if s.Client == nil {
-		web.JSON(c, http.StatusBadGateway, gin.H{"error": "upstream client not configured"})
+	client, uid, ok := s.upstreamClientForRequest(c)
+	if !ok {
 		return
 	}
+	ctx := c.Request.Context()
 
 	// Serialize syncs so concurrent saves cannot interleave mutations on
 	// the same source tagset.
 	s.tagSyncMu.Lock()
 	defer s.tagSyncMu.Unlock()
 
-	tid, ok := s.requireTenant(c)
-	if !ok {
-		return
-	}
-	ctx := c.Request.Context()
-
-	local, err := s.loadTagRules(ctx, tid)
+	local, err := s.loadTagRules(ctx, uid)
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load tag settings failed: %v", err)})
 		return
 	}
-	baseline, err := s.loadTagBaseline(ctx, tid)
+	baseline, err := s.loadTagBaseline(ctx, uid)
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load tag sync baseline failed: %v", err)})
 		return
 	}
 
-	snapshot, err := exhentai.FetchMyTags(ctx, s.Client)
+	snapshot, err := exhentai.FetchMyTags(ctx, client)
 	if err != nil {
 		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch mytags failed: %v", err)})
 		return
@@ -395,7 +390,7 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 			failRemaining(&result, plan.Adds[i:], nil, ctx.Err())
 			break
 		}
-		if err := exhentai.AddUserTagForm(ctx, s.Client, snapshot, ruleToUserTag(rule)); err != nil {
+		if err := exhentai.AddUserTagForm(ctx, client, snapshot, ruleToUserTag(rule)); err != nil {
 			result.Failed = append(result.Failed, model.TagSyncFailure{Tag: rule.Tag, Error: err.Error()})
 			continue
 		}
@@ -416,7 +411,7 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 		}
 		want := ruleToUserTag(up.Rule)
 		want.TagID = up.Remote.TagID
-		if err := exhentai.SetUserTag(ctx, s.Client, snapshot, want); err != nil {
+		if err := exhentai.SetUserTag(ctx, client, snapshot, want); err != nil {
 			result.Failed = append(result.Failed, model.TagSyncFailure{Tag: up.Rule.Tag, Error: err.Error()})
 			continue
 		}
@@ -446,7 +441,7 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 			for i, d := range toDelete {
 				ids[i] = d.TagID
 			}
-			if err := exhentai.DeleteUserTagsForm(ctx, s.Client, snapshot, ids); err != nil {
+			if err := exhentai.DeleteUserTagsForm(ctx, client, snapshot, ids); err != nil {
 				for _, d := range toDelete {
 					result.Failed = append(result.Failed, model.TagSyncFailure{Tag: d.Tag, Error: err.Error()})
 				}
@@ -461,12 +456,12 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 
 	// Apply pulls and the refreshed baseline in one transaction; a failure
 	// here leaves everything as-is (the next sync redoes it).
-	if err := s.applyTagSyncState(ctx, tid, plan.Pulls, baseline, plan.BaselineAfter); err != nil {
+	if err := s.applyTagSyncState(ctx, uid, plan.Pulls, baseline, plan.BaselineAfter); err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("apply tag sync failed: %v", err)})
 		return
 	}
 
-	tags, err := s.loadTagRules(ctx, tid)
+	tags, err := s.loadTagRules(ctx, uid)
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("reload tag settings failed: %v", err)})
 		return
@@ -482,7 +477,7 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 // plan's outcomes; keys mapped to nil drop their row.
 func (s *Server) applyTagSyncState(
 	ctx context.Context,
-	tenantID int64,
+	userID int64,
 	pulls []tagPullOp,
 	baseline []model.TagPreference,
 	after map[string]*model.TagPreference,
@@ -507,7 +502,7 @@ func (s *Server) applyTagSyncState(
 	for _, op := range pulls {
 		if op.Existing != nil {
 			if _, err := tx.TagPreference.Delete().
-				Where(tagpreference.TenantIDEQ(tenantID), tagpreference.IDEQ(op.Existing.Tag)).
+				Where(tagpreference.UserIDEQ(userID), tagpreference.IDEQ(op.Existing.Tag)).
 				Exec(ctx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("remove pulled tag %q: %w", op.Key, err)
@@ -515,7 +510,7 @@ func (s *Server) applyTagSyncState(
 		}
 		if op.Remote != nil {
 			if _, err := tx.TagPreference.Create().
-				SetTenantID(tenantID).
+				SetUserID(userID).
 				SetID(op.Remote.Tag).
 				SetAction(op.Remote.Action).
 				SetWeight(op.Remote.Weight).
@@ -527,7 +522,7 @@ func (s *Server) applyTagSyncState(
 	}
 
 	if _, err := tx.TagSyncBaseline.Delete().
-		Where(tagsyncbaseline.TenantIDEQ(tenantID)).
+		Where(tagsyncbaseline.UserIDEQ(userID)).
 		Exec(ctx); err != nil {
 		tx.Rollback()
 		return fmt.Errorf("clear tag sync baseline: %w", err)
@@ -542,7 +537,7 @@ func (s *Server) applyTagSyncState(
 		for _, key := range finalKeys {
 			rule := final[key]
 			builders = append(builders, tx.TagSyncBaseline.Create().
-				SetTenantID(tenantID).
+				SetUserID(userID).
 				SetID(key).
 				SetAction(rule.Action).
 				SetWeight(rule.Weight))

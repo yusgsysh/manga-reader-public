@@ -3,7 +3,6 @@ package handler
 import (
 	"fmt"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -12,254 +11,22 @@ import (
 	"manga-reader/internal/auth"
 	"manga-reader/internal/config"
 	"manga-reader/internal/ent"
-	"manga-reader/internal/ent/tenant"
+	"manga-reader/internal/ent/bookshelf"
+	"manga-reader/internal/ent/prefilljob"
+	"manga-reader/internal/ent/readingprogress"
+	"manga-reader/internal/ent/syncchange"
+	"manga-reader/internal/ent/tagpreference"
+	"manga-reader/internal/ent/tagsyncbaseline"
 	"manga-reader/internal/ent/user"
+	"manga-reader/internal/ent/usersetting"
 	"manga-reader/internal/web"
 )
 
-var tenantSlugPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
-
-type tenantJSON struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	Slug      string `json:"slug"`
-	Status    string `json:"status"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
-}
-
-func tenantResponse(t *ent.Tenant) tenantJSON {
-	return tenantJSON{
-		ID:        int64(t.ID),
-		Name:      t.Name,
-		Slug:      t.Slug,
-		Status:    t.Status,
-		CreatedAt: t.CreatedAt.UTC().Format(timeLayout),
-		UpdatedAt: t.UpdatedAt.UTC().Format(timeLayout),
-	}
-}
-
 const timeLayout = "2006-01-02T15:04:05Z07:00"
 
-func validTenantStatus(value string) bool {
-	return value == config.StatusActive || value == config.StatusDisabled
-}
-
-func validUserStatus(value string) bool {
-	return value == config.StatusActive || value == config.StatusDisabled
-}
-
-// ==================== Platform administration ====================
-
-func (s *Server) handleAdminTenantCreate(c *gin.Context) {
-	if !s.requirePlatformAdmin(c) {
-		return
-	}
-	limitRequestBody(c, 64<<10)
-	var body struct {
-		Name          string `json:"name"`
-		Slug          string `json:"slug"`
-		AdminUsername string `json:"admin_username"`
-		AdminPassword string `json:"admin_password"`
-	}
-	if err := web.BindJSON(c, &body); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
-		return
-	}
-	body.Name = strings.TrimSpace(body.Name)
-	body.Slug = strings.ToLower(strings.TrimSpace(body.Slug))
-	body.AdminUsername = strings.TrimSpace(body.AdminUsername)
-	if body.Name == "" || !tenantSlugPattern.MatchString(body.Slug) {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "name and a valid slug are required"})
-		return
-	}
-	if (body.AdminUsername == "") != (body.AdminPassword == "") {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "admin_username and admin_password must be provided together"})
-		return
-	}
-	if body.AdminPassword != "" && len(body.AdminPassword) < 8 {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "admin_password must be at least 8 characters"})
-		return
-	}
-
-	var passwordHash string
-	if body.AdminPassword != "" {
-		hash, err := auth.HashPassword(body.AdminPassword)
-		if err != nil {
-			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "password hashing failed"})
-			return
-		}
-		passwordHash = hash
-	}
-
-	ctx := c.Request.Context()
-	tx, err := s.DB.Client.Tx(ctx)
-	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create tenant failed"})
-		return
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	created, err := tx.Tenant.Create().
-		SetName(body.Name).
-		SetSlug(body.Slug).
-		SetStatus(config.StatusActive).
-		Save(ctx)
-	if err != nil {
-		if ent.IsConstraintError(err) {
-			web.JSON(c, http.StatusConflict, gin.H{"error": "tenant slug already exists"})
-			return
-		}
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create tenant failed"})
-		return
-	}
-	if body.AdminUsername != "" {
-		if _, err := tx.User.Create().
-			SetTenantID(int64(created.ID)).
-			SetUsername(body.AdminUsername).
-			SetPasswordHash(passwordHash).
-			SetRole(config.RoleTenantAdmin).
-			SetStatus(config.StatusActive).
-			Save(ctx); err != nil {
-			if ent.IsConstraintError(err) {
-				web.JSON(c, http.StatusConflict, gin.H{"error": "admin username already exists in this tenant"})
-				return
-			}
-			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create tenant admin failed"})
-			return
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create tenant failed"})
-		return
-	}
-	audit(c, "tenant.create", "tenant_id", created.ID)
-	web.JSON(c, http.StatusCreated, tenantResponse(created))
-}
-
-func (s *Server) handleAdminTenantList(c *gin.Context) {
-	if !s.requirePlatformAdmin(c) {
-		return
-	}
-	rows, err := s.DB.Client.Tenant.Query().
-		Order(ent.Asc(tenant.FieldID)).
-		All(c.Request.Context())
-	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "list tenants failed"})
-		return
-	}
-	out := make([]tenantJSON, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, tenantResponse(row))
-	}
-	web.JSON(c, http.StatusOK, gin.H{"tenants": out})
-}
-
-func (s *Server) handleAdminTenantGet(c *gin.Context) {
-	if !s.requirePlatformAdmin(c) {
-		return
-	}
-	id, ok := adminID(c)
-	if !ok {
-		return
-	}
-	t, err := s.DB.Client.Tenant.Get(c.Request.Context(), id)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			web.JSON(c, http.StatusNotFound, gin.H{"error": "tenant not found"})
-			return
-		}
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read tenant failed"})
-		return
-	}
-	web.JSON(c, http.StatusOK, tenantResponse(t))
-}
-
-func (s *Server) handleAdminTenantUpdate(c *gin.Context) {
-	if !s.requirePlatformAdmin(c) {
-		return
-	}
-	id, ok := adminID(c)
-	if !ok {
-		return
-	}
-	limitRequestBody(c, 64<<10)
-	var body struct {
-		Name *string `json:"name"`
-		Slug *string `json:"slug"`
-	}
-	if err := web.BindJSON(c, &body); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
-		return
-	}
-	update := s.DB.Client.Tenant.UpdateOneID(id)
-	if body.Name != nil {
-		name := strings.TrimSpace(*body.Name)
-		if name == "" {
-			web.JSON(c, http.StatusBadRequest, gin.H{"error": "name must not be empty"})
-			return
-		}
-		update.SetName(name)
-	}
-	if body.Slug != nil {
-		slug := strings.ToLower(strings.TrimSpace(*body.Slug))
-		if !tenantSlugPattern.MatchString(slug) {
-			web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid slug"})
-			return
-		}
-		update.SetSlug(slug)
-	}
-	t, err := update.Save(c.Request.Context())
-	if err != nil {
-		if ent.IsNotFound(err) {
-			web.JSON(c, http.StatusNotFound, gin.H{"error": "tenant not found"})
-			return
-		}
-		if ent.IsConstraintError(err) {
-			web.JSON(c, http.StatusConflict, gin.H{"error": "tenant slug already exists"})
-			return
-		}
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "update tenant failed"})
-		return
-	}
-	audit(c, "tenant.update", "tenant_id", t.ID)
-	web.JSON(c, http.StatusOK, tenantResponse(t))
-}
-
-func (s *Server) handleAdminTenantStatus(c *gin.Context) {
-	if !s.requirePlatformAdmin(c) {
-		return
-	}
-	id, ok := adminID(c)
-	if !ok {
-		return
-	}
-	limitRequestBody(c, 8<<10)
-	var body struct {
-		Status string `json:"status"`
-	}
-	if err := web.BindJSON(c, &body); err != nil || !validTenantStatus(body.Status) {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "status must be active or disabled"})
-		return
-	}
-	t, err := s.DB.Client.Tenant.UpdateOneID(id).SetStatus(body.Status).Save(c.Request.Context())
-	if err != nil {
-		if ent.IsNotFound(err) {
-			web.JSON(c, http.StatusNotFound, gin.H{"error": "tenant not found"})
-			return
-		}
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "update tenant status failed"})
-		return
-	}
-	audit(c, "tenant.status", "tenant_id", t.ID, "status", t.Status)
-	web.JSON(c, http.StatusOK, tenantResponse(t))
-}
-
-// ==================== Tenant administration ====================
-
-type tenantUserJSON struct {
+type userJSON struct {
 	ID        int    `json:"id"`
-	TenantID  int64  `json:"tenant_id"`
+	UserID    int    `json:"user_id"`
 	Username  string `json:"username"`
 	Role      string `json:"role"`
 	Status    string `json:"status"`
@@ -267,10 +34,10 @@ type tenantUserJSON struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
-func tenantUserResponse(u *ent.User) tenantUserJSON {
-	return tenantUserJSON{
+func userResponse(u *ent.User) userJSON {
+	return userJSON{
 		ID:        u.ID,
-		TenantID:  u.TenantID,
+		UserID:    u.ID,
 		Username:  u.Username,
 		Role:      u.Role,
 		Status:    u.Status,
@@ -279,35 +46,54 @@ func tenantUserResponse(u *ent.User) tenantUserJSON {
 	}
 }
 
-func (s *Server) handleTenantUserList(c *gin.Context) {
-	if !s.requireTenantAdmin(c) {
-		return
-	}
-	tid, ok := s.requireTenant(c)
-	if !ok {
+func validRole(value string) bool {
+	return value == config.RoleAdmin || value == config.RoleUser
+}
+
+func validUserStatus(value string) bool {
+	return value == config.StatusActive || value == config.StatusDisabled
+}
+
+func (s *Server) handleAdminUserList(c *gin.Context) {
+	if !s.requireAdmin(c) {
 		return
 	}
 	rows, err := s.DB.Client.User.Query().
-		Where(user.TenantIDEQ(tid)).
 		Order(ent.Asc(user.FieldID)).
 		All(c.Request.Context())
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "list users failed"})
 		return
 	}
-	out := make([]tenantUserJSON, 0, len(rows))
+	out := make([]userJSON, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, tenantUserResponse(row))
+		out = append(out, userResponse(row))
 	}
 	web.JSON(c, http.StatusOK, gin.H{"users": out})
 }
 
-func (s *Server) handleTenantUserCreate(c *gin.Context) {
-	if !s.requireTenantAdmin(c) {
+func (s *Server) handleAdminUserGet(c *gin.Context) {
+	if !s.requireAdmin(c) {
 		return
 	}
-	tid, ok := s.requireTenant(c)
+	id, ok := adminID(c)
 	if !ok {
+		return
+	}
+	u, err := s.DB.Client.User.Get(c.Request.Context(), id)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			web.JSON(c, http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read user failed"})
+		return
+	}
+	web.JSON(c, http.StatusOK, userResponse(u))
+}
+
+func (s *Server) handleAdminUserCreate(c *gin.Context) {
+	if !s.requireAdmin(c) {
 		return
 	}
 	limitRequestBody(c, 64<<10)
@@ -329,8 +115,8 @@ func (s *Server) handleTenantUserCreate(c *gin.Context) {
 	if body.Role == "" {
 		body.Role = config.RoleUser
 	}
-	if body.Role != config.RoleUser && body.Role != config.RoleTenantAdmin {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "role must be user or tenant_admin"})
+	if !validRole(body.Role) {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "role must be admin or user"})
 		return
 	}
 	if body.Status == "" {
@@ -346,7 +132,6 @@ func (s *Server) handleTenantUserCreate(c *gin.Context) {
 		return
 	}
 	created, err := s.DB.Client.User.Create().
-		SetTenantID(tid).
 		SetUsername(body.Username).
 		SetPasswordHash(hash).
 		SetRole(body.Role).
@@ -354,22 +139,18 @@ func (s *Server) handleTenantUserCreate(c *gin.Context) {
 		Save(c.Request.Context())
 	if err != nil {
 		if ent.IsConstraintError(err) {
-			web.JSON(c, http.StatusConflict, gin.H{"error": "username already exists in this tenant"})
+			web.JSON(c, http.StatusConflict, gin.H{"error": "username already exists"})
 			return
 		}
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create user failed"})
 		return
 	}
-	audit(c, "tenant.user.create", "target_user_id", created.ID, "role", created.Role)
-	web.JSON(c, http.StatusCreated, tenantUserResponse(created))
+	audit(c, "user.create", "target_user_id", created.ID, "role", created.Role)
+	web.JSON(c, http.StatusCreated, userResponse(created))
 }
 
-func (s *Server) handleTenantUserUpdate(c *gin.Context) {
-	if !s.requireTenantAdmin(c) {
-		return
-	}
-	tid, ok := s.requireTenant(c)
-	if !ok {
+func (s *Server) handleAdminUserUpdate(c *gin.Context) {
+	if !s.requireAdmin(c) {
 		return
 	}
 	uid, ok := adminID(c)
@@ -387,15 +168,9 @@ func (s *Server) handleTenantUserUpdate(c *gin.Context) {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
-	existing, err := s.DB.Client.User.Query().
-		Where(user.ID(uid), user.TenantIDEQ(tid)).
-		Only(c.Request.Context())
+	existing, err := s.DB.Client.User.Get(c.Request.Context(), uid)
 	if err != nil {
 		web.JSON(c, http.StatusNotFound, gin.H{"error": "user not found"})
-		return
-	}
-	if existing.Role == config.RolePlatformAdmin {
-		web.JSON(c, http.StatusForbidden, gin.H{"error": "platform administrators are managed by the platform"})
 		return
 	}
 
@@ -423,9 +198,15 @@ func (s *Server) handleTenantUserUpdate(c *gin.Context) {
 		revoke = true
 	}
 	if body.Role != nil {
-		if *body.Role != config.RoleUser && *body.Role != config.RoleTenantAdmin {
-			web.JSON(c, http.StatusBadRequest, gin.H{"error": "role must be user or tenant_admin"})
+		if !validRole(*body.Role) {
+			web.JSON(c, http.StatusBadRequest, gin.H{"error": "role must be admin or user"})
 			return
+		}
+		if existing.Role == config.RoleAdmin && *body.Role != config.RoleAdmin {
+			if !s.otherAdminExists(c, existing.ID) {
+				web.JSON(c, http.StatusConflict, gin.H{"error": "the last administrator cannot be demoted"})
+				return
+			}
 		}
 		update.SetRole(*body.Role)
 		revoke = true
@@ -433,6 +214,10 @@ func (s *Server) handleTenantUserUpdate(c *gin.Context) {
 	if body.Status != nil {
 		if !validUserStatus(*body.Status) {
 			web.JSON(c, http.StatusBadRequest, gin.H{"error": "status must be active or disabled"})
+			return
+		}
+		if existing.Role == config.RoleAdmin && *body.Status == config.StatusDisabled && !s.otherAdminExists(c, existing.ID) {
+			web.JSON(c, http.StatusConflict, gin.H{"error": "the last administrator cannot be disabled"})
 			return
 		}
 		update.SetStatus(*body.Status)
@@ -446,22 +231,18 @@ func (s *Server) handleTenantUserUpdate(c *gin.Context) {
 	updated, err := update.Save(c.Request.Context())
 	if err != nil {
 		if ent.IsConstraintError(err) {
-			web.JSON(c, http.StatusConflict, gin.H{"error": "username already exists in this tenant"})
+			web.JSON(c, http.StatusConflict, gin.H{"error": "username already exists"})
 			return
 		}
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "update user failed"})
 		return
 	}
-	audit(c, "tenant.user.update", "target_user_id", updated.ID, "role", updated.Role, "status", updated.Status)
-	web.JSON(c, http.StatusOK, tenantUserResponse(updated))
+	audit(c, "user.update", "target_user_id", updated.ID, "role", updated.Role, "status", updated.Status)
+	web.JSON(c, http.StatusOK, userResponse(updated))
 }
 
-func (s *Server) handleTenantUserStatus(c *gin.Context) {
-	if !s.requireTenantAdmin(c) {
-		return
-	}
-	tid, ok := s.requireTenant(c)
-	if !ok {
+func (s *Server) handleAdminUserStatus(c *gin.Context) {
+	if !s.requireAdmin(c) {
 		return
 	}
 	uid, ok := adminID(c)
@@ -476,15 +257,13 @@ func (s *Server) handleTenantUserStatus(c *gin.Context) {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "status must be active or disabled"})
 		return
 	}
-	existing, err := s.DB.Client.User.Query().
-		Where(user.ID(uid), user.TenantIDEQ(tid)).
-		Only(c.Request.Context())
+	existing, err := s.DB.Client.User.Get(c.Request.Context(), uid)
 	if err != nil {
 		web.JSON(c, http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
-	if existing.Role == config.RolePlatformAdmin {
-		web.JSON(c, http.StatusForbidden, gin.H{"error": "platform administrators are managed by the platform"})
+	if existing.Role == config.RoleAdmin && body.Status == config.StatusDisabled && !s.otherAdminExists(c, existing.ID) {
+		web.JSON(c, http.StatusConflict, gin.H{"error": "the last administrator cannot be disabled"})
 		return
 	}
 	update := s.DB.Client.User.UpdateOneID(existing.ID).SetStatus(body.Status)
@@ -496,8 +275,92 @@ func (s *Server) handleTenantUserStatus(c *gin.Context) {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "update user status failed"})
 		return
 	}
-	audit(c, "tenant.user.status", "target_user_id", updated.ID, "role", updated.Role, "status", updated.Status)
-	web.JSON(c, http.StatusOK, tenantUserResponse(updated))
+	audit(c, "user.status", "target_user_id", updated.ID, "role", updated.Role, "status", updated.Status)
+	web.JSON(c, http.StatusOK, userResponse(updated))
+}
+
+func (s *Server) handleAdminUserDelete(c *gin.Context) {
+	if !s.requireAdmin(c) {
+		return
+	}
+	uid, ok := adminID(c)
+	if !ok {
+		return
+	}
+	principal, _ := auth.PrincipalFrom(c)
+	if principal.ID == uid {
+		web.JSON(c, http.StatusConflict, gin.H{"error": "you cannot delete your own account"})
+		return
+	}
+	existing, err := s.DB.Client.User.Get(c.Request.Context(), uid)
+	if err != nil {
+		web.JSON(c, http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+	if existing.Role == config.RoleAdmin && !s.otherAdminExists(c, existing.ID) {
+		web.JSON(c, http.StatusConflict, gin.H{"error": "the last administrator cannot be deleted"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	tx, err := s.DB.Client.Tx(ctx)
+	if err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user failed"})
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	userID := int64(uid)
+	if _, err := tx.Bookshelf.Delete().Where(bookshelf.UserIDEQ(userID)).Exec(ctx); err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
+		return
+	}
+	if _, err := tx.ReadingProgress.Delete().Where(readingprogress.UserIDEQ(userID)).Exec(ctx); err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
+		return
+	}
+	if _, err := tx.PrefillJob.Delete().Where(prefilljob.UserIDEQ(userID)).Exec(ctx); err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
+		return
+	}
+	if _, err := tx.TagPreference.Delete().Where(tagpreference.UserIDEQ(userID)).Exec(ctx); err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
+		return
+	}
+	if _, err := tx.TagSyncBaseline.Delete().Where(tagsyncbaseline.UserIDEQ(userID)).Exec(ctx); err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
+		return
+	}
+	if _, err := tx.SyncChange.Delete().Where(syncchange.UserIDEQ(userID)).Exec(ctx); err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
+		return
+	}
+	if _, err := tx.UserSetting.Delete().Where(usersetting.UserIDEQ(uid)).Exec(ctx); err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user settings failed"})
+		return
+	}
+	if err := tx.User.DeleteOneID(uid).Exec(ctx); err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user failed"})
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user failed"})
+		return
+	}
+	audit(c, "user.delete", "target_user_id", uid)
+	s.cleanupGalleryCache(ctx)
+	web.JSON(c, http.StatusOK, gin.H{"deleted": true})
+}
+
+func (s *Server) otherAdminExists(c *gin.Context, exceptID int) bool {
+	count, err := s.DB.Client.User.Query().
+		Where(
+			user.RoleEQ(config.RoleAdmin),
+			user.StatusEQ(config.StatusActive),
+			user.IDNEQ(exceptID),
+		).
+		Count(c.Request.Context())
+	return err == nil && count > 0
 }
 
 func adminID(c *gin.Context) (int, bool) {

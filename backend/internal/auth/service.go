@@ -1,6 +1,6 @@
-// Package auth implements the single-administrator JWT login flow:
-// Argon2id password storage, HS256 access tokens, the Gin middleware that
-// guards non-public API routes, and the /api/auth/* handlers.
+// Package auth implements the multi-user JWT login flow: Argon2id password
+// storage, HS256 access tokens, the Gin middleware that guards every
+// user-private API route, and the /api/auth/* handlers.
 package auth
 
 import (
@@ -18,7 +18,6 @@ import (
 
 	"manga-reader/internal/config"
 	"manga-reader/internal/ent"
-	"manga-reader/internal/ent/tenant"
 	"manga-reader/internal/ent/user"
 	"manga-reader/internal/requestid"
 	"manga-reader/internal/web"
@@ -45,7 +44,6 @@ const (
 // from request bodies or queries are never used in its place.
 type Principal struct {
 	ID           int
-	TenantID     int64
 	Username     string
 	Role         string
 	TokenVersion int
@@ -66,8 +64,8 @@ type loginBucket struct {
 	last   time.Time
 }
 
-// New builds the auth service. When cfg.Enabled is false the service still
-// serves /api/auth/status so the SPA can detect the legacy anonymous mode.
+// New builds the auth service. Authentication is mandatory in multi-user
+// mode; cfg.Enabled is kept for unit tests that build a service directly.
 func New(db *ent.Client, cfg config.AuthConfig) *Service {
 	s := &Service{
 		db:           db,
@@ -96,16 +94,7 @@ func (s *Service) EnsureAdmin(ctx context.Context) (bool, error) {
 		return false, errors.New("auth database is nil")
 	}
 
-	defaultTenant, err := s.db.Tenant.Query().
-		Where(tenant.SlugEQ(config.DefaultTenantSlug)).
-		Only(ctx)
-	if err != nil {
-		return false, fmt.Errorf("default tenant is missing: %w", err)
-	}
-
-	count, err := s.db.User.Query().
-		Where(user.TenantIDEQ(int64(defaultTenant.ID))).
-		Count(ctx)
+	count, err := s.db.User.Query().Count(ctx)
 	if err != nil {
 		return false, fmt.Errorf("count users: %w", err)
 	}
@@ -128,10 +117,9 @@ func (s *Service) EnsureAdmin(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	_, err = s.db.User.Create().
-		SetTenantID(int64(defaultTenant.ID)).
 		SetUsername(s.cfg.AdminUsername).
 		SetPasswordHash(hash).
-		SetRole(config.RolePlatformAdmin).
+		SetRole(config.RoleAdmin).
 		SetStatus(config.StatusActive).
 		Save(ctx)
 	if err != nil {
@@ -140,41 +128,14 @@ func (s *Service) EnsureAdmin(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// publicAPIs are the only routes reachable without a JWT when auth is
-// enabled. The default is deny for every other /api/* route, so newly added
-// user-data endpoints are protected automatically.
-//
-// Gallery/search/image endpoints stay public because <img> and EventSource
-// cannot attach an Authorization header, and they expose upstream content
-// rather than local user data. Sync peer endpoints keep their own
-// Node API Key middleware.
+// publicAPIs are the only routes reachable without a JWT. Every route that
+// touches user data, including gallery/search/image proxies (which need the
+// caller's ExHentai cookie and are reachable from <img>/EventSource through the
+// HttpOnly session cookie), requires an authenticated user. Sync peer endpoints
+// keep their own Node API Key middleware and never accept a user JWT.
 var publicAPIs = map[string]struct{}{
 	"/api/auth/login":  {},
 	"/api/auth/status": {},
-
-	"/api/search":    {},
-	"/api/galleries": {},
-	"/api/watched":   {},
-	"/api/popular":   {},
-
-	"/api/gallery/:id/:token":                         {},
-	"/api/gallery/:id/:token/details":                 {},
-	"/api/gallery/:id/:token/pages":                   {},
-	"/api/gallery/:id/:token/torrents":                {},
-	"/api/gallery/:id/:token/torrents/:gtid/info":     {},
-	"/api/gallery/:id/:token/torrents/:gtid/download": {},
-
-	"/api/gallery-cache/:id/:token":         {},
-	"/api/gallery-cache/:id/:token/details": {},
-	"/api/gallery-cache/:id/:token/pages":   {},
-
-	"/api/image/page":           {},
-	"/api/image/thumbnail":      {},
-	"/api/image/page-thumbnail": {},
-
-	"/api/image-cache/page":           {},
-	"/api/image-cache/thumbnail":      {},
-	"/api/image-cache/page-thumbnail": {},
 
 	// Peer sync is authenticated by Node API Key middleware in the sync service.
 	"/api/sync/push":   {},
@@ -237,7 +198,7 @@ func (s *Service) authenticate(c *gin.Context) (Principal, error) {
 	}
 	// Logout increments token_version, which invalidates every token that was
 	// issued before it (not just the copy in this browser).
-	if u.Status != config.StatusActive || u.TenantID != claims.TenantID || u.Role != claims.Role {
+	if u.Status != config.StatusActive || int64(u.ID) != claims.UserID || u.Role != claims.Role {
 		return Principal{}, ErrInvalidToken
 	}
 	if u.TokenVersion != claims.TokenVersion {
@@ -245,7 +206,6 @@ func (s *Service) authenticate(c *gin.Context) (Principal, error) {
 	}
 	return Principal{
 		ID:           u.ID,
-		TenantID:     u.TenantID,
 		Username:     u.Username,
 		Role:         u.Role,
 		TokenVersion: u.TokenVersion,
@@ -322,7 +282,6 @@ func (s *Service) handleLogin(c *gin.Context) {
 
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	var body struct {
-		Tenant   string `json:"tenant"`
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
@@ -330,13 +289,11 @@ func (s *Service) handleLogin(c *gin.Context) {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
-	body.Tenant = strings.TrimSpace(body.Tenant)
 	body.Username = strings.TrimSpace(body.Username)
 	loginResult := "failure"
 	defer func() {
 		slog.Info("user login",
 			"request_id", requestid.From(c),
-			"tenant", body.Tenant,
 			"username", body.Username,
 			"result", loginResult,
 		)
@@ -346,30 +303,10 @@ func (s *Service) handleLogin(c *gin.Context) {
 		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
 		return
 	}
-	if body.Tenant == "" {
-		// Backwards-compatible default for older clients; the tenant is still
-		// resolved server-side, never trusted as an isolation boundary.
-		body.Tenant = config.DefaultTenantSlug
-	}
 
 	ctx := c.Request.Context()
-	t, err := s.db.Tenant.Query().
-		Where(tenant.SlugEQ(body.Tenant), tenant.StatusEQ(config.StatusActive)).
-		Only(ctx)
-	if err != nil {
-		if !ent.IsNotFound(err) {
-			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
-			return
-		}
-		// Burn the password hash for unknown/disabled tenants too.
-		_, _ = HashPassword(body.Password)
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
-		return
-	}
-
 	u, err := s.db.User.Query().
 		Where(
-			user.TenantIDEQ(int64(t.ID)),
 			user.UsernameEQ(body.Username),
 			user.StatusEQ(config.StatusActive),
 		).
@@ -390,7 +327,7 @@ func (s *Service) handleLogin(c *gin.Context) {
 		return
 	}
 
-	token, expires, err := s.tokens.issue(u.ID, u.TenantID, u.Username, u.Role, u.TokenVersion)
+	token, expires, err := s.tokens.issue(u.ID, u.Username, u.Role, u.TokenVersion)
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
 		return
@@ -414,7 +351,7 @@ func (s *Service) handleLogout(c *gin.Context) {
 	// account fail validation immediately. This is server-side revocation,
 	// not just a client-side cookie deletion.
 	if err := s.db.User.Update().
-		Where(user.ID(principal.ID), user.TenantIDEQ(principal.TenantID)).
+		Where(user.ID(principal.ID)).
 		AddTokenVersion(1).
 		Exec(c.Request.Context()); err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "logout failed"})
@@ -430,30 +367,11 @@ func (s *Service) handleMe(c *gin.Context) {
 		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	t, err := s.db.Tenant.Get(c.Request.Context(), int(principal.TenantID))
-	if err != nil {
-		web.AbortWithStatusJSON(c, http.StatusForbidden, gin.H{"error": "tenant unavailable"})
-		return
-	}
-	tenantJSON := gin.H{
-		"id":     int64(t.ID),
-		"name":   t.Name,
-		"slug":   t.Slug,
-		"status": t.Status,
-	}
-	userJSON := gin.H{
-		"id":        principal.ID,
-		"tenant_id": principal.TenantID,
-		"username":  principal.Username,
-		"role":      principal.Role,
-	}
 	web.JSON(c, http.StatusOK, gin.H{
-		"id":        principal.ID,
-		"tenant_id": principal.TenantID,
-		"username":  principal.Username,
-		"role":      principal.Role,
-		"tenant":    tenantJSON,
-		"user":      userJSON,
+		"id":       principal.ID,
+		"user_id":  principal.ID,
+		"username": principal.Username,
+		"role":     principal.Role,
 	})
 }
 

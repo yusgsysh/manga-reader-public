@@ -107,31 +107,33 @@ Search / Homepage / Watched 支持上游 ExHentai 的 Jump/Seek 定位，通过�
 
 ## Authentication (JWT)
 
-JWT auth is opt-in: set `JWT_SECRET` (at least 32 random bytes) to enable it. Without it the API keeps the legacy anonymous behaviour. HTTP Basic Authentication is not supported anywhere in the application.
+Multi-user mode is always on: set `JWT_SECRET` (at least 32 random bytes). The API refuses to start without it. HTTP Basic Authentication is not supported anywhere.
 
 ### Public vs protected
 
-Public (no JWT): `/api/auth/login`, `/api/auth/status`, `/api/search`, `/api/galleries`, `/api/watched`, `/api/popular`, `/api/gallery/*`, `/api/gallery-cache/*`, `/api/image/*`, `/api/image-cache/*`. Peer sync endpoints require a Node API Key instead (separate middleware).
+Public (no user JWT): `/api/auth/login`, `/api/auth/status`. Peer sync endpoints `/api/sync/push` and `/api/sync/events` require a Node API Key instead (separate middleware).
 
-Every other `/api/*` route requires a valid JWT: `/api/auth/me`, `/api/auth/logout`, `/api/bookshelf*`, `/api/progress*`, `/api/recently-read`, `/api/reading-progress/cleanup`, `/api/tag-settings*`, `/api/prefill*`, `/api/sync/config`, `/api/sync/status`, `/api/dev/*`, `/api/admin/*`, `/api/tenant/*`. The middleware is default-deny, so new API routes are protected unless explicitly listed as public.
+Every other `/api/*` route requires a valid user JWT: search, galleries, image proxies (the browser sends the same-origin HttpOnly cookie), `/api/auth/me`, `/api/auth/logout`, `/api/bookshelf*`, `/api/progress*`, `/api/recently-read`, `/api/reading-progress/cleanup`, `/api/tag-settings*`, `/api/prefill*`, `/api/settings*`, `/api/sync/config`, `/api/sync/status`, `/api/dev/*`, `/api/admin/*`. The middleware is default-deny.
 
-### Tenancy
+### User isolation
 
-Isolation is Shared Database + Shared Schema: tenant-owned rows carry `tenant_id` and every data-access path takes that ID from the verified JWT, never from a path, query or body parameter. `gallery_cache` remains global because it is upstream metadata shared by every tenant.
+Every private row carries `user_id`: `bookshelf`, `reading_progress`, `prefill_job`, `tag_preference`, `tag_sync_baseline`, `sync_change`, `user_setting`. Every query/create/update/delete takes the user ID from the verified JWT and includes it in the predicate. `user_id` in a path, query, header or body is ignored.
 
-The JWT carries `sub` (user id), `tenant_id`, `role`, `iss`, `iat`, `exp` and `jti`. After signature validation, the tenant middleware loads the tenant and rejects a missing/disabled one with `403`. Roles are `platform_admin`, `tenant_admin` and `user`.
+`gallery_cache` and public image/thumbnail caches remain instance-wide because they are upstream metadata rather than user data.
 
-Send the token as `Authorization: Bearer <access_token>`. Browsers may use the `manga_reader_auth` HttpOnly cookie set by login instead; this covers page refreshes and direct ZIP download links, where JavaScript cannot attach a header.
+### JWT claims
+
+The JWT carries `sub` (user id), `user_id`, `username`, `role`, `iss`, `iat`, `exp`, `jti` and `ver` (logout generation). `sub` and `user_id` must match. Roles are `admin` and `user`.
+
+Send the token as `Authorization: Bearer <access_token>`. Browsers may use the `manga_reader_auth` HttpOnly cookie set by login instead; this covers page refreshes, `<img>`/EventSource and direct ZIP download links.
 
 ### 0.1 Login
 
 `POST /api/auth/login`
 
 ```json
-{ "tenant": "default", "username": "admin", "password": "password" }
+{ "username": "admin", "password": "password" }
 ```
-
-`tenant` is the tenant slug. It may be omitted for backwards compatibility and falls back to `default`; the server always resolves it itself.
 
 Success `200`:
 
@@ -141,8 +143,6 @@ Success `200`:
 
 Failure `401` uses one message for unknown user and wrong password: `{"error":"invalid username or password"}`. Excessive attempts return `429`.
 
-The JWT contains `iss`, `sub` (user id), `iat`, `exp`, `jti`, `username` and `ver` (logout generation). Only HS256 is accepted.
-
 ### 0.2 Status (public)
 
 `GET /api/auth/status`
@@ -151,67 +151,80 @@ The JWT contains `iss`, `sub` (user id), `iat`, `exp`, `jti`, `username` and `ve
 { "enabled": true, "initialized": true }
 ```
 
-`enabled=false` means the deployment intentionally runs in anonymous mode; the SPA skips the login page.
-
 ### 0.3 Current user
 
 `GET /api/auth/me` (requires JWT)
 
 ```json
-{
-  "id": 1,
-  "tenant_id": 1,
-  "username": "admin",
-  "role": "platform_admin",
-  "tenant": { "id": 1, "name": "Default", "slug": "default", "status": "active" }
-}
+{ "id": 1, "user_id": 1, "username": "admin", "role": "admin" }
 ```
 
 ### 0.4 Logout
 
 `POST /api/auth/logout` (requires JWT)
 
-Increments `users.token_version` and clears the auth cookie. All tokens issued before logout return `401` immediately; this is server-side revocation, not just client-side token deletion.
+Increments `users.token_version` and clears the auth cookie. All tokens issued before logout return `401` immediately.
 
 ```json
 { "success": true }
 ```
 
-### 0.5 Platform administration (platform_admin)
+### 0.5 Personal settings and ExHentai Cookie
 
-All routes require a platform administrator JWT.
-
-| Method | Path | Body |
-|--------|------|------|
-| POST | `/api/admin/tenants` | `{ "name", "slug", "admin_username"?, "admin_password"? }` |
-| GET | `/api/admin/tenants` | - |
-| GET | `/api/admin/tenants/:id` | - |
-| PUT | `/api/admin/tenants/:id` | `{ "name"?, "slug"? }` |
-| PATCH | `/api/admin/tenants/:id/status` | `{ "status": "active" \| "disabled" }` |
-
-Tenant admins are optional at creation time and must be provided together. `slug` is globally unique.
-
-### 0.6 Tenant administration (tenant_admin)
-
-All routes require a tenant administrator JWT and are always scoped to that JWT's tenant; a user ID belonging to another tenant returns `404`.
+All routes are scoped to the JWT user.
 
 | Method | Path | Body |
 |--------|------|------|
-| GET | `/api/tenant/users` | - |
-| POST | `/api/tenant/users` | `{ "username", "password", "role": "user" \| "tenant_admin" }` |
-| PUT | `/api/tenant/users/:id` | `{ "username"?, "password"?, "role"?, "status"? }` |
-| PATCH | `/api/tenant/users/:id/status` | `{ "status": "active" \| "disabled" }` |
+| GET | `/api/settings` | - |
+| PUT | `/api/settings` | `{ "preferences": {...}, "site"?: "exhentai" \| "e-hentai" }` |
+| GET | `/api/settings/cookie` | - |
+| PUT | `/api/settings/cookie` | `{ "cookie"?: "ipb_member_id=...; ...", "ipb_member_id"?, "ipb_pass_hash"?, "igneous"?, "sk"?, "site"? }` |
+| DELETE | `/api/settings/cookie` | - |
+| POST | `/api/settings/cookie/verify` | - |
 
-Reset password and role/status changes increment `token_version`, revoking that user's existing tokens.
+Cookie responses contain only a non-secret summary:
 
-### 0.7 Node and API-key administration (platform_admin)
+```json
+{
+  "configured": true,
+  "status": "valid",
+  "site": "exhentai",
+  "verified_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z",
+  "has_igneous": true,
+  "has_sk": false
+}
+```
 
-All routes require a platform administrator JWT. Nodes are bound to one tenant; their API keys can only sync that tenant.
+- The cookie is encrypted at rest with AES-256-GCM (key derived from `JWT_SECRET`); it is never returned, logged, or shared with another user.
+- Each user gets a separate HTTP client and cookie jar; every ExHentai API/scrape request uses the current user's session.
+- The per-user `site` picks the browsing host: `exhentai` (default) scrapes exhentai.org, `e-hentai` scrapes e-hentai.org (search, listings, gallery pages, torrents; gallery ids/tokens are valid on both). The session cookie jar authenticates both hosts. Tag synchronisation always uses exhentai — the `s.exhentai.org` mutation API has no e-hentai equivalent.
+- `status` is `unset`, `unverified`, `valid` or `invalid`; `verify` performs one authenticated upstream request.
+- Preferences are an arbitrary JSON object stored per user (search defaults, tag filters, display, reader, preload, image policy, etc.).
+
+### 0.6 User administration (admin)
+
+| Method | Path | Body |
+|--------|------|------|
+| GET | `/api/admin/users` | - |
+| POST | `/api/admin/users` | `{ "username", "password", "role"?: "admin" \| "user", "status"? }` |
+| GET | `/api/admin/users/:id` | - |
+| PUT | `/api/admin/users/:id` | `{ "username"?, "password"?, "role"?, "status"? }` |
+| PATCH | `/api/admin/users/:id/status` | `{ "status": "active" \| "disabled" }` |
+| DELETE | `/api/admin/users/:id` | - |
+
+- Password/role/status changes increment `token_version`, revoking that user's existing tokens.
+- The last active administrator cannot be demoted, disabled or deleted; an administrator cannot delete their own account.
+- Deleting a user removes their private rows (bookshelf, progress, prefill jobs, tag preferences/baseline, outbox, settings) in one transaction.
+
+### 0.7 Node and API-key administration (admin)
+
+All routes require an administrator JWT. A node is a trusted sync peer of the instance and is no longer bound to a tenant.
 
 | Method | Path | Body |
 |--------|------|------|
 | GET | `/api/admin/nodes` | - |
-| POST | `/api/admin/nodes` | `{ "name", "tenant_id", "status"? }` |
+| POST | `/api/admin/nodes` | `{ "name", "status"? }` |
 | GET | `/api/admin/nodes/:id` | - |
 | PUT | `/api/admin/nodes/:id` | `{ "name"?, "status"? }` |
 | DELETE | `/api/admin/nodes/:id` | - |
@@ -223,7 +236,14 @@ All routes require a platform administrator JWT. Nodes are bound to one tenant; 
 - Scopes: `sync:read`, `sync:write`, `sync:events`.
 - `POST .../keys` and `.../rotate` return the full plaintext key **once** as `{"key":"mrk_...", "api_key":{...}}`; list/get only expose `key_prefix`.
 - Revocation is immediate. Rotation creates a new key and leaves the old one active unless `revoke_old` is true or the old key is explicitly deleted.
-- Deleting a node deletes its key rows in the same transaction.
+- Sync changes carry `user_id`; a trusted node replicates all users' data without merging ownership.
+
+### 0.8 System-level endpoints
+
+- `/api/sync/config` and `/api/sync/status` are instance-wide: administrator JWT required.
+- `/api/dev/*` is administrator-only (and only registered when `MANGA_READER_DEV_TOOLS=true`).
+- `/metrics` uses its own bearer token (or loopback-only when unset); user JWTs and node keys are rejected.
+- Node sync endpoints (`/api/sync/push`, `/api/sync/events`) accept only Node API Keys.
 
 ---
 
@@ -1495,7 +1515,7 @@ Cache-Control: no-store
 
 **宿主端点（`MANGA_READER_SYNC_ENABLED=true` 时注册）：**
 
-鉴权：`Authorization: Bearer <Node API Key>`。中间件解析 Key 的 SHA-256 哈希、校验节点/租户状态和 Scopes；失败返回 `401`，Scope 不足返回 `403`。用户 JWT 不能访问这些端点。节点只能访问其绑定租户的数据。
+鉴权：`Authorization: Bearer <Node API Key>`。中间件解析 Key 的 SHA-256 哈希、校验节点状态和 Scopes；失败返回 `401`，Scope 不足返回 `403`。用户 JWT 不能访问这些端点。变更携带 `user_id`，对端按用户写入。
 
 `POST /api/sync/push` — 一步推 + 拉。请求：
 
@@ -1547,7 +1567,7 @@ curl -N http://server:8080/api/sync/events -H 'Authorization: Bearer mrk_...'
 
 同步请求的 `request_id` 会写入审计日志；数据合并仍按行 LWW 幂等。API Key 明文只在创建/轮换时返回一次，错误日志不记录完整 Key。
 
-**Error Responses:** `400` 配置无效、`401` Key 无效/撤销/过期/节点或租户禁用、`403` Scope 不足、`404` 宿主端点未启用。
+**Error Responses:** `400` 配置无效、`401` Key 无效/撤销/过期/节点禁用、`403` Scope 不足、`404` 宿主端点未启用。
 
 ---
 
@@ -1626,7 +1646,7 @@ sum(rate(image_cache_requests_total[5m]))
 
 #### POST `/api/tag-settings/sync`
 
-**完整同步（三路合并）**：以 `tag_sync_baseline` 表为“上次同步时的源站快照”，对 `本地规则 / 基线 / 源站 My Tags` 做三路合并，**默认拉取源站的变更**，同时把本地变更推送到源站（需要后端配置了有效 Cookie）：
+**完整同步（三路合并）**：以 `tag_sync_baseline` 表为“上次同步时的源站快照”，对 `本地规则 / 基线 / 源站 My Tags` 做三路合并，**默认拉取源站的变更**，同时把本地变更推送到源站（需要当前用户已配置有效 Cookie）：
 
 - **双方一致**（含同时不存在）→ 不动，基线收敛到一致状态（双方都不存在时基线行删除）
 - **仅本地变更**（相对基线；“不存在”也算变更）→ 推送源站：

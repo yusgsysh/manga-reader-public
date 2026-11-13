@@ -3,19 +3,17 @@ import { Navigate } from "react-router";
 import { useAuth } from "../../context/auth";
 
 /**
- * UI-level role gate. The backend enforces the same roles independently; this
+ * UI-level role gate. The backend enforces the same role independently; this
  * only keeps ordinary users out of admin screens.
  */
 export function RequireRole({
   role,
   children,
 }: {
-  role: "platform_admin" | "tenant_admin";
+  role: "admin";
   children: ReactNode;
 }) {
-  const { isPlatformAdmin, isTenantAdmin } = useAuth();
-  const allowed =
-    role === "platform_admin" ? isPlatformAdmin : isTenantAdmin;
-  if (!allowed) return <Navigate to="/" replace />;
+  const { isAdmin } = useAuth();
+  if (role !== "admin" || !isAdmin) return <Navigate to="/" replace />;
   return <>{children}</>;
 }

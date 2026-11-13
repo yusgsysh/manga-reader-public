@@ -18,13 +18,12 @@ import (
 	"manga-reader/internal/cache"
 	"manga-reader/internal/config"
 	"manga-reader/internal/database"
-	"manga-reader/internal/exhentai"
 	"manga-reader/internal/handler"
 	"manga-reader/internal/metrics"
 	"manga-reader/internal/node"
 	"manga-reader/internal/requestid"
 	synclib "manga-reader/internal/sync"
-	"manga-reader/internal/tenant"
+	"manga-reader/internal/usercookie"
 	"manga-reader/internal/web"
 )
 
@@ -115,6 +114,29 @@ func csrfGuard(extra map[string]struct{}) gin.HandlerFunc {
 	}
 }
 
+// adminOnlyAPIs are instance-wide controls. A normal user must never change
+// the peer sync configuration or simulate an upstream outage for everyone.
+var adminOnlyAPIs = map[string]struct{}{
+	"/api/sync/config":       {},
+	"/api/sync/status":       {},
+	"/api/dev/upstream-down": {},
+}
+
+func adminOnlyMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if _, restricted := adminOnlyAPIs[c.FullPath()]; !restricted {
+			c.Next()
+			return
+		}
+		principal, ok := auth.PrincipalFrom(c)
+		if !ok || principal.Role != config.RoleAdmin {
+			web.AbortWithStatusJSON(c, http.StatusForbidden, gin.H{"error": "administrator required"})
+			return
+		}
+		c.Next()
+	}
+}
+
 // securityHeadersMiddleware carries over the headers the removed proxy layer
 // used to add. CSP stays out on purpose: a strict policy risks breaking the
 // React app, SSE and the image proxy.
@@ -172,17 +194,6 @@ func run() error {
 		"db_driver", cfg.Database.Driver,
 	)
 
-	client, err := exhentai.CreateHTTPClient(&exhentai.CookieConfig{
-		IpbMemberID: cfg.Cookie.IpbMemberID,
-		IpbPassHash: cfg.Cookie.IpbPassHash,
-		Igneous:     cfg.Cookie.Igneous,
-		SK:          cfg.Cookie.SK,
-	})
-	if err != nil {
-		logger.Error("http client init failed", "error", err)
-		return err
-	}
-
 	dbDriver := database.DriverSQLite
 	dbDSN := cfg.Database.Path
 	if cfg.Database.IsPostgres() {
@@ -196,6 +207,8 @@ func run() error {
 	}
 	defer db.Close()
 
+	// ExHentai sessions are per user, stored encrypted in user_setting.
+	userCookies := usercookie.New(db.Client, cfg.Auth.JWTSecret)
 	authSvc := auth.New(db.Client, cfg.Auth)
 	createdAdmin, err := authSvc.EnsureAdmin(context.Background())
 	if err != nil {
@@ -205,9 +218,7 @@ func run() error {
 	if createdAdmin {
 		logger.Info("administrator account initialized", "username", cfg.Auth.AdminUsername)
 	}
-	if authSvc.Enabled() {
-		logger.Info("JWT auth enabled", "issuer", cfg.Auth.JWTIssuer, "expires_in", cfg.Auth.ExpiresInSeconds())
-	}
+	logger.Info("JWT auth enabled", "issuer", cfg.Auth.JWTIssuer, "expires_in", cfg.Auth.ExpiresInSeconds())
 
 	nodeSvc := node.New(db.Client)
 	syncSvc := synclib.NewService(db.Client, synclib.Options{
@@ -227,11 +238,11 @@ func run() error {
 	// purge) still runs and propagates deletions.
 
 	handlerCfg := handler.Config{
-		Client:      client,
 		DB:          db,
 		DevTools:    cfg.DevTools,
 		Sync:        syncSvc,
-		AuthEnabled: cfg.Auth.Enabled,
+		RequireAuth: true,
+		UserCookies: userCookies,
 	}
 
 	if cfg.MinIO.IsValid() {
@@ -285,11 +296,10 @@ func run() error {
 	r.Use(CORSMiddleware(corsOrigins))
 	r.Use(securityHeadersMiddleware())
 	r.Use(csrfGuard(corsOrigins))
-	// Default-deny for /api/*: only publicAPIs pass without a valid JWT.
+	// Default-deny for /api/*: only publicAPIs and node-key sync routes pass
+	// without a valid user JWT.
 	r.Use(authSvc.Middleware())
-	// Turns the verified JWT tenant into the trusted request scope. Runs
-	// after auth; legacy anonymous mode stays on the default tenant.
-	r.Use(tenant.New(db.Client, cfg.Auth.Enabled).Middleware())
+	r.Use(adminOnlyMiddleware())
 
 	r.GET("/healthz", func(c *gin.Context) {
 		web.JSON(c, http.StatusOK, gin.H{"status": "ok"})

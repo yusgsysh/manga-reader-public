@@ -28,24 +28,24 @@ func (_u *BookshelfUpdate) Where(ps ...predicate.Bookshelf) *BookshelfUpdate {
 	return _u
 }
 
-// SetTenantID sets the "tenant_id" field.
-func (_u *BookshelfUpdate) SetTenantID(v int64) *BookshelfUpdate {
-	_u.mutation.ResetTenantID()
-	_u.mutation.SetTenantID(v)
+// SetUserID sets the "user_id" field.
+func (_u *BookshelfUpdate) SetUserID(v int64) *BookshelfUpdate {
+	_u.mutation.ResetUserID()
+	_u.mutation.SetUserID(v)
 	return _u
 }
 
-// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
-func (_u *BookshelfUpdate) SetNillableTenantID(v *int64) *BookshelfUpdate {
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (_u *BookshelfUpdate) SetNillableUserID(v *int64) *BookshelfUpdate {
 	if v != nil {
-		_u.SetTenantID(*v)
+		_u.SetUserID(*v)
 	}
 	return _u
 }
 
-// AddTenantID adds value to the "tenant_id" field.
-func (_u *BookshelfUpdate) AddTenantID(v int64) *BookshelfUpdate {
-	_u.mutation.AddTenantID(v)
+// AddUserID adds value to the "user_id" field.
+func (_u *BookshelfUpdate) AddUserID(v int64) *BookshelfUpdate {
+	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -140,11 +140,11 @@ func (_u *BookshelfUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			}
 		}
 	}
-	if value, ok := _u.mutation.TenantID(); ok {
-		_spec.SetField(bookshelf.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.UserID(); ok {
+		_spec.SetField(bookshelf.FieldUserID, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.AddedTenantID(); ok {
-		_spec.AddField(bookshelf.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.AddedUserID(); ok {
+		_spec.AddField(bookshelf.FieldUserID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(bookshelf.FieldGalleryID, field.TypeInt64, value)
@@ -178,24 +178,24 @@ type BookshelfUpdateOne struct {
 	mutation *BookshelfMutation
 }
 
-// SetTenantID sets the "tenant_id" field.
-func (_u *BookshelfUpdateOne) SetTenantID(v int64) *BookshelfUpdateOne {
-	_u.mutation.ResetTenantID()
-	_u.mutation.SetTenantID(v)
+// SetUserID sets the "user_id" field.
+func (_u *BookshelfUpdateOne) SetUserID(v int64) *BookshelfUpdateOne {
+	_u.mutation.ResetUserID()
+	_u.mutation.SetUserID(v)
 	return _u
 }
 
-// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
-func (_u *BookshelfUpdateOne) SetNillableTenantID(v *int64) *BookshelfUpdateOne {
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (_u *BookshelfUpdateOne) SetNillableUserID(v *int64) *BookshelfUpdateOne {
 	if v != nil {
-		_u.SetTenantID(*v)
+		_u.SetUserID(*v)
 	}
 	return _u
 }
 
-// AddTenantID adds value to the "tenant_id" field.
-func (_u *BookshelfUpdateOne) AddTenantID(v int64) *BookshelfUpdateOne {
-	_u.mutation.AddTenantID(v)
+// AddUserID adds value to the "user_id" field.
+func (_u *BookshelfUpdateOne) AddUserID(v int64) *BookshelfUpdateOne {
+	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -320,11 +320,11 @@ func (_u *BookshelfUpdateOne) sqlSave(ctx context.Context) (_node *Bookshelf, er
 			}
 		}
 	}
-	if value, ok := _u.mutation.TenantID(); ok {
-		_spec.SetField(bookshelf.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.UserID(); ok {
+		_spec.SetField(bookshelf.FieldUserID, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.AddedTenantID(); ok {
-		_spec.AddField(bookshelf.FieldTenantID, field.TypeInt64, value)
+	if value, ok := _u.mutation.AddedUserID(); ok {
+		_spec.AddField(bookshelf.FieldUserID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(bookshelf.FieldGalleryID, field.TypeInt64, value)

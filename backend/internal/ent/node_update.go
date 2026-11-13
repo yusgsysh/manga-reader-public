@@ -42,27 +42,6 @@ func (_u *NodeUpdate) SetNillableName(v *string) *NodeUpdate {
 	return _u
 }
 
-// SetTenantID sets the "tenant_id" field.
-func (_u *NodeUpdate) SetTenantID(v int64) *NodeUpdate {
-	_u.mutation.ResetTenantID()
-	_u.mutation.SetTenantID(v)
-	return _u
-}
-
-// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
-func (_u *NodeUpdate) SetNillableTenantID(v *int64) *NodeUpdate {
-	if v != nil {
-		_u.SetTenantID(*v)
-	}
-	return _u
-}
-
-// AddTenantID adds value to the "tenant_id" field.
-func (_u *NodeUpdate) AddTenantID(v int64) *NodeUpdate {
-	_u.mutation.AddTenantID(v)
-	return _u
-}
-
 // SetStatus sets the "status" field.
 func (_u *NodeUpdate) SetStatus(v string) *NodeUpdate {
 	_u.mutation.SetStatus(v)
@@ -169,12 +148,6 @@ func (_u *NodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(node.FieldName, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.TenantID(); ok {
-		_spec.SetField(node.FieldTenantID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedTenantID(); ok {
-		_spec.AddField(node.FieldTenantID, field.TypeInt64, value)
-	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(node.FieldStatus, field.TypeString, value)
 	}
@@ -218,27 +191,6 @@ func (_u *NodeUpdateOne) SetNillableName(v *string) *NodeUpdateOne {
 	if v != nil {
 		_u.SetName(*v)
 	}
-	return _u
-}
-
-// SetTenantID sets the "tenant_id" field.
-func (_u *NodeUpdateOne) SetTenantID(v int64) *NodeUpdateOne {
-	_u.mutation.ResetTenantID()
-	_u.mutation.SetTenantID(v)
-	return _u
-}
-
-// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
-func (_u *NodeUpdateOne) SetNillableTenantID(v *int64) *NodeUpdateOne {
-	if v != nil {
-		_u.SetTenantID(*v)
-	}
-	return _u
-}
-
-// AddTenantID adds value to the "tenant_id" field.
-func (_u *NodeUpdateOne) AddTenantID(v int64) *NodeUpdateOne {
-	_u.mutation.AddTenantID(v)
 	return _u
 }
 
@@ -377,12 +329,6 @@ func (_u *NodeUpdateOne) sqlSave(ctx context.Context) (_node *Node, err error) {
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(node.FieldName, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.TenantID(); ok {
-		_spec.SetField(node.FieldTenantID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedTenantID(); ok {
-		_spec.AddField(node.FieldTenantID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(node.FieldStatus, field.TypeString, value)

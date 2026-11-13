@@ -14,8 +14,8 @@ import (
 	"manga-reader/internal/ent/syncstate"
 	"manga-reader/internal/ent/tagpreference"
 	"manga-reader/internal/ent/tagsyncbaseline"
-	"manga-reader/internal/ent/tenant"
 	"manga-reader/internal/ent/user"
+	"manga-reader/internal/ent/usersetting"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,10 +27,10 @@ import (
 func init() {
 	bookshelfFields := schema.Bookshelf{}.Fields()
 	_ = bookshelfFields
-	// bookshelfDescTenantID is the schema descriptor for tenant_id field.
-	bookshelfDescTenantID := bookshelfFields[0].Descriptor()
-	// bookshelf.DefaultTenantID holds the default value on creation for the tenant_id field.
-	bookshelf.DefaultTenantID = bookshelfDescTenantID.Default.(int64)
+	// bookshelfDescUserID is the schema descriptor for user_id field.
+	bookshelfDescUserID := bookshelfFields[0].Descriptor()
+	// bookshelf.DefaultUserID holds the default value on creation for the user_id field.
+	bookshelf.DefaultUserID = bookshelfDescUserID.Default.(int64)
 	// bookshelfDescCreatedAt is the schema descriptor for created_at field.
 	bookshelfDescCreatedAt := bookshelfFields[3].Descriptor()
 	// bookshelf.DefaultCreatedAt holds the default value on creation for the created_at field.
@@ -116,15 +116,15 @@ func init() {
 	// node.NameValidator is a validator for the "name" field. It is called by the builders before save.
 	node.NameValidator = nodeDescName.Validators[0].(func(string) error)
 	// nodeDescStatus is the schema descriptor for status field.
-	nodeDescStatus := nodeFields[2].Descriptor()
+	nodeDescStatus := nodeFields[1].Descriptor()
 	// node.DefaultStatus holds the default value on creation for the status field.
 	node.DefaultStatus = nodeDescStatus.Default.(string)
 	// nodeDescCreatedAt is the schema descriptor for created_at field.
-	nodeDescCreatedAt := nodeFields[4].Descriptor()
+	nodeDescCreatedAt := nodeFields[3].Descriptor()
 	// node.DefaultCreatedAt holds the default value on creation for the created_at field.
 	node.DefaultCreatedAt = nodeDescCreatedAt.Default.(func() time.Time)
 	// nodeDescUpdatedAt is the schema descriptor for updated_at field.
-	nodeDescUpdatedAt := nodeFields[5].Descriptor()
+	nodeDescUpdatedAt := nodeFields[4].Descriptor()
 	// node.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	node.DefaultUpdatedAt = nodeDescUpdatedAt.Default.(func() time.Time)
 	// node.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -149,10 +149,10 @@ func init() {
 	nodeapikey.DefaultCreatedAt = nodeapikeyDescCreatedAt.Default.(func() time.Time)
 	prefilljobFields := schema.PrefillJob{}.Fields()
 	_ = prefilljobFields
-	// prefilljobDescTenantID is the schema descriptor for tenant_id field.
-	prefilljobDescTenantID := prefilljobFields[0].Descriptor()
-	// prefilljob.DefaultTenantID holds the default value on creation for the tenant_id field.
-	prefilljob.DefaultTenantID = prefilljobDescTenantID.Default.(int64)
+	// prefilljobDescUserID is the schema descriptor for user_id field.
+	prefilljobDescUserID := prefilljobFields[0].Descriptor()
+	// prefilljob.DefaultUserID holds the default value on creation for the user_id field.
+	prefilljob.DefaultUserID = prefilljobDescUserID.Default.(int64)
 	// prefilljobDescToken is the schema descriptor for token field.
 	prefilljobDescToken := prefilljobFields[3].Descriptor()
 	// prefilljob.DefaultToken holds the default value on creation for the token field.
@@ -189,10 +189,10 @@ func init() {
 	prefilljob.DefaultID = prefilljobDescID.Default.(func() uuid.UUID)
 	readingprogressFields := schema.ReadingProgress{}.Fields()
 	_ = readingprogressFields
-	// readingprogressDescTenantID is the schema descriptor for tenant_id field.
-	readingprogressDescTenantID := readingprogressFields[0].Descriptor()
-	// readingprogress.DefaultTenantID holds the default value on creation for the tenant_id field.
-	readingprogress.DefaultTenantID = readingprogressDescTenantID.Default.(int64)
+	// readingprogressDescUserID is the schema descriptor for user_id field.
+	readingprogressDescUserID := readingprogressFields[0].Descriptor()
+	// readingprogress.DefaultUserID holds the default value on creation for the user_id field.
+	readingprogress.DefaultUserID = readingprogressDescUserID.Default.(int64)
 	// readingprogressDescCurrentPage is the schema descriptor for current_page field.
 	readingprogressDescCurrentPage := readingprogressFields[3].Descriptor()
 	// readingprogress.DefaultCurrentPage holds the default value on creation for the current_page field.
@@ -235,10 +235,10 @@ func init() {
 	readingprogress.UpdateDefaultUpdatedAt = readingprogressDescUpdatedAt.UpdateDefault.(func() time.Time)
 	syncchangeFields := schema.SyncChange{}.Fields()
 	_ = syncchangeFields
-	// syncchangeDescTenantID is the schema descriptor for tenant_id field.
-	syncchangeDescTenantID := syncchangeFields[0].Descriptor()
-	// syncchange.DefaultTenantID holds the default value on creation for the tenant_id field.
-	syncchange.DefaultTenantID = syncchangeDescTenantID.Default.(int64)
+	// syncchangeDescUserID is the schema descriptor for user_id field.
+	syncchangeDescUserID := syncchangeFields[0].Descriptor()
+	// syncchange.DefaultUserID holds the default value on creation for the user_id field.
+	syncchange.DefaultUserID = syncchangeDescUserID.Default.(int64)
 	// syncchangeDescOp is the schema descriptor for op field.
 	syncchangeDescOp := syncchangeFields[4].Descriptor()
 	// syncchange.DefaultOp holds the default value on creation for the op field.
@@ -265,10 +265,10 @@ func init() {
 	syncstate.IDValidator = syncstateDescID.Validators[0].(func(string) error)
 	tagpreferenceFields := schema.TagPreference{}.Fields()
 	_ = tagpreferenceFields
-	// tagpreferenceDescTenantID is the schema descriptor for tenant_id field.
-	tagpreferenceDescTenantID := tagpreferenceFields[0].Descriptor()
-	// tagpreference.DefaultTenantID holds the default value on creation for the tenant_id field.
-	tagpreference.DefaultTenantID = tagpreferenceDescTenantID.Default.(int64)
+	// tagpreferenceDescUserID is the schema descriptor for user_id field.
+	tagpreferenceDescUserID := tagpreferenceFields[0].Descriptor()
+	// tagpreference.DefaultUserID holds the default value on creation for the user_id field.
+	tagpreference.DefaultUserID = tagpreferenceDescUserID.Default.(int64)
 	// tagpreferenceDescAction is the schema descriptor for action field.
 	tagpreferenceDescAction := tagpreferenceFields[2].Descriptor()
 	// tagpreference.ActionValidator is a validator for the "action" field. It is called by the builders before save.
@@ -293,10 +293,10 @@ func init() {
 	tagpreference.IDValidator = tagpreferenceDescID.Validators[0].(func(string) error)
 	tagsyncbaselineFields := schema.TagSyncBaseline{}.Fields()
 	_ = tagsyncbaselineFields
-	// tagsyncbaselineDescTenantID is the schema descriptor for tenant_id field.
-	tagsyncbaselineDescTenantID := tagsyncbaselineFields[0].Descriptor()
-	// tagsyncbaseline.DefaultTenantID holds the default value on creation for the tenant_id field.
-	tagsyncbaseline.DefaultTenantID = tagsyncbaselineDescTenantID.Default.(int64)
+	// tagsyncbaselineDescUserID is the schema descriptor for user_id field.
+	tagsyncbaselineDescUserID := tagsyncbaselineFields[0].Descriptor()
+	// tagsyncbaseline.DefaultUserID holds the default value on creation for the user_id field.
+	tagsyncbaseline.DefaultUserID = tagsyncbaselineDescUserID.Default.(int64)
 	// tagsyncbaselineDescAction is the schema descriptor for action field.
 	tagsyncbaselineDescAction := tagsyncbaselineFields[2].Descriptor()
 	// tagsyncbaseline.ActionValidator is a validator for the "action" field. It is called by the builders before save.
@@ -319,64 +319,60 @@ func init() {
 	tagsyncbaselineDescID := tagsyncbaselineFields[1].Descriptor()
 	// tagsyncbaseline.IDValidator is a validator for the "id" field. It is called by the builders before save.
 	tagsyncbaseline.IDValidator = tagsyncbaselineDescID.Validators[0].(func(string) error)
-	tenantFields := schema.Tenant{}.Fields()
-	_ = tenantFields
-	// tenantDescName is the schema descriptor for name field.
-	tenantDescName := tenantFields[0].Descriptor()
-	// tenant.NameValidator is a validator for the "name" field. It is called by the builders before save.
-	tenant.NameValidator = tenantDescName.Validators[0].(func(string) error)
-	// tenantDescSlug is the schema descriptor for slug field.
-	tenantDescSlug := tenantFields[1].Descriptor()
-	// tenant.SlugValidator is a validator for the "slug" field. It is called by the builders before save.
-	tenant.SlugValidator = tenantDescSlug.Validators[0].(func(string) error)
-	// tenantDescStatus is the schema descriptor for status field.
-	tenantDescStatus := tenantFields[2].Descriptor()
-	// tenant.DefaultStatus holds the default value on creation for the status field.
-	tenant.DefaultStatus = tenantDescStatus.Default.(string)
-	// tenantDescCreatedAt is the schema descriptor for created_at field.
-	tenantDescCreatedAt := tenantFields[3].Descriptor()
-	// tenant.DefaultCreatedAt holds the default value on creation for the created_at field.
-	tenant.DefaultCreatedAt = tenantDescCreatedAt.Default.(func() time.Time)
-	// tenantDescUpdatedAt is the schema descriptor for updated_at field.
-	tenantDescUpdatedAt := tenantFields[4].Descriptor()
-	// tenant.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	tenant.DefaultUpdatedAt = tenantDescUpdatedAt.Default.(func() time.Time)
-	// tenant.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	tenant.UpdateDefaultUpdatedAt = tenantDescUpdatedAt.UpdateDefault.(func() time.Time)
 	userFields := schema.User{}.Fields()
 	_ = userFields
-	// userDescTenantID is the schema descriptor for tenant_id field.
-	userDescTenantID := userFields[0].Descriptor()
-	// user.DefaultTenantID holds the default value on creation for the tenant_id field.
-	user.DefaultTenantID = userDescTenantID.Default.(int64)
 	// userDescUsername is the schema descriptor for username field.
-	userDescUsername := userFields[1].Descriptor()
+	userDescUsername := userFields[0].Descriptor()
 	// user.UsernameValidator is a validator for the "username" field. It is called by the builders before save.
 	user.UsernameValidator = userDescUsername.Validators[0].(func(string) error)
 	// userDescPasswordHash is the schema descriptor for password_hash field.
-	userDescPasswordHash := userFields[2].Descriptor()
+	userDescPasswordHash := userFields[1].Descriptor()
 	// user.PasswordHashValidator is a validator for the "password_hash" field. It is called by the builders before save.
 	user.PasswordHashValidator = userDescPasswordHash.Validators[0].(func(string) error)
 	// userDescRole is the schema descriptor for role field.
-	userDescRole := userFields[3].Descriptor()
+	userDescRole := userFields[2].Descriptor()
 	// user.DefaultRole holds the default value on creation for the role field.
 	user.DefaultRole = userDescRole.Default.(string)
 	// userDescStatus is the schema descriptor for status field.
-	userDescStatus := userFields[4].Descriptor()
+	userDescStatus := userFields[3].Descriptor()
 	// user.DefaultStatus holds the default value on creation for the status field.
 	user.DefaultStatus = userDescStatus.Default.(string)
 	// userDescTokenVersion is the schema descriptor for token_version field.
-	userDescTokenVersion := userFields[5].Descriptor()
+	userDescTokenVersion := userFields[4].Descriptor()
 	// user.DefaultTokenVersion holds the default value on creation for the token_version field.
 	user.DefaultTokenVersion = userDescTokenVersion.Default.(int)
 	// userDescCreatedAt is the schema descriptor for created_at field.
-	userDescCreatedAt := userFields[6].Descriptor()
+	userDescCreatedAt := userFields[5].Descriptor()
 	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
 	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() time.Time)
 	// userDescUpdatedAt is the schema descriptor for updated_at field.
-	userDescUpdatedAt := userFields[7].Descriptor()
+	userDescUpdatedAt := userFields[6].Descriptor()
 	// user.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	user.UpdateDefaultUpdatedAt = userDescUpdatedAt.UpdateDefault.(func() time.Time)
+	usersettingFields := schema.UserSetting{}.Fields()
+	_ = usersettingFields
+	// usersettingDescCookieCiphertext is the schema descriptor for cookie_ciphertext field.
+	usersettingDescCookieCiphertext := usersettingFields[1].Descriptor()
+	// usersetting.DefaultCookieCiphertext holds the default value on creation for the cookie_ciphertext field.
+	usersetting.DefaultCookieCiphertext = usersettingDescCookieCiphertext.Default.(string)
+	// usersettingDescCookieStatus is the schema descriptor for cookie_status field.
+	usersettingDescCookieStatus := usersettingFields[2].Descriptor()
+	// usersetting.DefaultCookieStatus holds the default value on creation for the cookie_status field.
+	usersetting.DefaultCookieStatus = usersettingDescCookieStatus.Default.(string)
+	// usersettingDescSite is the schema descriptor for site field.
+	usersettingDescSite := usersettingFields[4].Descriptor()
+	// usersetting.DefaultSite holds the default value on creation for the site field.
+	usersetting.DefaultSite = usersettingDescSite.Default.(string)
+	// usersettingDescCreatedAt is the schema descriptor for created_at field.
+	usersettingDescCreatedAt := usersettingFields[6].Descriptor()
+	// usersetting.DefaultCreatedAt holds the default value on creation for the created_at field.
+	usersetting.DefaultCreatedAt = usersettingDescCreatedAt.Default.(func() time.Time)
+	// usersettingDescUpdatedAt is the schema descriptor for updated_at field.
+	usersettingDescUpdatedAt := usersettingFields[7].Descriptor()
+	// usersetting.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	usersetting.DefaultUpdatedAt = usersettingDescUpdatedAt.Default.(func() time.Time)
+	// usersetting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	usersetting.UpdateDefaultUpdatedAt = usersettingDescUpdatedAt.UpdateDefault.(func() time.Time)
 }

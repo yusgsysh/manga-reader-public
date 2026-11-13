@@ -13,8 +13,8 @@ const (
 	Label = "bookshelf"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "id"
-	// FieldTenantID holds the string denoting the tenant_id field in the database.
-	FieldTenantID = "tenant_id"
+	// FieldUserID holds the string denoting the user_id field in the database.
+	FieldUserID = "user_id"
 	// FieldGalleryID holds the string denoting the gallery_id field in the database.
 	FieldGalleryID = "gallery_id"
 	// FieldToken holds the string denoting the token field in the database.
@@ -30,7 +30,7 @@ const (
 // Columns holds all SQL columns for bookshelf fields.
 var Columns = []string{
 	FieldID,
-	FieldTenantID,
+	FieldUserID,
 	FieldGalleryID,
 	FieldToken,
 	FieldCreatedAt,
@@ -48,8 +48,8 @@ func ValidColumn(column string) bool {
 }
 
 var (
-	// DefaultTenantID holds the default value on creation for the "tenant_id" field.
-	DefaultTenantID int64
+	// DefaultUserID holds the default value on creation for the "user_id" field.
+	DefaultUserID int64
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -66,9 +66,9 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
 }
 
-// ByTenantID orders the results by the tenant_id field.
-func ByTenantID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldTenantID, opts...).ToFunc()
+// ByUserID orders the results by the user_id field.
+func ByUserID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUserID, opts...).ToFunc()
 }
 
 // ByGalleryID orders the results by the gallery_id field.

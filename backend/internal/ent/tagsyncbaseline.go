@@ -15,8 +15,8 @@ import (
 // TagSyncBaseline is the model entity for the TagSyncBaseline schema.
 type TagSyncBaseline struct {
 	config `json:"-"`
-	// TenantID holds the value of the "tenant_id" field.
-	TenantID int64 `json:"tenant_id,omitempty"`
+	// UserID holds the value of the "user_id" field.
+	UserID int64 `json:"user_id,omitempty"`
 	// Action holds the value of the "action" field.
 	Action string `json:"action,omitempty"`
 	// Weight holds the value of the "weight" field.
@@ -35,7 +35,7 @@ func (*TagSyncBaseline) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case tagsyncbaseline.FieldTenantID, tagsyncbaseline.FieldWeight:
+		case tagsyncbaseline.FieldUserID, tagsyncbaseline.FieldWeight:
 			values[i] = new(sql.NullInt64)
 		case tagsyncbaseline.FieldAction, tagsyncbaseline.FieldID:
 			values[i] = new(sql.NullString)
@@ -56,11 +56,11 @@ func (_m *TagSyncBaseline) assignValues(columns []string, values []any) error {
 	}
 	for i := range columns {
 		switch columns[i] {
-		case tagsyncbaseline.FieldTenantID:
+		case tagsyncbaseline.FieldUserID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field tenant_id", values[i])
+				return fmt.Errorf("unexpected type %T for field user_id", values[i])
 			} else if value.Valid {
-				_m.TenantID = value.Int64
+				_m.UserID = value.Int64
 			}
 		case tagsyncbaseline.FieldAction:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -127,8 +127,8 @@ func (_m *TagSyncBaseline) Unwrap() *TagSyncBaseline {
 func (_m *TagSyncBaseline) String() string {
 	var builder strings.Builder
 	builder.WriteString("TagSyncBaseline(")
-	builder.WriteString("tenant_id=")
-	builder.WriteString(fmt.Sprintf("%v", _m.TenantID))
+	builder.WriteString("user_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.UserID))
 	builder.WriteString(", ")
 	builder.WriteString("action=")
 	builder.WriteString(_m.Action)

@@ -19,8 +19,6 @@ type Node struct {
 	ID int `json:"id,omitempty"`
 	// Name holds the value of the "name" field.
 	Name string `json:"name,omitempty"`
-	// TenantID holds the value of the "tenant_id" field.
-	TenantID int64 `json:"tenant_id,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
 	// LastSeenAt holds the value of the "last_seen_at" field.
@@ -37,7 +35,7 @@ func (*Node) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case node.FieldID, node.FieldTenantID:
+		case node.FieldID:
 			values[i] = new(sql.NullInt64)
 		case node.FieldName, node.FieldStatus:
 			values[i] = new(sql.NullString)
@@ -69,12 +67,6 @@ func (_m *Node) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field name", values[i])
 			} else if value.Valid {
 				_m.Name = value.String
-			}
-		case node.FieldTenantID:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field tenant_id", values[i])
-			} else if value.Valid {
-				_m.TenantID = value.Int64
 			}
 		case node.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -139,9 +131,6 @@ func (_m *Node) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("name=")
 	builder.WriteString(_m.Name)
-	builder.WriteString(", ")
-	builder.WriteString("tenant_id=")
-	builder.WriteString(fmt.Sprintf("%v", _m.TenantID))
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)

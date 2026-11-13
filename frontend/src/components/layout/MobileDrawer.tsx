@@ -6,10 +6,9 @@ import { cn } from "@cloudflare/kumo";
 import { Logo } from "../ui";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import {
-  PLATFORM_ADMIN_NAV,
+  ADMIN_NAV,
   PRIMARY_NAV,
   SECONDARY_NAV,
-  TENANT_ADMIN_NAV,
   isNavActive,
   type NavItem,
 } from "./nav";
@@ -55,16 +54,11 @@ export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
   const { lastListRoute } = useNavigationContext();
   const {
     enabled: authEnabled,
-    isPlatformAdmin,
-    isTenantAdmin,
+    isAdmin,
     logout,
     isLoggingOut,
   } = useAuth();
-  const adminNav = isPlatformAdmin
-    ? PLATFORM_ADMIN_NAV
-    : isTenantAdmin
-      ? TENANT_ADMIN_NAV
-      : [];
+  const adminNav = isAdmin ? ADMIN_NAV : [];
 
   useEffect(() => {
     if (!open) return;

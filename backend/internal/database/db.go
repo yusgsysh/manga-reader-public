@@ -97,8 +97,15 @@ func initClient(conn *sql.DB, dialectName string) (*DB, error) {
 	drv := entsql.OpenDB(dialectName, conn)
 	client := ent.NewClient(ent.Driver(drv))
 
-	migrateCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	migrateCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+	// Ownership columns must be correct before Ent builds the new
+	// (user_id, ...) unique indexes, otherwise rows from different old
+	// tenants collide on the temporary default 0.
+	if err := prepareMultiUserMigration(migrateCtx, conn, dialectName); err != nil {
+		client.Close()
+		return nil, fmt.Errorf("prepare multi-user migration: %w", err)
+	}
 	if err := client.Schema.Create(migrateCtx,
 		migrate.WithDropIndex(true),
 		migrate.WithDropColumn(true),
@@ -106,10 +113,11 @@ func initClient(conn *sql.DB, dialectName string) (*DB, error) {
 		client.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
-	if err := migrateTenancy(migrateCtx, client); err != nil {
+	if err := finishMultiUserMigration(migrateCtx, conn, dialectName); err != nil {
 		client.Close()
-		return nil, fmt.Errorf("migrate tenancy: %w", err)
+		return nil, fmt.Errorf("finish multi-user migration: %w", err)
 	}
+	logUnownedRows(migrateCtx, conn)
 
 	return &DB{Client: client, Conn: conn}, nil
 }

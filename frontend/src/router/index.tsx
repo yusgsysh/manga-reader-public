@@ -10,7 +10,7 @@ import {
   HomePage,
   LazyPage,
   LoginPage,
-  PlatformAdminPage,
+  UserAdminPage,
   NodeAdminPage,
   PopularPage,
   ReaderLoading,
@@ -20,7 +20,6 @@ import {
   SettingsPage,
   SubscriptionsPage,
   TagSettingsPage,
-  TenantAdminPage,
 } from "./pages";
 
 export const router = createBrowserRouter([
@@ -105,11 +104,11 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: "admin/tenants",
+        path: "admin/users",
         element: (
-          <RequireRole role="platform_admin">
+          <RequireRole role="admin">
             <LazyPage>
-              <PlatformAdminPage />
+              <UserAdminPage />
             </LazyPage>
           </RequireRole>
         ),
@@ -117,19 +116,9 @@ export const router = createBrowserRouter([
       {
         path: "admin/nodes",
         element: (
-          <RequireRole role="platform_admin">
+          <RequireRole role="admin">
             <LazyPage>
               <NodeAdminPage />
-            </LazyPage>
-          </RequireRole>
-        ),
-      },
-      {
-        path: "tenant/users",
-        element: (
-          <RequireRole role="tenant_admin">
-            <LazyPage>
-              <TenantAdminPage />
             </LazyPage>
           </RequireRole>
         ),

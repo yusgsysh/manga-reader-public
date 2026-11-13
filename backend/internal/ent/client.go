@@ -18,8 +18,8 @@ import (
 	"manga-reader/internal/ent/readingprogress"
 	"manga-reader/internal/ent/syncchange"
 	"manga-reader/internal/ent/syncstate"
-	"manga-reader/internal/ent/tenant"
 	"manga-reader/internal/ent/user"
+	"manga-reader/internal/ent/usersetting"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
@@ -52,10 +52,10 @@ type Client struct {
 	TagPreference *TagPreferenceClient
 	// TagSyncBaseline is the client for interacting with the TagSyncBaseline builders.
 	TagSyncBaseline *TagSyncBaselineClient
-	// Tenant is the client for interacting with the Tenant builders.
-	Tenant *TenantClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
+	// UserSetting is the client for interacting with the UserSetting builders.
+	UserSetting *UserSettingClient
 }
 
 // NewClient creates a new client configured with the given options.
@@ -77,8 +77,8 @@ func (c *Client) init() {
 	c.SyncState = NewSyncStateClient(c.config)
 	c.TagPreference = NewTagPreferenceClient(c.config)
 	c.TagSyncBaseline = NewTagSyncBaselineClient(c.config)
-	c.Tenant = NewTenantClient(c.config)
 	c.User = NewUserClient(c.config)
+	c.UserSetting = NewUserSettingClient(c.config)
 }
 
 type (
@@ -181,8 +181,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		SyncState:       NewSyncStateClient(cfg),
 		TagPreference:   NewTagPreferenceClient(cfg),
 		TagSyncBaseline: NewTagSyncBaselineClient(cfg),
-		Tenant:          NewTenantClient(cfg),
 		User:            NewUserClient(cfg),
+		UserSetting:     NewUserSettingClient(cfg),
 	}, nil
 }
 
@@ -212,8 +212,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		SyncState:       NewSyncStateClient(cfg),
 		TagPreference:   NewTagPreferenceClient(cfg),
 		TagSyncBaseline: NewTagSyncBaselineClient(cfg),
-		Tenant:          NewTenantClient(cfg),
 		User:            NewUserClient(cfg),
+		UserSetting:     NewUserSettingClient(cfg),
 	}, nil
 }
 
@@ -245,7 +245,7 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.Bookshelf, c.GalleryCache, c.Node, c.NodeAPIKey, c.PrefillJob,
 		c.ReadingProgress, c.SyncChange, c.SyncState, c.TagPreference,
-		c.TagSyncBaseline, c.Tenant, c.User,
+		c.TagSyncBaseline, c.User, c.UserSetting,
 	} {
 		n.Use(hooks...)
 	}
@@ -257,7 +257,7 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.Bookshelf, c.GalleryCache, c.Node, c.NodeAPIKey, c.PrefillJob,
 		c.ReadingProgress, c.SyncChange, c.SyncState, c.TagPreference,
-		c.TagSyncBaseline, c.Tenant, c.User,
+		c.TagSyncBaseline, c.User, c.UserSetting,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -286,10 +286,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.TagPreference.mutate(ctx, m)
 	case *TagSyncBaselineMutation:
 		return c.TagSyncBaseline.mutate(ctx, m)
-	case *TenantMutation:
-		return c.Tenant.mutate(ctx, m)
 	case *UserMutation:
 		return c.User.mutate(ctx, m)
+	case *UserSettingMutation:
+		return c.UserSetting.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
 	}
@@ -1385,7 +1385,7 @@ func (c *TagPreferenceClient) Update() *TagPreferenceUpdate {
 // UpdateOne returns an update builder for the given entity.
 func (c *TagPreferenceClient) UpdateOne(_m *TagPreference) *TagPreferenceUpdateOne {
 	mutation := newTagPreferenceMutation(c.config, OpUpdateOne)
-	mutation.tenant_id = &_m.TenantID
+	mutation.user_id = &_m.UserID
 	mutation.id = &_m.ID
 	return &TagPreferenceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
@@ -1487,7 +1487,7 @@ func (c *TagSyncBaselineClient) Update() *TagSyncBaselineUpdate {
 // UpdateOne returns an update builder for the given entity.
 func (c *TagSyncBaselineClient) UpdateOne(_m *TagSyncBaseline) *TagSyncBaselineUpdateOne {
 	mutation := newTagSyncBaselineMutation(c.config, OpUpdateOne)
-	mutation.tenant_id = &_m.TenantID
+	mutation.user_id = &_m.UserID
 	mutation.id = &_m.ID
 	return &TagSyncBaselineUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
@@ -1529,139 +1529,6 @@ func (c *TagSyncBaselineClient) mutate(ctx context.Context, m *TagSyncBaselineMu
 		return (&TagSyncBaselineDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown TagSyncBaseline mutation op: %q", m.Op())
-	}
-}
-
-// TenantClient is a client for the Tenant schema.
-type TenantClient struct {
-	config
-}
-
-// NewTenantClient returns a client for the Tenant from the given config.
-func NewTenantClient(c config) *TenantClient {
-	return &TenantClient{config: c}
-}
-
-// Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `tenant.Hooks(f(g(h())))`.
-func (c *TenantClient) Use(hooks ...Hook) {
-	c.hooks.Tenant = append(c.hooks.Tenant, hooks...)
-}
-
-// Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `tenant.Intercept(f(g(h())))`.
-func (c *TenantClient) Intercept(interceptors ...Interceptor) {
-	c.inters.Tenant = append(c.inters.Tenant, interceptors...)
-}
-
-// Create returns a builder for creating a Tenant entity.
-func (c *TenantClient) Create() *TenantCreate {
-	mutation := newTenantMutation(c.config, OpCreate)
-	return &TenantCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// CreateBulk returns a builder for creating a bulk of Tenant entities.
-func (c *TenantClient) CreateBulk(builders ...*TenantCreate) *TenantCreateBulk {
-	return &TenantCreateBulk{config: c.config, builders: builders}
-}
-
-// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
-// a builder and applies setFunc on it.
-func (c *TenantClient) MapCreateBulk(slice any, setFunc func(*TenantCreate, int)) *TenantCreateBulk {
-	rv := reflect.ValueOf(slice)
-	if rv.Kind() != reflect.Slice {
-		return &TenantCreateBulk{err: fmt.Errorf("calling to TenantClient.MapCreateBulk with wrong type %T, need slice", slice)}
-	}
-	builders := make([]*TenantCreate, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		builders[i] = c.Create()
-		setFunc(builders[i], i)
-	}
-	return &TenantCreateBulk{config: c.config, builders: builders}
-}
-
-// Update returns an update builder for Tenant.
-func (c *TenantClient) Update() *TenantUpdate {
-	mutation := newTenantMutation(c.config, OpUpdate)
-	return &TenantUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOne returns an update builder for the given entity.
-func (c *TenantClient) UpdateOne(_m *Tenant) *TenantUpdateOne {
-	mutation := newTenantMutation(c.config, OpUpdateOne, withTenant(_m))
-	return &TenantUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *TenantClient) UpdateOneID(id int) *TenantUpdateOne {
-	mutation := newTenantMutation(c.config, OpUpdateOne, withTenantID(id))
-	return &TenantUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// Delete returns a delete builder for Tenant.
-func (c *TenantClient) Delete() *TenantDelete {
-	mutation := newTenantMutation(c.config, OpDelete)
-	return &TenantDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// DeleteOne returns a builder for deleting the given entity.
-func (c *TenantClient) DeleteOne(_m *Tenant) *TenantDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *TenantClient) DeleteOneID(id int) *TenantDeleteOne {
-	builder := c.Delete().Where(tenant.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &TenantDeleteOne{builder}
-}
-
-// Query returns a query builder for Tenant.
-func (c *TenantClient) Query() *TenantQuery {
-	return &TenantQuery{
-		config: c.config,
-		ctx:    &QueryContext{Type: TypeTenant},
-		inters: c.Interceptors(),
-	}
-}
-
-// Get returns a Tenant entity by its id.
-func (c *TenantClient) Get(ctx context.Context, id int) (*Tenant, error) {
-	return c.Query().Where(tenant.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *TenantClient) GetX(ctx context.Context, id int) *Tenant {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-// Hooks returns the client hooks.
-func (c *TenantClient) Hooks() []Hook {
-	return c.hooks.Tenant
-}
-
-// Interceptors returns the client interceptors.
-func (c *TenantClient) Interceptors() []Interceptor {
-	return c.inters.Tenant
-}
-
-func (c *TenantClient) mutate(ctx context.Context, m *TenantMutation) (Value, error) {
-	switch m.Op() {
-	case OpCreate:
-		return (&TenantCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdate:
-		return (&TenantUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdateOne:
-		return (&TenantUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpDelete, OpDeleteOne:
-		return (&TenantDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
-	default:
-		return nil, fmt.Errorf("ent: unknown Tenant mutation op: %q", m.Op())
 	}
 }
 
@@ -1798,15 +1665,149 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 	}
 }
 
+// UserSettingClient is a client for the UserSetting schema.
+type UserSettingClient struct {
+	config
+}
+
+// NewUserSettingClient returns a client for the UserSetting from the given config.
+func NewUserSettingClient(c config) *UserSettingClient {
+	return &UserSettingClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `usersetting.Hooks(f(g(h())))`.
+func (c *UserSettingClient) Use(hooks ...Hook) {
+	c.hooks.UserSetting = append(c.hooks.UserSetting, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `usersetting.Intercept(f(g(h())))`.
+func (c *UserSettingClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UserSetting = append(c.inters.UserSetting, interceptors...)
+}
+
+// Create returns a builder for creating a UserSetting entity.
+func (c *UserSettingClient) Create() *UserSettingCreate {
+	mutation := newUserSettingMutation(c.config, OpCreate)
+	return &UserSettingCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UserSetting entities.
+func (c *UserSettingClient) CreateBulk(builders ...*UserSettingCreate) *UserSettingCreateBulk {
+	return &UserSettingCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UserSettingClient) MapCreateBulk(slice any, setFunc func(*UserSettingCreate, int)) *UserSettingCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UserSettingCreateBulk{err: fmt.Errorf("calling to UserSettingClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UserSettingCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UserSettingCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UserSetting.
+func (c *UserSettingClient) Update() *UserSettingUpdate {
+	mutation := newUserSettingMutation(c.config, OpUpdate)
+	return &UserSettingUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UserSettingClient) UpdateOne(_m *UserSetting) *UserSettingUpdateOne {
+	mutation := newUserSettingMutation(c.config, OpUpdateOne, withUserSetting(_m))
+	return &UserSettingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UserSettingClient) UpdateOneID(id int) *UserSettingUpdateOne {
+	mutation := newUserSettingMutation(c.config, OpUpdateOne, withUserSettingID(id))
+	return &UserSettingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UserSetting.
+func (c *UserSettingClient) Delete() *UserSettingDelete {
+	mutation := newUserSettingMutation(c.config, OpDelete)
+	return &UserSettingDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UserSettingClient) DeleteOne(_m *UserSetting) *UserSettingDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UserSettingClient) DeleteOneID(id int) *UserSettingDeleteOne {
+	builder := c.Delete().Where(usersetting.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UserSettingDeleteOne{builder}
+}
+
+// Query returns a query builder for UserSetting.
+func (c *UserSettingClient) Query() *UserSettingQuery {
+	return &UserSettingQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUserSetting},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UserSetting entity by its id.
+func (c *UserSettingClient) Get(ctx context.Context, id int) (*UserSetting, error) {
+	return c.Query().Where(usersetting.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UserSettingClient) GetX(ctx context.Context, id int) *UserSetting {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UserSettingClient) Hooks() []Hook {
+	return c.hooks.UserSetting
+}
+
+// Interceptors returns the client interceptors.
+func (c *UserSettingClient) Interceptors() []Interceptor {
+	return c.inters.UserSetting
+}
+
+func (c *UserSettingClient) mutate(ctx context.Context, m *UserSettingMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UserSettingCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UserSettingUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UserSettingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UserSettingDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UserSetting mutation op: %q", m.Op())
+	}
+}
+
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
 		Bookshelf, GalleryCache, Node, NodeAPIKey, PrefillJob, ReadingProgress,
-		SyncChange, SyncState, TagPreference, TagSyncBaseline, Tenant, User []ent.Hook
+		SyncChange, SyncState, TagPreference, TagSyncBaseline, User,
+		UserSetting []ent.Hook
 	}
 	inters struct {
 		Bookshelf, GalleryCache, Node, NodeAPIKey, PrefillJob, ReadingProgress,
-		SyncChange, SyncState, TagPreference, TagSyncBaseline, Tenant,
-		User []ent.Interceptor
+		SyncChange, SyncState, TagPreference, TagSyncBaseline, User,
+		UserSetting []ent.Interceptor
 	}
 )

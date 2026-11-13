@@ -2,7 +2,6 @@ import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
 import { Button, Input, Loader } from "@cloudflare/kumo";
 import {
-  Buildings,
   CircleNotch,
   Eye,
   EyeSlash,
@@ -47,7 +46,6 @@ export function LoginPage() {
     (location.state as { from?: unknown } | null)?.from,
   );
 
-  const [tenant, setTenant] = useState("default");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -70,14 +68,14 @@ export function LoginPage() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isLoggingIn) return;
-    if (!tenant.trim() || !username.trim() || !password) {
-      setError("请输入租户、用户名和密码");
+    if (!username.trim() || !password) {
+      setError("请输入用户名和密码");
       return;
     }
 
     setError(null);
     try {
-      await login(tenant.trim(), username.trim(), password);
+      await login(username.trim(), password);
       navigate(returnTo, { replace: true });
     } catch (cause) {
       setError(errorMessage(cause));
@@ -107,30 +105,6 @@ export function LoginPage() {
             onSubmit={handleSubmit}
             className="card-surface space-y-4 p-5 sm:p-6"
           >
-            <div className="space-y-1.5">
-              <label htmlFor="tenant" className="text-sm font-medium">
-                租户
-              </label>
-              <div className="relative">
-                <Buildings
-                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-kumo-subtle"
-                  aria-hidden
-                />
-                <Input
-                  id="tenant"
-                  name="tenant"
-                  autoComplete="organization"
-                  autoFocus
-                  spellCheck={false}
-                  className="pl-9"
-                  placeholder="租户 slug，例如 default"
-                  value={tenant}
-                  onChange={(event) => setTenant(event.target.value)}
-                  disabled={isLoggingIn}
-                />
-              </div>
-            </div>
-
             <div className="space-y-1.5">
               <label htmlFor="username" className="text-sm font-medium">
                 用户名

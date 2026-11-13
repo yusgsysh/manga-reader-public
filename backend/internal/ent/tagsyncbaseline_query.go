@@ -189,12 +189,12 @@ func (_q *TagSyncBaselineQuery) Clone() *TagSyncBaselineQuery {
 // Example:
 //
 //	var v []struct {
-//		TenantID int64 `json:"tenant_id,omitempty"`
+//		UserID int64 `json:"user_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.TagSyncBaseline.Query().
-//		GroupBy(tagsyncbaseline.FieldTenantID).
+//		GroupBy(tagsyncbaseline.FieldUserID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *TagSyncBaselineQuery) GroupBy(field string, fields ...string) *TagSyncBaselineGroupBy {
@@ -212,11 +212,11 @@ func (_q *TagSyncBaselineQuery) GroupBy(field string, fields ...string) *TagSync
 // Example:
 //
 //	var v []struct {
-//		TenantID int64 `json:"tenant_id,omitempty"`
+//		UserID int64 `json:"user_id,omitempty"`
 //	}
 //
 //	client.TagSyncBaseline.Query().
-//		Select(tagsyncbaseline.FieldTenantID).
+//		Select(tagsyncbaseline.FieldUserID).
 //		Scan(ctx, &v)
 func (_q *TagSyncBaselineQuery) Select(fields ...string) *TagSyncBaselineSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

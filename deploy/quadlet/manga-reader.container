@@ -20,7 +20,7 @@ After=manga-reader-warp.service
 Image=ghcr.io/yusgsysh/manga-reader:latest
 # 容器组：共享 WARP 所在的 netns；PublishPort 必须写在 manga-reader.pod 里。
 Pod=manga-reader.pod
-# 全量配置（EHENTAI_COOKIE、数据库驱动、JWT、Metrics、Node Sync 等）
+# 全量配置（数据库驱动、JWT、Metrics、Node Sync 等）
 # 注意：键名必须是 EnvironmentFile=（EnvFile= 非法键，quadlet 会跳过整个 unit）
 # 该值经 podman --env-file 注入：每行须为 KEY=VALUE，且 $ 不做展开
 # NO_PROXY 仍在 .env 中配置（内网 MinIO / 数据库 / 服务名需要绕过代理）

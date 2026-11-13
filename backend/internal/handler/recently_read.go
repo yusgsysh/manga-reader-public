@@ -30,7 +30,7 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 		return
 	}
 
-	tid, ok := s.requireTenant(c)
+	uid, ok := s.requireUser(c)
 	if !ok {
 		return
 	}
@@ -38,7 +38,7 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 	offset := page * recentlyReadPageSize
 
 	total, err := s.DB.Client.ReadingProgress.Query().
-		Where(readingprogress.TenantIDEQ(tid)).
+		Where(readingprogress.UserIDEQ(uid)).
 		Count(ctx)
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("count recently read failed: %v", err)})
@@ -47,7 +47,7 @@ func (s *Server) handleRecentlyRead(c *gin.Context) {
 	totalPages := (total + recentlyReadPageSize - 1) / recentlyReadPageSize
 
 	entities, err := s.DB.Client.ReadingProgress.Query().
-		Where(readingprogress.TenantIDEQ(tid)).
+		Where(readingprogress.UserIDEQ(uid)).
 		Order(ent.Desc(readingprogress.FieldUpdatedAt)).
 		Offset(offset).
 		Limit(recentlyReadPageSize).

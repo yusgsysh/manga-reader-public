@@ -262,12 +262,12 @@ func (_q *ReadingProgressQuery) Clone() *ReadingProgressQuery {
 // Example:
 //
 //	var v []struct {
-//		TenantID int64 `json:"tenant_id,omitempty"`
+//		UserID int64 `json:"user_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.ReadingProgress.Query().
-//		GroupBy(readingprogress.FieldTenantID).
+//		GroupBy(readingprogress.FieldUserID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *ReadingProgressQuery) GroupBy(field string, fields ...string) *ReadingProgressGroupBy {
@@ -285,11 +285,11 @@ func (_q *ReadingProgressQuery) GroupBy(field string, fields ...string) *Reading
 // Example:
 //
 //	var v []struct {
-//		TenantID int64 `json:"tenant_id,omitempty"`
+//		UserID int64 `json:"user_id,omitempty"`
 //	}
 //
 //	client.ReadingProgress.Query().
-//		Select(readingprogress.FieldTenantID).
+//		Select(readingprogress.FieldUserID).
 //		Scan(ctx, &v)
 func (_q *ReadingProgressQuery) Select(fields ...string) *ReadingProgressSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

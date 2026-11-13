@@ -19,9 +19,9 @@ import (
 // source limits uploads to 10 MB).
 const maxTorrentBytes = 10 << 20
 
-// TorrentsURL is the ExHentai gallery-torrents page for a gallery.
-func TorrentsURL(id, token string) string {
-	return ExhentaiURL + "/gallerytorrents.php?gid=" + url.QueryEscape(id) + "&t=" + url.QueryEscape(token)
+// TorrentsURLAt is the gallery-torrents page for a gallery on the given site.
+func TorrentsURLAt(base, id, token string) string {
+	return base + "/gallerytorrents.php?gid=" + url.QueryEscape(id) + "&t=" + url.QueryEscape(token)
 }
 
 // TorrentInfoResult is the expanded "Information" view plus the raw personal
@@ -40,8 +40,8 @@ func parseLooseInt(raw string) int {
 
 // ScrapeGalleryTorrents fetches the gallery's torrents page and parses each
 // torrent block. It returns an empty slice when the gallery has no torrents.
-func ScrapeGalleryTorrents(ctx context.Context, client *http.Client, id, token string) ([]model.GalleryTorrent, error) {
-	doc, err := httpGetDoc(ctx, client, TorrentsURL(id, token))
+func ScrapeGalleryTorrents(ctx context.Context, client *http.Client, base, id, token string) ([]model.GalleryTorrent, error) {
+	doc, err := httpGetDoc(ctx, client, TorrentsURLAt(base, id, token))
 	if err != nil {
 		return nil, err
 	}
@@ -91,12 +91,12 @@ func ScrapeGalleryTorrents(ctx context.Context, client *http.Client, id, token s
 
 // ScrapeGalleryTorrentInfo POSTs the "Information" action for one torrent and
 // parses the stats/comments plus the personal and redistributable links.
-func ScrapeGalleryTorrentInfo(ctx context.Context, client *http.Client, id, token, gtid string) (TorrentInfoResult, error) {
+func ScrapeGalleryTorrentInfo(ctx context.Context, client *http.Client, base, id, token, gtid string) (TorrentInfoResult, error) {
 	form := url.Values{}
 	form.Set("gtid", gtid)
 	form.Set("torrent_info", "Information")
 
-	doc, err := httpPostFormDoc(ctx, client, TorrentsURL(id, token), form)
+	doc, err := httpPostFormDoc(ctx, client, TorrentsURLAt(base, id, token), form)
 	if err != nil {
 		return TorrentInfoResult{}, err
 	}

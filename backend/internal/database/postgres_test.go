@@ -6,9 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"manga-reader/internal/config"
 	"manga-reader/internal/ent/bookshelf"
-	"manga-reader/internal/ent/tenant"
 )
 
 // TestPostgresCompatibility is opt-in because a PostgreSQL server is not part
@@ -28,26 +26,19 @@ func TestPostgresCompatibility(t *testing.T) {
 	ctx := t.Context()
 
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
-	tenantRow, err := db.Client.Tenant.Create().
-		SetName("pg-test-" + suffix).
-		SetSlug("pg-test-" + suffix).
-		SetStatus(config.StatusActive).Save(ctx)
-	if err != nil {
-		t.Fatalf("create tenant: %v", err)
-	}
+	userID := int64(1)
 	if _, err := db.Client.Bookshelf.Create().
-		SetTenantID(int64(tenantRow.ID)).SetGalleryID(1).SetToken("pg").Save(ctx); err != nil {
+		SetUserID(userID).SetGalleryID(1).SetToken("pg-" + suffix).Save(ctx); err != nil {
 		t.Fatalf("create bookshelf: %v", err)
 	}
 	rows, err := db.Client.Bookshelf.Query().
-		Where(bookshelf.TenantIDEQ(int64(tenantRow.ID)), bookshelf.GalleryID(1)).
+		Where(bookshelf.UserIDEQ(userID), bookshelf.GalleryID(1)).
 		All(ctx)
 	if err != nil || len(rows) != 1 {
-		t.Fatalf("tenant query = %+v (err %v), want one row", rows, err)
+		t.Fatalf("user-scoped query = %+v (err %v), want one row", rows, err)
 	}
 
-	// The multi-tenancy migration is idempotent on the PostgreSQL backend too:
-	// reopening against the same DSN must not duplicate the default tenant.
+	// The multi-user migration is idempotent on the PostgreSQL backend too.
 	if err := db.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
@@ -56,9 +47,8 @@ func TestPostgresCompatibility(t *testing.T) {
 		t.Fatalf("reopen postgres: %v", err)
 	}
 	defer again.Close()
-	count, err := again.Client.Tenant.Query().
-		Where(tenant.SlugEQ(config.DefaultTenantSlug)).Count(ctx)
-	if err != nil || count != 1 {
-		t.Fatalf("default tenant count = %d (err %v), want 1", count, err)
+	if _, err := again.Client.Bookshelf.Query().
+		Where(bookshelf.UserIDEQ(userID), bookshelf.GalleryID(1)).All(ctx); err != nil {
+		t.Fatalf("query bookshelf after reopen: %v", err)
 	}
 }

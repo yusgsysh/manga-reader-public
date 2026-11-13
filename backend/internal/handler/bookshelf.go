@@ -30,12 +30,13 @@ const galleryPrefetchTimeout = 60 * time.Second
 
 // prefetchGallery fills the gallery cache (metadata + pages) in the background
 // so the item stays usable offline. Failures are logged and otherwise ignored.
-func (s *Server) prefetchGallery(galleryID int64, token string, seed *model.Gallery) {
-	if s.Client == nil {
+func (s *Server) prefetchGallery(userID, galleryID int64, token string, seed *model.Gallery) {
+	client, err := s.upstreamClient(context.Background(), userID)
+	if err != nil {
 		return
 	}
 
-	key := fmt.Sprintf("%d:%s", galleryID, token)
+	key := fmt.Sprintf("%d/%d:%s", userID, galleryID, token)
 	galleryPrefetchGroup.Do(key, func() (any, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), galleryPrefetchTimeout)
 		defer cancel()
@@ -49,16 +50,16 @@ func (s *Server) prefetchGallery(galleryID int64, token string, seed *model.Gall
 			}
 		}
 
-		u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
+		u := exhentai.GalleryURLAt(s.upstreamBase(context.Background(), userID), strconv.FormatInt(galleryID, 10), token)
 
 		// Shares the in-flight scrape with the streaming /pages handler so a
 		// gallery is never fetched from upstream twice at the same time, and
 		// persists the verified list (the walk itself has no cache side effect).
-		if _, scrapeErr := s.scrapeAndCache(ctx, galleryID, token, nil); scrapeErr != nil {
+		if _, scrapeErr := s.scrapeAndCache(ctx, userID, galleryID, token, nil); scrapeErr != nil {
 			slog.Debug("gallery prefetch pages failed", "id", galleryID, "error", scrapeErr)
 		}
 
-		if details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u); err != nil {
+		if details, err := exhentai.ScrapeGalleryDetails(ctx, client, u); err != nil {
 			slog.Debug("gallery prefetch details failed", "id", galleryID, "error", err)
 		} else if db != nil {
 			if err := gallerycache.UpsertDetails(ctx, db, galleryID, token, cacheMetaFromDetails(details)); err != nil {
@@ -88,7 +89,7 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 		return
 	}
 
-	tid, ok := s.requireTenant(c)
+	uid, ok := s.requireUser(c)
 	if !ok {
 		return
 	}
@@ -97,7 +98,7 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 	offset := page * pageSize
 
 	total, err := s.DB.Client.Bookshelf.Query().
-		Where(bookshelf.TenantIDEQ(tid)).
+		Where(bookshelf.UserIDEQ(uid)).
 		Count(ctx)
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("count bookshelf failed: %v", err)})
@@ -107,7 +108,7 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 	totalPages := (total + pageSize - 1) / pageSize
 
 	items, err := s.DB.Client.Bookshelf.Query().
-		Where(bookshelf.TenantIDEQ(tid)).
+		Where(bookshelf.UserIDEQ(uid)).
 		Order(
 			ent.Desc(bookshelf.FieldUpdatedAt),
 			ent.Desc(bookshelf.FieldGalleryID),
@@ -131,7 +132,7 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 	progressByKey := make(map[galleryRef]*ent.ReadingProgress, len(ids))
 	if len(ids) > 0 {
 		progressRows, err := s.DB.Client.ReadingProgress.Query().
-			Where(readingprogress.TenantIDEQ(tid), readingprogress.GalleryIDIn(ids...)).
+			Where(readingprogress.UserIDEQ(uid), readingprogress.GalleryIDIn(ids...)).
 			All(ctx)
 		if err != nil {
 			web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list reading progress failed: %v", err)})
@@ -213,7 +214,7 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 		return
 	}
 
-	tid, ok := s.requireTenant(c)
+	uid, ok := s.requireUser(c)
 	if !ok {
 		return
 	}
@@ -221,7 +222,7 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 
 	exists, err := s.DB.Client.Bookshelf.Query().
 		Where(
-			bookshelf.TenantIDEQ(tid),
+			bookshelf.UserIDEQ(uid),
 			bookshelf.GalleryID(id),
 			bookshelf.Token(token),
 		).
@@ -238,14 +239,14 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 	// Resolve metadata once: it reports the offline flag and seeds the
 	// gallery_cache row the list endpoint reads from. Only the reference is
 	// stored in the bookshelf table itself.
-	gallery, offline, err := s.galleryForBookshelf(ctx, id, token)
+	gallery, offline, err := s.galleryForBookshelf(ctx, uid, id, token)
 	if err != nil {
 		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
 	}
 
 	_, err = s.DB.Client.Bookshelf.Create().
-		SetTenantID(tid).
+		SetUserID(uid).
 		SetGalleryID(id).
 		SetToken(token).
 		Save(ctx)
@@ -256,12 +257,12 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 
 	if s.syncSvc != nil {
 		synclib.LogRecordError(
-			s.syncSvc.RecordUpsertForTenant(ctx, tid, synclib.EntityBookshelf, id, token),
+			s.syncSvc.RecordUpsert(ctx, uid, synclib.EntityBookshelf, id, token),
 			synclib.EntityBookshelf, id, token)
 	}
 
 	// Warm the offline cache in the background (metadata + pages).
-	go s.prefetchGallery(id, token, gallery)
+	go s.prefetchGallery(uid, id, token, gallery)
 
 	web.JSON(c, http.StatusOK, model.BookshelfMutationResponse{
 		Success:     true,
@@ -274,8 +275,12 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 // the upstream ExHentai API is unreachable it falls back to the cached snapshot
 // so collecting a gallery keeps working offline. The returned bool reports
 // whether the cache fallback was used.
-func (s *Server) galleryForBookshelf(ctx context.Context, id int64, token string) (*model.Gallery, bool, error) {
-	meta, err := exhentai.PostGalleryMetadata(ctx, s.Client, id, token)
+func (s *Server) galleryForBookshelf(ctx context.Context, userID, id int64, token string) (*model.Gallery, bool, error) {
+	client, err := s.upstreamClient(ctx, userID)
+	if err != nil {
+		return nil, false, err
+	}
+	meta, err := exhentai.PostGalleryMetadata(ctx, client, id, token)
 	if err == nil {
 		return model.ConvertMetadataToGallery(meta), false, nil
 	}
@@ -309,14 +314,14 @@ func (s *Server) handleBookshelfRemove(c *gin.Context) {
 		return
 	}
 
-	tid, ok := s.requireTenant(c)
+	uid, ok := s.requireUser(c)
 	if !ok {
 		return
 	}
 	ctx := c.Request.Context()
 	_, err = s.DB.Client.Bookshelf.Delete().
 		Where(
-			bookshelf.TenantIDEQ(tid),
+			bookshelf.UserIDEQ(uid),
 			bookshelf.GalleryID(id),
 			bookshelf.Token(token),
 		).
@@ -330,7 +335,7 @@ func (s *Server) handleBookshelfRemove(c *gin.Context) {
 	// removes a stale copy on the peer, matching the user's intent.
 	if s.syncSvc != nil {
 		synclib.LogRecordError(
-			s.syncSvc.RecordDeleteForTenant(ctx, tid, synclib.EntityBookshelf, id, token),
+			s.syncSvc.RecordDelete(ctx, uid, synclib.EntityBookshelf, id, token),
 			synclib.EntityBookshelf, id, token)
 	}
 
@@ -353,7 +358,7 @@ func (s *Server) handleBookshelfStatus(c *gin.Context) {
 		return
 	}
 
-	tid, ok := s.requireTenant(c)
+	uid, ok := s.requireUser(c)
 	if !ok {
 		return
 	}
@@ -361,7 +366,7 @@ func (s *Server) handleBookshelfStatus(c *gin.Context) {
 
 	b, err := s.DB.Client.Bookshelf.Query().
 		Where(
-			bookshelf.TenantIDEQ(tid),
+			bookshelf.UserIDEQ(uid),
 			bookshelf.GalleryID(id),
 			bookshelf.Token(token),
 		).

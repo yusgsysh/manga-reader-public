@@ -15,8 +15,6 @@ const (
 	FieldID = "id"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
-	// FieldTenantID holds the string denoting the tenant_id field in the database.
-	FieldTenantID = "tenant_id"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldLastSeenAt holds the string denoting the last_seen_at field in the database.
@@ -33,7 +31,6 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldName,
-	FieldTenantID,
 	FieldStatus,
 	FieldLastSeenAt,
 	FieldCreatedAt,
@@ -74,11 +71,6 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 // ByName orders the results by the name field.
 func ByName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldName, opts...).ToFunc()
-}
-
-// ByTenantID orders the results by the tenant_id field.
-func ByTenantID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldTenantID, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

@@ -14,14 +14,13 @@ const (
 type nodeContextKey string
 
 // Identity is the trusted node behind an authenticated sync request. Nothing
-// in it comes from request parameters; NodeID/TenantID/Scopes are resolved from
-// the API key row and its node.
+// in it comes from request parameters; NodeID/Scopes are resolved from the API
+// key row and its node.
 type Identity struct {
-	NodeID   int
-	Name     string
-	TenantID int64
-	Scopes   []string
-	KeyID    int
+	NodeID int
+	Name   string
+	Scopes []string
+	KeyID  int
 }
 
 // WithGin attaches the identity to the request.

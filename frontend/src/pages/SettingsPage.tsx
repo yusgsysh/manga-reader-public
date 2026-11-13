@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   ArrowsClockwise,
   CircleNotch,
+  Cookie,
   Monitor,
   Moon,
   Palette,
@@ -20,6 +21,14 @@ import {
   type SyncConfigUpdate,
 } from "../api/sync";
 import { ApiRequestError } from "../api/client";
+import {
+  clearCookie,
+  fetchCookie,
+  saveCookie,
+  verifyCookie,
+  type CookieSummary,
+  type ExhentaiSite,
+} from "../api/settings";
 import { useTheme } from "../hooks/useTheme";
 import { useTagTranslation } from "../hooks/useTagTranslation";
 import { SETTINGS_STALE_TIME } from "../lib/cacheConfig";
@@ -37,6 +46,172 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
 ];
 
 const CUSTOM_ACCENT_SEED = "#6366f1";
+
+const COOKIE_STATUS_LABELS: Record<CookieSummary["status"], string> = {
+  unset: "未配置",
+  unverified: "待验证",
+  valid: "有效",
+  invalid: "无效或已过期",
+};
+
+function CookieSection() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["settings", "cookie"],
+    queryFn: fetchCookie,
+    retry: false,
+    staleTime: 0,
+  });
+  const [cookie, setCookie] = useState("");
+  const [site, setSite] = useState<ExhentaiSite>("exhentai");
+  const [applied, setApplied] = useState<CookieSummary | null>(null);
+  const current = query.data;
+  if (current && current !== applied) {
+    setApplied(current);
+    setSite(current.site);
+  }
+
+  const save = useMutation({
+    mutationFn: () =>
+      saveCookie({ cookie: cookie.trim(), site }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["settings", "cookie"], data);
+      setCookie("");
+      toast.success("ExHentai Cookie 已保存");
+    },
+    onError: (error) => toast.error("保存 Cookie 失败", error),
+  });
+
+  const verify = useMutation({
+    mutationFn: verifyCookie,
+    onSuccess: (data) => {
+      queryClient.setQueryData(["settings", "cookie"], data);
+      toast.show({
+        title:
+          data.status === "valid"
+            ? "Cookie 验证通过"
+            : "Cookie 验证失败，请重新复制",
+        variant: data.status === "valid" ? "success" : "info",
+      });
+    },
+    onError: (error) => toast.error("验证 Cookie 失败", error),
+  });
+
+  const clear = useMutation({
+    mutationFn: clearCookie,
+    onSuccess: (data) => {
+      queryClient.setQueryData(["settings", "cookie"], data);
+      setCookie("");
+      toast.success("已清除 ExHentai Cookie");
+    },
+    onError: (error) => toast.error("清除 Cookie 失败", error),
+  });
+
+  const summary = current;
+  const configured = summary?.configured ?? false;
+
+  return (
+    <Section title="ExHentai 账号">
+      <div className="card-surface space-y-4 p-4 text-sm">
+        {query.isLoading ? (
+          <div className="flex items-center gap-2 text-kumo-subtle">
+            <CircleNotch className="size-4 animate-spin" />
+            正在读取…
+          </div>
+        ) : query.isError ? (
+          <p className="text-kumo-subtle">无法读取 Cookie 状态。</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <Cookie className="size-5 text-kumo-subtle" />
+              <span className="font-medium">
+                {configured ? COOKIE_STATUS_LABELS[summary?.status ?? "unset"] : "未配置"}
+              </span>
+              {configured && (
+                <span className="text-xs text-kumo-subtle">
+                  igneous {summary?.has_igneous ? "已提供" : "缺失"} · sk{" "}
+                  {summary?.has_sk ? "已提供" : "缺失"}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-kumo-subtle">
+              只属于当前账号。服务端加密保存，不会回传到浏览器，也不会被其他用户使用。
+            </p>
+
+            <div>
+              <div className="mb-2 font-medium">ExHentai 站点</div>
+              <select
+                aria-label="ExHentai 站点"
+                value={site}
+                onChange={(event) => setSite(event.target.value as ExhentaiSite)}
+                className="rounded-lg border border-kumo-hairline bg-kumo-base px-3 py-2 text-sm text-kumo-default"
+              >
+                <option value="exhentai">ExHentai (exhentai.org)</option>
+                <option value="e-hentai">E-Hentai (e-hentai.org)</option>
+              </select>
+            </div>
+
+            <div>
+              <div className="mb-2 font-medium">
+                Cookie
+                {configured && (
+                  <span className="ml-2 text-xs font-normal text-kumo-subtle">
+                    已保存；输入新值可替换
+                  </span>
+                )}
+              </div>
+              <textarea
+                aria-label="ExHentai Cookie"
+                rows={3}
+                spellCheck={false}
+                placeholder="ipb_member_id=...; ipb_pass_hash=...; igneous=...; sk=..."
+                value={cookie}
+                onChange={(event) => setCookie(event.target.value)}
+                className="w-full rounded-lg border border-kumo-hairline bg-kumo-base px-3 py-2 font-mono text-xs text-kumo-default"
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                onClick={() => save.mutate()}
+                disabled={
+                  (!cookie.trim() && site === (current?.site ?? "exhentai")) ||
+                  save.isPending
+                }
+              >
+                {save.isPending && (
+                  <CircleNotch className="mr-1 size-4 animate-spin" />
+                )}
+                保存 Cookie
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => verify.mutate()}
+                disabled={!configured || verify.isPending}
+              >
+                {verify.isPending && (
+                  <CircleNotch className="mr-1 size-4 animate-spin" />
+                )}
+                验证
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => clear.mutate()}
+                disabled={!configured || clear.isPending}
+              >
+                清除
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </Section>
+  );
+}
 
 const CUSTOM_SWATCH_GRADIENT =
   "conic-gradient(from 0deg, #ef4444, #eab308, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444)";
@@ -431,7 +606,7 @@ function SyncSection() {
                   保存
                 </Button>
                 <p className="text-xs text-kumo-subtle">
-                  双向同步阅读进度与书架；API Key 在平台「节点管理」创建，节点绑定租户。
+                  双向同步阅读进度与书架；API Key 在「节点管理」创建。
                 </p>
               </div>
             </>
@@ -477,14 +652,15 @@ function SyncSection() {
 
 export function SettingsPage() {
   useDocumentTitle("设置");
-  const { enabled: authEnabled, isPlatformAdmin } = useAuth();
-  const canManageGlobal = !authEnabled || isPlatformAdmin;
+  const { enabled: authEnabled, isAdmin } = useAuth();
+  const canManageGlobal = !authEnabled || isAdmin;
   return (
     <div className="max-w-3xl">
       <PageHeader
         title="设置"
       />
       <div className="space-y-8">
+        <CookieSection />
         <AppearanceSection />
         <TagDatabaseSection />
         {canManageGlobal && <SyncSection />}

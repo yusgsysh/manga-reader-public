@@ -263,12 +263,12 @@ func (_q *PrefillJobQuery) Clone() *PrefillJobQuery {
 // Example:
 //
 //	var v []struct {
-//		TenantID int64 `json:"tenant_id,omitempty"`
+//		UserID int64 `json:"user_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.PrefillJob.Query().
-//		GroupBy(prefilljob.FieldTenantID).
+//		GroupBy(prefilljob.FieldUserID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *PrefillJobQuery) GroupBy(field string, fields ...string) *PrefillJobGroupBy {
@@ -286,11 +286,11 @@ func (_q *PrefillJobQuery) GroupBy(field string, fields ...string) *PrefillJobGr
 // Example:
 //
 //	var v []struct {
-//		TenantID int64 `json:"tenant_id,omitempty"`
+//		UserID int64 `json:"user_id,omitempty"`
 //	}
 //
 //	client.PrefillJob.Query().
-//		Select(prefilljob.FieldTenantID).
+//		Select(prefilljob.FieldUserID).
 //		Scan(ctx, &v)
 func (_q *PrefillJobQuery) Select(fields ...string) *PrefillJobSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

@@ -13,8 +13,8 @@ const (
 	Label = "sync_change"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "id"
-	// FieldTenantID holds the string denoting the tenant_id field in the database.
-	FieldTenantID = "tenant_id"
+	// FieldUserID holds the string denoting the user_id field in the database.
+	FieldUserID = "user_id"
 	// FieldEntity holds the string denoting the entity field in the database.
 	FieldEntity = "entity"
 	// FieldGalleryID holds the string denoting the gallery_id field in the database.
@@ -32,7 +32,7 @@ const (
 // Columns holds all SQL columns for syncchange fields.
 var Columns = []string{
 	FieldID,
-	FieldTenantID,
+	FieldUserID,
 	FieldEntity,
 	FieldGalleryID,
 	FieldToken,
@@ -51,8 +51,8 @@ func ValidColumn(column string) bool {
 }
 
 var (
-	// DefaultTenantID holds the default value on creation for the "tenant_id" field.
-	DefaultTenantID int64
+	// DefaultUserID holds the default value on creation for the "user_id" field.
+	DefaultUserID int64
 	// DefaultOp holds the default value on creation for the "op" field.
 	DefaultOp string
 	// DefaultChangedAt holds the default value on creation for the "changed_at" field.
@@ -67,9 +67,9 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
 }
 
-// ByTenantID orders the results by the tenant_id field.
-func ByTenantID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldTenantID, opts...).ToFunc()
+// ByUserID orders the results by the user_id field.
+func ByUserID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUserID, opts...).ToFunc()
 }
 
 // ByEntity orders the results by the entity field.

@@ -216,7 +216,11 @@ func (s *Server) handleGetGallery(c *gin.Context) {
 		return
 	}
 
-	meta, err := exhentai.PostGalleryMetadata(c.Request.Context(), s.Client, id, token)
+	client, _, ok := s.upstreamClientForRequest(c)
+	if !ok {
+		return
+	}
+	meta, err := exhentai.PostGalleryMetadata(c.Request.Context(), client, id, token)
 	if err != nil {
 		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
@@ -232,10 +236,14 @@ func (s *Server) handleGalleryDetails(c *gin.Context) {
 		return
 	}
 
-	u := exhentai.GalleryURL(c.Param("id"), token)
 	ctx := c.Request.Context()
+	client, uid, ok := s.upstreamClientForRequest(c)
+	if !ok {
+		return
+	}
+	u := exhentai.GalleryURLAt(s.upstreamBase(ctx, uid), c.Param("id"), token)
 
-	details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u)
+	details, err := exhentai.ScrapeGalleryDetails(ctx, client, u)
 	if err != nil {
 		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
 		return
@@ -404,14 +412,18 @@ func (h *pagesHub) release(key string, s *galleryPagesStream) {
 // returns the number of pages streamed and the terminal error.
 func (s *Server) scrapeGalleryPages(
 	ctx context.Context,
-	galleryID int64,
+	userID, galleryID int64,
 	token string,
 	emit func(total int, pageURLs []string, thumbnails []model.GalleryPageThumb) error,
 ) (int, error) {
-	key := fmt.Sprintf("%d:%s", galleryID, token)
+	client, err := s.upstreamClient(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	key := fmt.Sprintf("%d/%d:%s", userID, galleryID, token)
 	stream, leader := galleryPagesHub.acquire(key)
 	if leader {
-		s.runGalleryPagesScrape(ctx, key, stream, galleryID, token)
+		s.runGalleryPagesScrape(ctx, key, stream, userID, galleryID, token, client)
 	}
 	return stream.drain(ctx, 0, emit)
 }
@@ -424,8 +436,9 @@ func (s *Server) runGalleryPagesScrape(
 	ctx context.Context,
 	key string,
 	stream *galleryPagesStream,
-	galleryID int64,
+	userID, galleryID int64,
 	token string,
+	client *http.Client,
 ) {
 	go func() {
 		defer galleryPagesHub.release(key, stream)
@@ -435,11 +448,11 @@ func (s *Server) runGalleryPagesScrape(
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), galleryPagesHardCap)
 		defer cancel()
 
-		u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
+		u := exhentai.GalleryURLAt(s.upstreamBase(ctx, userID), strconv.FormatInt(galleryID, 10), token)
 		var pageURLs []string
 		var thumbnails []model.GalleryPageThumb
 		total := 0
-		err := exhentai.StreamGalleryPages(ctx, s.Client, u, func(t int, urls []string, thumbs []model.GalleryPageThumb) error {
+		err := exhentai.StreamGalleryPages(ctx, client, u, func(t int, urls []string, thumbs []model.GalleryPageThumb) error {
 			total = t
 			pageURLs = append(pageURLs, urls...)
 			thumbnails = append(thumbnails, thumbs...)
@@ -464,13 +477,13 @@ func (s *Server) runGalleryPagesScrape(
 // so a failed or partial walk never touches the cache.
 func (s *Server) scrapeAndCache(
 	ctx context.Context,
-	galleryID int64,
+	userID, galleryID int64,
 	token string,
 	emit func(total int, pageURLs []string, thumbnails []model.GalleryPageThumb) error,
 ) (int, error) {
 	var pageURLs []string
 	var thumbnails []model.GalleryPageThumb
-	count, err := s.scrapeGalleryPages(ctx, galleryID, token, func(total int, urls []string, thumbs []model.GalleryPageThumb) error {
+	count, err := s.scrapeGalleryPages(ctx, userID, galleryID, token, func(total int, urls []string, thumbs []model.GalleryPageThumb) error {
 		pageURLs = append(pageURLs, urls...)
 		thumbnails = append(thumbnails, thumbs...)
 		if emit != nil {
@@ -501,17 +514,20 @@ func (s *Server) scrapeAndCache(
 // background. Concurrent triggers for the same gallery collapse into one walk
 // and one write via galleryPagesFillGroup. It is used by the page-count check,
 // image-failure recovery and thumbnail-resolve cache fill.
-func (s *Server) refreshPages(ctx context.Context, galleryID int64, token string) {
-	if s.cacheDB() == nil || s.Client == nil {
+func (s *Server) refreshPages(ctx context.Context, userID, galleryID int64, token string) {
+	if s.cacheDB() == nil {
 		return
 	}
-	key := fmt.Sprintf("%d:%s", galleryID, token)
+	if _, err := s.upstreamClient(ctx, userID); err != nil {
+		return
+	}
+	key := fmt.Sprintf("%d/%d:%s", userID, galleryID, token)
 	galleryPagesFillGroup.Do(key, func() (any, error) {
 		// The refresh runs on the full background budget regardless of the
 		// caller's lifetime; inherit values only, never cancellation.
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), galleryPagesHardCap)
 		defer cancel()
-		if _, err := s.scrapeAndCache(ctx, galleryID, token, nil); err != nil {
+		if _, err := s.scrapeAndCache(ctx, userID, galleryID, token, nil); err != nil {
 			slog.Debug("gallery page cache refresh failed", "id", galleryID, "error", err)
 		}
 		return nil, nil
@@ -523,11 +539,14 @@ func (s *Server) refreshPages(ctx context.Context, galleryID int64, token string
 // cache write has completed. The caller's context bounds the walk (capped by
 // galleryPagesHardCap), so a request-path recovery can time-box it instead of
 // waiting on the full background budget.
-func (s *Server) refreshPagesSync(ctx context.Context, galleryID int64, token string) error {
-	if s.cacheDB() == nil || s.Client == nil {
+func (s *Server) refreshPagesSync(ctx context.Context, userID, galleryID int64, token string) error {
+	if s.cacheDB() == nil {
 		return nil
 	}
-	key := fmt.Sprintf("%d:%s", galleryID, token)
+	if _, err := s.upstreamClient(ctx, userID); err != nil {
+		return err
+	}
+	key := fmt.Sprintf("%d/%d:%s", userID, galleryID, token)
 	// DoChan instead of Do: group.Do blocks duplicate callers with a bare
 	// wg.Wait() that ignores their context, so a request could hang for the
 	// leader's full budget after its client is gone. DoChan lets us honour
@@ -535,7 +554,7 @@ func (s *Server) refreshPagesSync(ctx context.Context, galleryID int64, token st
 	ch := galleryPagesFillGroup.DoChan(key, func() (any, error) {
 		ctx, cancel := context.WithTimeout(ctx, galleryPagesHardCap)
 		defer cancel()
-		_, err := s.scrapeAndCache(ctx, galleryID, token, nil)
+		_, err := s.scrapeAndCache(ctx, userID, galleryID, token, nil)
 		if err != nil {
 			slog.Debug("gallery page cache refresh failed", "id", galleryID, "error", err)
 		}
@@ -688,9 +707,13 @@ func (s *Server) handleGalleryPages(c *gin.Context) {
 	if !ok {
 		return
 	}
+	uid, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
 	idParam := c.Param("id")
 	streamGalleryPagesNDJSON(c, idParam, token, func(ctx context.Context, emit func(int, []string, []model.GalleryPageThumb) error) (int, error) {
-		return s.scrapeGalleryPages(ctx, galleryID, token, emit)
+		return s.scrapeGalleryPages(ctx, uid, galleryID, token, emit)
 	})
 }
 
@@ -703,7 +726,12 @@ func (s *Server) handleGalleryTorrents(c *gin.Context) {
 	if !ok {
 		return
 	}
-	torrents, err := exhentai.ScrapeGalleryTorrents(c.Request.Context(), s.Client, strconv.FormatInt(id, 10), token)
+	client, uid, ok := s.upstreamClientForRequest(c)
+	if !ok {
+		return
+	}
+	base := s.upstreamBase(c.Request.Context(), uid)
+	torrents, err := exhentai.ScrapeGalleryTorrents(c.Request.Context(), client, base, strconv.FormatInt(id, 10), token)
 	if err != nil {
 		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery torrents failed: %v", err)})
 		return
@@ -724,7 +752,11 @@ func (s *Server) handleGalleryTorrentInfo(c *gin.Context) {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid torrent id"})
 		return
 	}
-	result, err := exhentai.ScrapeGalleryTorrentInfo(c.Request.Context(), s.Client, strconv.FormatInt(id, 10), token, gtid)
+	client, uid, ok := s.upstreamClientForRequest(c)
+	if !ok {
+		return
+	}
+	result, err := exhentai.ScrapeGalleryTorrentInfo(c.Request.Context(), client, s.upstreamBase(c.Request.Context(), uid), strconv.FormatInt(id, 10), token, gtid)
 	if err != nil {
 		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch torrent info failed: %v", err)})
 		return
@@ -748,8 +780,13 @@ func (s *Server) handleGalleryTorrentDownload(c *gin.Context) {
 	}
 	idParam := strconv.FormatInt(id, 10)
 	ctx := c.Request.Context()
+	client, uid, ok := s.upstreamClientForRequest(c)
+	if !ok {
+		return
+	}
+	base := s.upstreamBase(ctx, uid)
 
-	torrents, err := exhentai.ScrapeGalleryTorrents(ctx, s.Client, idParam, token)
+	torrents, err := exhentai.ScrapeGalleryTorrents(ctx, client, base, idParam, token)
 	if err != nil {
 		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery torrents failed: %v", err)})
 		return
@@ -768,7 +805,7 @@ func (s *Server) handleGalleryTorrentDownload(c *gin.Context) {
 
 	rawURL := torrent.DownloadURL
 	if c.Query("variant") == "personalized" {
-		result, infoErr := exhentai.ScrapeGalleryTorrentInfo(ctx, s.Client, idParam, token, gtid)
+		result, infoErr := exhentai.ScrapeGalleryTorrentInfo(ctx, client, base, idParam, token, gtid)
 		if infoErr != nil {
 			web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch torrent info failed: %v", infoErr)})
 			return
@@ -784,7 +821,7 @@ func (s *Server) handleGalleryTorrentDownload(c *gin.Context) {
 		return
 	}
 
-	data, err := exhentai.FetchTorrent(ctx, s.Client, rawURL)
+	data, err := exhentai.FetchTorrent(ctx, client, rawURL)
 	if err != nil {
 		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download torrent failed: %v", err)})
 		return
@@ -822,7 +859,11 @@ func (s *Server) handleCachedGallery(c *gin.Context) {
 		metrics.ObserveGalleryCache("gallery", "miss")
 	}
 
-	meta, err := exhentai.PostGalleryMetadata(ctx, s.Client, id, token)
+	client, _, ok := s.upstreamClientForRequest(c)
+	if !ok {
+		return
+	}
+	meta, err := exhentai.PostGalleryMetadata(ctx, client, id, token)
 	if err != nil {
 		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
@@ -860,8 +901,12 @@ func (s *Server) handleCachedGalleryDetails(c *gin.Context) {
 		metrics.ObserveGalleryCache("details", "miss")
 	}
 
-	u := exhentai.GalleryURL(c.Param("id"), token)
-	details, err := exhentai.ScrapeGalleryDetails(ctx, s.Client, u)
+	client, uid, ok := s.upstreamClientForRequest(c)
+	if !ok {
+		return
+	}
+	u := exhentai.GalleryURLAt(s.upstreamBase(ctx, uid), c.Param("id"), token)
+	details, err := exhentai.ScrapeGalleryDetails(ctx, client, u)
 	if err != nil {
 		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery details failed: %v", err)})
 		return
@@ -885,6 +930,10 @@ func (s *Server) handleCachedGalleryPages(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	uid, ok := s.requireUser(c)
+	if !ok {
+		return
+	}
 
 	row, found, err := gallerycache.Get(ctx, s.cacheDB(), id, token)
 	if err != nil {
@@ -901,7 +950,7 @@ func (s *Server) handleCachedGalleryPages(c *gin.Context) {
 		// pages is replaced without blocking the hit. Probe at most once per
 		// TTL so browsing does not translate into an upstream request per view.
 		if row.PagesFetchedAt == nil || time.Since(*row.PagesFetchedAt) > cachedPageCountProbeTTL {
-			go s.verifyCachedPageCount(id, token, len(row.Pages))
+			go s.verifyCachedPageCount(uid, id, token, len(row.Pages))
 		}
 		return
 	}
@@ -909,7 +958,7 @@ func (s *Server) handleCachedGalleryPages(c *gin.Context) {
 	// Miss: stream upstream and backfill on a complete walk.
 	metrics.ObserveGalleryCache("pages", "miss")
 	streamGalleryPagesNDJSON(c, c.Param("id"), token, func(ctx context.Context, emit func(int, []string, []model.GalleryPageThumb) error) (int, error) {
-		return s.scrapeAndCache(ctx, id, token, emit)
+		return s.scrapeAndCache(ctx, uid, id, token, emit)
 	})
 }
 
@@ -917,18 +966,22 @@ func (s *Server) handleCachedGalleryPages(c *gin.Context) {
 // fetches only the gallery's ".gpc" total and, when it no longer matches the
 // cached page count, runs a full cache-fill walk. Concurrent probes for the
 // same gallery collapse via galleryPagesFillGroup.
-func (s *Server) verifyCachedPageCount(galleryID int64, token string, cached int) {
-	if s.cacheDB() == nil || s.Client == nil {
+func (s *Server) verifyCachedPageCount(userID, galleryID int64, token string, cached int) {
+	if s.cacheDB() == nil {
 		return
 	}
-	key := fmt.Sprintf("%d:%s", galleryID, token)
+	client, err := s.upstreamClient(context.Background(), userID)
+	if err != nil {
+		return
+	}
+	key := fmt.Sprintf("%d/%d:%s", userID, galleryID, token)
 	galleryPagesFillGroup.Do(key, func() (any, error) {
 		// The probe and the refresh walk get separate budgets: the walk can
 		// take up to galleryPagesHardCap and must not consume the probe's
 		// 30s window, or the detected page-count change would never persist.
 		probeCtx, probeCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		u := exhentai.GalleryURL(strconv.FormatInt(galleryID, 10), token)
-		total, err := exhentai.ScrapeGalleryTotal(probeCtx, s.Client, u)
+		u := exhentai.GalleryURLAt(s.upstreamBase(probeCtx, userID), strconv.FormatInt(galleryID, 10), token)
+		total, err := exhentai.ScrapeGalleryTotal(probeCtx, client, u)
 		probeCancel()
 		if err != nil {
 			slog.Debug("cached page-count check failed", "id", galleryID, "error", err)
@@ -940,7 +993,7 @@ func (s *Server) verifyCachedPageCount(galleryID int64, token string, cached int
 		slog.Info("cached page count changed; refreshing", "id", galleryID, "cached", cached, "upstream", total)
 		walkCtx, walkCancel := context.WithTimeout(context.Background(), galleryPagesHardCap)
 		defer walkCancel()
-		if _, err := s.scrapeAndCache(walkCtx, galleryID, token, nil); err != nil {
+		if _, err := s.scrapeAndCache(walkCtx, userID, galleryID, token, nil); err != nil {
 			slog.Warn("cached page-count refresh failed", "id", galleryID, "error", err)
 		}
 		return nil, nil
@@ -973,15 +1026,19 @@ func (s *Server) handleSearch(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	client, uid, ok := s.upstreamClientForRequest(c)
+	if !ok {
+		return
+	}
 
-	siteURL := exhentai.ExhentaiURL
+	siteURL := s.upstreamBase(ctx, uid)
 
 	var categories []string
 	if categoryStr != "" {
 		categories = strings.Split(categoryStr, ",")
 	}
 
-	total, results, nav, err := exhentai.ScrapeSearch(ctx, s.Client, siteURL, keyword, categories, page, opts, navOpts)
+	total, results, nav, err := exhentai.ScrapeSearch(ctx, client, siteURL, keyword, categories, page, opts, navOpts)
 	if err != nil {
 		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("search failed: %v", err)})
 		return
@@ -1049,12 +1106,16 @@ func (s *Server) handlePageImage(c *gin.Context) {
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
+	client, _, ok := s.upstreamClientForRequest(c)
+	if !ok {
+		return
+	}
 
 	// Stream the image instead of buffering it: failures are detected while
 	// establishing the stream (page scrape, status, probe), so every error
 	// that can still produce a JSON response happens before headers are
 	// written. A mid-body upstream failure truncates the response instead.
-	stream, err := exhentai.FetchPageImageStream(ctx, s.Client, pageURL)
+	stream, err := exhentai.FetchPageImageStream(ctx, client, pageURL)
 	if err != nil || stream == nil {
 		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
 		return
@@ -1077,95 +1138,98 @@ func (s *Server) handlePageImage(c *gin.Context) {
 	}
 }
 
-func (s *Server) handleGalleryList(listURL string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		pageStr := c.DefaultQuery("page", "0")
-		page, _ := strconv.Atoi(pageStr)
-		if page < 0 {
-			page = 0
-		}
-		if page > maxListingPage {
-			web.JSON(c, http.StatusBadRequest, gin.H{"error": fmt.Sprintf("page too large (max %d)", maxListingPage)})
-			return
-		}
-
-		opts, err := parseSearchOptions(c)
-		if err != nil {
-			web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		navOpts, err := parseListingNavOptions(c)
-		if err != nil {
-			web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		var categories []string
-		if categoryStr := c.Query("categories"); categoryStr != "" {
-			categories = strings.Split(categoryStr, ",")
-		}
-
-		ctx := c.Request.Context()
-
-		results, nav, err := exhentai.ScrapeGalleryList(ctx, s.Client, listURL, page, categories, opts, navOpts)
-		if err != nil {
-			web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery list failed: %v", err)})
-			return
-		}
-
-		type galleryResult struct {
-			ID       int64                 `json:"id"`
-			Token    string                `json:"token"`
-			Title    string                `json:"title"`
-			Category model.GalleryCategory `json:"category"`
-			Cover    string                `json:"cover"`
-			Posted   string                `json:"posted"`
-			Rating   float64               `json:"rating"`
-			URL      string                `json:"url"`
-			Tags     []string              `json:"tags"`
-			Uploader string                `json:"uploader"`
-			Pages    int                   `json:"pages"`
-			Domain   string                `json:"domain"`
-		}
-
-		items := make([]galleryResult, len(results))
-		for i, r := range results {
-			items[i] = galleryResult{
-				ID:       int64(r.GalleryID),
-				Token:    r.Token,
-				Title:    r.Title,
-				Category: model.MapCategory(r.Cat),
-				Cover:    r.Cover,
-				Posted:   r.Posted,
-				Rating:   r.Rating,
-				URL:      r.URL,
-				Tags:     r.Tags,
-				Uploader: r.Uploader,
-				Pages:    r.Pages,
-				Domain:   r.Domain,
-			}
-		}
-
-		web.JSON(c, http.StatusOK, gin.H{
-			"page":      page,
-			"page_size": len(items),
-			"results":   items,
-			"nav":       nav,
-		})
+func (s *Server) handleGalleryListAt(c *gin.Context, listPath string) {
+	pageStr := c.DefaultQuery("page", "0")
+	page, _ := strconv.Atoi(pageStr)
+	if page < 0 {
+		page = 0
 	}
+	if page > maxListingPage {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": fmt.Sprintf("page too large (max %d)", maxListingPage)})
+		return
+	}
+
+	opts, err := parseSearchOptions(c)
+	if err != nil {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	navOpts, err := parseListingNavOptions(c)
+	if err != nil {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var categories []string
+	if categoryStr := c.Query("categories"); categoryStr != "" {
+		categories = strings.Split(categoryStr, ",")
+	}
+
+	ctx := c.Request.Context()
+	client, uid, ok := s.upstreamClientForRequest(c)
+	if !ok {
+		return
+	}
+	listURL := s.upstreamBase(ctx, uid) + listPath
+
+	results, nav, err := exhentai.ScrapeGalleryList(ctx, client, listURL, page, categories, opts, navOpts)
+	if err != nil {
+		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("fetch gallery list failed: %v", err)})
+		return
+	}
+
+	type galleryResult struct {
+		ID       int64                 `json:"id"`
+		Token    string                `json:"token"`
+		Title    string                `json:"title"`
+		Category model.GalleryCategory `json:"category"`
+		Cover    string                `json:"cover"`
+		Posted   string                `json:"posted"`
+		Rating   float64               `json:"rating"`
+		URL      string                `json:"url"`
+		Tags     []string              `json:"tags"`
+		Uploader string                `json:"uploader"`
+		Pages    int                   `json:"pages"`
+		Domain   string                `json:"domain"`
+	}
+
+	items := make([]galleryResult, len(results))
+	for i, r := range results {
+		items[i] = galleryResult{
+			ID:       int64(r.GalleryID),
+			Token:    r.Token,
+			Title:    r.Title,
+			Category: model.MapCategory(r.Cat),
+			Cover:    r.Cover,
+			Posted:   r.Posted,
+			Rating:   r.Rating,
+			URL:      r.URL,
+			Tags:     r.Tags,
+			Uploader: r.Uploader,
+			Pages:    r.Pages,
+			Domain:   r.Domain,
+		}
+	}
+
+	web.JSON(c, http.StatusOK, gin.H{
+		"page":      page,
+		"page_size": len(items),
+		"results":   items,
+		"nav":       nav,
+	})
 }
 
 func (s *Server) handleGalleries(c *gin.Context) {
-	s.handleGalleryList(exhentai.ExhentaiURL + "/")(c)
+	s.handleGalleryListAt(c, "/")
 }
 
 func (s *Server) handleWatched(c *gin.Context) {
-	s.handleGalleryList(exhentai.ExhentaiURL + "/watched")(c)
+	s.handleGalleryListAt(c, "/watched")
 }
 
 func (s *Server) handlePopular(c *gin.Context) {
-	s.handleGalleryList(exhentai.ExhentaiURL + "/popular")(c)
+	s.handleGalleryListAt(c, "/popular")
 }
 
 var (

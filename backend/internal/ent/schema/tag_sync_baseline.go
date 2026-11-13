@@ -24,16 +24,16 @@ type TagSyncBaseline struct {
 func (TagSyncBaseline) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		entsql.Annotation{Table: "tag_sync_baseline"},
-		compositeID("tenant_id", "id"),
+		compositeID("user_id", "id"),
 	}
 }
 
 // Fields of the TagSyncBaseline.
 func (TagSyncBaseline) Fields() []ent.Field {
 	return []ent.Field{
-		field.Int64("tenant_id").Default(1),
-		// The tag itself is the identity within a tenant: the primary key is
-		// (tenant_id, tag).
+		field.Int64("user_id").Default(0),
+		// The tag itself is the identity within a user: the primary key is
+		// (user_id, tag).
 		field.String("id").
 			StorageKey("tag").
 			NotEmpty().

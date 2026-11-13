@@ -11,7 +11,6 @@ import (
 type Config struct {
 	Port     string
 	Database DatabaseConfig
-	Cookie   CookieConfig
 	MinIO    MinIOConfig
 	LogLevel string
 	// Sync configures the peer-facing sync host. Node API keys are stored in
@@ -23,9 +22,9 @@ type Config struct {
 	DevTools bool
 	// Metrics configures the internal Prometheus endpoint.
 	Metrics MetricsConfig
-	// Auth is the JWT authentication setup used by the SPA login page. It is
-	// enabled by setting JWT_SECRET; without it the app keeps its legacy
-	// anonymous single-tenant behaviour.
+	// Auth is the JWT authentication setup used by the SPA login page. Every
+	// request that touches user data is authenticated; there is no anonymous
+	// mode.
 	Auth AuthConfig
 }
 
@@ -36,7 +35,9 @@ type Config struct {
 type AuthConfig struct {
 	Enabled bool
 	// JWTSecret signs HS256 tokens. It must be a high-entropy value of at
-	// least 32 bytes; auth refuses to start with a weak/empty secret.
+	// least 32 bytes; auth refuses to start with a weak/empty secret. The
+	// same secret derives the AES-GCM key that seals per-user ExHentai
+	// cookies in the database.
 	JWTSecret string
 	JWTIssuer string
 	// JWTExpiresIn is embedded in exp/iat and returned as expires_in.
@@ -87,6 +88,9 @@ func (c DatabaseConfig) IsPostgres() bool {
 	return c.Driver == "postgres" || c.Driver == "postgresql" || c.Driver == "pg"
 }
 
+// CookieConfig holds one user's ExHentai session. It is never read from the
+// environment: each account submits its own cookie through the settings API
+// and the server stores it encrypted (see internal/usercookie).
 type CookieConfig struct {
 	IpbMemberID string
 	IpbPassHash string
@@ -133,7 +137,6 @@ func Load() (*Config, error) {
 			RequestTimeout:  30 * time.Second,
 			APIKeyMinLength: 32,
 		},
-		Cookie: loadCookieConfig(),
 		MinIO: MinIOConfig{
 			Endpoint:  getEnv("MINIO_ENDPOINT", ""),
 			AccessKey: getEnv("MINIO_ACCESS_KEY", ""),
@@ -142,10 +145,6 @@ func Load() (*Config, error) {
 			UseSSL:    parseBoolEnv("MINIO_USE_SSL", false),
 			Region:    getEnv("MINIO_REGION", ""),
 		},
-	}
-
-	if cookieStr := getEnv("EHENTAI_COOKIE", ""); cookieStr != "" {
-		cfg.Cookie = parseCookieString(cookieStr)
 	}
 
 	metricsCfg, err := loadMetrics()
@@ -175,10 +174,6 @@ func Load() (*Config, error) {
 	}
 	cfg.Auth = authCfg
 
-	if !cfg.Cookie.IsValid() {
-		return nil, fmt.Errorf("missing required cookies: set EHENTAI_COOKIE or EHENTAI_COOKIE_IPB_MEMBER_ID + EHENTAI_COOKIE_IPB_PASS_HASH")
-	}
-
 	switch {
 	case cfg.Database.IsPostgres():
 		if cfg.Database.DSN == "" {
@@ -205,20 +200,15 @@ func loadMetrics() (MetricsConfig, error) {
 	return cfg, nil
 }
 
-// loadAuth reads the JWT/admin settings. Auth is opt-in for backwards
-// compatibility with existing anonymous deployments: a non-empty JWT_SECRET
-// enables it. Setting ADMIN_PASSWORD without a secret is a configuration
+// loadAuth reads the JWT/admin settings. Authentication is mandatory: every
+// user-private API needs an identity, so a missing JWT_SECRET is a startup
 // error rather than a silently anonymous deployment.
 func loadAuth() (AuthConfig, error) {
 	secret := strings.TrimSpace(getEnv("JWT_SECRET", ""))
 	adminPassword := getEnv("ADMIN_PASSWORD", "")
 
 	if secret == "" {
-		if adminPassword != "" {
-			return AuthConfig{}, fmt.Errorf("ADMIN_PASSWORD is set but JWT_SECRET is empty; set JWT_SECRET (for example: openssl rand -hex 32)")
-		}
-		// Keep the defaults available for diagnostics, but do not enable.
-		return AuthConfig{}, nil
+		return AuthConfig{}, fmt.Errorf("JWT_SECRET is required: multi-user mode needs signed sessions (for example: openssl rand -hex 32)")
 	}
 
 	// HMAC-SHA256 keys shorter than the 32-byte output weaken the signature.
@@ -298,6 +288,28 @@ func parseBoolEnv(key string, defaultVal bool) bool {
 	return b
 }
 
+// ParseCookieString parses a browser-style "k=v; k=v" ExHentai cookie header.
+func ParseCookieString(s string) CookieConfig { return parseCookieString(s) }
+
+// Encode renders the session as a browser-style cookie header. Secrets are
+// only ever handled in memory; callers must not log the result.
+func (c CookieConfig) Encode() string {
+	parts := make([]string, 0, 4)
+	if c.IpbMemberID != "" {
+		parts = append(parts, "ipb_member_id="+c.IpbMemberID)
+	}
+	if c.IpbPassHash != "" {
+		parts = append(parts, "ipb_pass_hash="+c.IpbPassHash)
+	}
+	if c.Igneous != "" {
+		parts = append(parts, "igneous="+c.Igneous)
+	}
+	if c.SK != "" {
+		parts = append(parts, "sk="+c.SK)
+	}
+	return strings.Join(parts, "; ")
+}
+
 func parseCookieString(s string) CookieConfig {
 	cfg := CookieConfig{}
 	for _, pair := range splitSeq(s, ";") {
@@ -360,35 +372,6 @@ func trimSpace(s string) string {
 		end--
 	}
 	return s[start:end]
-}
-
-// loadCookieConfig reads the ExHentai session cookies from the environment.
-// Both supported forms may be present: the individual variables take precedence,
-// and a combined EHENTAI_COOKIE string only fills the fields they leave empty.
-// Treating the string as a wholesale override (the old behaviour) silently
-// dropped igneous/sk from an otherwise complete individual setup as soon as an
-// older partial string survived in .env, and ExHentai answered with sad panda.
-func loadCookieConfig() CookieConfig {
-	cfg := CookieConfig{
-		IpbMemberID: normalizeCookieValue(getEnv("EHENTAI_COOKIE_IPB_MEMBER_ID", "")),
-		IpbPassHash: normalizeCookieValue(getEnv("EHENTAI_COOKIE_IPB_PASS_HASH", "")),
-		Igneous:     normalizeCookieValue(getEnv("EHENTAI_COOKIE_IGNEOUS", "")),
-		SK:          normalizeCookieValue(getEnv("EHENTAI_COOKIE_SK", "")),
-	}
-	combined := parseCookieString(getEnv("EHENTAI_COOKIE", ""))
-	if cfg.IpbMemberID == "" {
-		cfg.IpbMemberID = combined.IpbMemberID
-	}
-	if cfg.IpbPassHash == "" {
-		cfg.IpbPassHash = combined.IpbPassHash
-	}
-	if cfg.Igneous == "" {
-		cfg.Igneous = combined.Igneous
-	}
-	if cfg.SK == "" {
-		cfg.SK = combined.SK
-	}
-	return cfg
 }
 
 // normalizeCookieValue removes what copying a cookie out of browser devtools or

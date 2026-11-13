@@ -1,21 +1,17 @@
-import { apiGet, apiPatchJson, apiPostJson, apiPut } from "./client";
+import {
+  apiDelete,
+  apiGet,
+  apiPatchJson,
+  apiPostJson,
+  apiPut,
+} from "./client";
 
-export type TenantStatus = "active" | "disabled";
-export type UserRole = "platform_admin" | "tenant_admin" | "user";
 export type UserStatus = "active" | "disabled";
+export type UserRole = "admin" | "user";
 
-export interface Tenant {
+export interface AdminUser {
   id: number;
-  name: string;
-  slug: string;
-  status: TenantStatus;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface TenantUser {
-  id: number;
-  tenant_id: number;
+  user_id: number;
   username: string;
   role: UserRole;
   status: UserStatus;
@@ -23,69 +19,42 @@ export interface TenantUser {
   updated_at: string;
 }
 
-export function fetchTenants(): Promise<{ tenants: Tenant[] }> {
-  return apiGet<{ tenants: Tenant[] }>("/api/admin/tenants");
+export function fetchUsers(): Promise<{ users: AdminUser[] }> {
+  return apiGet<{ users: AdminUser[] }>("/api/admin/users");
 }
 
-export interface CreateTenantInput {
-  name: string;
-  slug: string;
-  admin_username?: string;
-  admin_password?: string;
-}
-
-export function createTenant(input: CreateTenantInput): Promise<Tenant> {
-  return apiPostJson<Tenant>("/api/admin/tenants", input);
-}
-
-export function updateTenant(
-  id: number,
-  input: { name?: string; slug?: string },
-): Promise<Tenant> {
-  return apiPut<Tenant>(`/api/admin/tenants/${id}`, input);
-}
-
-export function setTenantStatus(
-  id: number,
-  status: TenantStatus,
-): Promise<Tenant> {
-  return apiPatchJson<Tenant>(`/api/admin/tenants/${id}/status`, { status });
-}
-
-export function fetchTenantUsers(): Promise<{ users: TenantUser[] }> {
-  return apiGet<{ users: TenantUser[] }>("/api/tenant/users");
-}
-
-export interface CreateTenantUserInput {
+export interface CreateUserInput {
   username: string;
   password: string;
-  role: Exclude<UserRole, "platform_admin">;
+  role?: UserRole;
   status?: UserStatus;
 }
 
-export function createTenantUser(
-  input: CreateTenantUserInput,
-): Promise<TenantUser> {
-  return apiPostJson<TenantUser>("/api/tenant/users", input);
+export function createUser(input: CreateUserInput): Promise<AdminUser> {
+  return apiPostJson<AdminUser>("/api/admin/users", input);
 }
 
-export interface UpdateTenantUserInput {
+export interface UpdateUserInput {
   username?: string;
   password?: string;
-  role?: Exclude<UserRole, "platform_admin">;
+  role?: UserRole;
   status?: UserStatus;
 }
 
-export function updateTenantUser(
+export function updateUser(
   id: number,
-  input: UpdateTenantUserInput,
-): Promise<TenantUser> {
-  return apiPut<TenantUser>(`/api/tenant/users/${id}`, input);
+  input: UpdateUserInput,
+): Promise<AdminUser> {
+  return apiPut<AdminUser>(`/api/admin/users/${id}`, input);
 }
 
-export function setTenantUserStatus(
+export function setUserStatus(
   id: number,
   status: UserStatus,
-): Promise<TenantUser> {
-  return apiPatchJson<TenantUser>(`/api/tenant/users/${id}/status`, { status });
+): Promise<AdminUser> {
+  return apiPatchJson<AdminUser>(`/api/admin/users/${id}/status`, { status });
+}
+
+export function deleteUser(id: number): Promise<{ deleted: boolean }> {
+  return apiDelete<{ deleted: boolean }>(`/api/admin/users/${id}`);
 }

@@ -6,10 +6,9 @@ import { IconButton, Logo } from "../ui";
 import { MobileDrawer } from "./MobileDrawer";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import {
-  PLATFORM_ADMIN_NAV,
+  ADMIN_NAV,
   PRIMARY_NAV,
   SECONDARY_NAV,
-  TENANT_ADMIN_NAV,
   isNavActive,
   type NavItem,
 } from "./nav";
@@ -57,16 +56,11 @@ export function Header() {
   const { lastListRoute } = useNavigationContext();
   const {
     enabled: authEnabled,
-    isPlatformAdmin,
-    isTenantAdmin,
+    isAdmin,
     logout,
     isLoggingOut,
   } = useAuth();
-  const adminNav = isPlatformAdmin
-    ? PLATFORM_ADMIN_NAV
-    : isTenantAdmin
-      ? TENANT_ADMIN_NAV
-      : [];
+  const adminNav = isAdmin ? ADMIN_NAV : [];
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const isActive = (to: string) =>

@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 )
 
 // sadPandaPage is what ExHentai returns when it rejects the session: an empty
@@ -24,14 +23,9 @@ const validPage = `<html><head><title>ok</title></head><body><div id="gdt">galle
 // resetHealGate keeps the package-level retry gate from leaking between tests.
 func resetHealGate(t *testing.T) {
 	t.Helper()
-	healGate.mu.Lock()
-	healGate.blockedUntil = time.Time{}
-	healGate.mu.Unlock()
-	t.Cleanup(func() {
-		healGate.mu.Lock()
-		healGate.blockedUntil = time.Time{}
-		healGate.mu.Unlock()
-	})
+	clear := func() { healGates = sync.Map{} }
+	clear()
+	t.Cleanup(clear)
 }
 
 func clientWithCookies(t *testing.T, target string, cookies ...*http.Cookie) *http.Client {

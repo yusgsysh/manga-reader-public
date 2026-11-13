@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Input, Loader } from "@cloudflare/kumo";
-import { CircleNotch, Key, Plus, Power } from "@phosphor-icons/react";
+import { CircleNotch, Key, Plus, Power, Trash } from "@phosphor-icons/react";
 import {
-  createTenantUser,
-  fetchTenantUsers,
-  setTenantUserStatus,
-  updateTenantUser,
-  type TenantUser,
+  createUser,
+  deleteUser,
+  fetchUsers,
+  setUserStatus,
+  updateUser,
+  type AdminUser,
   type UserRole,
 } from "../api/admin";
 import { ErrorState } from "../components/common/ErrorState";
@@ -15,15 +16,14 @@ import { PageHeader, Section, useToast } from "../components/ui";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAuth } from "../context/auth";
 
-const QUERY_KEY = ["tenant", "users"] as const;
+const QUERY_KEY = ["admin", "users"] as const;
 
 const ROLE_LABELS: Record<string, string> = {
-  platform_admin: "平台管理员",
-  tenant_admin: "租户管理员",
+  admin: "管理员",
   user: "普通用户",
 };
 
-function UserRow({ user }: { user: TenantUser }) {
+function UserRow({ user }: { user: AdminUser }) {
   const toast = useToast();
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth();
@@ -32,10 +32,7 @@ function UserRow({ user }: { user: TenantUser }) {
 
   const toggle = useMutation({
     mutationFn: () =>
-      setTenantUserStatus(
-        user.id,
-        user.status === "active" ? "disabled" : "active",
-      ),
+      setUserStatus(user.id, user.status === "active" ? "disabled" : "active"),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
       toast.success("用户状态已更新");
@@ -43,8 +40,20 @@ function UserRow({ user }: { user: TenantUser }) {
     onError: (error) => toast.error("更新用户状态失败", error),
   });
 
+  const roleMutation = useMutation({
+    mutationFn: () =>
+      updateUser(user.id, {
+        role: user.role === "admin" ? "user" : "admin",
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      toast.success("用户角色已更新");
+    },
+    onError: (error) => toast.error("更新用户角色失败", error),
+  });
+
   const reset = useMutation({
-    mutationFn: () => updateTenantUser(user.id, { password }),
+    mutationFn: () => updateUser(user.id, { password }),
     onSuccess: () => {
       setPassword("");
       setResetOpen(false);
@@ -53,7 +62,16 @@ function UserRow({ user }: { user: TenantUser }) {
     onError: (error) => toast.error("重置密码失败", error),
   });
 
-  const isPlatformAdmin = user.role === "platform_admin";
+  const remove = useMutation({
+    mutationFn: () => deleteUser(user.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      toast.success("用户及其个人数据已删除");
+    },
+    onError: (error) => toast.error("删除用户失败", error),
+  });
+
+  const isSelf = user.id === currentUser?.id;
 
   return (
     <div className="card-surface p-4">
@@ -61,7 +79,7 @@ function UserRow({ user }: { user: TenantUser }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate font-medium">{user.username}</span>
-            {user.id === currentUser?.id && (
+            {isSelf && (
               <span className="rounded-full bg-kumo-tint px-2 py-0.5 text-xs text-kumo-subtle">
                 当前用户
               </span>
@@ -81,27 +99,42 @@ function UserRow({ user }: { user: TenantUser }) {
           </div>
           <div className="mt-0.5 text-xs text-kumo-subtle">ID {user.id}</div>
         </div>
-        {!isPlatformAdmin && (
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setResetOpen((open) => !open)}
-            >
-              <Key className="mr-1 size-3.5" />
-              重置密码
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => toggle.mutate()}
-              disabled={toggle.isPending}
-            >
-              <Power className="mr-1 size-3.5" />
-              {user.status === "active" ? "禁用" : "启用"}
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => roleMutation.mutate()}
+            disabled={roleMutation.isPending}
+          >
+            {user.role === "admin" ? "降为普通用户" : "设为管理员"}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setResetOpen((open) => !open)}
+          >
+            <Key className="mr-1 size-3.5" />
+            重置密码
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => toggle.mutate()}
+            disabled={toggle.isPending || isSelf}
+          >
+            <Power className="mr-1 size-3.5" />
+            {user.status === "active" ? "禁用" : "启用"}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => remove.mutate()}
+            disabled={remove.isPending || isSelf}
+          >
+            <Trash className="mr-1 size-3.5" />
+            删除
+          </Button>
+        </div>
       </div>
 
       {resetOpen && (
@@ -130,29 +163,24 @@ function UserRow({ user }: { user: TenantUser }) {
   );
 }
 
-export function TenantAdminPage() {
+export function UserAdminPage() {
   useDocumentTitle("用户管理");
   const toast = useToast();
   const queryClient = useQueryClient();
-  const { tenant } = useAuth();
   const usersQuery = useQuery({
     queryKey: QUERY_KEY,
-    queryFn: fetchTenantUsers,
+    queryFn: fetchUsers,
     retry: false,
     staleTime: 0,
   });
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Exclude<UserRole, "platform_admin">>("user");
+  const [role, setRole] = useState<UserRole>("user");
 
   const create = useMutation({
     mutationFn: () =>
-      createTenantUser({
-        username: username.trim(),
-        password,
-        role,
-      }),
+      createUser({ username: username.trim(), password, role }),
     onSuccess: () => {
       setUsername("");
       setPassword("");
@@ -169,12 +197,9 @@ export function TenantAdminPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="用户管理" />
-      <div>
-        <h1 className="text-lg font-semibold tracking-tight">租户用户管理</h1>
-        <p className="mt-1 text-sm text-kumo-subtle">
-          租户：{tenant?.name ?? "-"}（{tenant?.slug ?? "-"}）
-        </p>
-      </div>
+      <p className="text-sm text-kumo-subtle">
+        每个账号拥有独立的 ExHentai Cookie、个人设置、书架、阅读记录和下载任务；数据不会跨账号共享。
+      </p>
 
       <Section title="创建用户">
         <div className="card-surface space-y-3 p-4">
@@ -195,20 +220,14 @@ export function TenantAdminPage() {
             <select
               aria-label="角色"
               value={role}
-              onChange={(event) =>
-                setRole(event.target.value as Exclude<UserRole, "platform_admin">)
-              }
+              onChange={(event) => setRole(event.target.value as UserRole)}
               className="rounded-lg border border-kumo-hairline bg-kumo-base px-3 py-2 text-sm text-kumo-default"
             >
               <option value="user">普通用户</option>
-              <option value="tenant_admin">租户管理员</option>
+              <option value="admin">管理员</option>
             </select>
           </div>
-          <Button
-            onClick={() => create.mutate()}
-            disabled={!canCreate}
-            size="sm"
-          >
+          <Button onClick={() => create.mutate()} disabled={!canCreate} size="sm">
             {create.isPending ? (
               <CircleNotch className="mr-1 size-3.5 animate-spin" />
             ) : (

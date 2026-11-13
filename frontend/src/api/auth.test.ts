@@ -53,10 +53,9 @@ describe("auth session", () => {
       if (url.endsWith("/api/auth/me")) {
         return json({
           id: 1,
-          tenant_id: 1,
+          user_id: 1,
           username: "admin",
-          role: "platform_admin",
-          tenant: { id: 1, name: "Default", slug: "default", status: "active" },
+          role: "admin",
         });
       }
       return json({ error: "not found" }, 404);
@@ -67,11 +66,10 @@ describe("auth session", () => {
       initialized: true,
       user: {
         id: 1,
-        tenant_id: 1,
+        user_id: 1,
         username: "admin",
-        role: "platform_admin",
+        role: "admin",
       },
-      tenant: { id: 1, name: "Default", slug: "default", status: "active" },
     });
   });
 
@@ -87,7 +85,6 @@ describe("auth session", () => {
       enabled: true,
       initialized: true,
       user: null,
-      tenant: null,
     });
   });
 
@@ -98,7 +95,6 @@ describe("auth session", () => {
       enabled: false,
       initialized: false,
       user: null,
-      tenant: null,
     });
   });
 });
@@ -116,28 +112,25 @@ describe("authenticated requests", () => {
       if (url.endsWith("/api/auth/me")) {
         return json({
           id: 1,
-          tenant_id: 1,
+          user_id: 1,
           username: "admin",
-          role: "platform_admin",
-          tenant: { id: 1, name: "Default", slug: "default", status: "active" },
+          role: "admin",
         });
       }
       return json({ ok: true });
     });
 
-    await expect(login("default", "admin", "password123")).resolves.toEqual({
+    await expect(login("admin", "password123")).resolves.toEqual({
       user: {
         id: 1,
-        tenant_id: 1,
+        user_id: 1,
         username: "admin",
-        role: "platform_admin",
+        role: "admin",
       },
-      tenant: { id: 1, name: "Default", slug: "default", status: "active" },
     });
 
     const loginCall = calls.find((call) => call.url.endsWith("/api/auth/login"));
     expect(JSON.parse(String(loginCall?.init?.body))).toMatchObject({
-      tenant: "default",
       username: "admin",
     });
 
@@ -159,16 +152,15 @@ describe("authenticated requests", () => {
       if (url.endsWith("/api/auth/me")) {
         return json({
           id: 1,
-          tenant_id: 1,
+          user_id: 1,
           username: "admin",
-          role: "platform_admin",
-          tenant: { id: 1, name: "Default", slug: "default", status: "active" },
+          role: "admin",
         });
       }
       return json({ success: true });
     });
 
-    await login("default", "admin", "password123");
+    await login("admin", "password123");
     await logout();
     await apiGet("/api/bookshelf");
 

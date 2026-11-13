@@ -16,7 +16,7 @@ func TestTokenManagerRoundTrip(t *testing.T) {
 	fixed := time.Now().UTC()
 	m.now = func() time.Time { return fixed }
 
-	raw, expires, err := m.issue(7, 2, "alice", config.RoleTenantAdmin, 3)
+	raw, expires, err := m.issue(7, "alice", config.RoleAdmin, 3)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
@@ -28,9 +28,8 @@ func TestTokenManagerRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if claims.Subject != "7" || claims.Username != "alice" ||
-		claims.TenantID != 2 || claims.Role != config.RoleTenantAdmin ||
-		claims.TokenVersion != 3 {
+	if claims.Subject != "7" || claims.UserID != 7 || claims.Username != "alice" ||
+		claims.Role != config.RoleAdmin || claims.TokenVersion != 3 {
 		t.Fatalf("claims = %+v", claims)
 	}
 	if claims.Issuer != "manga-reader-test" || claims.ID == "" {
@@ -49,8 +48,8 @@ func TestTokenManagerRejectsInvalidClaims(t *testing.T) {
 
 	base := func() Claims {
 		return Claims{
+			UserID:       1,
 			Username:     "alice",
-			TenantID:     1,
 			Role:         config.RoleUser,
 			TokenVersion: 0,
 			RegisteredClaims: jwt.RegisteredClaims{
@@ -144,18 +143,26 @@ func TestTokenManagerRejectsInvalidClaims(t *testing.T) {
 			}()),
 		},
 		{
-			name: "zero tenant",
+			name: "zero user",
 			raw: sign(func() Claims {
 				c := base()
-				c.TenantID = 0
+				c.UserID = 0
 				return c
 			}()),
 		},
 		{
-			name: "negative tenant",
+			name: "negative user",
 			raw: sign(func() Claims {
 				c := base()
-				c.TenantID = -1
+				c.UserID = -1
+				return c
+			}()),
+		},
+		{
+			name: "subject does not match user",
+			raw: sign(func() Claims {
+				c := base()
+				c.Subject = "2"
 				return c
 			}()),
 		},

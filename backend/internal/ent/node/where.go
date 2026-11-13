@@ -59,11 +59,6 @@ func Name(v string) predicate.Node {
 	return predicate.Node(sql.FieldEQ(FieldName, v))
 }
 
-// TenantID applies equality check predicate on the "tenant_id" field. It's identical to TenantIDEQ.
-func TenantID(v int64) predicate.Node {
-	return predicate.Node(sql.FieldEQ(FieldTenantID, v))
-}
-
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.Node {
 	return predicate.Node(sql.FieldEQ(FieldStatus, v))
@@ -147,46 +142,6 @@ func NameEqualFold(v string) predicate.Node {
 // NameContainsFold applies the ContainsFold predicate on the "name" field.
 func NameContainsFold(v string) predicate.Node {
 	return predicate.Node(sql.FieldContainsFold(FieldName, v))
-}
-
-// TenantIDEQ applies the EQ predicate on the "tenant_id" field.
-func TenantIDEQ(v int64) predicate.Node {
-	return predicate.Node(sql.FieldEQ(FieldTenantID, v))
-}
-
-// TenantIDNEQ applies the NEQ predicate on the "tenant_id" field.
-func TenantIDNEQ(v int64) predicate.Node {
-	return predicate.Node(sql.FieldNEQ(FieldTenantID, v))
-}
-
-// TenantIDIn applies the In predicate on the "tenant_id" field.
-func TenantIDIn(vs ...int64) predicate.Node {
-	return predicate.Node(sql.FieldIn(FieldTenantID, vs...))
-}
-
-// TenantIDNotIn applies the NotIn predicate on the "tenant_id" field.
-func TenantIDNotIn(vs ...int64) predicate.Node {
-	return predicate.Node(sql.FieldNotIn(FieldTenantID, vs...))
-}
-
-// TenantIDGT applies the GT predicate on the "tenant_id" field.
-func TenantIDGT(v int64) predicate.Node {
-	return predicate.Node(sql.FieldGT(FieldTenantID, v))
-}
-
-// TenantIDGTE applies the GTE predicate on the "tenant_id" field.
-func TenantIDGTE(v int64) predicate.Node {
-	return predicate.Node(sql.FieldGTE(FieldTenantID, v))
-}
-
-// TenantIDLT applies the LT predicate on the "tenant_id" field.
-func TenantIDLT(v int64) predicate.Node {
-	return predicate.Node(sql.FieldLT(FieldTenantID, v))
-}
-
-// TenantIDLTE applies the LTE predicate on the "tenant_id" field.
-func TenantIDLTE(v int64) predicate.Node {
-	return predicate.Node(sql.FieldLTE(FieldTenantID, v))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.

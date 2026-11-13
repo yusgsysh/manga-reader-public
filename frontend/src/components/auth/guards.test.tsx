@@ -22,12 +22,10 @@ function authValue(overrides: Partial<AuthContextValue> = {}): AuthContextValue 
   return {
     session: null,
     user: null,
-    tenant: null,
     role: null,
     enabled: true,
     isAuthenticated: false,
-    isPlatformAdmin: false,
-    isTenantAdmin: false,
+    isAdmin: false,
     isLoading: false,
     error: null,
     isLoggingIn: false,
@@ -67,16 +65,8 @@ function renderGuard(value: AuthContextValue, initialPath: string) {
           <Route
             path="/admin"
             element={
-              <RequireRole role="platform_admin">
-                <div>platform-content</div>
-              </RequireRole>
-            }
-          />
-          <Route
-            path="/tenant"
-            element={
-              <RequireRole role="tenant_admin">
-                <div>tenant-content</div>
+              <RequireRole role="admin">
+                <div>admin-content</div>
               </RequireRole>
             }
           />
@@ -100,7 +90,7 @@ describe("RequireAuth", () => {
     renderGuard(
       authValue({
         isAuthenticated: true,
-        user: { id: 1, tenant_id: 1, username: "alice", role: "user" },
+        user: { id: 1, user_id: 1, username: "alice", role: "user" },
       }),
       "/private",
     );
@@ -125,38 +115,15 @@ describe("RequireAuth", () => {
 });
 
 describe("RequireRole", () => {
-  it("allows platform admins into platform routes", () => {
-    renderGuard(
-      authValue({ isPlatformAdmin: true, role: "platform_admin" }),
-      "/admin",
-    );
-    expect(screen.getByText("platform-content")).toBeTruthy();
+  it("allows administrators into admin routes", () => {
+    renderGuard(authValue({ isAdmin: true, role: "admin" }), "/admin");
+    expect(screen.getByText("admin-content")).toBeTruthy();
   });
 
-  it("keeps tenant admins and users out of platform routes", () => {
-    const { unmount } = renderGuard(
-      authValue({ isTenantAdmin: true, role: "tenant_admin" }),
-      "/admin",
-    );
-    expect(screen.getByText("home-marker")).toBeTruthy();
-    expect(screen.queryByText("platform-content")).toBeNull();
-    unmount();
-
+  it("keeps ordinary users out of admin routes", () => {
     renderGuard(authValue({ role: "user" }), "/admin");
     expect(screen.getByText("home-marker")).toBeTruthy();
-  });
-
-  it("allows tenant admins but not users into tenant routes", () => {
-    const { unmount } = renderGuard(
-      authValue({ isTenantAdmin: true, role: "tenant_admin" }),
-      "/tenant",
-    );
-    expect(screen.getByText("tenant-content")).toBeTruthy();
-    unmount();
-
-    renderGuard(authValue({ role: "user" }), "/tenant");
-    expect(screen.getByText("home-marker")).toBeTruthy();
-    expect(screen.queryByText("tenant-content")).toBeNull();
+    expect(screen.queryByText("admin-content")).toBeNull();
   });
 });
 
@@ -203,7 +170,7 @@ describe("LoginPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "登录" }));
 
     expect(screen.getByRole("alert").textContent).toContain(
-      "请输入租户、用户名和密码",
+      "请输入用户名和密码",
     );
     expect(login).not.toHaveBeenCalled();
   });
@@ -219,7 +186,7 @@ describe("LoginPage", () => {
     await userEvent.type(screen.getByLabelText("密码"), "secret-pass");
     await userEvent.click(screen.getByRole("button", { name: "登录" }));
 
-    expect(login).toHaveBeenCalledWith("default", "alice", "secret-pass");
+    expect(login).toHaveBeenCalledWith("alice", "secret-pass");
     expect(await screen.findByText("bookshelf-marker")).toBeTruthy();
   });
 
@@ -261,7 +228,7 @@ describe("LoginPage", () => {
     renderLogin(
       authValue({
         isAuthenticated: true,
-        user: { id: 1, tenant_id: 1, username: "alice", role: "user" },
+        user: { id: 1, user_id: 1, username: "alice", role: "user" },
       }),
     );
     expect(screen.getByText("home-marker")).toBeTruthy();

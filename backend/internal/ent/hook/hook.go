@@ -128,18 +128,6 @@ func (f TagSyncBaselineFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Va
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TagSyncBaselineMutation", m)
 }
 
-// The TenantFunc type is an adapter to allow the use of ordinary
-// function as Tenant mutator.
-type TenantFunc func(context.Context, *ent.TenantMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f TenantFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.TenantMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TenantMutation", m)
-}
-
 // The UserFunc type is an adapter to allow the use of ordinary
 // function as User mutator.
 type UserFunc func(context.Context, *ent.UserMutation) (ent.Value, error)
@@ -150,6 +138,18 @@ func (f UserFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error)
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserMutation", m)
+}
+
+// The UserSettingFunc type is an adapter to allow the use of ordinary
+// function as UserSetting mutator.
+type UserSettingFunc func(context.Context, *ent.UserSettingMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UserSettingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UserSettingMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserSettingMutation", m)
 }
 
 // Condition is a hook condition function.

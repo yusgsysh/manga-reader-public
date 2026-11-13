@@ -9,9 +9,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
-// TenantID applies equality check predicate on the "tenant_id" field. It's identical to TenantIDEQ.
-func TenantID(v int64) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldEQ(FieldTenantID, v))
+// UserID applies equality check predicate on the "user_id" field. It's identical to UserIDEQ.
+func UserID(v int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldEQ(FieldUserID, v))
 }
 
 // Action applies equality check predicate on the "action" field. It's identical to ActionEQ.
@@ -39,44 +39,44 @@ func ID(v string) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldEQ(FieldID, v))
 }
 
-// TenantIDEQ applies the EQ predicate on the "tenant_id" field.
-func TenantIDEQ(v int64) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldEQ(FieldTenantID, v))
+// UserIDEQ applies the EQ predicate on the "user_id" field.
+func UserIDEQ(v int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldEQ(FieldUserID, v))
 }
 
-// TenantIDNEQ applies the NEQ predicate on the "tenant_id" field.
-func TenantIDNEQ(v int64) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldNEQ(FieldTenantID, v))
+// UserIDNEQ applies the NEQ predicate on the "user_id" field.
+func UserIDNEQ(v int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldNEQ(FieldUserID, v))
 }
 
-// TenantIDIn applies the In predicate on the "tenant_id" field.
-func TenantIDIn(vs ...int64) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldIn(FieldTenantID, vs...))
+// UserIDIn applies the In predicate on the "user_id" field.
+func UserIDIn(vs ...int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldIn(FieldUserID, vs...))
 }
 
-// TenantIDNotIn applies the NotIn predicate on the "tenant_id" field.
-func TenantIDNotIn(vs ...int64) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldNotIn(FieldTenantID, vs...))
+// UserIDNotIn applies the NotIn predicate on the "user_id" field.
+func UserIDNotIn(vs ...int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldNotIn(FieldUserID, vs...))
 }
 
-// TenantIDGT applies the GT predicate on the "tenant_id" field.
-func TenantIDGT(v int64) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldGT(FieldTenantID, v))
+// UserIDGT applies the GT predicate on the "user_id" field.
+func UserIDGT(v int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldGT(FieldUserID, v))
 }
 
-// TenantIDGTE applies the GTE predicate on the "tenant_id" field.
-func TenantIDGTE(v int64) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldGTE(FieldTenantID, v))
+// UserIDGTE applies the GTE predicate on the "user_id" field.
+func UserIDGTE(v int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldGTE(FieldUserID, v))
 }
 
-// TenantIDLT applies the LT predicate on the "tenant_id" field.
-func TenantIDLT(v int64) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldLT(FieldTenantID, v))
+// UserIDLT applies the LT predicate on the "user_id" field.
+func UserIDLT(v int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldLT(FieldUserID, v))
 }
 
-// TenantIDLTE applies the LTE predicate on the "tenant_id" field.
-func TenantIDLTE(v int64) predicate.TagPreference {
-	return predicate.TagPreference(sql.FieldLTE(FieldTenantID, v))
+// UserIDLTE applies the LTE predicate on the "user_id" field.
+func UserIDLTE(v int64) predicate.TagPreference {
+	return predicate.TagPreference(sql.FieldLTE(FieldUserID, v))
 }
 
 // ActionEQ applies the EQ predicate on the "action" field.

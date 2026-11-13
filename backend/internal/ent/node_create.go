@@ -26,12 +26,6 @@ func (_c *NodeCreate) SetName(v string) *NodeCreate {
 	return _c
 }
 
-// SetTenantID sets the "tenant_id" field.
-func (_c *NodeCreate) SetTenantID(v int64) *NodeCreate {
-	_c.mutation.SetTenantID(v)
-	return _c
-}
-
 // SetStatus sets the "status" field.
 func (_c *NodeCreate) SetStatus(v string) *NodeCreate {
 	_c.mutation.SetStatus(v)
@@ -147,9 +141,6 @@ func (_c *NodeCreate) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Node.name": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.TenantID(); !ok {
-		return &ValidationError{Name: "tenant_id", err: errors.New(`ent: missing required field "Node.tenant_id"`)}
-	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "Node.status"`)}
 	}
@@ -188,10 +179,6 @@ func (_c *NodeCreate) createSpec() (*Node, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(node.FieldName, field.TypeString, value)
 		_node.Name = value
-	}
-	if value, ok := _c.mutation.TenantID(); ok {
-		_spec.SetField(node.FieldTenantID, field.TypeInt64, value)
-		_node.TenantID = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(node.FieldStatus, field.TypeString, value)

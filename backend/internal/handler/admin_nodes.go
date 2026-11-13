@@ -15,7 +15,6 @@ import (
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/node"
 	"manga-reader/internal/ent/nodeapikey"
-	"manga-reader/internal/ent/tenant"
 	nodeauth "manga-reader/internal/node"
 	"manga-reader/internal/requestid"
 	"manga-reader/internal/web"
@@ -24,7 +23,6 @@ import (
 type nodeJSON struct {
 	ID         int     `json:"id"`
 	Name       string  `json:"name"`
-	TenantID   int64   `json:"tenant_id"`
 	Status     string  `json:"status"`
 	LastSeenAt *string `json:"last_seen_at"`
 	CreatedAt  string  `json:"created_at"`
@@ -53,7 +51,7 @@ func formatTimePtr(t *time.Time) *string {
 
 func nodeResponse(n *ent.Node) nodeJSON {
 	return nodeJSON{
-		ID: n.ID, Name: n.Name, TenantID: n.TenantID, Status: n.Status,
+		ID: n.ID, Name: n.Name, Status: n.Status,
 		LastSeenAt: formatTimePtr(n.LastSeenAt),
 		CreatedAt:  n.CreatedAt.UTC().Format(timeLayout),
 		UpdatedAt:  n.UpdatedAt.UTC().Format(timeLayout),
@@ -115,13 +113,13 @@ func audit(c *gin.Context, action string, attrs ...any) {
 		"result", "ok",
 	}
 	if principal, ok := auth.PrincipalFrom(c); ok {
-		base = append(base, "actor_user_id", principal.ID, "tenant_id", principal.TenantID)
+		base = append(base, "actor_user_id", principal.ID)
 	}
 	slog.Info("security audit", append(base, attrs...)...)
 }
 
 func (s *Server) handleAdminNodeList(c *gin.Context) {
-	if !s.requirePlatformAdmin(c) {
+	if !s.requireAdmin(c) {
 		return
 	}
 	rows, err := s.DB.Client.Node.Query().Order(ent.Asc(node.FieldID)).All(c.Request.Context())
@@ -137,22 +135,21 @@ func (s *Server) handleAdminNodeList(c *gin.Context) {
 }
 
 func (s *Server) handleAdminNodeCreate(c *gin.Context) {
-	if !s.requirePlatformAdmin(c) {
+	if !s.requireAdmin(c) {
 		return
 	}
 	limitRequestBody(c, 64<<10)
 	var body struct {
-		Name     string `json:"name"`
-		TenantID int64  `json:"tenant_id"`
-		Status   string `json:"status"`
+		Name   string `json:"name"`
+		Status string `json:"status"`
 	}
 	if err := web.BindJSON(c, &body); err != nil {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	body.Name = strings.TrimSpace(body.Name)
-	if body.Name == "" || body.TenantID <= 0 {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "name and tenant_id are required"})
+	if body.Name == "" {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "name is required"})
 		return
 	}
 	if body.Status == "" {
@@ -162,33 +159,23 @@ func (s *Server) handleAdminNodeCreate(c *gin.Context) {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "status must be active or disabled"})
 		return
 	}
-	if _, err := s.DB.Client.Tenant.Query().
-		Where(tenant.ID(int(body.TenantID))).
-		Only(c.Request.Context()); err != nil {
-		if ent.IsNotFound(err) {
-			web.JSON(c, http.StatusBadRequest, gin.H{"error": "tenant not found"})
-			return
-		}
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read tenant failed"})
-		return
-	}
 	created, err := s.DB.Client.Node.Create().
-		SetName(body.Name).SetTenantID(body.TenantID).SetStatus(body.Status).
+		SetName(body.Name).SetStatus(body.Status).
 		Save(c.Request.Context())
 	if err != nil {
 		if ent.IsConstraintError(err) {
-			web.JSON(c, http.StatusConflict, gin.H{"error": "node name already exists in this tenant"})
+			web.JSON(c, http.StatusConflict, gin.H{"error": "node name already exists"})
 			return
 		}
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create node failed"})
 		return
 	}
-	audit(c, "node.create", "node_id", created.ID, "target_tenant_id", created.TenantID)
+	audit(c, "node.create", "node_id", created.ID)
 	web.JSON(c, http.StatusCreated, nodeResponse(created))
 }
 
 func (s *Server) handleAdminNodeGet(c *gin.Context) {
-	if !s.requirePlatformAdmin(c) {
+	if !s.requireAdmin(c) {
 		return
 	}
 	id, ok := adminID(c)
@@ -208,7 +195,7 @@ func (s *Server) handleAdminNodeGet(c *gin.Context) {
 }
 
 func (s *Server) handleAdminNodeUpdate(c *gin.Context) {
-	if !s.requirePlatformAdmin(c) {
+	if !s.requireAdmin(c) {
 		return
 	}
 	id, ok := adminID(c)
@@ -247,18 +234,18 @@ func (s *Server) handleAdminNodeUpdate(c *gin.Context) {
 			return
 		}
 		if ent.IsConstraintError(err) {
-			web.JSON(c, http.StatusConflict, gin.H{"error": "node name already exists in this tenant"})
+			web.JSON(c, http.StatusConflict, gin.H{"error": "node name already exists"})
 			return
 		}
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "update node failed"})
 		return
 	}
-	audit(c, "node.update", "node_id", n.ID, "target_tenant_id", n.TenantID)
+	audit(c, "node.update", "node_id", n.ID)
 	web.JSON(c, http.StatusOK, nodeResponse(n))
 }
 
 func (s *Server) handleAdminNodeDelete(c *gin.Context) {
-	if !s.requirePlatformAdmin(c) {
+	if !s.requireAdmin(c) {
 		return
 	}
 	id, ok := adminID(c)
@@ -293,7 +280,7 @@ func (s *Server) handleAdminNodeDelete(c *gin.Context) {
 }
 
 func (s *Server) handleAdminNodeKeyList(c *gin.Context) {
-	if !s.requirePlatformAdmin(c) {
+	if !s.requireAdmin(c) {
 		return
 	}
 	nodeID, ok := nodeIDParam(c)
@@ -316,7 +303,7 @@ func (s *Server) handleAdminNodeKeyList(c *gin.Context) {
 }
 
 func (s *Server) handleAdminNodeKeyCreate(c *gin.Context) {
-	if !s.requirePlatformAdmin(c) {
+	if !s.requireAdmin(c) {
 		return
 	}
 	nodeID, ok := nodeIDParam(c)
@@ -370,7 +357,7 @@ func (s *Server) handleAdminNodeKeyCreate(c *gin.Context) {
 }
 
 func (s *Server) handleAdminNodeKeyRevoke(c *gin.Context) {
-	if !s.requirePlatformAdmin(c) {
+	if !s.requireAdmin(c) {
 		return
 	}
 	nodeID, ok := nodeIDParam(c)
@@ -401,7 +388,7 @@ func (s *Server) handleAdminNodeKeyRevoke(c *gin.Context) {
 }
 
 func (s *Server) handleAdminNodeKeyRotate(c *gin.Context) {
-	if !s.requirePlatformAdmin(c) {
+	if !s.requireAdmin(c) {
 		return
 	}
 	nodeID, ok := nodeIDParam(c)

@@ -62,7 +62,7 @@ func TestCompositePK_FreshSchema(t *testing.T) {
 	defer db.Close()
 
 	// GalleryCache is global: its natural (gallery_id, token) key stays a
-	// composite primary key shared by every tenant.
+	// composite primary key shared by the whole instance.
 	ddl := tableDDL(t, db.Conn, "gallery_cache")
 	if !strings.Contains(ddl, "PRIMARY KEY (`gallery_id`, `token`)") {
 		t.Errorf("gallery_cache DDL missing composite primary key:\n%s", ddl)
@@ -71,22 +71,22 @@ func TestCompositePK_FreshSchema(t *testing.T) {
 		t.Error("gallery_cache still has the unique index that the primary key replaces")
 	}
 
-	// Bookshelf / ReadingProgress are tenant-owned: an auto id avoids Ent's
+	// Bookshelf / ReadingProgress are user-owned: an auto id avoids Ent's
 	// two-column composite update limitation, while the unique index still
-	// enforces one row per (tenant, gallery, token).
+	// enforces one row per (user, gallery, token).
 	for table, index := range map[string]string{
-		"bookshelf":        "bookshelf_tenant_id_gallery_id_token",
-		"reading_progress": "readingprogress_tenant_id_gallery_id_token",
+		"bookshelf":        "bookshelf_user_id_gallery_id_token",
+		"reading_progress": "readingprogress_user_id_gallery_id_token",
 	} {
 		ddl := tableDDL(t, db.Conn, table)
 		if !strings.Contains(ddl, "PRIMARY KEY AUTOINCREMENT") {
 			t.Errorf("%s DDL missing id primary key:\n%s", table, ddl)
 		}
-		if !hasColumn(t, db.Conn, table, "tenant_id") {
-			t.Errorf("%s is missing tenant_id", table)
+		if !hasColumn(t, db.Conn, table, "user_id") {
+			t.Errorf("%s is missing user_id", table)
 		}
 		if !hasIndex(t, db.Conn, table, index) {
-			t.Errorf("%s missing unique tenant index %s", table, index)
+			t.Errorf("%s missing unique user index %s", table, index)
 		}
 	}
 
@@ -100,10 +100,10 @@ func TestCompositePK_FreshSchema(t *testing.T) {
 	if !strings.Contains(ddl, "job_id") || strings.Contains(ddl, "`id`") {
 		t.Errorf("prefill_job should key on job_id, not id:\n%s", ddl)
 	}
-	if !hasIndex(t, db.Conn, "prefill_job", "prefilljob_tenant_id_gallery_id_token") {
+	if !hasIndex(t, db.Conn, "prefill_job", "prefilljob_user_id_gallery_id_token") {
 		t.Error("prefill_job lost the (gallery_id, token) lookup index")
 	}
-	if !hasIndex(t, db.Conn, "prefill_job", "prefilljob_tenant_id_status_created_at") {
+	if !hasIndex(t, db.Conn, "prefill_job", "prefilljob_user_id_status_created_at") {
 		t.Error("prefill_job lost the (status, created_at) index")
 	}
 
@@ -113,11 +113,11 @@ func TestCompositePK_FreshSchema(t *testing.T) {
 		"tag_sync_baseline": "tag_sync_baseline_tag_key",
 	} {
 		ddl := tableDDL(t, db.Conn, table)
-		if !strings.Contains(ddl, "PRIMARY KEY (`tenant_id`, `tag`)") {
-			t.Errorf("%s DDL missing (tenant_id, tag) primary key:\n%s", table, ddl)
+		if !strings.Contains(ddl, "PRIMARY KEY (`user_id`, `tag`)") {
+			t.Errorf("%s DDL missing (user_id, tag) primary key:\n%s", table, ddl)
 		}
-		if !hasColumn(t, db.Conn, table, "tenant_id") {
-			t.Errorf("%s is missing tenant_id", table)
+		if !hasColumn(t, db.Conn, table, "user_id") {
+			t.Errorf("%s is missing user_id", table)
 		}
 		if hasIndex(t, db.Conn, table, index) {
 			t.Errorf("%s still has the unique index that the primary key replaces", table)
@@ -232,8 +232,8 @@ INSERT INTO sync_state ("key", value, updated_at)
 		"gallery_cache":     "PRIMARY KEY (`gallery_id`, `token`)",
 		"bookshelf":         "PRIMARY KEY AUTOINCREMENT",
 		"reading_progress":  "PRIMARY KEY AUTOINCREMENT",
-		"tag_preference":    "PRIMARY KEY (`tenant_id`, `tag`)",
-		"tag_sync_baseline": "PRIMARY KEY (`tenant_id`, `tag`)",
+		"tag_preference":    "PRIMARY KEY (`user_id`, `tag`)",
+		"tag_sync_baseline": "PRIMARY KEY (`user_id`, `tag`)",
 		"sync_state":        "PRIMARY KEY (`key`)",
 	} {
 		ddl := tableDDL(t, db.Conn, table)
@@ -242,8 +242,8 @@ INSERT INTO sync_state ("key", value, updated_at)
 		}
 	}
 	for _, table := range []string{"bookshelf", "reading_progress"} {
-		if !hasColumn(t, db.Conn, table, "tenant_id") {
-			t.Errorf("%s migration did not add tenant_id", table)
+		if !hasColumn(t, db.Conn, table, "user_id") {
+			t.Errorf("%s migration did not add user_id", table)
 		}
 	}
 
@@ -277,14 +277,14 @@ INSERT INTO sync_state ("key", value, updated_at)
 		t.Errorf("reading_progress = (%d, %v), want (3, 0.3)", prog.CurrentPage, prog.Progress)
 	}
 
-	rule, err := db.Client.TagPreference.Query().Where(tagpreference.TenantIDEQ(1), tagpreference.IDEQ("female:yuri")).Only(ctx)
+	rule, err := db.Client.TagPreference.Query().Where(tagpreference.UserIDEQ(0), tagpreference.IDEQ("female:yuri")).Only(ctx)
 	if err != nil {
 		t.Fatalf("read tag_preference row: %v", err)
 	}
 	if rule.Action != "like" || rule.Weight != 10 {
 		t.Errorf("tag_preference = (%q, %d), want (like, 10)", rule.Action, rule.Weight)
 	}
-	baseline, err := db.Client.TagSyncBaseline.Query().Where(tagsyncbaseline.TenantIDEQ(1), tagsyncbaseline.IDEQ("female:yuri")).Only(ctx)
+	baseline, err := db.Client.TagSyncBaseline.Query().Where(tagsyncbaseline.UserIDEQ(0), tagsyncbaseline.IDEQ("female:yuri")).Only(ctx)
 	if err != nil {
 		t.Fatalf("read tag_sync_baseline row: %v", err)
 	}

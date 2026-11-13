@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"time"
 
-	"manga-reader/internal/config"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/gallerycache"
@@ -27,13 +26,16 @@ import (
 // Applying the same change twice is a no-op (equal timestamps are skipped),
 // which makes retries and echoes harmless.
 func ApplyChanges(ctx context.Context, client *ent.Client, changes []Change) (applied, skipped int, err error) {
-	return ApplyChangesForTenant(ctx, client, config.DefaultTenantID, changes)
-}
-
-// ApplyChangesForTenant applies a peer batch to exactly one tenant.
-func ApplyChangesForTenant(ctx context.Context, client *ent.Client, tenantID int64, changes []Change) (applied, skipped int, err error) {
 	for _, ch := range changes {
-		ok, applyErr := applyChange(ctx, client, tenantID, ch)
+		// A private row without an owner cannot be attributed safely. Skip it
+		// instead of guessing a user, and let the operator see the warning.
+		if ch.UserID <= 0 && ch.Entity != EntityGalleryCache {
+			slog.Warn("skipping unowned sync change",
+				"entity", ch.Entity, "gallery_id", ch.GalleryID, "token", ch.Token)
+			skipped++
+			continue
+		}
+		ok, applyErr := applyChange(ctx, client, ch)
 		if applyErr != nil {
 			// A row that fails ent validation (e.g. progress > 1 from a
 			// divergent peer) must not wedge replication: the cursor would
@@ -56,7 +58,7 @@ func ApplyChangesForTenant(ctx context.Context, client *ent.Client, tenantID int
 	return applied, skipped, nil
 }
 
-func applyChange(ctx context.Context, client *ent.Client, tenantID int64, ch Change) (bool, error) {
+func applyChange(ctx context.Context, client *ent.Client, ch Change) (bool, error) {
 	// A peer with a clock ahead of ours would otherwise win every future LWW
 	// comparison and could permanently revert the user's newer local edits.
 	// Clamp incoming timestamps to (approximately) now.
@@ -70,9 +72,9 @@ func applyChange(ctx context.Context, client *ent.Client, tenantID int64, ch Cha
 	}
 	switch ch.Entity {
 	case EntityReadingProgress:
-		return applyReadingProgress(ctx, client, tenantID, ch)
+		return applyReadingProgress(ctx, client, ch)
 	case EntityBookshelf:
-		return applyBookshelf(ctx, client, tenantID, ch)
+		return applyBookshelf(ctx, client, ch)
 	case EntityGalleryCache:
 		return applyGalleryCache(ctx, client, ch)
 	default:
@@ -258,10 +260,10 @@ func applyGalleryCache(ctx context.Context, client *ent.Client, ch Change) (bool
 	return true, nil
 }
 
-func applyReadingProgress(ctx context.Context, client *ent.Client, tenantID int64, ch Change) (bool, error) {
+func applyReadingProgress(ctx context.Context, client *ent.Client, ch Change) (bool, error) {
 	existing, err := client.ReadingProgress.Query().
 		Where(
-			readingprogress.TenantIDEQ(tenantID),
+			readingprogress.UserIDEQ(ch.UserID),
 			readingprogress.GalleryID(ch.GalleryID),
 			readingprogress.Token(ch.Token),
 		).
@@ -279,7 +281,7 @@ func applyReadingProgress(ctx context.Context, client *ent.Client, tenantID int6
 		}
 		if _, err := client.ReadingProgress.Delete().
 			Where(
-				readingprogress.TenantIDEQ(tenantID),
+				readingprogress.UserIDEQ(ch.UserID),
 				readingprogress.GalleryID(ch.GalleryID),
 				readingprogress.Token(ch.Token),
 			).
@@ -294,7 +296,7 @@ func applyReadingProgress(ctx context.Context, client *ent.Client, tenantID int6
 	}
 	if existing == nil {
 		if _, err := client.ReadingProgress.Create().
-			SetTenantID(tenantID).
+			SetUserID(ch.UserID).
 			SetGalleryID(ch.GalleryID).
 			SetToken(ch.Token).
 			SetCurrentPage(ch.Row.CurrentPage).
@@ -314,7 +316,7 @@ func applyReadingProgress(ctx context.Context, client *ent.Client, tenantID int6
 	// only the replicated fields and updated_at decide the winner.
 	if err := client.ReadingProgress.Update().
 		Where(
-			readingprogress.TenantIDEQ(tenantID),
+			readingprogress.UserIDEQ(ch.UserID),
 			readingprogress.GalleryID(ch.GalleryID),
 			readingprogress.Token(ch.Token),
 		).
@@ -328,10 +330,10 @@ func applyReadingProgress(ctx context.Context, client *ent.Client, tenantID int6
 	return true, nil
 }
 
-func applyBookshelf(ctx context.Context, client *ent.Client, tenantID int64, ch Change) (bool, error) {
+func applyBookshelf(ctx context.Context, client *ent.Client, ch Change) (bool, error) {
 	existing, err := client.Bookshelf.Query().
 		Where(
-			bookshelf.TenantIDEQ(tenantID),
+			bookshelf.UserIDEQ(ch.UserID),
 			bookshelf.GalleryID(ch.GalleryID),
 			bookshelf.Token(ch.Token),
 		).
@@ -349,7 +351,7 @@ func applyBookshelf(ctx context.Context, client *ent.Client, tenantID int64, ch 
 		}
 		if _, err := client.Bookshelf.Delete().
 			Where(
-				bookshelf.TenantIDEQ(tenantID),
+				bookshelf.UserIDEQ(ch.UserID),
 				bookshelf.GalleryID(ch.GalleryID),
 				bookshelf.Token(ch.Token),
 			).
@@ -364,7 +366,7 @@ func applyBookshelf(ctx context.Context, client *ent.Client, tenantID int64, ch 
 	}
 	if existing == nil {
 		if _, err := client.Bookshelf.Create().
-			SetTenantID(tenantID).
+			SetUserID(ch.UserID).
 			SetGalleryID(ch.GalleryID).
 			SetToken(ch.Token).
 			SetCreatedAt(ch.Row.CreatedAt).
@@ -379,7 +381,7 @@ func applyBookshelf(ctx context.Context, client *ent.Client, tenantID int64, ch 
 	}
 	if err := client.Bookshelf.Update().
 		Where(
-			bookshelf.TenantIDEQ(tenantID),
+			bookshelf.UserIDEQ(ch.UserID),
 			bookshelf.GalleryID(ch.GalleryID),
 			bookshelf.Token(ch.Token),
 		).
@@ -392,16 +394,12 @@ func applyBookshelf(ctx context.Context, client *ent.Client, tenantID int64, ch 
 
 // ExportSnapshot returns the current state of all synced tables as upsert
 // changes (bootstrap transfer).
-func ExportSnapshot(ctx context.Context, client *ent.Client, tenantID int64) ([]Change, error) {
-	progressRows, err := client.ReadingProgress.Query().
-		Where(readingprogress.TenantIDEQ(tenantID)).
-		All(ctx)
+func ExportSnapshot(ctx context.Context, client *ent.Client) ([]Change, error) {
+	progressRows, err := client.ReadingProgress.Query().All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("export reading progress: %w", err)
 	}
-	bookshelfRows, err := client.Bookshelf.Query().
-		Where(bookshelf.TenantIDEQ(tenantID)).
-		All(ctx)
+	bookshelfRows, err := client.Bookshelf.Query().All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("export bookshelf: %w", err)
 	}
@@ -413,6 +411,7 @@ func ExportSnapshot(ctx context.Context, client *ent.Client, tenantID int64) ([]
 	changes := make([]Change, 0, len(progressRows)+len(bookshelfRows)+len(cacheRows))
 	for _, p := range progressRows {
 		changes = append(changes, Change{
+			UserID:    p.UserID,
 			Entity:    EntityReadingProgress,
 			GalleryID: p.GalleryID,
 			Token:     p.Token,
@@ -428,6 +427,7 @@ func ExportSnapshot(ctx context.Context, client *ent.Client, tenantID int64) ([]
 	}
 	for _, b := range bookshelfRows {
 		changes = append(changes, Change{
+			UserID:    b.UserID,
 			Entity:    EntityBookshelf,
 			GalleryID: b.GalleryID,
 			Token:     b.Token,
@@ -457,14 +457,14 @@ func ExportSnapshot(ctx context.Context, client *ent.Client, tenantID int64) ([]
 // its own copy.
 //
 // The second return value is the current outbox maximum (the new cursor).
-func ReadChangesSince(ctx context.Context, client *ent.Client, tenantID int64, cursor int) ([]Change, int, error) {
-	maxID, err := maxOutboxID(ctx, client, tenantID)
+func ReadChangesSince(ctx context.Context, client *ent.Client, cursor int) ([]Change, int, error) {
+	maxID, err := maxOutboxID(ctx, client)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	entries, err := client.SyncChange.Query().
-		Where(syncchange.TenantIDEQ(tenantID), syncchange.IDGT(cursor)).
+		Where(syncchange.IDGT(cursor)).
 		Order(ent.Asc(syncchange.FieldID)).
 		All(ctx)
 	if err != nil {
@@ -477,6 +477,7 @@ func ReadChangesSince(ctx context.Context, client *ent.Client, tenantID int64, c
 	// Coalesce per record: the last entry wins (an upsert after a delete
 	// resurrects the row, a delete after an upsert removes it).
 	type dedupeKey struct {
+		userID    int64
 		entity    string
 		galleryID int64
 		token     string
@@ -484,7 +485,7 @@ func ReadChangesSince(ctx context.Context, client *ent.Client, tenantID int64, c
 	latest := make(map[dedupeKey]*ent.SyncChange, len(entries))
 	order := make([]dedupeKey, 0, len(entries))
 	for _, e := range entries {
-		k := dedupeKey{entity: e.Entity, galleryID: e.GalleryID, token: e.Token}
+		k := dedupeKey{userID: e.UserID, entity: e.Entity, galleryID: e.GalleryID, token: e.Token}
 		if _, seen := latest[k]; !seen {
 			order = append(order, k)
 		}
@@ -497,6 +498,7 @@ func ReadChangesSince(ctx context.Context, client *ent.Client, tenantID int64, c
 		if e.Op == OpDelete {
 			deletedAt := e.ChangedAt
 			changes = append(changes, Change{
+				UserID:    e.UserID,
 				Entity:    e.Entity,
 				GalleryID: e.GalleryID,
 				Token:     e.Token,
@@ -505,13 +507,14 @@ func ReadChangesSince(ctx context.Context, client *ent.Client, tenantID int64, c
 			})
 			continue
 		}
-		row, err := fetchRow(ctx, client, tenantID, e.Entity, e.GalleryID, e.Token)
+		row, err := fetchRow(ctx, client, e.UserID, e.Entity, e.GalleryID, e.Token)
 		if err != nil {
 			return nil, 0, err
 		}
 		if row == nil {
 			deletedAt := e.ChangedAt
 			changes = append(changes, Change{
+				UserID:    e.UserID,
 				Entity:    e.Entity,
 				GalleryID: e.GalleryID,
 				Token:     e.Token,
@@ -521,6 +524,7 @@ func ReadChangesSince(ctx context.Context, client *ent.Client, tenantID int64, c
 			continue
 		}
 		changes = append(changes, Change{
+			UserID:    e.UserID,
 			Entity:    e.Entity,
 			GalleryID: e.GalleryID,
 			Token:     e.Token,
@@ -531,12 +535,12 @@ func ReadChangesSince(ctx context.Context, client *ent.Client, tenantID int64, c
 	return changes, maxID, nil
 }
 
-func fetchRow(ctx context.Context, client *ent.Client, tenantID int64, entity string, galleryID int64, token string) (*Row, error) {
+func fetchRow(ctx context.Context, client *ent.Client, userID int64, entity string, galleryID int64, token string) (*Row, error) {
 	switch entity {
 	case EntityReadingProgress:
 		p, err := client.ReadingProgress.Query().
 			Where(
-				readingprogress.TenantIDEQ(tenantID),
+				readingprogress.UserIDEQ(userID),
 				readingprogress.GalleryID(galleryID),
 				readingprogress.Token(token),
 			).
@@ -557,7 +561,7 @@ func fetchRow(ctx context.Context, client *ent.Client, tenantID int64, entity st
 	case EntityBookshelf:
 		b, err := client.Bookshelf.Query().
 			Where(
-				bookshelf.TenantIDEQ(tenantID),
+				bookshelf.UserIDEQ(userID),
 				bookshelf.GalleryID(galleryID),
 				bookshelf.Token(token),
 			).
@@ -620,12 +624,12 @@ func galleryCacheRow(g *ent.GalleryCache) *Row {
 
 // pruneOutbox removes pushed entries. Callers must only prune up to a cursor
 // the peer has confirmed holding.
-func pruneOutbox(ctx context.Context, client *ent.Client, tenantID int64, cursor int) error {
+func pruneOutbox(ctx context.Context, client *ent.Client, cursor int) error {
 	if cursor <= 0 {
 		return nil
 	}
 	if _, err := client.SyncChange.Delete().
-		Where(syncchange.TenantIDEQ(tenantID), syncchange.IDLTE(cursor)).
+		Where(syncchange.IDLTE(cursor)).
 		Exec(ctx); err != nil {
 		return fmt.Errorf("prune outbox: %w", err)
 	}

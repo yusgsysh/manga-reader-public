@@ -899,7 +899,7 @@ func TestPrefetchGallery_WritesCache(t *testing.T) {
 		Thumbnail: "https://example.com/pf.webp",
 		PageCount: 4,
 	}
-	server.prefetchGallery(55555, "pf55555", seed)
+	server.prefetchGallery(0, 55555, "pf55555", seed)
 
 	row, found, err := gallerycache.Get(t.Context(), client, 55555, "pf55555")
 	if err != nil || !found {
@@ -931,7 +931,7 @@ func TestPrefetchGallery_IncompletePagesNotCached(t *testing.T) {
 		Thumbnail: "https://example.com/incomplete.webp",
 		PageCount: 65,
 	}
-	server.prefetchGallery(77777, "pf77777", seed)
+	server.prefetchGallery(0, 77777, "pf77777", seed)
 
 	row, found, err := gallerycache.Get(t.Context(), client, 77777, "pf77777")
 	if err != nil || !found {
@@ -1108,7 +1108,7 @@ func TestRefreshPages_Shrinks(t *testing.T) {
 	}
 
 	server := &Server{Client: newMockClient(mockServer.URL), DB: &database.DB{Client: client}}
-	server.refreshPages(t.Context(), 12345, "tok12345")
+	server.refreshPages(t.Context(), 0, 12345, "tok12345")
 
 	row, found, err := gallerycache.Get(t.Context(), client, 12345, "tok12345")
 	if err != nil || !found {
@@ -1182,7 +1182,7 @@ func TestVerifyCachedPageCount_RefreshesOnChange(t *testing.T) {
 	seedGalleryCache(t, client, 12345, "tok12345") // cached 2 pages
 
 	server := &Server{Client: newMockClient(mockServer.URL), DB: &database.DB{Client: client}}
-	server.verifyCachedPageCount(12345, "tok12345", 2)
+	server.verifyCachedPageCount(0, 12345, "tok12345", 2)
 
 	row, found, err := gallerycache.Get(t.Context(), client, 12345, "tok12345")
 	if err != nil || !found {

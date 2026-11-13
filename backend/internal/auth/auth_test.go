@@ -33,13 +33,6 @@ func newTestClient(t *testing.T) *ent.Client {
 	if err := client.Schema.Create(t.Context()); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if _, err := client.Tenant.Create().
-		SetName(config.DefaultTenantName).
-		SetSlug(config.DefaultTenantSlug).
-		SetStatus(config.StatusActive).
-		Save(t.Context()); err != nil {
-		t.Fatalf("create default tenant: %v", err)
-	}
 	t.Cleanup(func() { client.Close() })
 	return client
 }
@@ -159,8 +152,11 @@ func TestLoginSuccessAndProtectedRoutes(t *testing.T) {
 	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", ""); got.Code != http.StatusUnauthorized {
 		t.Fatalf("protected route without token = %d, want 401", got.Code)
 	}
-	if got := doJSON(r, http.MethodGet, "/api/search", "", ""); got.Code != http.StatusOK {
+	if got := doJSON(r, http.MethodGet, "/api/auth/status", "", ""); got.Code != http.StatusOK {
 		t.Fatalf("public route = %d, want 200", got.Code)
+	}
+	if got := doJSON(r, http.MethodGet, "/api/search", "", ""); got.Code != http.StatusUnauthorized {
+		t.Fatalf("user-private route without token = %d, want 401", got.Code)
 	}
 }
 
@@ -201,18 +197,18 @@ func TestMiddlewareRejectsInvalidTokens(t *testing.T) {
 	}
 
 	wrongSigManager := newTokenManager(strings.Repeat("x", 32), svc.cfg.JWTIssuer, time.Hour)
-	wrongSig, _, err := wrongSigManager.issue(u.ID, u.TenantID, u.Username, u.Role, u.TokenVersion)
+	wrongSig, _, err := wrongSigManager.issue(u.ID, u.Username, u.Role, u.TokenVersion)
 	if err != nil {
 		t.Fatalf("issue wrong-signature token: %v", err)
 	}
 	expiredManager := newTokenManager(svc.cfg.JWTSecret, svc.cfg.JWTIssuer, time.Minute)
 	expiredManager.now = func() time.Time { return time.Now().Add(-2 * time.Hour) }
-	expired, _, err := expiredManager.issue(u.ID, u.TenantID, u.Username, u.Role, u.TokenVersion)
+	expired, _, err := expiredManager.issue(u.ID, u.Username, u.Role, u.TokenVersion)
 	if err != nil {
 		t.Fatalf("issue expired token: %v", err)
 	}
 	wrongIssuerManager := newTokenManager(svc.cfg.JWTSecret, "someone-else", time.Hour)
-	wrongIssuer, _, err := wrongIssuerManager.issue(u.ID, u.TenantID, u.Username, u.Role, u.TokenVersion)
+	wrongIssuer, _, err := wrongIssuerManager.issue(u.ID, u.Username, u.Role, u.TokenVersion)
 	if err != nil {
 		t.Fatalf("issue wrong-issuer token: %v", err)
 	}

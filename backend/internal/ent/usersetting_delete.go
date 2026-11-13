@@ -5,33 +5,33 @@ package ent
 import (
 	"context"
 	"manga-reader/internal/ent/predicate"
-	"manga-reader/internal/ent/tenant"
+	"manga-reader/internal/ent/usersetting"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 )
 
-// TenantDelete is the builder for deleting a Tenant entity.
-type TenantDelete struct {
+// UserSettingDelete is the builder for deleting a UserSetting entity.
+type UserSettingDelete struct {
 	config
 	hooks    []Hook
-	mutation *TenantMutation
+	mutation *UserSettingMutation
 }
 
-// Where appends a list predicates to the TenantDelete builder.
-func (_d *TenantDelete) Where(ps ...predicate.Tenant) *TenantDelete {
+// Where appends a list predicates to the UserSettingDelete builder.
+func (_d *UserSettingDelete) Where(ps ...predicate.UserSetting) *UserSettingDelete {
 	_d.mutation.Where(ps...)
 	return _d
 }
 
 // Exec executes the deletion query and returns how many vertices were deleted.
-func (_d *TenantDelete) Exec(ctx context.Context) (int, error) {
+func (_d *UserSettingDelete) Exec(ctx context.Context) (int, error) {
 	return withHooks(ctx, _d.sqlExec, _d.mutation, _d.hooks)
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_d *TenantDelete) ExecX(ctx context.Context) int {
+func (_d *UserSettingDelete) ExecX(ctx context.Context) int {
 	n, err := _d.Exec(ctx)
 	if err != nil {
 		panic(err)
@@ -39,8 +39,8 @@ func (_d *TenantDelete) ExecX(ctx context.Context) int {
 	return n
 }
 
-func (_d *TenantDelete) sqlExec(ctx context.Context) (int, error) {
-	_spec := sqlgraph.NewDeleteSpec(tenant.Table, sqlgraph.NewFieldSpec(tenant.FieldID, field.TypeInt))
+func (_d *UserSettingDelete) sqlExec(ctx context.Context) (int, error) {
+	_spec := sqlgraph.NewDeleteSpec(usersetting.Table, sqlgraph.NewFieldSpec(usersetting.FieldID, field.TypeInt))
 	if ps := _d.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -56,32 +56,32 @@ func (_d *TenantDelete) sqlExec(ctx context.Context) (int, error) {
 	return affected, err
 }
 
-// TenantDeleteOne is the builder for deleting a single Tenant entity.
-type TenantDeleteOne struct {
-	_d *TenantDelete
+// UserSettingDeleteOne is the builder for deleting a single UserSetting entity.
+type UserSettingDeleteOne struct {
+	_d *UserSettingDelete
 }
 
-// Where appends a list predicates to the TenantDelete builder.
-func (_d *TenantDeleteOne) Where(ps ...predicate.Tenant) *TenantDeleteOne {
+// Where appends a list predicates to the UserSettingDelete builder.
+func (_d *UserSettingDeleteOne) Where(ps ...predicate.UserSetting) *UserSettingDeleteOne {
 	_d._d.mutation.Where(ps...)
 	return _d
 }
 
 // Exec executes the deletion query.
-func (_d *TenantDeleteOne) Exec(ctx context.Context) error {
+func (_d *UserSettingDeleteOne) Exec(ctx context.Context) error {
 	n, err := _d._d.Exec(ctx)
 	switch {
 	case err != nil:
 		return err
 	case n == 0:
-		return &NotFoundError{tenant.Label}
+		return &NotFoundError{usersetting.Label}
 	default:
 		return nil
 	}
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_d *TenantDeleteOne) ExecX(ctx context.Context) {
+func (_d *UserSettingDeleteOne) ExecX(ctx context.Context) {
 	if err := _d.Exec(ctx); err != nil {
 		panic(err)
 	}

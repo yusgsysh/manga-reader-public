@@ -20,8 +20,8 @@ type PrefillJob struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID uuid.UUID `json:"id,omitempty"`
-	// TenantID holds the value of the "tenant_id" field.
-	TenantID int64 `json:"tenant_id,omitempty"`
+	// UserID holds the value of the "user_id" field.
+	UserID int64 `json:"user_id,omitempty"`
 	// GalleryID holds the value of the "gallery_id" field.
 	GalleryID *int64 `json:"gallery_id,omitempty"`
 	// Token holds the value of the "token" field.
@@ -54,7 +54,7 @@ func (*PrefillJob) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case prefilljob.FieldUrls, prefilljob.FieldErrors:
 			values[i] = new([]byte)
-		case prefilljob.FieldTenantID, prefilljob.FieldGalleryID, prefilljob.FieldTotal, prefilljob.FieldFailedCount:
+		case prefilljob.FieldUserID, prefilljob.FieldGalleryID, prefilljob.FieldTotal, prefilljob.FieldFailedCount:
 			values[i] = new(sql.NullInt64)
 		case prefilljob.FieldToken, prefilljob.FieldTitle, prefilljob.FieldStatus:
 			values[i] = new(sql.NullString)
@@ -83,11 +83,11 @@ func (_m *PrefillJob) assignValues(columns []string, values []any) error {
 			} else if value != nil {
 				_m.ID = *value
 			}
-		case prefilljob.FieldTenantID:
+		case prefilljob.FieldUserID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field tenant_id", values[i])
+				return fmt.Errorf("unexpected type %T for field user_id", values[i])
 			} else if value.Valid {
-				_m.TenantID = value.Int64
+				_m.UserID = value.Int64
 			}
 		case prefilljob.FieldGalleryID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -197,8 +197,8 @@ func (_m *PrefillJob) String() string {
 	var builder strings.Builder
 	builder.WriteString("PrefillJob(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
-	builder.WriteString("tenant_id=")
-	builder.WriteString(fmt.Sprintf("%v", _m.TenantID))
+	builder.WriteString("user_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.UserID))
 	builder.WriteString(", ")
 	if v := _m.GalleryID; v != nil {
 		builder.WriteString("gallery_id=")

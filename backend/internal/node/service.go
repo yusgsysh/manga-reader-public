@@ -103,18 +103,11 @@ func (s *Service) Middleware(requiredScopes ...string) gin.HandlerFunc {
 			s.reject(c, "node disabled or missing")
 			return
 		}
-		t, err := s.db.Tenant.Get(c.Request.Context(), int(n.TenantID))
-		if err != nil || t.Status != config.StatusActive {
-			s.reject(c, "tenant disabled or missing")
-			return
-		}
-
 		identity := Identity{
-			NodeID:   n.ID,
-			Name:     n.Name,
-			TenantID: n.TenantID,
-			Scopes:   append([]string(nil), matched.Scopes...),
-			KeyID:    matched.ID,
+			NodeID: n.ID,
+			Name:   n.Name,
+			Scopes: append([]string(nil), matched.Scopes...),
+			KeyID:  matched.ID,
 		}
 		for _, scope := range requiredScopes {
 			if !identity.HasScope(scope) {

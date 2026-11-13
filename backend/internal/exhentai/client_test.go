@@ -28,6 +28,9 @@ func TestCreateHTTPClient_CookiesReachAPISubdomain(t *testing.T) {
 	for _, raw := range []string{
 		"https://exhentai.org/mytags",
 		"https://s.exhentai.org/api.php",
+		// One user may browse either site, so the jar carries the session on
+		// e-hentai.org too (same account, same cookie values).
+		"https://e-hentai.org/g/1/abc/",
 	} {
 		u, _ := url.Parse(raw)
 		got := map[string]bool{}
@@ -39,5 +42,29 @@ func TestCreateHTTPClient_CookiesReachAPISubdomain(t *testing.T) {
 				t.Errorf("cookie %q missing for %s (got %v)", name, raw, got)
 			}
 		}
+	}
+}
+
+// SiteBaseURL maps the per-user site preference to its browsing host; an
+// unknown or empty preference falls back to exhentai.
+func TestSiteBaseURL(t *testing.T) {
+	cases := map[string]string{
+		"":           ExhentaiURL,
+		"exhentai":   ExhentaiURL,
+		"e-hentai":   EHentaiURL,
+		"something+": ExhentaiURL,
+	}
+	for site, want := range cases {
+		if got := SiteBaseURL(site); got != want {
+			t.Errorf("SiteBaseURL(%q) = %s, want %s", site, got, want)
+		}
+	}
+}
+
+// GalleryURLAt keeps id/token semantics on either host.
+func TestGalleryURLAt(t *testing.T) {
+	got := GalleryURLAt(EHentaiURL, "42", "tok")
+	if got != "https://e-hentai.org/g/42/tok/" {
+		t.Fatalf("GalleryURLAt = %s", got)
 	}
 }

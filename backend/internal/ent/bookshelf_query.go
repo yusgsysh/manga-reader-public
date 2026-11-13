@@ -262,12 +262,12 @@ func (_q *BookshelfQuery) Clone() *BookshelfQuery {
 // Example:
 //
 //	var v []struct {
-//		TenantID int64 `json:"tenant_id,omitempty"`
+//		UserID int64 `json:"user_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.Bookshelf.Query().
-//		GroupBy(bookshelf.FieldTenantID).
+//		GroupBy(bookshelf.FieldUserID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *BookshelfQuery) GroupBy(field string, fields ...string) *BookshelfGroupBy {
@@ -285,11 +285,11 @@ func (_q *BookshelfQuery) GroupBy(field string, fields ...string) *BookshelfGrou
 // Example:
 //
 //	var v []struct {
-//		TenantID int64 `json:"tenant_id,omitempty"`
+//		UserID int64 `json:"user_id,omitempty"`
 //	}
 //
 //	client.Bookshelf.Query().
-//		Select(bookshelf.FieldTenantID).
+//		Select(bookshelf.FieldUserID).
 //		Scan(ctx, &v)
 func (_q *BookshelfQuery) Select(fields ...string) *BookshelfSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

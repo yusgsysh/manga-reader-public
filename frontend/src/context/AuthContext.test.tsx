@@ -40,25 +40,24 @@ function json(body: unknown, status = 200): Response {
 
 const meResponse = {
   id: 1,
-  tenant_id: 1,
+  user_id: 1,
   username: "alice",
-  role: "platform_admin",
-  tenant: { id: 1, name: "Default", slug: "default", status: "active" },
+  role: "admin",
 };
 
 function Probe() {
-  const { user, isLoading, error, login, logout, isPlatformAdmin, isAuthenticated } =
+  const { user, isLoading, error, login, logout, isAdmin, isAuthenticated } =
     useAuth();
   if (isLoading) return <div>loading</div>;
   return (
     <div>
       <span data-testid="username">{user?.username ?? "anon"}</span>
-      <span data-testid="platform">{String(isPlatformAdmin)}</span>
+      <span data-testid="admin">{String(isAdmin)}</span>
       <span data-testid="authed">{String(isAuthenticated)}</span>
       {error && <span data-testid="error">{error.message}</span>}
       <button
         onClick={() => {
-          void login("default", "alice", "secret-pass").catch(() => {});
+          void login("alice", "secret-pass").catch(() => {});
         }}
       >
         login
@@ -106,7 +105,7 @@ describe("AuthProvider", () => {
     renderAuth();
 
     expect(await screen.findByText("alice")).toBeTruthy();
-    expect(screen.getByTestId("platform").textContent).toBe("true");
+    expect(screen.getByTestId("admin").textContent).toBe("true");
     expect(screen.getByTestId("authed").textContent).toBe("true");
   });
 

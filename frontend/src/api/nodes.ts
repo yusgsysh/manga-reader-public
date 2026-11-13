@@ -8,7 +8,6 @@ export type NodeScope = (typeof NODE_SCOPES)[number];
 export interface SyncNode {
   id: number;
   name: string;
-  tenant_id: number;
   status: NodeStatus;
   last_seen_at: string | null;
   created_at: string;
@@ -40,7 +39,6 @@ export function fetchNodes(): Promise<{ nodes: SyncNode[] }> {
 
 export function createNode(input: {
   name: string;
-  tenant_id: number;
   status?: NodeStatus;
 }): Promise<SyncNode> {
   return apiPostJson<SyncNode>("/api/admin/nodes", input);

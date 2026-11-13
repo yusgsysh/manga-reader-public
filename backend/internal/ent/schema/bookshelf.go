@@ -28,7 +28,7 @@ func (Bookshelf) Annotations() []schema.Annotation {
 // always reflects the latest known upstream data.
 func (Bookshelf) Fields() []ent.Field {
 	return []ent.Field{
-		field.Int64("tenant_id").Default(1),
+		field.Int64("user_id").Default(0),
 		field.Int64("gallery_id"),
 		field.String("token"),
 		field.Time("created_at").Default(time.Now).Immutable(),
@@ -39,6 +39,6 @@ func (Bookshelf) Fields() []ent.Field {
 // Indexes of the Bookshelf.
 func (Bookshelf) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("tenant_id", "gallery_id", "token").Unique(),
+		index.Fields("user_id", "gallery_id", "token").Unique(),
 	}
 }

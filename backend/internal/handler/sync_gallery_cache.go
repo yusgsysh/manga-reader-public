@@ -14,7 +14,7 @@ func (s *Server) recordGalleryCacheChange(ctx context.Context, galleryID int64, 
 		return
 	}
 	synclib.LogRecordError(
-		s.syncSvc.RecordUpsert(ctx, synclib.EntityGalleryCache, galleryID, token),
+		s.syncSvc.RecordUpsert(ctx, 0, synclib.EntityGalleryCache, galleryID, token),
 		synclib.EntityGalleryCache, galleryID, token)
 }
 
@@ -43,7 +43,7 @@ func (s *Server) cleanupGalleryCache(ctx context.Context) {
 	for i, k := range keys {
 		syncKeys[i] = synclib.Key{GalleryID: k.GalleryID, Token: k.Token}
 	}
-	if recErr := s.syncSvc.RecordDeletes(ctx, synclib.EntityGalleryCache, syncKeys); recErr != nil {
+	if recErr := s.syncSvc.RecordDeletes(ctx, 0, synclib.EntityGalleryCache, syncKeys); recErr != nil {
 		slog.Warn("record sync cache cleanup failed", "error", recErr)
 	}
 }

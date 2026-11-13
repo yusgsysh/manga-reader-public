@@ -20,16 +20,16 @@ type TagSyncBaselineCreate struct {
 	hooks    []Hook
 }
 
-// SetTenantID sets the "tenant_id" field.
-func (_c *TagSyncBaselineCreate) SetTenantID(v int64) *TagSyncBaselineCreate {
-	_c.mutation.SetTenantID(v)
+// SetUserID sets the "user_id" field.
+func (_c *TagSyncBaselineCreate) SetUserID(v int64) *TagSyncBaselineCreate {
+	_c.mutation.SetUserID(v)
 	return _c
 }
 
-// SetNillableTenantID sets the "tenant_id" field if the given value is not nil.
-func (_c *TagSyncBaselineCreate) SetNillableTenantID(v *int64) *TagSyncBaselineCreate {
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (_c *TagSyncBaselineCreate) SetNillableUserID(v *int64) *TagSyncBaselineCreate {
 	if v != nil {
-		_c.SetTenantID(*v)
+		_c.SetUserID(*v)
 	}
 	return _c
 }
@@ -123,9 +123,9 @@ func (_c *TagSyncBaselineCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *TagSyncBaselineCreate) defaults() {
-	if _, ok := _c.mutation.TenantID(); !ok {
-		v := tagsyncbaseline.DefaultTenantID
-		_c.mutation.SetTenantID(v)
+	if _, ok := _c.mutation.UserID(); !ok {
+		v := tagsyncbaseline.DefaultUserID
+		_c.mutation.SetUserID(v)
 	}
 	if _, ok := _c.mutation.Weight(); !ok {
 		v := tagsyncbaseline.DefaultWeight
@@ -143,8 +143,8 @@ func (_c *TagSyncBaselineCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *TagSyncBaselineCreate) check() error {
-	if _, ok := _c.mutation.TenantID(); !ok {
-		return &ValidationError{Name: "tenant_id", err: errors.New(`ent: missing required field "TagSyncBaseline.tenant_id"`)}
+	if _, ok := _c.mutation.UserID(); !ok {
+		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "TagSyncBaseline.user_id"`)}
 	}
 	if _, ok := _c.mutation.Action(); !ok {
 		return &ValidationError{Name: "action", err: errors.New(`ent: missing required field "TagSyncBaseline.action"`)}
@@ -193,9 +193,9 @@ func (_c *TagSyncBaselineCreate) createSpec() (*TagSyncBaseline, *sqlgraph.Creat
 		_node = &TagSyncBaseline{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(tagsyncbaseline.Table, nil)
 	)
-	if value, ok := _c.mutation.TenantID(); ok {
-		_spec.SetField(tagsyncbaseline.FieldTenantID, field.TypeInt64, value)
-		_node.TenantID = value
+	if value, ok := _c.mutation.UserID(); ok {
+		_spec.SetField(tagsyncbaseline.FieldUserID, field.TypeInt64, value)
+		_node.UserID = value
 	}
 	if value, ok := _c.mutation.Action(); ok {
 		_spec.SetField(tagsyncbaseline.FieldAction, field.TypeString, value)
