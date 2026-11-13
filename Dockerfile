@@ -48,7 +48,8 @@ RUN rm -rf internal/web/dist
 COPY --from=frontend /app/dist ./internal/web/dist
 
 # Build static binary (modernc.org/sqlite is pure-Go, no CGO needed)
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/manga-reader .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/manga-reader . \
+    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/reset-admin ./cmd/reset-admin
 
 # ---- Runtime stage ----
 FROM alpine:3.22
@@ -59,6 +60,7 @@ RUN apk add --no-cache ca-certificates tzdata \
 
 WORKDIR /app
 COPY --from=builder /out/manga-reader /app/manga-reader
+COPY --from=builder /out/reset-admin /app/reset-admin
 
 RUN mkdir -p /app/data && chown -R appuser:appuser /app
 

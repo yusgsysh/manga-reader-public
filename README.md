@@ -149,6 +149,21 @@ MANGA_READER_AUTH_COOKIE_SECURE=auto
 ```
 
 - **默认租户与平台管理员**：首次启动创建 `default` 租户（ID 1），并用 `ADMIN_USERNAME` + `ADMIN_PASSWORD` 创建该租户的**平台管理员**；密码以 Argon2id PHC 哈希写入数据库。之后启动**不会覆盖**已有密码，可清空 `ADMIN_PASSWORD`。
+- **忘记管理员密码**：不要通过改 `.env` 的 `ADMIN_PASSWORD` 来重置。新镜像内置 `reset-admin` 命令（密码从 stdin 读取，不出现在进程列表）：
+
+  ```bash
+  printf '%s\n' 'new-strong-password' | \
+    docker compose exec -T backend /app/reset-admin -tenant default -username admin
+  ```
+
+  从源码运行：
+
+  ```bash
+  cd backend
+  printf '%s\n' 'new-strong-password' | go run ./cmd/reset-admin -tenant default -username admin
+  ```
+
+  命令会递增 `token_version` 撤销旧 Token，并把用户状态恢复为 `active`。
 - **登录接口**：`POST /api/auth/login` 需要 `tenant`（租户 slug，可省略并回退到 `default`）+ `username` + `password`。成功后返回 `access_token` / `token_type` / `expires_in`，同时写入 `HttpOnly; SameSite=Lax; Secure(auto)` Cookie；JWT 中含有 `sub`、`tenant_id`、`role`、`iss`、`iat`、`exp`、`jti`。前端不把 Token 放进 `localStorage`（降低 XSS 窃取风险），页面刷新后由 Cookie + `GET /api/auth/me` 恢复登录态。
 - **角色**：`platform_admin` 管理全局租户/节点；`tenant_admin` 管理本租户用户和业务数据；`user` 只使用业务功能。角色校验同时在前端路由与后端 handler 执行。
 - **数据隔离**：`bookshelf`、`reading_progress`、`prefill_job`、`tag_preference`、`tag_sync_baseline` 全部带 `tenant_id`；它们按租户共享，所有查询/创建/更新/删除都从 JWT 租户上下文取 ID。`gallery_cache` 是全局共享的上游元数据缓存。`tenant_id` 请求参数/Header 一律被忽略。
