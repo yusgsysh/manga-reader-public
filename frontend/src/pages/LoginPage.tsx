@@ -7,6 +7,7 @@ import {
   EyeSlash,
   LockSimple,
   User,
+  WarningCircle,
 } from "@phosphor-icons/react";
 import { ApiRequestError } from "../api/client";
 import { Logo } from "../components/ui";
@@ -83,16 +84,18 @@ export function LoginPage() {
   };
 
   return (
-    <div className="relative flex min-h-dvh flex-col bg-kumo-base text-kumo-default">
-      <div className="absolute right-4 top-4">
-        <ThemeSwitcher className="w-[7.5rem]" />
+    <div className="login-backdrop relative flex min-h-dvh flex-col bg-kumo-base text-kumo-default">
+      <div className="absolute right-4 top-4 z-10">
+        <ThemeSwitcher className="w-[7.5rem] shadow-sm" />
       </div>
 
-      <main className="flex flex-1 items-center justify-center px-4 py-16">
+      <main className="page-enter relative flex flex-1 items-center justify-center px-4 py-16">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex flex-col items-center text-center">
-            <Logo className="[&_svg]:size-10" />
-            <h1 className="mt-4 text-xl font-semibold tracking-tight">
+            <div className="login-mark">
+              <Logo className="[&_svg]:size-8" />
+            </div>
+            <h1 className="mt-5 text-2xl font-semibold tracking-tight">
               Manga Reader
             </h1>
             <p className="mt-1.5 text-sm text-kumo-subtle">
@@ -103,7 +106,7 @@ export function LoginPage() {
           <form
             noValidate
             onSubmit={handleSubmit}
-            className="card-surface space-y-4 p-5 sm:p-6"
+            className="card-surface login-card space-y-5 p-6 sm:p-7"
           >
             <div className="space-y-1.5">
               <label htmlFor="username" className="text-sm font-medium">
@@ -119,6 +122,8 @@ export function LoginPage() {
                   name="username"
                   autoComplete="username"
                   spellCheck={false}
+                  size="lg"
+                  aria-label="用户名"
                   className="pl-9"
                   placeholder="请输入用户名"
                   value={username}
@@ -142,6 +147,8 @@ export function LoginPage() {
                   name="password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
+                  size="lg"
+                  aria-label="密码"
                   className="px-9"
                   placeholder="请输入密码"
                   value={password}
@@ -167,14 +174,17 @@ export function LoginPage() {
             {error && (
               <p
                 role="alert"
-                className="rounded-lg border border-kumo-danger/30 bg-kumo-danger/10 px-3 py-2 text-sm text-kumo-danger"
+                className="flex items-start gap-2 rounded-lg border border-kumo-danger/30 bg-kumo-danger/10 px-3 py-2 text-sm text-kumo-danger"
               >
-                {error}
+                <WarningCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <span>{error}</span>
               </p>
             )}
 
             <Button
               type="submit"
+              variant="primary"
+              size="lg"
               className="w-full"
               disabled={isLoggingIn}
               aria-busy={isLoggingIn}
@@ -190,7 +200,7 @@ export function LoginPage() {
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-xs text-kumo-subtle">
+          <p className="mt-6 text-center text-xs text-kumo-subtle/90">
             JWT 身份认证 · Token 保存在 HttpOnly Cookie 中
           </p>
         </div>

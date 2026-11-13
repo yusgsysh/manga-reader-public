@@ -27,6 +27,9 @@ build/android/overlay.json
 # Local environment files (cookies, passwords) — never commit
 .env
 
+# Playwright MCP browser work artifacts (screenshots, console dumps)
+.playwright-mcp/
+
 # Frontend bundle embedded into the binary (the image build drops it here;
 # only the placeholder is tracked so `go build` works from a fresh clone)
 backend/internal/web/dist/*
