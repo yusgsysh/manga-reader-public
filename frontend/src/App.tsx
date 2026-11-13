@@ -9,6 +9,7 @@ import {
 } from "@cloudflare/kumo";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { AuthProvider } from "./context/AuthContext";
+import { useAuth } from "./context/auth";
 import { NavigationProvider } from "./context/NavigationContext";
 import { useSyncEvents } from "./hooks/useSyncEvents";
 import { GLOBAL_STALE_TIME } from "./lib/cacheConfig";
@@ -33,27 +34,34 @@ const AppLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(
 );
 AppLink.displayName = "AppLink";
 
-// Refreshes progress/bookshelf caches when the backend signals a change
-// (local writes on other tabs, rows applied from a sync peer).
-function SyncEventBridge() {
-  useSyncEvents();
+// Background work that only makes sense once a user is signed in: subscribe to
+// the local change stream (SSE) so cross-tab/peer writes invalidate caches, and
+// warm the tag-translation database at idle so tag-heavy pages don't flash
+// untranslated labels. Neither runs on the login page, which has no synced data
+// and no tags — otherwise a cold visit would still pull the 1.75 MB db.text.js
+// and open a doomed 401 SSE stream.
+function AuthenticatedEffects() {
+  const { isAuthenticated } = useAuth();
+  useSyncEvents(isAuthenticated);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    // `load()` is idempotent, so this prefetch never races the on-demand
+    // `load()` inside useTagTranslation; both share the same promise.
+    return scheduleIdle(() => void tagTranslationService.load());
+  }, [isAuthenticated]);
+
   return null;
 }
 
 export default function App() {
-  // The tag-translation database is a 1.75 MB payload whose inflate + index
-  // build costs ~1 s of main-thread time on low-end devices. Kicking the load
-  // off at idle keeps it out of the route transition and first scroll; every
-  // consumer still sees the same "loading -> ready" stream.
-  useEffect(() => scheduleIdle(() => void tagTranslationService.load()), []);
-
   return (
     <ErrorBoundary>
       <ThemeProvider>
         <MotionProvider>
           <QueryClientProvider client={queryClient}>
             <AuthProvider>
-              <SyncEventBridge />
+              <AuthenticatedEffects />
               <LinkProvider component={AppLink}>
                 <TooltipProvider>
                   <Toasty>

@@ -16,12 +16,16 @@ const SYNCED_QUERY_KEYS = [
  * data changes — including rows applied from a remote sync peer, which the
  * local UI would otherwise never see until their staleTime expires.
  *
- * EventSource reconnects on its own after transient failures.
+ * The subscription is gated on `enabled` (the caller passes authentication
+ * state): an unauthenticated visitor (the login page) has no synced data to
+ * invalidate, so opening the SSE stream there only wastes a request and logs a
+ * 401. EventSource reconnects on its own after transient failures.
  */
-export function useSyncEvents(): void {
+export function useSyncEvents(enabled: boolean): void {
   const queryClient = useQueryClient();
 
   useEffect(() => {
+    if (!enabled) return;
     // EventSource cannot set an Authorization header; the HttpOnly auth
     // cookie is sent with withCredentials (needed for the dev origin).
     const source = new EventSource(buildApiUrl("/api/events/changes"), {
@@ -36,5 +40,5 @@ export function useSyncEvents(): void {
     // Reconnect is automatic; nothing to do on error.
 
     return () => source.close();
-  }, [queryClient]);
+  }, [queryClient, enabled]);
 }
