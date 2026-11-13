@@ -45,11 +45,3 @@ func From(c *gin.Context) string {
 	}
 	return ""
 }
-
-// FromContext returns the request id from a plain context.
-func FromContext(ctx context.Context) string {
-	if id, ok := ctx.Value(key).(string); ok {
-		return id
-	}
-	return ""
-}

@@ -46,16 +46,3 @@ func From(c *gin.Context) (Scope, bool) {
 	scope, ok := value.(Scope)
 	return scope, ok
 }
-
-// FromContext is used by background/helper code that only has a
-// context.Context (not a Gin context), such as the sync outbox recorder.
-func FromContext(ctx context.Context) (Scope, bool) {
-	scope, ok := ctx.Value(contextKey).(Scope)
-	return scope, ok
-}
-
-// WithContext returns a context carrying the scope (tests and background jobs
-// that must act as a specific tenant).
-func WithContext(ctx context.Context, scope Scope) context.Context {
-	return context.WithValue(ctx, contextKey, scope)
-}

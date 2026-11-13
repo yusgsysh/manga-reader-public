@@ -40,13 +40,6 @@ func From(c *gin.Context) (Identity, bool) {
 	return identity, ok
 }
 
-// FromContext is available to background code that receives the request
-// context rather than the Gin context.
-func FromContext(ctx context.Context) (Identity, bool) {
-	identity, ok := ctx.Value(contextKey).(Identity)
-	return identity, ok
-}
-
 // HasScope reports whether the key includes a granted scope.
 func (i Identity) HasScope(scope string) bool {
 	for _, granted := range i.Scopes {
