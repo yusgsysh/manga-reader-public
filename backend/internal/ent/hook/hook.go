@@ -32,6 +32,30 @@ func (f GalleryCacheFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GalleryCacheMutation", m)
 }
 
+// The NodeFunc type is an adapter to allow the use of ordinary
+// function as Node mutator.
+type NodeFunc func(context.Context, *ent.NodeMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f NodeFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.NodeMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.NodeMutation", m)
+}
+
+// The NodeAPIKeyFunc type is an adapter to allow the use of ordinary
+// function as NodeAPIKey mutator.
+type NodeAPIKeyFunc func(context.Context, *ent.NodeAPIKeyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f NodeAPIKeyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.NodeAPIKeyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.NodeAPIKeyMutation", m)
+}
+
 // The PrefillJobFunc type is an adapter to allow the use of ordinary
 // function as PrefillJob mutator.
 type PrefillJobFunc func(context.Context, *ent.PrefillJobMutation) (ent.Value, error)

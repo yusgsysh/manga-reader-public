@@ -1,19 +1,19 @@
 import { apiGet, apiPut } from "./client";
 
-/** Returned in place of a stored token; sending it back keeps the secret. */
-export const SYNC_TOKEN_MASK = "********";
+/** Returned in place of a stored node API key; sending it back keeps the secret. */
+export const SYNC_KEY_MASK = "********";
 
 export interface SyncConfig {
   enabled: boolean;
   server_url: string;
-  /** Masked (********) when a token is stored, empty otherwise. */
+  /** Masked (********) when an API key is stored, empty otherwise. */
   token: string;
 }
 
 export interface SyncConfigUpdate {
   enabled?: boolean;
   server_url?: string;
-  /** Omit or send "" to clear; send the mask to keep the stored token. */
+  /** Omit or send "" to clear; send the mask to keep the stored node API key. */
   token?: string;
 }
 

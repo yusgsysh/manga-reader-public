@@ -2,7 +2,6 @@ package sync
 
 import (
 	"context"
-	"crypto/subtle"
 	json "encoding/json/v2"
 	"errors"
 	"log/slog"
@@ -17,15 +16,12 @@ import (
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/syncchange"
 	"manga-reader/internal/metrics"
+	nodeauth "manga-reader/internal/node"
+	"manga-reader/internal/requestid"
 	"manga-reader/internal/web"
 )
 
 const (
-	// headerToken authenticates peer-facing sync endpoints. SSE handlers
-	// cannot set request headers in browsers, but the sync engine is a Go
-	// client, so a single header covers the whole protocol.
-	headerToken = "X-Sync-Token"
-
 	// heartbeatInterval keeps proxies from reaping idle SSE streams (a
 	// typical reverse-proxy read timeout is 60s).
 	heartbeatInterval = 25 * time.Second
@@ -34,12 +30,12 @@ const (
 // Service wires the sync protocol endpoints, the change hub and the sync
 // engine onto an ent client.
 type Service struct {
-	client    *ent.Client
-	hub       *Hub
-	hostToken string
-	// tenantID is the single tenant served by this sync instance. Peer sync
-	// carries no client-supplied tenant; keeping one configured tenant
-	// prevents a stale or malicious peer from crossing tenant boundaries.
+	client      *ent.Client
+	hub         *Hub
+	hostEnabled bool
+	nodeAuth    func(scopes ...string) gin.HandlerFunc
+	// tenantID is the tenant used by the local client engine. Host requests
+	// take their tenant from the authenticated node instead.
 	tenantID int64
 	engine   *Engine
 	// clientActive mirrors ClientConfig.Active(); the outbox is only written
@@ -55,7 +51,7 @@ type Service struct {
 // serves sync peers, or it is configured as a sync client. Without this guard
 // a single-instance deployment appends a row on every page turn forever.
 func (s *Service) recordEnabled() bool {
-	if s.hostToken != "" || s.clientActive.Load() {
+	if s.hostEnabled || s.clientActive.Load() {
 		return true
 	}
 	return !s.disableInactiveOutbox
@@ -63,17 +59,20 @@ func (s *Service) recordEnabled() bool {
 
 // Options configures a Service.
 type Options struct {
-	// HostToken enables the peer-facing endpoints (/api/sync/push,
-	// /api/sync/events) when non-empty. Empty means this instance does not
-	// accept sync peers.
-	HostToken string
-	// DisableInactiveOutbox stops appending outbox rows when neither a host
-	// token nor a client peer is configured, so a single-instance deployment
-	// does not grow sync_change forever.
+	// HostEnabled mounts the peer-facing routes. Authentication is supplied
+	// separately as a node-API-key middleware.
+	HostEnabled bool
+	// NodeAuth validates Authorization: Bearer <node API key> and requires
+	// the scopes passed to it. It must not accept user JWTs.
+	NodeAuth func(scopes ...string) gin.HandlerFunc
+	// DisableInactiveOutbox stops appending outbox rows when no peer is
+	// configured, so a single-instance deployment does not grow sync_change.
 	DisableInactiveOutbox bool
-	// TenantID selects the tenant replicated by the host endpoints and the
-	// client engine. Zero means the default tenant (1).
+	// TenantID selects the tenant used by the client engine. Zero means the
+	// default tenant (1). Host requests use the authenticated node tenant.
 	TenantID int64
+	// RequestTimeout bounds one push exchange (default 30s).
+	RequestTimeout time.Duration
 }
 
 // NewService builds a Service. The engine must be started with RunEngine.
@@ -85,11 +84,15 @@ func NewService(client *ent.Client, opts Options) *Service {
 	s := &Service{
 		client:                client,
 		hub:                   NewHub(),
-		hostToken:             opts.HostToken,
+		hostEnabled:           opts.HostEnabled,
+		nodeAuth:              opts.NodeAuth,
 		tenantID:              tenantID,
 		disableInactiveOutbox: opts.DisableInactiveOutbox,
 	}
 	s.engine = newEngine(s)
+	if opts.RequestTimeout > 0 {
+		s.engine.http.Timeout = opts.RequestTimeout
+	}
 	return s
 }
 
@@ -104,21 +107,9 @@ func (s *Service) RegisterRoutes(r gin.IRouter) {
 	r.GET("/api/sync/config", s.handleConfigGet)
 	r.PUT("/api/sync/config", s.handleConfigPut)
 	r.GET("/api/sync/status", s.handleStatus)
-	if s.hostToken != "" {
-		r.POST("/api/sync/push", s.requireToken(), s.handlePush)
-		r.GET("/api/sync/events", s.requireToken(), s.handlePeerEvents)
-	}
-}
-
-func (s *Service) requireToken() gin.HandlerFunc {
-	want := []byte(s.hostToken)
-	return func(c *gin.Context) {
-		got := []byte(c.GetHeader(headerToken))
-		if len(got) == 0 || subtle.ConstantTimeCompare(got, want) != 1 {
-			web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "invalid sync token"})
-			return
-		}
-		c.Next()
+	if s.hostEnabled && s.nodeAuth != nil {
+		r.POST("/api/sync/push", s.nodeAuth(nodeauth.ScopeSyncWrite), s.handlePush)
+		r.GET("/api/sync/events", s.nodeAuth(nodeauth.ScopeSyncEvent), s.handlePeerEvents)
 	}
 }
 
@@ -137,8 +128,14 @@ func (s *Service) handlePush(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	identity, ok := nodeauth.From(c)
+	if !ok {
+		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "node identity missing"})
+		return
+	}
+	nodeTenantID := identity.TenantID
 
-	applied, skipped, err := ApplyChangesForTenant(ctx, s.client, s.tenantID, req.Changes)
+	applied, skipped, err := ApplyChangesForTenant(ctx, s.client, nodeTenantID, req.Changes)
 	if err != nil {
 		slog.Error("apply sync changes failed", "error", err)
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "apply changes failed"})
@@ -156,14 +153,14 @@ func (s *Service) handlePush(c *gin.Context) {
 		// Read the watermark before the export so a row written in between
 		// keeps an outbox id above the returned cursor instead of landing in
 		// neither the snapshot nor the delta.
-		cursor, err = maxOutboxID(ctx, s.client, s.tenantID)
+		cursor, err = maxOutboxID(ctx, s.client, nodeTenantID)
 		if err != nil {
 			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "collect cursor failed"})
 			return
 		}
-		changes, err = ExportSnapshot(ctx, s.client, s.tenantID)
+		changes, err = ExportSnapshot(ctx, s.client, nodeTenantID)
 	} else {
-		changes, cursor, err = ReadChangesSince(ctx, s.client, s.tenantID, req.Cursor)
+		changes, cursor, err = ReadChangesSince(ctx, s.client, nodeTenantID, req.Cursor)
 	}
 	if err != nil {
 		slog.Error("collect sync changes failed", "error", err)
@@ -176,11 +173,22 @@ func (s *Service) handlePush(c *gin.Context) {
 	// outbox max means the host was reset (rewind) or the client is stale, and
 	// pruning then would destroy changes the client has never seen.
 	if req.Cursor > 0 && req.Cursor <= cursor {
-		if err := pruneOutbox(ctx, s.client, s.tenantID, req.Cursor); err != nil {
+		if err := pruneOutbox(ctx, s.client, nodeTenantID, req.Cursor); err != nil {
 			slog.Warn("prune sync outbox failed", "error", err)
 		}
 	}
 
+	slog.Info("node sync push",
+		"request_id", requestid.From(c),
+		"node_id", identity.NodeID,
+		"tenant_id", nodeTenantID,
+		"applied", applied,
+		"skipped", skipped,
+		"changes_in", len(req.Changes),
+		"changes_out", len(changes),
+		"sync_request_id", req.RequestID,
+		"result", "ok",
+	)
 	web.JSON(c, http.StatusOK, PushResponse{
 		Cursor:  cursor,
 		Changes: changes,
@@ -191,9 +199,14 @@ func (s *Service) handlePush(c *gin.Context) {
 
 // handlePeerEvents streams change notifications to remote sync engines.
 func (s *Service) handlePeerEvents(c *gin.Context) {
+	if identity, ok := nodeauth.From(c); ok {
+		slog.Info("node sync events connected",
+			"request_id", requestid.From(c), "node_id", identity.NodeID, "tenant_id", identity.TenantID)
+	}
 	sub, cancel := s.hub.SubscribePeer()
 	s.serveEvents(c, sub, cancel, func() any {
-		cursor, err := maxOutboxID(c.Request.Context(), s.client, s.tenantID)
+		identity, _ := nodeauth.From(c)
+		cursor, err := maxOutboxID(c.Request.Context(), s.client, identity.TenantID)
 		if err != nil {
 			return nil
 		}

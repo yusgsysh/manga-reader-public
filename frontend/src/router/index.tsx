@@ -11,6 +11,7 @@ import {
   LazyPage,
   LoginPage,
   PlatformAdminPage,
+  NodeAdminPage,
   PopularPage,
   ReaderLoading,
   ReaderRoute,
@@ -109,6 +110,16 @@ export const router = createBrowserRouter([
           <RequireRole role="platform_admin">
             <LazyPage>
               <PlatformAdminPage />
+            </LazyPage>
+          </RequireRole>
+        ),
+      },
+      {
+        path: "admin/nodes",
+        element: (
+          <RequireRole role="platform_admin">
+            <LazyPage>
+              <NodeAdminPage />
             </LazyPage>
           </RequireRole>
         ),

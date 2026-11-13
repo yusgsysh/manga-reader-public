@@ -25,4 +25,3 @@ backend/internal/web/dist/*
 .env.*
 !.env.example
 secrets
-*.htpasswd

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/tenant"
 	"manga-reader/internal/ent/user"
+	"manga-reader/internal/requestid"
 	"manga-reader/internal/web"
 )
 
@@ -145,7 +147,7 @@ func (s *Service) EnsureAdmin(ctx context.Context) (bool, error) {
 // Gallery/search/image endpoints stay public because <img> and EventSource
 // cannot attach an Authorization header, and they expose upstream content
 // rather than local user data. Sync peer endpoints keep their own
-// X-Sync-Token check.
+// Node API Key middleware.
 var publicAPIs = map[string]struct{}{
 	"/api/auth/login":  {},
 	"/api/auth/status": {},
@@ -174,7 +176,7 @@ var publicAPIs = map[string]struct{}{
 	"/api/image-cache/thumbnail":      {},
 	"/api/image-cache/page-thumbnail": {},
 
-	// Peer sync is authenticated by X-Sync-Token in the sync service.
+	// Peer sync is authenticated by Node API Key middleware in the sync service.
 	"/api/sync/push":   {},
 	"/api/sync/events": {},
 }
@@ -330,6 +332,15 @@ func (s *Service) handleLogin(c *gin.Context) {
 	}
 	body.Tenant = strings.TrimSpace(body.Tenant)
 	body.Username = strings.TrimSpace(body.Username)
+	loginResult := "failure"
+	defer func() {
+		slog.Info("user login",
+			"request_id", requestid.From(c),
+			"tenant", body.Tenant,
+			"username", body.Username,
+			"result", loginResult,
+		)
+	}()
 	if body.Username == "" || body.Password == "" {
 		// Same message as a wrong password: do not reveal which field failed.
 		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
@@ -385,6 +396,7 @@ func (s *Service) handleLogin(c *gin.Context) {
 		return
 	}
 	s.setCookie(c, token, expires)
+	loginResult = "success"
 	web.JSON(c, http.StatusOK, gin.H{
 		"access_token": token,
 		"token_type":   "Bearer",

@@ -17,10 +17,6 @@ build/android/gen/main_android.gen.go
 frontend/frontend
 build/android/overlay.json
 
-# HTTP Basic Auth credentials — never commit
-*.htpasswd
-secrets/
-
 # Local environment files (cookies, passwords) — never commit
 .env
 

@@ -13,14 +13,13 @@
 #   backend (Gin :8080, 对外发布 5173)
 #     ├── 静态前端（构建时 embed 进二进制，不外挂静态文件）
 #     ├── /api/* 与 SPA 回退同进程处理
-#     ├── JWT 登录认证（可选，设置 JWT_SECRET 启用；与 Basic Auth 二选一）
-#     ├── HTTP Basic Auth（可选，MANGA_READER_BASIC_AUTH_*，默认关闭）
+#     ├── JWT 用户业务认证（设置 JWT_SECRET 启用）
+#     ├── Node API Key 节点同步认证（数据库管理，平台管理员创建）
+#     ├── Metrics Token / 回环限制（独立凭证）
 #     └── 数据卷 backend_data → /app/data
 #
-# 公网部署：Basic Auth 必须开启且置于 HTTPS 之后；PostgreSQL / MinIO
-# 默认仅绑定回环地址，不发布公网端口（见 README「公网部署」）。
-# 需要局域网/公网访问时，显式改成 "0.0.0.0:5173:8080"，并建议开启 Basic Auth +
-# HTTPS 反向代理（默认关闭认证，匿名即可访问）。
+# 公网部署：JWT 登录必须置于 HTTPS 之后；PostgreSQL / MinIO 默认仅绑定回环地址，
+# 不发布公网端口（见 README「公网部署」）。
 
 services:
   backend:
@@ -39,16 +38,7 @@ services:
       EHENTAI_PORT: ":8080"
       MANGA_READER_DB_PATH: /app/data/manga-reader.db
 
-      # HTTP Basic Auth（Gin 层，默认关闭；生产在 .env 开启）
-      # 注意：.env 中的 $ 需写成 $$（compose 会做变量插值）
-      MANGA_READER_BASIC_AUTH_ENABLED: ${MANGA_READER_BASIC_AUTH_ENABLED:-false}
-      MANGA_READER_BASIC_AUTH_USERNAME: ${MANGA_READER_BASIC_AUTH_USERNAME:-}
-      MANGA_READER_BASIC_AUTH_PASSWORD: ${MANGA_READER_BASIC_AUTH_PASSWORD:-}
-      # 口令/htpasswd 文件经 secret 注入时设置（见文件末尾 secrets 示例）
-      MANGA_READER_BASIC_AUTH_FILE: ${MANGA_READER_BASIC_AUTH_FILE:-}
-      MANGA_READER_BASIC_AUTH_PASSWORD_FILE: ${MANGA_READER_BASIC_AUTH_PASSWORD_FILE:-}
-
-      # JWT 登录认证（设置 JWT_SECRET 即启用；与 Basic Auth 二选一）
+      # JWT 用户登录（用户业务 API）
       # 生成密钥：openssl rand -hex 32
       JWT_SECRET: ${JWT_SECRET:-}
       JWT_ISSUER: ${JWT_ISSUER:-manga-reader}
@@ -56,6 +46,15 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       MANGA_READER_AUTH_COOKIE_SECURE: ${MANGA_READER_AUTH_COOKIE_SECURE:-auto}
+
+      # Metrics 内部接口（独立 Token；未设置时仅回环访问）
+      MANGA_READER_METRICS_ENABLED: ${MANGA_READER_METRICS_ENABLED:-true}
+      MANGA_READER_METRICS_TOKEN: ${MANGA_READER_METRICS_TOKEN:-}
+
+      # 节点同步（API Key 在数据库管理，不使用环境变量）
+      MANGA_READER_SYNC_ENABLED: ${MANGA_READER_SYNC_ENABLED:-true}
+      MANGA_READER_SYNC_REQUEST_TIMEOUT: ${MANGA_READER_SYNC_REQUEST_TIMEOUT:-30s}
+      MANGA_READER_SYNC_API_KEY_MIN_LENGTH: ${MANGA_READER_SYNC_API_KEY_MIN_LENGTH:-32}
 
       # HTTP 代理（出站走代理，.env 中的 HTTP_PROXY/HTTPS_PROXY/NO_PROXY）
       # 未设置时为空，Go 视为未配置代理即直连
@@ -97,24 +96,3 @@ services:
 
 volumes:
   backend_data:
-
-# ------------------------------------------------------------
-# 生产环境 Basic Auth 推荐：口令不进 .env / 容器环境，而是以
-# htpasswd 文件（apr1 $1$ 或 bcrypt $2$ 哈希）经 docker secret 注入：
-#
-#   1) 宿主机生成（交互输入口令，不落命令行历史）：
-#        mkdir -p secrets
-#        htpasswd -nm admin > secrets/manga_reader.htpasswd
-#   2) .env 中设置：
-#        MANGA_READER_BASIC_AUTH_ENABLED=true
-#        MANGA_READER_BASIC_AUTH_FILE=/run/secrets/manga_reader_htpasswd
-#   3) 取消下面的注释：
-#
-# secrets:
-#   manga_reader_htpasswd:
-#     file: ./secrets/manga_reader.htpasswd
-#
-#   并在 backend 服务下追加：
-#     secrets:
-#       - manga_reader_htpasswd
-# ------------------------------------------------------------

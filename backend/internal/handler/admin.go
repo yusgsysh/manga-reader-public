@@ -133,6 +133,7 @@ func (s *Server) handleAdminTenantCreate(c *gin.Context) {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create tenant failed"})
 		return
 	}
+	audit(c, "tenant.create", "tenant_id", created.ID)
 	web.JSON(c, http.StatusCreated, tenantResponse(created))
 }
 
@@ -221,6 +222,7 @@ func (s *Server) handleAdminTenantUpdate(c *gin.Context) {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "update tenant failed"})
 		return
 	}
+	audit(c, "tenant.update", "tenant_id", t.ID)
 	web.JSON(c, http.StatusOK, tenantResponse(t))
 }
 
@@ -249,6 +251,7 @@ func (s *Server) handleAdminTenantStatus(c *gin.Context) {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "update tenant status failed"})
 		return
 	}
+	audit(c, "tenant.status", "tenant_id", t.ID, "status", t.Status)
 	web.JSON(c, http.StatusOK, tenantResponse(t))
 }
 
@@ -357,6 +360,7 @@ func (s *Server) handleTenantUserCreate(c *gin.Context) {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create user failed"})
 		return
 	}
+	audit(c, "tenant.user.create", "target_user_id", created.ID, "role", created.Role)
 	web.JSON(c, http.StatusCreated, tenantUserResponse(created))
 }
 
@@ -448,6 +452,7 @@ func (s *Server) handleTenantUserUpdate(c *gin.Context) {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "update user failed"})
 		return
 	}
+	audit(c, "tenant.user.update", "target_user_id", updated.ID, "role", updated.Role, "status", updated.Status)
 	web.JSON(c, http.StatusOK, tenantUserResponse(updated))
 }
 
@@ -491,6 +496,7 @@ func (s *Server) handleTenantUserStatus(c *gin.Context) {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "update user status failed"})
 		return
 	}
+	audit(c, "tenant.user.status", "target_user_id", updated.ID, "role", updated.Role, "status", updated.Status)
 	web.JSON(c, http.StatusOK, tenantUserResponse(updated))
 }
 

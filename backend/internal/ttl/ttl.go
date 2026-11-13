@@ -22,7 +22,7 @@ const (
 )
 
 // PrivateMaxAge renders a "private, max-age=<seconds>" Cache-Control value.
-// Image responses sit behind Basic Auth, so a shared cache must not store
+// Image responses are private library content, so a shared cache must not store
 // and re-serve them to another client.
 func PrivateMaxAge(d time.Duration) string {
 	return "private, max-age=" + seconds(d)

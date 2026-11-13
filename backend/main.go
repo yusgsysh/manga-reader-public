@@ -15,13 +15,14 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"manga-reader/internal/auth"
-	"manga-reader/internal/basicauth"
 	"manga-reader/internal/cache"
 	"manga-reader/internal/config"
 	"manga-reader/internal/database"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/handler"
 	"manga-reader/internal/metrics"
+	"manga-reader/internal/node"
+	"manga-reader/internal/requestid"
 	synclib "manga-reader/internal/sync"
 	"manga-reader/internal/tenant"
 	"manga-reader/internal/web"
@@ -90,7 +91,7 @@ func CORSMiddleware(extra map[string]struct{}) gin.HandlerFunc {
 }
 
 // csrfGuard rejects state-changing requests that a browser marks as
-// cross-site. Basic Auth credentials are attached automatically to
+// cross-site. Cookie-based JWT sessions are attached automatically to
 // same-origin subrequests, so without this a malicious page could POST to
 // /api/reading-progress/cleanup and wipe the user's history. Requests with no
 // Origin/Sec-Fetch-Site header (curl, the Go desktop client) are allowed.
@@ -208,12 +209,15 @@ func run() error {
 		logger.Info("JWT auth enabled", "issuer", cfg.Auth.JWTIssuer, "expires_in", cfg.Auth.ExpiresInSeconds())
 	}
 
+	nodeSvc := node.New(db.Client)
 	syncSvc := synclib.NewService(db.Client, synclib.Options{
-		HostToken:             cfg.SyncToken,
+		HostEnabled:           cfg.Sync.Enabled,
+		NodeAuth:              nodeSvc.Middleware,
+		RequestTimeout:        cfg.Sync.RequestTimeout,
 		DisableInactiveOutbox: true,
 	})
-	if cfg.SyncToken != "" {
-		logger.Info("sync host enabled")
+	if cfg.Sync.Enabled {
+		logger.Info("node sync host enabled")
 	}
 
 	// No startup sweep of gallery_cache: the read-through cache deliberately
@@ -266,7 +270,7 @@ func run() error {
 	r := gin.New()
 	// Trust client-supplied X-Forwarded-For only when the operator names the
 	// reverse-proxy CIDRs. Gin trusts everything by default, which lets a
-	// client rotate X-Forwarded-For and defeat the Basic Auth rate limiter.
+	// client rotate X-Forwarded-For and defeat per-IP rate limits.
 	if err := r.SetTrustedProxies(splitCSV(os.Getenv("MANGA_READER_TRUSTED_PROXIES"))); err != nil {
 		logger.Error("invalid MANGA_READER_TRUSTED_PROXIES", "error", err)
 		return err
@@ -276,29 +280,42 @@ func run() error {
 	// Outermost app middleware: counts every request including auth failures.
 	r.Use(metrics.GinMiddleware())
 	r.Use(gin.Logger())
+	r.Use(requestid.Middleware())
 	r.Use(gin.Recovery())
 	r.Use(CORSMiddleware(corsOrigins))
 	r.Use(securityHeadersMiddleware())
 	r.Use(csrfGuard(corsOrigins))
-	r.Use(basicauth.Middleware(cfg.BasicAuth))
 	// Default-deny for /api/*: only publicAPIs pass without a valid JWT.
 	r.Use(authSvc.Middleware())
 	// Turns the verified JWT tenant into the trusted request scope. Runs
 	// after auth; legacy anonymous mode stays on the default tenant.
 	r.Use(tenant.New(db.Client, cfg.Auth.Enabled).Middleware())
 
-	if cfg.BasicAuth.Enabled {
-		logger.Info("basic auth enabled", "source", map[bool]string{true: "htpasswd file", false: "environment"}[cfg.BasicAuth.File != ""])
-	}
-
 	r.GET("/healthz", func(c *gin.Context) {
 		web.JSON(c, http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// Prometheus exposition for upstream traffic. Registered *after*
-	// basicauth.Middleware, which is what makes it covered by Basic Auth like
-	// the API (gin applies Use handlers to routes registered afterwards).
-	r.GET("/metrics", gin.WrapH(metrics.Handler()))
+	// Readiness is deliberately separate from liveness: it only says whether
+	// the datastore is reachable and never exposes DSNs, paths or secrets.
+	r.GET("/readyz", func(c *gin.Context) {
+		if db.Conn == nil {
+			web.JSON(c, http.StatusServiceUnavailable, gin.H{"status": "unavailable"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+		if err := db.Conn.PingContext(ctx); err != nil {
+			web.JSON(c, http.StatusServiceUnavailable, gin.H{"status": "unavailable"})
+			return
+		}
+		web.JSON(c, http.StatusOK, gin.H{"status": "ready"})
+	})
+
+	// Prometheus exposition is its own credential class: loopback-only when
+	// no token is configured, otherwise a dedicated metrics bearer token.
+	if cfg.Metrics.Enabled {
+		r.GET("/metrics", metrics.AuthMiddleware(cfg.Metrics.Token), gin.WrapH(metrics.Handler()))
+	}
 
 	authSvc.RegisterRoutes(r)
 	srv.RegisterRoutes(r)

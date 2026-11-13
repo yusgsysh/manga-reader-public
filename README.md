@@ -18,7 +18,8 @@
 - 缩略图源站代理与 MinIO 缓存
 - 页面图片 MinIO 缓存（可选）
 - 多租户：Shared Database + Shared Schema + `tenant_id` 隔离；平台管理员 / 租户管理员 / 普通用户三级角色
-- 默认匿名访问（默认租户），可选 JWT 登录页（内置管理员、Argon2id 密码哈希、HttpOnly Cookie、服务端登出撤销）或 HTTP Basic Auth（见「公网部署」）
+- 默认匿名访问（默认租户），可选 JWT 登录页（内置管理员、Argon2id 密码哈希、HttpOnly Cookie、服务端登出撤销）
+- 节点同步使用数据库管理的独立 Node API Key（SHA-256 哈希、Scopes、轮换/撤销），与用户 JWT 完全分离
 
 ## 目录结构
 
@@ -54,7 +55,7 @@ backend/
 │   │   └── migrate/              # 数据库迁移逻辑
 │   ├── auth/                     # JWT 登录（Argon2id / HS256 / Gin 中间件）
 │   ├── tenant/                   # 租户上下文与租户中间件
-│   ├── basicauth/                # HTTP Basic Auth（apr1/bcrypt 校验 + 限流）
+│   ├── node/                     # Node API Key 认证与 Scopes
 │   ├── exhentai/                 # ExHentai API / 页面抓取（含 10 秒请求去重）
 │   ├── gallerycache/             # gallery_cache 读写
 │   ├── handler/                  # HTTP 处理器 (Gin)
@@ -87,8 +88,8 @@ backend/
    EHENTAI_COOKIE_IPB_PASS_HASH=xxx
    ```
 
-   `.env.example` 默认关闭 Basic Auth，匿名即可访问。如果要把服务暴露到公网，
-   建议再开启认证并设置强口令（见「公网部署」）。
+   `.env.example` 默认匿名访问（默认租户）。如果要把服务暴露到公网，
+   必须设置 `JWT_SECRET` 开启登录认证（见「公网部署」）。
 
 2. 启动服务（单镜像：Gin API + 内嵌前端由 GitHub Actions 构建推送到 `ghcr.io/yusgsysh/manga-reader`，compose 直接拉取，仓库内无 `build:` 配置）。GHCR 包为私有时先登录（PAT 需 `read:packages`）：
 
@@ -115,21 +116,20 @@ backend/
 
 数据位于 Docker 命名卷中，`docker compose down` 不会丢失；如需彻底清除使用 `docker compose down -v`。
 
-## 公网部署（HTTPS + 认证）
+## 公网部署（HTTPS + 三套独立认证）
 
-两种认证方式均为**默认关闭**：不配置时匿名即可访问，`bun dev`、`go run .`、Playwright、单元测试、桌面端均不受影响。公网部署选择其中一种即可（不要同时开启，否则 Basic Auth 会先于登录页拦截请求）：
+认证按接口用途拆分，凭证互不通用：
 
-- **JWT 登录页（推荐）**：设置 `JWT_SECRET` 启用，浏览器访问 `/login`，见下节「JWT 登录认证」。
-- **HTTP Basic Auth**：设置 `MANGA_READER_BASIC_AUTH_ENABLED=true` 并提供凭据（启用但缺少凭据时后端拒绝启动，fail closed）。
+| 接口类型 | 认证机制 |
+|----------|----------|
+| 用户业务 API（登录、书架、进度、Prefill、租户/用户管理） | `Authorization: Bearer <JWT>` |
+| 节点同步 API（`/api/sync/push`、`/api/sync/events`） | `Authorization: Bearer <Node API Key>` |
+| Metrics 内部接口 | 回环限制或独立 `MANGA_READER_METRICS_TOKEN` |
+| Health / Readiness | 最小信息公开：`/healthz`、`/readyz` |
 
-两种方式都要求：
-
-- **HTTPS 必须在认证之前**：Basic Auth 只是 `base64(user:pass)`，不是加密；JWT 的 HttpOnly Cookie 也必须走 TLS。TLS 由前置层（云负载均衡 / Caddy / 前置 nginx）提供，同时负责 HTTP :80 → HTTPS :443 跳转；HSTS 也由该层配置，确认域名永久 HTTPS 后再开启。
-- **应用端口不暴露公网**：容器 `:8080`、PostgreSQL `:5432`、MinIO `:9000/:9001` 不发布到公网，只在 Docker 内网通信；compose 与 quadlet 默认发布到 `127.0.0.1:5173:8080`，公网只经过带 TLS 的前置反代。确实需要局域网直连时才改成 `0.0.0.0:5173:8080`。
-- **保护范围**：Basic Auth 模式覆盖 `/`、静态资源、`/api/*`、`/metrics`，仅 `/healthz` 豁免；认证失败返回 `401` + `WWW-Authenticate: Basic realm="Manga Reader"`，由浏览器处理，不会显示登录页。JWT 模式则允许前端打开 `/login`，静态页面和公开 API 可匿名加载，用户数据接口由 JWT 中间件保护（见下节）。
-- **`/metrics`**：JWT 模式下不要求登录 Token（便于监控抓取），仍可用 Basic Auth 或前置反代保护；Prometheus 指标见「可观测性」。
-
-认证、静态资源与 API 同在一个 Gin 进程内（前端在构建时 `//go:embed` 进二进制），因此没有反代层在中间消费 `Authorization`。
+- **HTTPS 必须在认证之前**：JWT 的 HttpOnly Cookie 和节点 API Key 都必须走 TLS。TLS 由前置层（云负载均衡 / Caddy / 前置 nginx）提供，同时负责 HTTP :80 → HTTPS :443 跳转；HSTS 也由该层配置。
+- **应用端口不暴露公网**：容器 `:8080`、PostgreSQL `:5432`、MinIO `:9000/:9001` 不发布到公网；compose 与 quadlet 默认发布到 `127.0.0.1:5173:8080`，公网只经过带 TLS 的前置反代。确实需要局域网直连时才改成 `0.0.0.0:5173:8080`。
+- **Basic Auth 已完全移除**：后端、前端、compose/quadlet、observability 和文档都不再接受或配置 HTTP Basic Authentication。
 
 ### JWT 登录认证与多租户
 
@@ -144,75 +144,53 @@ JWT_SECRET=<粘贴上一步输出>
 JWT_ISSUER=manga-reader
 JWT_EXPIRES_IN=1h
 ADMIN_USERNAME=admin
-ADMIN_PASSWORD=change-me-strong-password   # 仅首次启动用于创建管理员
+ADMIN_PASSWORD=change-me-strong-password   # 仅首次启动用于创建平台管理员
 MANGA_READER_AUTH_COOKIE_SECURE=auto
 ```
 
 - **默认租户与平台管理员**：首次启动创建 `default` 租户（ID 1），并用 `ADMIN_USERNAME` + `ADMIN_PASSWORD` 创建该租户的**平台管理员**；密码以 Argon2id PHC 哈希写入数据库。之后启动**不会覆盖**已有密码，可清空 `ADMIN_PASSWORD`。
 - **登录接口**：`POST /api/auth/login` 需要 `tenant`（租户 slug，可省略并回退到 `default`）+ `username` + `password`。成功后返回 `access_token` / `token_type` / `expires_in`，同时写入 `HttpOnly; SameSite=Lax; Secure(auto)` Cookie；JWT 中含有 `sub`、`tenant_id`、`role`、`iss`、`iat`、`exp`、`jti`。前端不把 Token 放进 `localStorage`（降低 XSS 窃取风险），页面刷新后由 Cookie + `GET /api/auth/me` 恢复登录态。
-- **角色**：`platform_admin` 管理全局租户；`tenant_admin` 管理本租户用户和业务数据；`user` 只使用业务功能。角色校验同时在前端路由与后端 handler 执行。
-- **数据隔离**：`bookshelf`、`reading_progress`、`prefill_job`、`tag_preference`、`tag_sync_baseline` 全部带 `tenant_id`；它们按租户共享（同一租户内的用户工作在同一空间），所有查询/创建/更新/删除都从 JWT 租户上下文取 ID。`gallery_cache` 是全局共享的上游元数据缓存，不按租户拆分。`tenant_id` 请求参数/Header 一律被忽略。
+- **角色**：`platform_admin` 管理全局租户/节点；`tenant_admin` 管理本租户用户和业务数据；`user` 只使用业务功能。角色校验同时在前端路由与后端 handler 执行。
+- **数据隔离**：`bookshelf`、`reading_progress`、`prefill_job`、`tag_preference`、`tag_sync_baseline` 全部带 `tenant_id`；它们按租户共享，所有查询/创建/更新/删除都从 JWT 租户上下文取 ID。`gallery_cache` 是全局共享的上游元数据缓存。`tenant_id` 请求参数/Header 一律被忽略。
 - **租户中间件**：JWT 验证后加载租户并检查 `status=active`；不存在/禁用返回 403，删除或禁用用户的 Token 会在下一次请求失效。平台管理员与租户管理员也不能跨租户访问用户或业务数据。
 - **数据迁移**：旧单用户数据库启动时自动创建 `default` 租户，把旧管理员提升为平台管理员、把所有租户业务行归入租户 1；`gallery_cache` 保留。迁移在事务中执行且可重复运行。
-- **CSRF**：Cookie 仅用于同源请求；已有的 `csrfGuard` 会拒绝跨站 `Origin` / `Sec-Fetch-Site` 的写请求。反向代理必须透传 `Origin` / `Sec-Fetch-Site`，并保持应用与前端同源；HTTPS 终止在反代时还要设置 `X-Forwarded-Proto: https`，否则 `auto` 模式不会给 Cookie 加 `Secure`。
-- **登出**：`POST /api/auth/logout` 会递增 `users.token_version` 并清除 Cookie，所有已签发 Token 立即失效（服务端撤销，不只是前端删除 Token）。
+- **CSRF**：Cookie 仅用于同源请求；`csrfGuard` 会拒绝跨站 `Origin` / `Sec-Fetch-Site` 的写请求。反向代理必须透传 `Origin` / `Sec-Fetch-Site`，并保持应用与前端同源；HTTPS 终止在反代时还要设置 `X-Forwarded-Proto: https`，否则 `auto` 模式不会给 Cookie 加 `Secure`。
+- **登出**：`POST /api/auth/logout` 会递增 `users.token_version` 并清除 Cookie，所有已签发 Token 立即失效。
 - **Token 校验**：只接受 `Authorization: Bearer <JWT>`（或同源 Cookie），严格校验 HS256 签名、`iss`、`iat`、`exp` 和 `token_version`；缺失/无效/过期/签名错误统一返回 `401`。
-- **公开 API**：`/api/auth/login`、`/api/auth/status`、搜索/画廊/图片代理；同步推送端点继续使用 `X-Sync-Token`。**其余 `/api/*` 默认要求 JWT**（书架、阅读进度、最近阅读、标签设置、Prefill、同步配置、Dev Tools、`/api/admin/*`、`/api/tenant/*` 等）。
-- **管理 API**：`/api/admin/tenants*` 仅平台管理员；`/api/tenant/users*` 仅租户管理员，且路径中的用户 ID 必须同时匹配 JWT 租户。
-- **数据同步范围**：现有 peer 同步协议按单个租户运行（默认租户）；其他租户的写入不会进入默认租户的 outbox，避免跨租户复制。
-- **与 Basic Auth 二选一**：Basic Auth 在 JWT 之前执行；同时开启时浏览器会先弹 Basic Auth 对话框。桌面端同步仍可使用 Basic Auth 或独立 `MANGA_READER_SYNC_TOKEN`。
+- **公开 API**：`/api/auth/login`、`/api/auth/status`、搜索/画廊/图片代理。**其余 `/api/*` 默认要求 JWT**（书架、阅读进度、最近阅读、标签设置、Prefill、同步配置、Dev Tools、`/api/admin/*`、`/api/tenant/*` 等）。
+- **管理 API**：`/api/admin/tenants*` 与 `/api/admin/nodes*` 仅平台管理员；`/api/tenant/users*` 仅租户管理员，且路径中的用户 ID 必须同时匹配 JWT 租户。
 
-### Basic Auth 开关与凭据
+### 节点同步与 API Key
 
-最小生产配置（`.env`，占位示例，勿提交真实口令；`secrets/` 与 `*.htpasswd` 已在 `.gitignore`）：
+- **节点**：`/api/admin/nodes` 由平台管理员管理，每个节点绑定一个租户；节点状态支持启用/禁用。
+- **API Key**：按节点独立生成（至少 256 bit 随机熵），数据库只保存 SHA-256 哈希和显示前缀；完整明文只在创建/轮换响应中出现一次。
+- **Scopes**：`sync:read`、`sync:write`、`sync:events`。`POST /api/sync/push` 需要 `sync:write`；`GET /api/sync/events` 需要 `sync:events`；越权返回 403。
+- **轮换**：新 Key 创建后旧 Key 默认保持有效，确认后可显式 DELETE 撤销；撤销、禁用节点或禁用租户会立即拒绝认证。
+- **隔离**：节点 API Key 只能访问其绑定租户；请求中的 `node_id`/`tenant_id` 不能扩大范围。同步请求记录 `request_id` 审计日志，数据合并本身按行 LWW 幂等。
+- **客户端配置**：桌面端设置页填写服务器地址 + 该节点的 API Key；请求使用 `Authorization: Bearer <API Key>`。用户 JWT 不能访问同步端点。
 
-```env
-MANGA_READER_BASIC_AUTH_ENABLED=true
-MANGA_READER_BASIC_AUTH_USERNAME=admin
-MANGA_READER_BASIC_AUTH_PASSWORD=change-me-strong-password
-```
+### Metrics 与健康检查
 
-```bash
-docker compose up -d   # 环境变量变化会重建容器
-```
+- `/metrics` 默认启用；**未配置 Token 时仅允许回环地址访问**。需要跨主机抓取时设置独立令牌：
 
-凭据注入三选一（启用时必须提供其一，否则后端**拒绝启动**，fail closed）：
+  ```env
+  MANGA_READER_METRICS_ENABLED=true
+  MANGA_READER_METRICS_TOKEN=<openssl rand -hex 32>
+  ```
 
-1. **用户名 + 口令环境变量**（上例）：口令在进程内以常数时间比较校验；不写日志、不回传 API。
-2. **htpasswd 文件（推荐）**：口令不进容器环境变量，经 docker secret 挂载：
+  请求头使用 `Authorization: Bearer <METRICS_TOKEN>`。该 Token 与 JWT_SECRET、节点 API Key 完全独立。
 
-   ```bash
-   mkdir -p secrets
-   htpasswd -nm admin > secrets/manga_reader.htpasswd   # 交互输入口令
-   chmod 600 secrets/manga_reader.htpasswd              # 进程用户需可读；组/其他不可写
-   ```
-
-   ```env
-   MANGA_READER_BASIC_AUTH_ENABLED=true
-   MANGA_READER_BASIC_AUTH_FILE=/run/secrets/manga_reader_htpasswd
-   ```
-
-   再按 `docker-compose.yml` 末尾示例取消 `secrets:` 注释并给 backend 服务挂载该 secret。
-
-3. **口令文件**（明文单行，docker secret）：`MANGA_READER_BASIC_AUTH_PASSWORD_FILE=/run/secrets/...` + 用户名环境变量。
-
-注意事项：
-
-- **哈希格式**：apr1（`$1$` / `$apr1$`，`htpasswd -m`/`-n`）与 bcrypt（`$2$`，`htpasswd -B`）均可校验；`$5$`/`$6$`（sha-crypt）不支持，会被当作验证失败（锁死而非降级）。htpasswd 文件每次请求重新读取，轮换口令无需重启。
-- `.env` 中的 `$` 需写成 `$$`（compose 变量插值）。
-- **限流**：Basic Auth 开启时按来源 IP 限 50 req/s（突发 200，超限 `429` + `Retry-After`），作为基础防洪水/防爆破；需要更强防爆破时在前置防火墙 / fail2ban 封禁。切勿因此放松口令强度。默认不信任 `X-Forwarded-For`；部署在反代之后时设置 `MANGA_READER_TRUSTED_PROXIES=<代理 CIDR>`，让限流按真实客户端 IP 计数。
-- **桌面端同步**：同步端点同样受 Basic Auth 保护。桌面端在设置页的服务器地址内嵌凭据即可：`https://user:$PASSWORD@server.example.com`（Go HTTP 客户端自动携带 `Authorization`）；本仓库部署实例即 `https://admin:$PASSWORD@server.example.com`（口令含 `@`、`:` 时需 URL 编码）。Basic 用户名/口令与 `MANGA_READER_SYNC_TOKEN` 是两套独立凭据，需同时正确（见 `backend/API.md` 28）。
-- **安全 Header** 由 Gin 统一添加：`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`；刻意不加 CSP（避免破坏 React、SSE、图片代理）。
+- `/healthz` 是存活性检查，只返回 `{"status":"ok"}`；`/readyz` 检查数据库连接，只返回 `{"status":"ready"}` 或 `503 {"status":"unavailable"}`，不暴露 DSN、路径或密钥。
 
 ### 验证
 
 ```bash
 cd backend
-go test ./internal/auth/ ./internal/basicauth/ ./internal/web/ ./internal/config/
+go test ./internal/auth/ ./internal/node/ ./internal/metrics/ ./internal/sync/ ./internal/web/ ./internal/config/
 cd ../frontend && bun run test
 ```
 
-覆盖：JWT 登录成功/失败、缺失/无效/过期/错误签名 Token、公开与受保护 API、登出后 Token 撤销、管理员密码不被覆盖、跨租户书架/进度/Prefill 隔离、角色权限、JWT 篡改、禁用租户与迁移保数据；Basic Auth 配置 fail-closed 矩阵、apr1/bcrypt 已知答案向量、`/healthz` 豁免、401 挑战头、限流 429、SPA 回退与缓存策略；前端登录态恢复、Bearer 头与 401 并发去重。
+覆盖：JWT 登录/失效/篡改、Basic Auth 头被拒绝、节点 API Key 认证/撤销/Scopes/禁用、同步租户隔离、Metrics 回环与独立 Token、跨租户书架/进度/Prefill 隔离、角色权限与数据迁移。
 
 ## CI 与部署
 
@@ -258,7 +236,7 @@ docker compose up -d
 `.env` 关键项：
 
 - `MANGA_READER_TARGET`：抓取目标，默认 `host.docker.internal:5173`（宿主机上主 compose 发布的 backend 端口；跨机抓取填 `http` 目标所在主机与端口）
-- `MANGA_READER_METRICS_USERNAME/PASSWORD`：backend 开启 Basic Auth 时 `/metrics` 同样受保护，需与 `MANGA_READER_BASIC_AUTH_*` 一致；未开启时保持默认即可（凭据会被忽略）
+- `MANGA_READER_METRICS_TOKEN`：与 backend 的 `MANGA_READER_METRICS_TOKEN` 一致；Prometheus 使用 `Authorization: Bearer` 抓取。未设置时 backend 的 `/metrics` 只允许回环访问。
 - `GRAFANA_ADMIN_USER/PASSWORD`：Grafana 管理员
 
 Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5xx 比例 / P95 延迟、图片与 gallery 缓存 hit rate、MinIO 操作速率与延迟、10 秒文档短共享结果（含当前条目数）、上游请求与 P95 延迟、上游在途请求与重试放大、sad_panda / IP 封禁 / HTTP 错误判定、内存预算（已用 / 上限 / 等待者 / 获取等待 P95）、goroutines / 内存 / FD。指标口径见「可观测性（Prometheus 指标）」。
@@ -293,20 +271,18 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `ADMIN_USERNAME` | 否 | `admin` | 首次初始化默认租户（`default`）的平台管理员用户名 |
 | `ADMIN_PASSWORD` | 否 | - | 首次初始化平台管理员密码（至少 8 位）；仅在默认租户没有用户时使用，不覆盖已有密码 |
 | `MANGA_READER_AUTH_COOKIE_SECURE` | 否 | `auto` | 认证 Cookie 的 `Secure`：`auto`（TLS 或 `X-Forwarded-Proto=https` 时开启）/`true`/`false` |
-| `MANGA_READER_BASIC_AUTH_ENABLED` | 否 | `false` | 内置 HTTP Basic Auth 开关；与 JWT 登录二选一 |
-| `MANGA_READER_BASIC_AUTH_USERNAME` | 否† | - | Basic Auth 用户名（启用且用环境变量/口令文件方式时必填） |
-| `MANGA_READER_BASIC_AUTH_PASSWORD` | 否† | - | Basic Auth 口令（生产建议改用 secret 文件，勿提交真实口令） |
-| `MANGA_READER_BASIC_AUTH_FILE` | 否† | - | 现成 htpasswd 文件路径（docker secret，推荐；apr1 `$1$` / bcrypt `$2$`） |
-| `MANGA_READER_BASIC_AUTH_PASSWORD_FILE` | 否† | - | 单行口令文件路径（docker secret） |
+| `MANGA_READER_METRICS_ENABLED` | 否 | `true` | 启用 `/metrics`；未配置 Token 时仅回环可访问 |
+| `MANGA_READER_METRICS_TOKEN` | 否 | - | 独立 Metrics Token（至少 32 字符）；与 JWT/节点 API Key 不共用 |
+| `MANGA_READER_SYNC_ENABLED` | 否 | `true` | 启用节点同步宿主端点；节点与 API Key 通过数据库管理 |
+| `MANGA_READER_SYNC_REQUEST_TIMEOUT` | 否 | `30s` | 单次同步 push 的 HTTP 超时（1s–5m） |
+| `MANGA_READER_SYNC_API_KEY_MIN_LENGTH` | 否 | `32` | 节点 API Key 最小长度校验（不得低于 32） |
 | `MANGA_READER_DEV_TOOLS` | 否 | `false` | 启用 `/api/dev/*` 调试接口（可运行时模拟 ExHentai 不可用，见 `backend/API.md` Dev Tools） |
-| `MANGA_READER_SYNC_TOKEN` | 否 | - | 同步宿主令牌；非空时启用服务端同步端点（`/api/sync/push`、`/api/sync/events`） |
 | `MANGA_READER_MEM_BUDGET` | 否 | 不限制（`0`） | 进程内图片缓冲的字节预算（下载、精灵图解码等驻留内存的操作按大小预留，超出则排队）；默认不限制，设为正数才启用；可用 `MiB`/`MB` 后缀 |
 | `HTTP_PROXY` | 否 | - | backend 出站 HTTP 代理（`http://`、`https://`、`socks5://`），仅作用于后端抓取/同步请求 |
 | `HTTPS_PROXY` | 否 | - | 同上，用于 `https://` 目标（ExHentai 等） |
 | `NO_PROXY` | 否 | - | 绕过代理的主机/网段（内网 MinIO、数据库、compose 服务名等） |
 
 > \* `EHENTAI_COOKIE` 与 `EHENTAI_COOKIE_IPB_MEMBER_ID` + `EHENTAI_COOKIE_IPB_PASS_HASH` 至少配置一种，否则后端无法启动。
-> † Basic Auth 启用时必须提供凭据来源之一（用户名+口令、`_FILE`、或 `MANGA_READER_BASIC_AUTH_FILE`），否则后端拒绝启动（fail closed）。
 
 ### ExHentai 返回 sad panda
 
@@ -421,7 +397,7 @@ Schema 文件：
 
 ### 可观测性（Prometheus 指标）
 
-`GET /metrics` 暴露 Prometheus 文本格式（Basic Auth 之后；指标实现见 `backend/internal/metrics`，使用包私有 registry，测试可隔离采集）。可视化与抓取见「自部署监控（Prometheus + Grafana）」。
+`GET /metrics` 暴露 Prometheus 文本格式（回环限制或独立 Metrics Token；指标实现见 `backend/internal/metrics`，使用包私有 registry，测试可隔离采集）。可视化与抓取见「自部署监控（Prometheus + Grafana）」。
 
 | 指标 | 类型 | 标签 | 说明 |
 |------|------|------|------|
@@ -437,7 +413,7 @@ Schema 文件：
 | `gallery_cache_requests_total` | Counter | `kind, result` | `gallery_cache` 查找：`kind` = gallery / details / pages / page_thumb，`result` = hit / miss |
 | `minio_cache_requests_total` | Counter | `op, result` | MinIO 操作：`op` = get / put / head，`result` = ok / not_found / error（**miss 不是 error**） |
 | `minio_cache_operation_duration_seconds` | Histogram | `op` | MinIO 操作延迟 |
-| `http_requests_total` | Counter | `method, route, status_code` | 本应用 HTTP 请求（含 Basic Auth 401 与限流 429；handler panic 由 Recovery 转成 500 后同样计入） |
+| `http_requests_total` | Counter | `method, route, status_code` | 本应用 HTTP 请求（含认证 401/403 与限流 429；handler panic 由 Recovery 转成 500 后同样计入） |
 | `http_request_duration_seconds` | Histogram | `method, route` | 本应用 HTTP 延迟（中间件入口 → 响应完成） |
 | `membudget_reserved_bytes` | Gauge | — | 当前已预留的图片负载字节数（`MANGA_READER_MEM_BUDGET` 预算内） |
 | `membudget_limit_bytes` | Gauge | — | 内存预算上限；`0` 表示不限制（默认） |
@@ -488,24 +464,17 @@ curl -X POST http://localhost:8080/api/reading-progress/cleanup?days=0
 
 多实例双向同步**阅读进度、书架与画廊缓存**（settings 不同步），所有连接由桌面端主动发起（NAT 友好）：
 
-- **服务端**：设置 `MANGA_READER_SYNC_TOKEN` 启用宿主端点，写入的数据进 outbox。
-- **桌面端 / 客户端**：设置页「数据同步」填服务端地址 + 同一令牌并启用（配置存 `sync_state` 表）。服务端在 Basic Auth 之后时，地址内嵌凭据：`https://admin:$PASSWORD@server.example.com`。
-- 双方通过 `POST /api/sync/push` 推送 + 拉取，`GET /api/sync/events` SSE 监听对端新变更（写后 2s 去抖推送，心跳 25s，断线退避 1s→60s，60s 轮询兜底）。
+- **服务端**：`MANGA_READER_SYNC_ENABLED=true` 时挂载节点同步端点；节点和 API Key 由平台管理员在 `/admin/nodes` 创建，API Key 只保存 SHA-256 哈希。
+- **桌面端 / 客户端**：设置页「数据同步」填服务端地址 + 该节点的一次性 API Key 并启用（配置存 `sync_state` 表）。请求使用 `Authorization: Bearer <Node API Key>`，不再使用 Basic Auth 或全局同步令牌。
+- 双方通过 `POST /api/sync/push` 推送 + 拉取，`GET /api/sync/events` SSE 监听对端新变更（写后 2s 去抖推送，心跳 25s，断线退避 1s→60s，60s 轮询兜底）。节点 API Key 需要 `sync:write`（push）或 `sync:events`（SSE）。
 - 合并规则：按行 LWW（`updated_at` 新者胜），删除用 tombstone；首次连接返回全量快照；更换 `server_url` 会自动重置同步游标与引导标记，对新对端重新全量（`gallery_cache` 行在 LWW 胜出时按字段合并，空值不覆盖，镜像本地 upsert 语义）。
-- 桌面端本地通过 `GET /api/events/changes` SSE 通知前端刷新（Gin 直接写出长连接，无中间代理缓冲；`WriteTimeout` 刻意未设置以支持长流）。
+- 节点只能访问其绑定租户的 outbox/snapshot；请求里的 `node_id`/`tenant_id` 不会扩大范围。同步请求带 `request_id` 写入审计日志。
+- 桌面端本地通过 `GET /api/events/changes` SSE 通知前端刷新（该端点使用用户 JWT）。
 
 ```bash
-# 服务端
-MANGA_READER_SYNC_TOKEN=my-secret go run .
-
-# 桌面端配置
+# 平台管理员在 /admin/nodes 创建节点与 API Key 后，桌面端配置：
 curl -X PUT http://localhost:8080/api/sync/config -H 'Content-Type: application/json' \
-  -d '{"enabled":true,"server_url":"http://server:8080","token":"my-secret"}'
-
-# 桌面端配置（公网 Basic Auth 之后：请求本身与 server_url 均带凭据）
-curl -u admin:$PASSWORD -X PUT https://manga.09270721.xyz/api/sync/config \
-  -H 'Content-Type: application/json' \
-  -d '{"enabled":true,"server_url":"https://admin:$PASSWORD@server.example.com","token":"my-secret"}'
+  -d '{"enabled":true,"server_url":"http://server:8080","token":"mrk_..."}'
 
 curl http://localhost:8080/api/sync/status
 ```

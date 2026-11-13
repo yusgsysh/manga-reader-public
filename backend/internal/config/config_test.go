@@ -1,27 +1,28 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func setRequiredCookies(t *testing.T) {
 	t.Helper()
 	t.Setenv("EHENTAI_COOKIE_IPB_MEMBER_ID", "1")
 	t.Setenv("EHENTAI_COOKIE_IPB_PASS_HASH", "hash")
-	// Basic Auth defaults to off; an enabled setup in the developer's shell
-	// must not leak into tests that are about something else.
+	// Auth/metrics/sync settings must be opted into explicitly; shell
+	// settings must not leak into unrelated tests.
 	for _, key := range []string{
-		"MANGA_READER_BASIC_AUTH_ENABLED",
-		"MANGA_READER_BASIC_AUTH_USERNAME",
-		"MANGA_READER_BASIC_AUTH_PASSWORD",
-		"MANGA_READER_BASIC_AUTH_PASSWORD_FILE",
-		"MANGA_READER_BASIC_AUTH_FILE",
-		// JWT auth must be opted into explicitly; shell settings must not
-		// leak into unrelated tests.
 		"JWT_SECRET",
 		"JWT_ISSUER",
 		"JWT_EXPIRES_IN",
 		"ADMIN_USERNAME",
 		"ADMIN_PASSWORD",
 		"MANGA_READER_AUTH_COOKIE_SECURE",
+		"MANGA_READER_METRICS_ENABLED",
+		"MANGA_READER_METRICS_TOKEN",
+		"MANGA_READER_SYNC_ENABLED",
+		"MANGA_READER_SYNC_REQUEST_TIMEOUT",
+		"MANGA_READER_SYNC_API_KEY_MIN_LENGTH",
 	} {
 		t.Setenv(key, "")
 	}
@@ -155,5 +156,39 @@ func TestLoad_UnsupportedDriver(t *testing.T) {
 
 	if _, err := Load(); err == nil {
 		t.Fatal("expected error for unsupported driver")
+	}
+}
+
+func TestLoad_MetricsAndSyncConfig(t *testing.T) {
+	setRequiredCookies(t)
+	t.Setenv("MANGA_READER_METRICS_ENABLED", "true")
+	t.Setenv("MANGA_READER_METRICS_TOKEN", "mfxokrdp-ymjopne-3594-lyfsj-abcdef")
+	t.Setenv("MANGA_READER_SYNC_ENABLED", "false")
+	t.Setenv("MANGA_READER_SYNC_REQUEST_TIMEOUT", "45s")
+	t.Setenv("MANGA_READER_SYNC_API_KEY_MIN_LENGTH", "48")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.Metrics.Enabled || cfg.Metrics.Token == "" {
+		t.Fatalf("metrics config = %+v", cfg.Metrics)
+	}
+	if cfg.Sync.Enabled {
+		t.Fatal("Sync.Enabled = true, want false")
+	}
+	if cfg.Sync.RequestTimeout != 45*time.Second {
+		t.Fatalf("timeout = %v", cfg.Sync.RequestTimeout)
+	}
+	if cfg.Sync.APIKeyMinLength != 48 {
+		t.Fatalf("min key length = %d", cfg.Sync.APIKeyMinLength)
+	}
+}
+
+func TestLoad_RejectsWeakMetricsToken(t *testing.T) {
+	setRequiredCookies(t)
+	t.Setenv("MANGA_READER_METRICS_TOKEN", "short")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for short metrics token")
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/gallerycache"
 	"manga-reader/internal/ent/readingprogress"
+	nodeauth "manga-reader/internal/node"
 )
 
 func newTestClient(t *testing.T) *ent.Client {
@@ -51,6 +52,28 @@ func newTestRouter(svc *Service) *gin.Engine {
 	r := gin.New()
 	svc.RegisterRoutes(r)
 	return r
+}
+
+// testNodeAuth is a lightweight stand-in for node.Service; the real API-key
+// verifier is covered by node package tests. Sync tests only need a trusted
+// node identity on the Gin context.
+func testNodeAuth(validToken string) func(...string) gin.HandlerFunc {
+	return func(scopes ...string) gin.HandlerFunc {
+		return func(c *gin.Context) {
+			header := c.GetHeader("Authorization")
+			if header != "Bearer "+validToken {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+				return
+			}
+			allowed := append([]string{nodeauth.ScopeSyncRead, nodeauth.ScopeSyncWrite, nodeauth.ScopeSyncEvent}, scopes...)
+			nodeauth.WithGin(c, nodeauth.Identity{NodeID: 1, TenantID: 1, Scopes: allowed})
+			c.Next()
+		}
+	}
+}
+
+func newHostService(client *ent.Client, token string) *Service {
+	return NewService(client, Options{HostEnabled: true, NodeAuth: testNodeAuth(token)})
 }
 
 func seedProgress(t *testing.T, client *ent.Client, galleryID int64, token string, page int, updatedAt time.Time) {
@@ -92,7 +115,7 @@ func doPush(t *testing.T, r *gin.Engine, token string, req PushRequest) (*httpte
 	httpReq := httptest.NewRequest(http.MethodPost, "/api/sync/push", bytes.NewReader(body))
 	httpReq.Header.Set("Content-Type", "application/json")
 	if token != "" {
-		httpReq.Header.Set(headerToken, token)
+		httpReq.Header.Set("Authorization", "Bearer "+token)
 	}
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httpReq)
@@ -279,7 +302,7 @@ func TestReadChangesSinceCoalescesPerRecord(t *testing.T) {
 func TestPushBootstrapAndDelta(t *testing.T) {
 	serverClient := newTestClient(t)
 	clientClient := newTestClient(t)
-	serverSvc := NewService(serverClient, Options{HostToken: "s3cret"})
+	serverSvc := newHostService(serverClient, "s3cret")
 	router := newTestRouter(serverSvc)
 
 	now := time.Now().UTC()
@@ -358,7 +381,7 @@ func TestPushBootstrapAndDelta(t *testing.T) {
 
 func TestPushRequiresToken(t *testing.T) {
 	serverClient := newTestClient(t)
-	withToken := NewService(serverClient, Options{HostToken: "right"})
+	withToken := newHostService(serverClient, "right")
 	router := newTestRouter(withToken)
 
 	body, _ := json.Marshal(PushRequest{})
@@ -366,7 +389,7 @@ func TestPushRequiresToken(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/sync/push", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		if token != "" {
-			req.Header.Set(headerToken, token)
+			req.Header.Set("Authorization", "Bearer "+token)
 		}
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
@@ -871,7 +894,7 @@ func TestReadChangesSinceFetchesGalleryCacheRow(t *testing.T) {
 // permanently.
 func TestPushPruneSkipsRewoundCursor(t *testing.T) {
 	serverClient := newTestClient(t)
-	svc := NewService(serverClient, Options{HostToken: "tok"})
+	svc := newHostService(serverClient, "tok")
 	router := newTestRouter(svc)
 
 	now := time.Now().UTC()
@@ -936,5 +959,42 @@ func TestApplyChangesSkipsInvalidRow(t *testing.T) {
 	}
 	if p := getProgress(t, client, 1, "tok"); p == nil || p.CurrentPage != 2 {
 		t.Fatalf("valid row not applied: %+v", p)
+	}
+}
+
+func testNodeAuthTenant(validToken string, tenantID int64) func(...string) gin.HandlerFunc {
+	return func(scopes ...string) gin.HandlerFunc {
+		return func(c *gin.Context) {
+			if c.GetHeader("Authorization") != "Bearer "+validToken {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+				return
+			}
+			nodeauth.WithGin(c, nodeauth.Identity{NodeID: 9, TenantID: tenantID, Scopes: []string{nodeauth.ScopeSyncRead, nodeauth.ScopeSyncWrite}})
+			c.Next()
+		}
+	}
+}
+
+func TestPushIsScopedToNodeTenant(t *testing.T) {
+	serverClient := newTestClient(t)
+	now := time.Now().UTC()
+	seedProgress(t, serverClient, 1, "tenant-1", 1, now)
+	if _, err := serverClient.ReadingProgress.Create().
+		SetTenantID(2).SetGalleryID(2).SetToken("tenant-2").
+		SetCurrentPage(2).SetProgress(0.2).SetCreatedAt(now).SetUpdatedAt(now).
+		Save(t.Context()); err != nil {
+		t.Fatalf("seed tenant 2: %v", err)
+	}
+	svc := NewService(serverClient, Options{
+		HostEnabled: true,
+		NodeAuth:    testNodeAuthTenant("node-2-key", 2),
+	})
+	router := newTestRouter(svc)
+	w, resp := doPush(t, router, "node-2-key", PushRequest{Cursor: 0, Snapshot: true})
+	if w.Code != http.StatusOK {
+		t.Fatalf("push = %d %s", w.Code, w.Body.String())
+	}
+	if len(resp.Changes) != 1 || resp.Changes[0].GalleryID != 2 {
+		t.Fatalf("node tenant snapshot = %+v, want only gallery 2", resp.Changes)
 	}
 }

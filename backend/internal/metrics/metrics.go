@@ -1,7 +1,7 @@
 // Package metrics exposes Prometheus instrumentation for upstream ExHentai
 // traffic, the app's own HTTP surface, the image payload memory budget and Go
 // runtime/process stats. The registry is package-private so tests can gather
-// isolated snapshots; production mounts Handler at /metrics behind Basic Auth.
+// isolated snapshots; production mounts Handler at /metrics behind the independent metrics-token middleware.
 package metrics
 
 import (
@@ -208,7 +208,7 @@ func GinMiddleware() gin.HandlerFunc {
 }
 
 // Handler serves the Prometheus text exposition format for this package's
-// private registry. Mount it behind the app's Basic Auth middleware.
+// private registry. Mount it behind the independent metrics-token middleware.
 func Handler() http.Handler {
 	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 }

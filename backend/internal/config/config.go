@@ -14,20 +14,18 @@ type Config struct {
 	Cookie   CookieConfig
 	MinIO    MinIOConfig
 	LogLevel string
-	// SyncToken enables the peer-facing sync endpoints when non-empty
-	// (/api/sync/push and /api/sync/events). Empty disables the sync host.
-	SyncToken string
+	// Sync configures the peer-facing sync host. Node API keys are stored in
+	// the database, never in the environment.
+	Sync SyncConfig
 	// DevTools enables the /api/dev/* debug endpoints (off by default). They
 	// exist so a deployment can simulate an ExHentai outage at runtime to
 	// verify the frontend's offline fallback.
 	DevTools bool
-	// BasicAuth guards every route except /healthz with HTTP Basic Auth.
-	// It replaced the reverse-proxy layer that used to sit in front of the
-	// API, now that Gin serves the frontend too.
-	BasicAuth BasicAuthConfig
+	// Metrics configures the internal Prometheus endpoint.
+	Metrics MetricsConfig
 	// Auth is the JWT authentication setup used by the SPA login page. It is
 	// enabled by setting JWT_SECRET; without it the app keeps its legacy
-	// anonymous single-user behaviour (and Basic Auth remains available).
+	// anonymous single-tenant behaviour.
 	Auth AuthConfig
 }
 
@@ -60,21 +58,19 @@ func (c AuthConfig) ExpiresInSeconds() int {
 	return int(c.JWTExpiresIn / time.Second)
 }
 
-// BasicAuthConfig is the validated HTTP Basic Auth setup. Credentials come
-// from exactly one source: a single user in the environment, or an htpasswd
-// file (apr1 or bcrypt).
-type BasicAuthConfig struct {
+// MetricsConfig controls the internal metrics/readiness surface. When Token
+// is empty, /metrics only answers loopback clients; with a token it requires
+// "Authorization: Bearer <token>" (independent from JWT and node API keys).
+type MetricsConfig struct {
 	Enabled bool
-	// Username/Password hold the single environment-provided user.
-	Username string
-	Password string
-	// File is the htpasswd path; empty when the credentials came from the
-	// environment. It is kept for logging/diagnostics.
-	File string
-	// Hashes is the parsed htpasswd content, loaded once at startup so the
-	// credential file does not have to be world-readable and every request
-	// does not re-read it from disk.
-	Hashes map[string]string
+	Token   string
+}
+
+// SyncConfig configures the node sync host. API keys remain database-managed.
+type SyncConfig struct {
+	Enabled         bool
+	RequestTimeout  time.Duration
+	APIKeyMinLength int
 }
 
 // DatabaseConfig selects the database backend. Driver defaults to "sqlite";
@@ -130,10 +126,14 @@ func Load() (*Config, error) {
 			Path:   getEnv("MANGA_READER_DB_PATH", "data/manga-reader.db"),
 			DSN:    dbDSN,
 		},
-		LogLevel:  getEnv("LOG_LEVEL", "warn"),
-		DevTools:  parseBoolEnv("MANGA_READER_DEV_TOOLS", false),
-		SyncToken: getEnv("MANGA_READER_SYNC_TOKEN", ""),
-		Cookie:    loadCookieConfig(),
+		LogLevel: getEnv("LOG_LEVEL", "warn"),
+		DevTools: parseBoolEnv("MANGA_READER_DEV_TOOLS", false),
+		Sync: SyncConfig{
+			Enabled:         parseBoolEnv("MANGA_READER_SYNC_ENABLED", true),
+			RequestTimeout:  30 * time.Second,
+			APIKeyMinLength: 32,
+		},
+		Cookie: loadCookieConfig(),
 		MinIO: MinIOConfig{
 			Endpoint:  getEnv("MINIO_ENDPOINT", ""),
 			AccessKey: getEnv("MINIO_ACCESS_KEY", ""),
@@ -148,11 +148,26 @@ func Load() (*Config, error) {
 		cfg.Cookie = parseCookieString(cookieStr)
 	}
 
-	basicAuth, err := loadBasicAuth()
+	metricsCfg, err := loadMetrics()
 	if err != nil {
 		return nil, err
 	}
-	cfg.BasicAuth = basicAuth
+	cfg.Metrics = metricsCfg
+
+	if raw := strings.TrimSpace(getEnv("MANGA_READER_SYNC_REQUEST_TIMEOUT", "")); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil || d < time.Second || d > 5*time.Minute {
+			return nil, fmt.Errorf("MANGA_READER_SYNC_REQUEST_TIMEOUT must be a duration between 1s and 5m")
+		}
+		cfg.Sync.RequestTimeout = d
+	}
+	if raw := strings.TrimSpace(getEnv("MANGA_READER_SYNC_API_KEY_MIN_LENGTH", "")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 32 {
+			return nil, fmt.Errorf("MANGA_READER_SYNC_API_KEY_MIN_LENGTH must be at least 32")
+		}
+		cfg.Sync.APIKeyMinLength = n
+	}
 
 	authCfg, err := loadAuth()
 	if err != nil {
@@ -177,82 +192,16 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// loadBasicAuth reads and validates MANGA_READER_BASIC_AUTH_* the same way
-// the old proxy layer did: an unparsable switch value or a missing credential
-// source is a hard error, so a deployment can never come up anonymously by
-// accident (fail closed).
-func loadBasicAuth() (BasicAuthConfig, error) {
-	enabled := strings.ToLower(strings.TrimSpace(getEnv("MANGA_READER_BASIC_AUTH_ENABLED", "false")))
-	switch enabled {
-	case "true", "1", "yes":
-	case "false", "0", "no", "":
-		return BasicAuthConfig{}, nil
-	default:
-		// Deliberately does not echo the raw value: mis-pasted secrets stay
-		// out of the logs.
-		return BasicAuthConfig{}, fmt.Errorf("invalid MANGA_READER_BASIC_AUTH_ENABLED value (want true/false)")
+// loadMetrics reads the independent metrics token. An empty token keeps the
+// endpoint loopback-only; a configured token must be strong enough to stand
+// on its own and is never shared with JWT or node API keys.
+func loadMetrics() (MetricsConfig, error) {
+	cfg := MetricsConfig{Enabled: parseBoolEnv("MANGA_READER_METRICS_ENABLED", true)}
+	token := strings.TrimSpace(getEnv("MANGA_READER_METRICS_TOKEN", ""))
+	if token != "" && len(token) < 32 {
+		return MetricsConfig{}, fmt.Errorf("MANGA_READER_METRICS_TOKEN must be at least 32 characters")
 	}
-
-	cfg := BasicAuthConfig{Enabled: true}
-
-	if file := getEnv("MANGA_READER_BASIC_AUTH_FILE", ""); file != "" {
-		st, err := os.Stat(file)
-		if err != nil {
-			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_FILE not found: %s", file)
-		}
-		if st.Size() == 0 {
-			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_FILE is empty: %s", file)
-		}
-		// Least privilege: reject a credential file that group/other can
-		// modify. Readability is proven by os.ReadFile below; the process UID
-		// only needs read access (0400/0600/0644 are all fine).
-		if st.Mode().Perm()&0o022 != 0 {
-			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_FILE must not be writable by group or others (chmod 0400/0600/0644): %s", file)
-		}
-		data, err := os.ReadFile(file)
-		if err != nil {
-			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_FILE not readable: %s", file)
-		}
-		hashes := parseHtpasswd(data)
-		if len(hashes) == 0 {
-			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_FILE has no valid entries: %s", file)
-		}
-		cfg.File = file
-		cfg.Hashes = hashes
-		return cfg, nil
-	}
-
-	user := getEnv("MANGA_READER_BASIC_AUTH_USERNAME", "")
-	if user == "" {
-		return BasicAuthConfig{}, fmt.Errorf("basic auth enabled but MANGA_READER_BASIC_AUTH_USERNAME is not set")
-	}
-	if strings.Contains(user, ":") {
-		return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_USERNAME must not contain ':'")
-	}
-
-	pass := getEnv("MANGA_READER_BASIC_AUTH_PASSWORD", "")
-	if pass == "" {
-		passFile := getEnv("MANGA_READER_BASIC_AUTH_PASSWORD_FILE", "")
-		if passFile == "" {
-			return BasicAuthConfig{}, fmt.Errorf("basic auth enabled but no password (set MANGA_READER_BASIC_AUTH_PASSWORD or MANGA_READER_BASIC_AUTH_PASSWORD_FILE)")
-		}
-		data, err := os.ReadFile(passFile)
-		if err != nil {
-			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_PASSWORD_FILE not readable: %s", passFile)
-		}
-		line, _, _ := strings.Cut(string(data), "\n")
-		line = strings.TrimRight(line, "\r")
-		if line == "" {
-			return BasicAuthConfig{}, fmt.Errorf("MANGA_READER_BASIC_AUTH_PASSWORD_FILE is empty: %s", passFile)
-		}
-		pass = line
-	}
-	if pass == "" {
-		return BasicAuthConfig{}, fmt.Errorf("basic auth enabled but the password is empty")
-	}
-
-	cfg.Username = user
-	cfg.Password = pass
+	cfg.Token = token
 	return cfg, nil
 }
 
@@ -328,24 +277,6 @@ func loadAuth() (AuthConfig, error) {
 	}
 
 	return cfg, nil
-}
-
-// parseHtpasswd turns an htpasswd file into username -> hash entries. Blank
-// lines and comments are ignored; malformed lines are skipped.
-func parseHtpasswd(data []byte) map[string]string {
-	hashes := make(map[string]string)
-	for line := range strings.SplitSeq(string(data), "\n") {
-		line = strings.TrimRight(line, "\r")
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		name, hash, ok := strings.Cut(line, ":")
-		if !ok || name == "" || hash == "" {
-			continue
-		}
-		hashes[name] = hash
-	}
-	return hashes
 }
 
 func getEnv(key, defaultVal string) string {

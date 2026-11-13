@@ -424,3 +424,108 @@ func TestMultiTenant_AdminFlows(t *testing.T) {
 		t.Fatalf("disabled tenant admin token = %d, want 403", got.Code)
 	}
 }
+
+func TestMultiTenant_NodeAndAPIKeyAdmin(t *testing.T) {
+	f := newMTFixture(t)
+	platformToken, _ := f.login(t, "tenant-a", "admin-a", "password123")
+	tenantAdminToken, _ := f.login(t, "tenant-a", "tenant-admin-a", "password123")
+	if platformToken == "" || tenantAdminToken == "" {
+		t.Fatal("logins failed")
+	}
+
+	if got := f.do(t, http.MethodGet, "/api/admin/nodes", nil, tenantAdminToken); got.Code != http.StatusForbidden {
+		t.Fatalf("tenant admin list nodes = %d, want 403", got.Code)
+	}
+
+	w := f.do(t, http.MethodPost, "/api/admin/nodes", map[string]any{
+		"name": "desktop-home", "tenant_id": f.tenantA.ID,
+	}, platformToken)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create node = %d %s", w.Code, w.Body.String())
+	}
+	var createdNode struct {
+		ID       int    `json:"id"`
+		TenantID int64  `json:"tenant_id"`
+		Status   string `json:"status"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &createdNode); err != nil || createdNode.Status != "active" {
+		t.Fatalf("decode node: %v %s", err, w.Body.String())
+	}
+	if createdNode.TenantID != int64(f.tenantA.ID) {
+		t.Fatalf("node tenant = %d, want %d", createdNode.TenantID, f.tenantA.ID)
+	}
+
+	w = f.do(t, http.MethodPost, "/api/admin/nodes/"+strconv.Itoa(createdNode.ID)+"/keys", map[string]any{
+		"scopes": []string{"sync:read", "sync:write", "sync:events"},
+	}, platformToken)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create key = %d %s", w.Code, w.Body.String())
+	}
+	var createdKey struct {
+		Key    string `json:"key"`
+		APIKey struct {
+			ID        int    `json:"id"`
+			KeyPrefix string `json:"key_prefix"`
+			Status    string `json:"status"`
+		} `json:"api_key"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &createdKey); err != nil {
+		t.Fatalf("decode key: %v", err)
+	}
+	if !strings.HasPrefix(createdKey.Key, "mrk_") || createdKey.APIKey.KeyPrefix == "" {
+		t.Fatalf("unexpected key response: %+v", createdKey)
+	}
+	if !strings.HasPrefix(createdKey.Key, createdKey.APIKey.KeyPrefix) {
+		t.Fatalf("key prefix %q does not prefix key %q", createdKey.APIKey.KeyPrefix, createdKey.Key)
+	}
+
+	// Listing keys must only expose the prefix, never the plaintext secret.
+	w = f.do(t, http.MethodGet, "/api/admin/nodes/"+strconv.Itoa(createdNode.ID)+"/keys", nil, platformToken)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list keys = %d", w.Code)
+	}
+	if strings.Contains(w.Body.String(), createdKey.Key) {
+		t.Fatal("list keys leaked the full API key")
+	}
+	if !strings.Contains(w.Body.String(), createdKey.APIKey.KeyPrefix) {
+		t.Fatal("list keys missing prefix")
+	}
+
+	// Rotation returns a new plaintext and keeps the old key active.
+	w = f.do(t, http.MethodPost, "/api/admin/nodes/"+strconv.Itoa(createdNode.ID)+"/keys/"+strconv.Itoa(createdKey.APIKey.ID)+"/rotate", map[string]any{
+		"revoke_old": false,
+	}, platformToken)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("rotate key = %d %s", w.Code, w.Body.String())
+	}
+	var rotated struct {
+		Key string `json:"key"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &rotated)
+	if rotated.Key == "" || rotated.Key == createdKey.Key {
+		t.Fatal("rotation did not return a fresh key")
+	}
+
+	// Revoking the old key is explicit.
+	w = f.do(t, http.MethodDelete, "/api/admin/nodes/"+strconv.Itoa(createdNode.ID)+"/keys/"+strconv.Itoa(createdKey.APIKey.ID), nil, platformToken)
+	if w.Code != http.StatusOK {
+		t.Fatalf("revoke key = %d %s", w.Code, w.Body.String())
+	}
+	var revoked struct {
+		Status string `json:"status"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &revoked)
+	if revoked.Status != "revoked" {
+		t.Fatalf("revoked status = %q", revoked.Status)
+	}
+
+	// Deleting the node removes its key rows.
+	w = f.do(t, http.MethodDelete, "/api/admin/nodes/"+strconv.Itoa(createdNode.ID), nil, platformToken)
+	if w.Code != http.StatusOK {
+		t.Fatalf("delete node = %d %s", w.Code, w.Body.String())
+	}
+	count, err := f.db.Client.NodeAPIKey.Query().Count(t.Context())
+	if err != nil || count != 0 {
+		t.Fatalf("keys after node delete = %d (err %v)", count, err)
+	}
+}

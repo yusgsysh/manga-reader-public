@@ -12,7 +12,7 @@ import { HexColorPicker, HexColorInput } from "react-colorful";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchUpstreamDown, setUpstreamDown } from "../api/dev";
 import {
-  SYNC_TOKEN_MASK,
+  SYNC_KEY_MASK,
   fetchSyncConfig,
   fetchSyncStatus,
   saveSyncConfig,
@@ -329,14 +329,14 @@ function SyncSection() {
     setAppliedConfig(config);
     setServerURL(config.server_url);
     setEnabled(config.enabled);
-    setTokenStored(config.token === SYNC_TOKEN_MASK);
+    setTokenStored(config.token === SYNC_KEY_MASK);
   }
 
   const saveMutation = useMutation({
     mutationFn: (update: SyncConfigUpdate) => saveSyncConfig(update),
     onSuccess: (cfg) => {
       queryClient.setQueryData(["sync-config"], cfg);
-      setTokenStored(cfg.token === SYNC_TOKEN_MASK);
+      setTokenStored(cfg.token === SYNC_KEY_MASK);
       setToken("");
       void statusQuery.refetch();
       toast.success("同步配置已保存");
@@ -392,7 +392,7 @@ function SyncSection() {
               </div>
               <div>
                 <div className="mb-2 text-sm font-medium">
-                  同步令牌
+                  节点 API Key
                   {tokenStored && (
                     <span className="ml-2 text-xs font-normal text-kumo-subtle">
                       已保存
@@ -404,9 +404,9 @@ function SyncSection() {
                     type="password"
                     autoComplete="off"
                     placeholder={
-                      tokenStored ? "留空保持现有令牌" : "服务端 MANGA_READER_SYNC_TOKEN"
+                      tokenStored ? "留空保持现有令牌" : "在「节点管理」创建的 API Key"
                     }
-                    aria-label="同步令牌"
+                    aria-label="节点 API Key"
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
                     disabled={saveMutation.isPending}
@@ -431,7 +431,7 @@ function SyncSection() {
                   保存
                 </Button>
                 <p className="text-xs text-kumo-subtle">
-                  双向同步阅读进度与书架；服务端需设置 MANGA_READER_SYNC_TOKEN。
+                  双向同步阅读进度与书架；API Key 在平台「节点管理」创建，节点绑定租户。
                 </p>
               </div>
             </>

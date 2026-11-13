@@ -110,9 +110,13 @@ type Key struct {
 // host to send its full table state instead of outbox deltas; the client sets
 // it exactly once, until its first successful push.
 type PushRequest struct {
-	Cursor   int      `json:"cursor"`
-	Snapshot bool     `json:"snapshot"`
-	Changes  []Change `json:"changes"`
+	// RequestID lets peers correlate retries and audit lines. Data merging
+	// is independently idempotent via per-row LWW, so a retried request is
+	// safe even when the id is absent.
+	RequestID string   `json:"request_id,omitempty"`
+	Cursor    int      `json:"cursor"`
+	Snapshot  bool     `json:"snapshot"`
+	Changes   []Change `json:"changes"`
 }
 
 // PushResponse returns host-side changes after the caller's cursor.

@@ -20,7 +20,7 @@ After=manga-reader-warp.service
 Image=ghcr.io/yusgsysh/manga-reader:latest
 # 容器组：共享 WARP 所在的 netns；PublishPort 必须写在 manga-reader.pod 里。
 Pod=manga-reader.pod
-# 全量配置（EHENTAI_COOKIE、同步令牌、数据库驱动、JWT / Basic Auth 等）
+# 全量配置（EHENTAI_COOKIE、数据库驱动、JWT、Metrics、Node Sync 等）
 # 注意：键名必须是 EnvironmentFile=（EnvFile= 非法键，quadlet 会跳过整个 unit）
 # 该值经 podman --env-file 注入：每行须为 KEY=VALUE，且 $ 不做展开
 # NO_PROXY 仍在 .env 中配置（内网 MinIO / 数据库 / 服务名需要绕过代理）
@@ -45,14 +45,14 @@ Environment=MANGA_READER_DB_PATH=/app/data/manga-reader.db
 #Environment=ADMIN_PASSWORD=change-me-strong-password
 #Environment=MANGA_READER_AUTH_COOKIE_SECURE=auto
 
-# HTTP Basic Auth（Gin 层；生产置于 HTTPS 之后；与 JWT 登录二选一）
-# 开关与凭据优先读 EnvironmentFile（.env）；也可在此显式覆盖：
-#Environment=MANGA_READER_BASIC_AUTH_ENABLED=true
-#Environment=MANGA_READER_BASIC_AUTH_USERNAME=admin
-#Environment=MANGA_READER_BASIC_AUTH_PASSWORD=change-me-strong-password
-# htpasswd 文件模式（apr1/bcrypt 均可）：
-#Environment=MANGA_READER_BASIC_AUTH_FILE=/run/secrets/manga_reader_htpasswd
-#Secret=manga_reader_htpasswd
+# Metrics 独立 Token（未设置时 /metrics 仅回环访问）
+#Environment=MANGA_READER_METRICS_ENABLED=true
+#Environment=MANGA_READER_METRICS_TOKEN=<paste output of: openssl rand -hex 32>
+
+# 节点同步（Node API Key 由平台管理员在 /admin/nodes 创建，存数据库）
+#Environment=MANGA_READER_SYNC_ENABLED=true
+#Environment=MANGA_READER_SYNC_REQUEST_TIMEOUT=30s
+#Environment=MANGA_READER_SYNC_API_KEY_MIN_LENGTH=32
 
 # 数据卷：以 podman volume ls 实际名称为准
 Volume=manga-reader-public_backend_data:/app/data

@@ -5,7 +5,7 @@
 #       Prometheus http://localhost:9090（仅本机回环）
 #
 # 抓取目标默认 host.docker.internal:5173（宿主机上 compose 发布的 backend 端口）。
-# backend 开启 Basic Auth 时 /metrics 同样受保护，需在 .env 配置抓取凭据。
+# /metrics 使用独立的 MANGA_READER_METRICS_TOKEN（Authorization: Bearer）。
 #
 # Prometheus 不展开配置文件里的环境变量，所以抓取配置经 compose 的
 # configs.content 在 up 时用 .env 渲染（改 .env 后需重新 up 生效）。
@@ -26,11 +26,9 @@ configs:
           metrics_path: /metrics
           static_configs:
             - targets: ["${MANGA_READER_TARGET}"]
-          # backend 未开 Basic Auth 时凭据会被忽略，留默认值即可；
-          # 开启后在 .env 填与 MANGA_READER_BASIC_AUTH_* 一致的用户名/口令。
-          basic_auth:
-            username: ${MANGA_READER_METRICS_USERNAME}
-            password: ${MANGA_READER_METRICS_PASSWORD}
+          authorization:
+            type: Bearer
+            credentials: ${MANGA_READER_METRICS_TOKEN:?set MANGA_READER_METRICS_TOKEN in .env}
 
   # 告警规则（见 alerting/rules.yml）。修改后需 docker compose up -d 重挂。
   prometheus_rules:

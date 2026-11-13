@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  SYNC_TOKEN_MASK,
+  SYNC_KEY_MASK,
   fetchSyncConfig,
   fetchSyncStatus,
   saveSyncConfig,
@@ -12,7 +12,7 @@ const BASE = "http://localhost:8080";
 const sampleConfig: SyncConfig = {
   enabled: true,
   server_url: "https://server.example.com",
-  token: SYNC_TOKEN_MASK,
+  token: SYNC_KEY_MASK,
 };
 
 const sampleStatus: SyncStatus = {

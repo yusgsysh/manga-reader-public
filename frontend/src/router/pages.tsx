@@ -58,6 +58,11 @@ export const TenantAdminPage = lazy(() =>
     default: m.TenantAdminPage,
   })),
 );
+export const NodeAdminPage = lazy(() =>
+  import("../pages/NodeAdminPage").then((m) => ({
+    default: m.NodeAdminPage,
+  })),
+);
 
 function PageLoading() {
   return (

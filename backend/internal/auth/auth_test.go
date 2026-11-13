@@ -310,3 +310,16 @@ func TestStatusIsPublicAndReportsInitialized(t *testing.T) {
 		t.Fatalf("status = %+v, want enabled+initialized", res)
 	}
 }
+
+func TestBasicAuthHeaderIsNotAccepted(t *testing.T) {
+	svc, _ := newTestService(t)
+	r := newTestRouter(svc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/bookshelf", nil)
+	req.SetBasicAuth("admin", "password123")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("Basic auth header = %d, want 401", w.Code)
+	}
+}

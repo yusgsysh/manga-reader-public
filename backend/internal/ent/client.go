@@ -12,6 +12,8 @@ import (
 	"manga-reader/internal/ent/migrate"
 
 	"manga-reader/internal/ent/bookshelf"
+	"manga-reader/internal/ent/node"
+	"manga-reader/internal/ent/nodeapikey"
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/readingprogress"
 	"manga-reader/internal/ent/syncchange"
@@ -34,6 +36,10 @@ type Client struct {
 	Bookshelf *BookshelfClient
 	// GalleryCache is the client for interacting with the GalleryCache builders.
 	GalleryCache *GalleryCacheClient
+	// Node is the client for interacting with the Node builders.
+	Node *NodeClient
+	// NodeAPIKey is the client for interacting with the NodeAPIKey builders.
+	NodeAPIKey *NodeAPIKeyClient
 	// PrefillJob is the client for interacting with the PrefillJob builders.
 	PrefillJob *PrefillJobClient
 	// ReadingProgress is the client for interacting with the ReadingProgress builders.
@@ -63,6 +69,8 @@ func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.Bookshelf = NewBookshelfClient(c.config)
 	c.GalleryCache = NewGalleryCacheClient(c.config)
+	c.Node = NewNodeClient(c.config)
+	c.NodeAPIKey = NewNodeAPIKeyClient(c.config)
 	c.PrefillJob = NewPrefillJobClient(c.config)
 	c.ReadingProgress = NewReadingProgressClient(c.config)
 	c.SyncChange = NewSyncChangeClient(c.config)
@@ -165,6 +173,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		config:          cfg,
 		Bookshelf:       NewBookshelfClient(cfg),
 		GalleryCache:    NewGalleryCacheClient(cfg),
+		Node:            NewNodeClient(cfg),
+		NodeAPIKey:      NewNodeAPIKeyClient(cfg),
 		PrefillJob:      NewPrefillJobClient(cfg),
 		ReadingProgress: NewReadingProgressClient(cfg),
 		SyncChange:      NewSyncChangeClient(cfg),
@@ -194,6 +204,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		config:          cfg,
 		Bookshelf:       NewBookshelfClient(cfg),
 		GalleryCache:    NewGalleryCacheClient(cfg),
+		Node:            NewNodeClient(cfg),
+		NodeAPIKey:      NewNodeAPIKeyClient(cfg),
 		PrefillJob:      NewPrefillJobClient(cfg),
 		ReadingProgress: NewReadingProgressClient(cfg),
 		SyncChange:      NewSyncChangeClient(cfg),
@@ -231,8 +243,9 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.Bookshelf, c.GalleryCache, c.PrefillJob, c.ReadingProgress, c.SyncChange,
-		c.SyncState, c.TagPreference, c.TagSyncBaseline, c.Tenant, c.User,
+		c.Bookshelf, c.GalleryCache, c.Node, c.NodeAPIKey, c.PrefillJob,
+		c.ReadingProgress, c.SyncChange, c.SyncState, c.TagPreference,
+		c.TagSyncBaseline, c.Tenant, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -242,8 +255,9 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.Bookshelf, c.GalleryCache, c.PrefillJob, c.ReadingProgress, c.SyncChange,
-		c.SyncState, c.TagPreference, c.TagSyncBaseline, c.Tenant, c.User,
+		c.Bookshelf, c.GalleryCache, c.Node, c.NodeAPIKey, c.PrefillJob,
+		c.ReadingProgress, c.SyncChange, c.SyncState, c.TagPreference,
+		c.TagSyncBaseline, c.Tenant, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -256,6 +270,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Bookshelf.mutate(ctx, m)
 	case *GalleryCacheMutation:
 		return c.GalleryCache.mutate(ctx, m)
+	case *NodeMutation:
+		return c.Node.mutate(ctx, m)
+	case *NodeAPIKeyMutation:
+		return c.NodeAPIKey.mutate(ctx, m)
 	case *PrefillJobMutation:
 		return c.PrefillJob.mutate(ctx, m)
 	case *ReadingProgressMutation:
@@ -509,6 +527,272 @@ func (c *GalleryCacheClient) mutate(ctx context.Context, m *GalleryCacheMutation
 		return (&GalleryCacheDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GalleryCache mutation op: %q", m.Op())
+	}
+}
+
+// NodeClient is a client for the Node schema.
+type NodeClient struct {
+	config
+}
+
+// NewNodeClient returns a client for the Node from the given config.
+func NewNodeClient(c config) *NodeClient {
+	return &NodeClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `node.Hooks(f(g(h())))`.
+func (c *NodeClient) Use(hooks ...Hook) {
+	c.hooks.Node = append(c.hooks.Node, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `node.Intercept(f(g(h())))`.
+func (c *NodeClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Node = append(c.inters.Node, interceptors...)
+}
+
+// Create returns a builder for creating a Node entity.
+func (c *NodeClient) Create() *NodeCreate {
+	mutation := newNodeMutation(c.config, OpCreate)
+	return &NodeCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Node entities.
+func (c *NodeClient) CreateBulk(builders ...*NodeCreate) *NodeCreateBulk {
+	return &NodeCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *NodeClient) MapCreateBulk(slice any, setFunc func(*NodeCreate, int)) *NodeCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &NodeCreateBulk{err: fmt.Errorf("calling to NodeClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*NodeCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &NodeCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Node.
+func (c *NodeClient) Update() *NodeUpdate {
+	mutation := newNodeMutation(c.config, OpUpdate)
+	return &NodeUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *NodeClient) UpdateOne(_m *Node) *NodeUpdateOne {
+	mutation := newNodeMutation(c.config, OpUpdateOne, withNode(_m))
+	return &NodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *NodeClient) UpdateOneID(id int) *NodeUpdateOne {
+	mutation := newNodeMutation(c.config, OpUpdateOne, withNodeID(id))
+	return &NodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Node.
+func (c *NodeClient) Delete() *NodeDelete {
+	mutation := newNodeMutation(c.config, OpDelete)
+	return &NodeDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *NodeClient) DeleteOne(_m *Node) *NodeDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *NodeClient) DeleteOneID(id int) *NodeDeleteOne {
+	builder := c.Delete().Where(node.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &NodeDeleteOne{builder}
+}
+
+// Query returns a query builder for Node.
+func (c *NodeClient) Query() *NodeQuery {
+	return &NodeQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeNode},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Node entity by its id.
+func (c *NodeClient) Get(ctx context.Context, id int) (*Node, error) {
+	return c.Query().Where(node.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *NodeClient) GetX(ctx context.Context, id int) *Node {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *NodeClient) Hooks() []Hook {
+	return c.hooks.Node
+}
+
+// Interceptors returns the client interceptors.
+func (c *NodeClient) Interceptors() []Interceptor {
+	return c.inters.Node
+}
+
+func (c *NodeClient) mutate(ctx context.Context, m *NodeMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&NodeCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&NodeUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&NodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&NodeDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Node mutation op: %q", m.Op())
+	}
+}
+
+// NodeAPIKeyClient is a client for the NodeAPIKey schema.
+type NodeAPIKeyClient struct {
+	config
+}
+
+// NewNodeAPIKeyClient returns a client for the NodeAPIKey from the given config.
+func NewNodeAPIKeyClient(c config) *NodeAPIKeyClient {
+	return &NodeAPIKeyClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `nodeapikey.Hooks(f(g(h())))`.
+func (c *NodeAPIKeyClient) Use(hooks ...Hook) {
+	c.hooks.NodeAPIKey = append(c.hooks.NodeAPIKey, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `nodeapikey.Intercept(f(g(h())))`.
+func (c *NodeAPIKeyClient) Intercept(interceptors ...Interceptor) {
+	c.inters.NodeAPIKey = append(c.inters.NodeAPIKey, interceptors...)
+}
+
+// Create returns a builder for creating a NodeAPIKey entity.
+func (c *NodeAPIKeyClient) Create() *NodeAPIKeyCreate {
+	mutation := newNodeAPIKeyMutation(c.config, OpCreate)
+	return &NodeAPIKeyCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of NodeAPIKey entities.
+func (c *NodeAPIKeyClient) CreateBulk(builders ...*NodeAPIKeyCreate) *NodeAPIKeyCreateBulk {
+	return &NodeAPIKeyCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *NodeAPIKeyClient) MapCreateBulk(slice any, setFunc func(*NodeAPIKeyCreate, int)) *NodeAPIKeyCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &NodeAPIKeyCreateBulk{err: fmt.Errorf("calling to NodeAPIKeyClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*NodeAPIKeyCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &NodeAPIKeyCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for NodeAPIKey.
+func (c *NodeAPIKeyClient) Update() *NodeAPIKeyUpdate {
+	mutation := newNodeAPIKeyMutation(c.config, OpUpdate)
+	return &NodeAPIKeyUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *NodeAPIKeyClient) UpdateOne(_m *NodeAPIKey) *NodeAPIKeyUpdateOne {
+	mutation := newNodeAPIKeyMutation(c.config, OpUpdateOne, withNodeAPIKey(_m))
+	return &NodeAPIKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *NodeAPIKeyClient) UpdateOneID(id int) *NodeAPIKeyUpdateOne {
+	mutation := newNodeAPIKeyMutation(c.config, OpUpdateOne, withNodeAPIKeyID(id))
+	return &NodeAPIKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for NodeAPIKey.
+func (c *NodeAPIKeyClient) Delete() *NodeAPIKeyDelete {
+	mutation := newNodeAPIKeyMutation(c.config, OpDelete)
+	return &NodeAPIKeyDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *NodeAPIKeyClient) DeleteOne(_m *NodeAPIKey) *NodeAPIKeyDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *NodeAPIKeyClient) DeleteOneID(id int) *NodeAPIKeyDeleteOne {
+	builder := c.Delete().Where(nodeapikey.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &NodeAPIKeyDeleteOne{builder}
+}
+
+// Query returns a query builder for NodeAPIKey.
+func (c *NodeAPIKeyClient) Query() *NodeAPIKeyQuery {
+	return &NodeAPIKeyQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeNodeAPIKey},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a NodeAPIKey entity by its id.
+func (c *NodeAPIKeyClient) Get(ctx context.Context, id int) (*NodeAPIKey, error) {
+	return c.Query().Where(nodeapikey.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *NodeAPIKeyClient) GetX(ctx context.Context, id int) *NodeAPIKey {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *NodeAPIKeyClient) Hooks() []Hook {
+	return c.hooks.NodeAPIKey
+}
+
+// Interceptors returns the client interceptors.
+func (c *NodeAPIKeyClient) Interceptors() []Interceptor {
+	return c.inters.NodeAPIKey
+}
+
+func (c *NodeAPIKeyClient) mutate(ctx context.Context, m *NodeAPIKeyMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&NodeAPIKeyCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&NodeAPIKeyUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&NodeAPIKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&NodeAPIKeyDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown NodeAPIKey mutation op: %q", m.Op())
 	}
 }
 
@@ -1517,11 +1801,12 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Bookshelf, GalleryCache, PrefillJob, ReadingProgress, SyncChange, SyncState,
-		TagPreference, TagSyncBaseline, Tenant, User []ent.Hook
+		Bookshelf, GalleryCache, Node, NodeAPIKey, PrefillJob, ReadingProgress,
+		SyncChange, SyncState, TagPreference, TagSyncBaseline, Tenant, User []ent.Hook
 	}
 	inters struct {
-		Bookshelf, GalleryCache, PrefillJob, ReadingProgress, SyncChange, SyncState,
-		TagPreference, TagSyncBaseline, Tenant, User []ent.Interceptor
+		Bookshelf, GalleryCache, Node, NodeAPIKey, PrefillJob, ReadingProgress,
+		SyncChange, SyncState, TagPreference, TagSyncBaseline, Tenant,
+		User []ent.Interceptor
 	}
 )

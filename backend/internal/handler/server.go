@@ -100,6 +100,17 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 	r.PUT("/api/tenant/users/:id", s.handleTenantUserUpdate)
 	r.PATCH("/api/tenant/users/:id/status", s.handleTenantUserStatus)
 
+	// Node and node API-key administration (platform_admin only).
+	r.GET("/api/admin/nodes", s.handleAdminNodeList)
+	r.POST("/api/admin/nodes", s.handleAdminNodeCreate)
+	r.GET("/api/admin/nodes/:id", s.handleAdminNodeGet)
+	r.PUT("/api/admin/nodes/:id", s.handleAdminNodeUpdate)
+	r.DELETE("/api/admin/nodes/:id", s.handleAdminNodeDelete)
+	r.GET("/api/admin/nodes/:id/keys", s.handleAdminNodeKeyList)
+	r.POST("/api/admin/nodes/:id/keys", s.handleAdminNodeKeyCreate)
+	r.DELETE("/api/admin/nodes/:id/keys/:keyId", s.handleAdminNodeKeyRevoke)
+	r.POST("/api/admin/nodes/:id/keys/:keyId/rotate", s.handleAdminNodeKeyRotate)
+
 	r.GET("/api/gallery/:id/:token", s.handleGetGallery)
 	r.GET("/api/gallery/:id/:token/details", s.handleGalleryDetails)
 	r.GET("/api/gallery/:id/:token/pages", s.handleGalleryPages)

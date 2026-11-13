@@ -245,14 +245,13 @@ func (e *Engine) sendPush(ctx context.Context, cfg ClientConfig, req PushRequest
 	url := cfg.ServerURL + "/api/sync/push"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		// The server URL may embed Basic Auth credentials (user:pass@host)
-		// for an auth-protected public peer; url.Parse errors echo the raw
-		// URL verbatim, so the error must not wrap them. It would otherwise
-		// end up in logs and in sync_state.last_error.
+		// A server URL may accidentally contain userinfo; url.Parse errors
+		// echo the raw URL verbatim, so they must not be wrapped. Otherwise
+		// they would end up in logs and sync_state.last_error.
 		return resp, fmt.Errorf("build push request: invalid server url")
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set(headerToken, cfg.Token)
+	httpReq.Header.Set("Authorization", "Bearer "+cfg.Token)
 
 	httpResp, err := e.http.Do(httpReq)
 	if err != nil {
@@ -314,7 +313,7 @@ func (e *Engine) sseSession(ctx context.Context, cfg ClientConfig, events chan<-
 	if err != nil {
 		return false
 	}
-	httpReq.Header.Set(headerToken, cfg.Token)
+	httpReq.Header.Set("Authorization", "Bearer "+cfg.Token)
 	httpReq.Header.Set("Accept", "text/event-stream")
 
 	// No timeout: the stream is long-lived (heartbeats keep it fresh).

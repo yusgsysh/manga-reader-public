@@ -107,11 +107,11 @@ Search / Homepage / Watched 支持上游 ExHentai 的 Jump/Seek 定位，通过�
 
 ## Authentication (JWT)
 
-JWT auth is opt-in: set `JWT_SECRET` (at least 32 random bytes) to enable it. Without it the API keeps the legacy anonymous behaviour. Basic Auth, if enabled, runs **before** JWT and will block `/login` and the SPA.
+JWT auth is opt-in: set `JWT_SECRET` (at least 32 random bytes) to enable it. Without it the API keeps the legacy anonymous behaviour. HTTP Basic Authentication is not supported anywhere in the application.
 
 ### Public vs protected
 
-Public (no JWT): `/api/auth/login`, `/api/auth/status`, `/api/search`, `/api/galleries`, `/api/watched`, `/api/popular`, `/api/gallery/*`, `/api/gallery-cache/*`, `/api/image/*`, `/api/image-cache/*`, and the peer sync endpoints (which require `X-Sync-Token` instead).
+Public (no JWT): `/api/auth/login`, `/api/auth/status`, `/api/search`, `/api/galleries`, `/api/watched`, `/api/popular`, `/api/gallery/*`, `/api/gallery-cache/*`, `/api/image/*`, `/api/image-cache/*`. Peer sync endpoints require a Node API Key instead (separate middleware).
 
 Every other `/api/*` route requires a valid JWT: `/api/auth/me`, `/api/auth/logout`, `/api/bookshelf*`, `/api/progress*`, `/api/recently-read`, `/api/reading-progress/cleanup`, `/api/tag-settings*`, `/api/prefill*`, `/api/sync/config`, `/api/sync/status`, `/api/dev/*`, `/api/admin/*`, `/api/tenant/*`. The middleware is default-deny, so new API routes are protected unless explicitly listed as public.
 
@@ -203,6 +203,27 @@ All routes require a tenant administrator JWT and are always scoped to that JWT'
 | PATCH | `/api/tenant/users/:id/status` | `{ "status": "active" \| "disabled" }` |
 
 Reset password and role/status changes increment `token_version`, revoking that user's existing tokens.
+
+### 0.7 Node and API-key administration (platform_admin)
+
+All routes require a platform administrator JWT. Nodes are bound to one tenant; their API keys can only sync that tenant.
+
+| Method | Path | Body |
+|--------|------|------|
+| GET | `/api/admin/nodes` | - |
+| POST | `/api/admin/nodes` | `{ "name", "tenant_id", "status"? }` |
+| GET | `/api/admin/nodes/:id` | - |
+| PUT | `/api/admin/nodes/:id` | `{ "name"?, "status"? }` |
+| DELETE | `/api/admin/nodes/:id` | - |
+| GET | `/api/admin/nodes/:id/keys` | - |
+| POST | `/api/admin/nodes/:id/keys` | `{ "scopes"?, "expires_at"? }` |
+| DELETE | `/api/admin/nodes/:id/keys/:keyId` | - |
+| POST | `/api/admin/nodes/:id/keys/:keyId/rotate` | `{ "revoke_old"?, "expires_at"? }` |
+
+- Scopes: `sync:read`, `sync:write`, `sync:events`.
+- `POST .../keys` and `.../rotate` return the full plaintext key **once** as `{"key":"mrk_...", "api_key":{...}}`; list/get only expose `key_prefix`.
+- Revocation is immediate. Rotation creates a new key and leaves the old one active unless `revoke_old` is true or the old key is explicitly deleted.
+- Deleting a node deletes its key rows in the same transaction.
 
 ---
 
@@ -1468,18 +1489,19 @@ Cache-Control: no-store
 }
 ```
 
-**本地事件流（供前端刷新，无鉴权）：**
+**本地事件流（供前端刷新，用户 JWT）：**
 
 `GET /api/events/changes` — SSE，连接后立即推送 `data: {}`；本地任意同步数据变更（含远端应用）再推 `data: {}`。该路径由 Gin 直接流式写出（无反代缓冲，`WriteTimeout` 未设置）。
 
-**宿主端点（仅当服务端设置 `MANGA_READER_SYNC_TOKEN` 时注册，否则 `404`）：**
+**宿主端点（`MANGA_READER_SYNC_ENABLED=true` 时注册）：**
 
-鉴权：请求头 `X-Sync-Token: <token>`，不匹配返回 `401 {"error":"invalid sync token"}`。
+鉴权：`Authorization: Bearer <Node API Key>`。中间件解析 Key 的 SHA-256 哈希、校验节点/租户状态和 Scopes；失败返回 `401`，Scope 不足返回 `403`。用户 JWT 不能访问这些端点。节点只能访问其绑定租户的数据。
 
 `POST /api/sync/push` — 一步推 + 拉。请求：
 
 ```json
 {
+  "request_id": "optional-correlation-id",
   "cursor": 12,
   "snapshot": false,
   "changes": [
@@ -1509,33 +1531,29 @@ Cache-Control: no-store
 **示例：**
 
 ```bash
-# 服务端设置令牌后，桌面端配置并引导
+# 平台管理员通过 /api/admin/nodes 与 /api/admin/nodes/:id/keys 创建节点和 API Key 后：
 curl -X PUT http://localhost:8080/api/sync/config -H 'Content-Type: application/json' \
-  -d '{"enabled":true,"server_url":"http://server:8080","token":"my-secret"}'
+  -d '{"enabled":true,"server_url":"http://server:8080","token":"mrk_..."}'
 
-# 公网服务端（Basic Auth 后）：请求本身与 server_url 均带凭据
-curl -u admin:$PASSWORD -X PUT https://manga.09270721.xyz/api/sync/config \
-  -H 'Content-Type: application/json' \
-  -d '{"enabled":true,"server_url":"https://admin:$PASSWORD@server.example.com","token":"my-secret"}'
-
-# 手动推 + 拉
+# 手动推 + 拉（节点 API Key）
 curl -X POST http://server:8080/api/sync/push \
-  -H 'Content-Type: application/json' -H 'X-Sync-Token: my-secret' \
+  -H 'Authorization: Bearer mrk_...' \
+  -H 'Content-Type: application/json' \
   -d '{"cursor":0,"snapshot":true,"changes":[]}'
 
 # 监听远端变更
-curl -N http://server:8080/api/sync/events -H 'X-Sync-Token: my-secret'
+curl -N http://server:8080/api/sync/events -H 'Authorization: Bearer mrk_...'
 ```
 
-> 公网服务端若在反向代理层开启 HTTP Basic Auth（见根 README「公网部署」），在 `server_url` 内嵌 Basic 凭据即可通过：`https://user:$PASSWORD@server.example.com`，例如 `https://admin:$PASSWORD@server.example.com`（口令含 `@`、`:` 时需 URL 编码）。Go 客户端会自动携带 `Authorization` 头，它与 `X-Sync-Token` 相互独立、需同时提供；同步错误信息（`last_error`）不会包含该口令。
+同步请求的 `request_id` 会写入审计日志；数据合并仍按行 LWW 幂等。API Key 明文只在创建/轮换时返回一次，错误日志不记录完整 Key。
 
-**Error Responses:** `400` 配置无效（如 `server_url` 缺少 http/https、请求体非法）、`401` 令牌不匹配、`404` 宿主端点未启用。
+**Error Responses:** `400` 配置无效、`401` Key 无效/撤销/过期/节点或租户禁用、`403` Scope 不足、`404` 宿主端点未启用。
 
 ---
 
 ### 29. Metrics（Prometheus）
 
-`GET /metrics` — Prometheus 文本格式（`Content-Type: text/plain; version=0.0.4`），在 Basic Auth 中间件之后（公网需带凭据）。指标实现见 `backend/internal/metrics`（包私有 registry，`promhttp` 暴露）。
+`GET /metrics` — Prometheus 文本格式（`Content-Type: text/plain; version=0.0.4`）。默认只允许回环地址访问；配置 `MANGA_READER_METRICS_TOKEN` 后必须携带 `Authorization: Bearer <token>` 或 `X-Metrics-Token`。该凭证与 JWT、节点 API Key 完全独立。`GET /healthz` 返回存活状态，`GET /readyz` 检查数据库连接，两者都只返回最小状态信息。
 
 缓存命中率相关计数器（完整指标列表见根 README「可观测性」）：
 
@@ -1554,7 +1572,7 @@ sum(rate(image_cache_requests_total{result="hit"}[5m]))
 sum(rate(image_cache_requests_total[5m]))
 ```
 
-**Error Responses:** `401` Basic Auth 凭据缺失或错误。
+**Error Responses:** `401` Metrics Token 缺失或错误；未配置 Token 且来源不是回环地址时返回 `403`。
 
 ---
 

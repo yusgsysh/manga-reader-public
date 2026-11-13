@@ -5,6 +5,8 @@ package ent
 import (
 	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/gallerycache"
+	"manga-reader/internal/ent/node"
+	"manga-reader/internal/ent/nodeapikey"
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/readingprogress"
 	"manga-reader/internal/ent/schema"
@@ -107,6 +109,44 @@ func init() {
 	gallerycache.DefaultUpdatedAt = gallerycacheDescUpdatedAt.Default.(func() time.Time)
 	// gallerycache.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	gallerycache.UpdateDefaultUpdatedAt = gallerycacheDescUpdatedAt.UpdateDefault.(func() time.Time)
+	nodeFields := schema.Node{}.Fields()
+	_ = nodeFields
+	// nodeDescName is the schema descriptor for name field.
+	nodeDescName := nodeFields[0].Descriptor()
+	// node.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	node.NameValidator = nodeDescName.Validators[0].(func(string) error)
+	// nodeDescStatus is the schema descriptor for status field.
+	nodeDescStatus := nodeFields[2].Descriptor()
+	// node.DefaultStatus holds the default value on creation for the status field.
+	node.DefaultStatus = nodeDescStatus.Default.(string)
+	// nodeDescCreatedAt is the schema descriptor for created_at field.
+	nodeDescCreatedAt := nodeFields[4].Descriptor()
+	// node.DefaultCreatedAt holds the default value on creation for the created_at field.
+	node.DefaultCreatedAt = nodeDescCreatedAt.Default.(func() time.Time)
+	// nodeDescUpdatedAt is the schema descriptor for updated_at field.
+	nodeDescUpdatedAt := nodeFields[5].Descriptor()
+	// node.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	node.DefaultUpdatedAt = nodeDescUpdatedAt.Default.(func() time.Time)
+	// node.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	node.UpdateDefaultUpdatedAt = nodeDescUpdatedAt.UpdateDefault.(func() time.Time)
+	nodeapikeyFields := schema.NodeAPIKey{}.Fields()
+	_ = nodeapikeyFields
+	// nodeapikeyDescKeyHash is the schema descriptor for key_hash field.
+	nodeapikeyDescKeyHash := nodeapikeyFields[1].Descriptor()
+	// nodeapikey.KeyHashValidator is a validator for the "key_hash" field. It is called by the builders before save.
+	nodeapikey.KeyHashValidator = nodeapikeyDescKeyHash.Validators[0].(func(string) error)
+	// nodeapikeyDescKeyPrefix is the schema descriptor for key_prefix field.
+	nodeapikeyDescKeyPrefix := nodeapikeyFields[2].Descriptor()
+	// nodeapikey.KeyPrefixValidator is a validator for the "key_prefix" field. It is called by the builders before save.
+	nodeapikey.KeyPrefixValidator = nodeapikeyDescKeyPrefix.Validators[0].(func(string) error)
+	// nodeapikeyDescStatus is the schema descriptor for status field.
+	nodeapikeyDescStatus := nodeapikeyFields[4].Descriptor()
+	// nodeapikey.DefaultStatus holds the default value on creation for the status field.
+	nodeapikey.DefaultStatus = nodeapikeyDescStatus.Default.(string)
+	// nodeapikeyDescCreatedAt is the schema descriptor for created_at field.
+	nodeapikeyDescCreatedAt := nodeapikeyFields[7].Descriptor()
+	// nodeapikey.DefaultCreatedAt holds the default value on creation for the created_at field.
+	nodeapikey.DefaultCreatedAt = nodeapikeyDescCreatedAt.Default.(func() time.Time)
 	prefilljobFields := schema.PrefillJob{}.Fields()
 	_ = prefilljobFields
 	// prefilljobDescTenantID is the schema descriptor for tenant_id field.

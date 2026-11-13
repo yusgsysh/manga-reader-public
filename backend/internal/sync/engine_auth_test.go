@@ -6,10 +6,9 @@ import (
 	"testing"
 )
 
-// The sync server URL may embed Basic Auth credentials (user:pass@host) so
-// the client can pass an edge-level Basic Auth in front of the server.
-// Push errors must never contain the password: they are logged and persisted
-// to sync_state.last_error (surfaced by GET /api/sync/status).
+// A sync server URL may accidentally contain userinfo. Push errors must never
+// include that password: they are logged and persisted to
+// sync_state.last_error (surfaced by GET /api/sync/status).
 func TestPushErrorRedactsServerURLCredentials(t *testing.T) {
 	e := newEngine(&Service{})
 
