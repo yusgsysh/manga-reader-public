@@ -113,7 +113,7 @@ Multi-user mode is always on. `JWT_SECRET` is optional: when unset the API gener
 
 Public (no user JWT): `/api/auth/login`, `/api/auth/register` (first-admin setup only), `/api/auth/status`. Peer sync endpoints `/api/sync/push` and `/api/sync/events` require a Node API Key instead (separate middleware).
 
-Every other `/api/*` route requires a valid user JWT: search, galleries, image proxies (the browser sends the same-origin HttpOnly cookie), `/api/auth/me`, `/api/auth/logout`, `/api/bookshelf*`, `/api/progress*`, `/api/recently-read`, `/api/reading-progress/cleanup`, `/api/tag-settings*`, `/api/prefill*`, `/api/settings*`, `/api/sync/config`, `/api/sync/status`, `/api/dev/*`, `/api/admin/*`. The middleware is default-deny.
+Every other `/api/*` route requires a valid user JWT: search, galleries, image proxies (the browser sends the same-origin HttpOnly cookie), `/api/auth/logout`, `/api/bookshelf*`, `/api/progress*`, `/api/recently-read`, `/api/reading-progress/cleanup`, `/api/tag-settings*`, `/api/prefill*`, `/api/settings*`, `/api/sync/config`, `/api/sync/status`, `/api/dev/*`, `/api/admin/*`. The middleware is default-deny.
 
 ### User isolation
 
@@ -138,7 +138,12 @@ Send the token as `Authorization: Bearer <access_token>`. Browsers may use the `
 Success `200`:
 
 ```json
-{ "access_token": "<JWT>", "token_type": "Bearer", "expires_in": 3600 }
+{
+  "access_token": "<JWT>",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "user": { "id": "7a6c…", "user_id": "7a6c…", "username": "admin", "role": "admin" }
+}
 ```
 
 Failure `401` uses one message for unknown user and wrong password: `{"error":"invalid username or password"}`. Excessive attempts return `429`.
@@ -156,7 +161,12 @@ Only available while the instance is uninitialized (the `users` table is empty).
 Success `200`:
 
 ```json
-{ "access_token": "<JWT>", "token_type": "Bearer", "expires_in": 3600 }
+{
+  "access_token": "<JWT>",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "user": { "id": "7a6c…", "user_id": "7a6c…", "username": "admin", "role": "admin" }
+}
 ```
 
 Failure `409 {"error":"already initialized"}` once any account exists; `400` for a missing username or a password shorter than 8 characters; `429` after excessive attempts. The endpoint cannot be used to mint additional administrators.
@@ -165,19 +175,18 @@ Failure `409 {"error":"already initialized"}` once any account exists; `400` for
 
 `GET /api/auth/status`
 
-```json
-{ "initialized": true }
-```
-
-### 0.4 Current user
-
-`GET /api/auth/me` (requires JWT)
+The SPA's boot probe. It is public so a signed-out visitor can discover first-run state; when the request carries a valid session (cookie or bearer token) the identity is included as well, so a page refresh restores the session in one round-trip. Login and register return the same `user` object, which is why there is no separate `/api/auth/me`.
 
 ```json
-{ "id": "7a6c…", "user_id": "7a6c…", "username": "admin", "role": "admin" }
+{
+  "initialized": true,
+  "user": { "id": "7a6c…", "user_id": "7a6c…", "username": "admin", "role": "admin" }
+}
 ```
 
-### 0.5 Logout
+Signed out (or with an invalid/revoked token) `user` is `null`. A stale token never makes the probe itself fail; the protected routes still answer `401` and clear the cookie.
+
+### 0.4 Logout
 
 `POST /api/auth/logout` (requires JWT)
 
@@ -187,7 +196,7 @@ Increments `users.token_version` and clears the auth cookie. All tokens issued b
 { "success": true }
 ```
 
-### 0.6 Personal settings and ExHentai Cookie
+### 0.5 Personal settings and ExHentai Cookie
 
 All routes are scoped to the JWT user.
 
@@ -226,7 +235,7 @@ Cookie responses contain only a non-secret summary:
 - `status` is `unset`, `unverified`, `valid` or `invalid`; `verify` performs one authenticated upstream request.
 - Preferences are an arbitrary JSON object stored per user (search defaults, tag filters, display, reader, preload, image policy, etc.).
 
-### 0.7 User administration (admin)
+### 0.6 User administration (admin)
 
 | Method | Path | Body |
 |--------|------|------|
@@ -241,7 +250,7 @@ Cookie responses contain only a non-secret summary:
 - The last active administrator cannot be demoted, disabled or deleted; an administrator cannot delete their own account.
 - Deleting a user removes their private rows (bookshelf, progress, prefill jobs, tag preferences/baseline, outbox, settings) in one transaction.
 
-### 0.8 Node and API-key administration (admin)
+### 0.7 Node and API-key administration (admin)
 
 All routes require an administrator JWT. A node is a trusted sync peer of the instance and is no longer bound to a tenant.
 
@@ -263,7 +272,7 @@ All routes require an administrator JWT. A node is a trusted sync peer of the in
 - Revocation is immediate. Rotation creates a new key and leaves the old one active unless `revoke_old` is true or the old key is explicitly deleted.
 - Sync changes carry `user_id`; a trusted node replicates all users' data without merging ownership.
 
-### 0.9 System-level endpoints
+### 0.8 System-level endpoints
 
 - `/api/sync/config` and `/api/sync/status` are instance-wide: administrator JWT required.
 - `/api/dev/*` is administrator-only (and only registered when `MANGA_READER_DEV_TOOLS=true`).

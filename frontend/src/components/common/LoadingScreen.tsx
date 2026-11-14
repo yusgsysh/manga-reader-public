@@ -15,12 +15,15 @@ function Spinner({ label }: { label: string }) {
 }
 
 /**
- * Full-viewport loading state shared by every page-level spinner.
+ * Full-viewport loading state used where no page layout exists yet: the auth
+ * gate during boot, the login/setup screens, and the reader. Lazy in-shell
+ * routes use `PageSkeleton` instead, because there the header and page grid
+ * are already mounted and a centered spinner would blank them out.
  *
  * The spinner is always centered in the viewport, while the message is
  * absolutely positioned out of flow. That way the presence, absence, or
  * length of the message can never shift the spinner — switching between
- * loading screens (route fallback, auth check, page data) keeps the circle in
+ * loading screens (auth check, reader, page data) keeps the circle in
  * exactly the same spot instead of making it jump.
  */
 export function LoadingScreen({ message }: LoadingScreenProps) {
@@ -32,25 +35,6 @@ export function LoadingScreen({ message }: LoadingScreenProps) {
           {message}
         </p>
       ) : null}
-    </div>
-  );
-}
-
-/**
- * Loading state for a lazily loaded page inside the app shell.
- *
- * It uses the same centered spinner as {@link LoadingScreen} and is fixed to
- * the viewport, so the header and main padding cannot move it. That keeps the
- * circle still through the whole boot sequence: auth check -> shell mounts ->
- * route chunk loads. Keep it a sibling of (not a child of) PageTransition: the
- * enter animation's transform would otherwise make this fixed element position
- * itself against the page box instead of the viewport, which is what made the
- * spinner jump to the top half.
- */
-export function PageLoading() {
-  return (
-    <div className="pointer-events-none fixed inset-0">
-      <Spinner label="Loading" />
     </div>
   );
 }

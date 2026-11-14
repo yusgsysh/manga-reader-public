@@ -247,15 +247,14 @@ func PrincipalFrom(c *gin.Context) (Principal, bool) {
 	return principal, ok
 }
 
-// RegisterRoutes mounts the public auth endpoints plus the protected
-// logout/me routes. The middleware is applied globally by main, so logout/me
-// are protected by the same default-deny rule as the rest of the API.
+// RegisterRoutes mounts the public auth endpoints plus the protected logout
+// route. The middleware is applied globally by main, so logout is protected by
+// the same default-deny rule as the rest of the API.
 func (s *Service) RegisterRoutes(r gin.IRouter) {
 	r.POST("/api/auth/login", noStore, s.handleLogin)
 	r.POST("/api/auth/register", noStore, s.handleRegister)
 	r.GET("/api/auth/status", noStore, s.handleStatus)
 	r.POST("/api/auth/logout", noStore, s.handleLogout)
-	r.GET("/api/auth/me", noStore, s.handleMe)
 }
 
 func noStore(c *gin.Context) {
@@ -263,14 +262,40 @@ func noStore(c *gin.Context) {
 	c.Next()
 }
 
+// userJSON is the identity shape shared by the auth endpoints. /status (the
+// session probe), login and register all return it, so the SPA never needs a
+// second request to learn who is signed in.
+func userJSON(id ident.UUID, username, role string) gin.H {
+	return gin.H{
+		"id":       id,
+		"user_id":  id,
+		"username": username,
+		"role":     role,
+	}
+}
+
+// handleStatus answers the SPA's boot probe. It stays public so a signed-out
+// visitor can discover the first-run state, but when the request does carry a
+// valid session (HttpOnly cookie or bearer token) the identity is included
+// here too. The refresh path therefore restores auth in a single round-trip.
 func (s *Service) handleStatus(c *gin.Context) {
 	initialized, err := s.IsInitialized(c.Request.Context())
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "failed to read auth status"})
 		return
 	}
+
+	// A missing, stale or revoked token just means "signed out"; the protected
+	// routes still reject it and clear the cookie. Never fail the probe here:
+	// boot must be able to tell "signed out" apart from "server error".
+	var user any
+	if principal, err := s.authenticate(c); err == nil {
+		user = userJSON(principal.ID, principal.Username, principal.Role)
+	}
+
 	web.JSON(c, http.StatusOK, gin.H{
 		"initialized": initialized,
+		"user":        user,
 	})
 }
 
@@ -350,6 +375,7 @@ func (s *Service) handleRegister(c *gin.Context) {
 		"access_token": token,
 		"token_type":   "Bearer",
 		"expires_in":   s.cfg.ExpiresInSeconds(),
+		"user":         userJSON(u.ID, u.Username, u.Role),
 	})
 }
 
@@ -418,6 +444,7 @@ func (s *Service) handleLogin(c *gin.Context) {
 		"access_token": token,
 		"token_type":   "Bearer",
 		"expires_in":   s.cfg.ExpiresInSeconds(),
+		"user":         userJSON(u.ID, u.Username, u.Role),
 	})
 }
 
@@ -439,20 +466,6 @@ func (s *Service) handleLogout(c *gin.Context) {
 	}
 	s.clearCookie(c)
 	web.JSON(c, http.StatusOK, gin.H{"success": true})
-}
-
-func (s *Service) handleMe(c *gin.Context) {
-	principal, ok := PrincipalFrom(c)
-	if !ok {
-		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	web.JSON(c, http.StatusOK, gin.H{
-		"id":       principal.ID,
-		"user_id":  principal.ID,
-		"username": principal.Username,
-		"role":     principal.Role,
-	})
 }
 
 func (s *Service) setCookie(c *gin.Context, token string, expires time.Time) {

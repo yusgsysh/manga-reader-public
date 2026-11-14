@@ -141,9 +141,18 @@ func TestLoginSuccessAndProtectedRoutes(t *testing.T) {
 	if len(cookies) == 0 || cookies[0].Name != CookieName || !cookies[0].HttpOnly {
 		t.Fatalf("login did not set an HttpOnly cookie: %+v", cookies)
 	}
-
-	if got := doJSON(r, http.MethodGet, "/api/auth/me", "", token); got.Code != http.StatusOK {
-		t.Fatalf("/me = %d, want 200 (%s)", got.Code, got.Body.String())
+	var loginRes struct {
+		User *struct {
+			Username string `json:"username"`
+			Role     string `json:"role"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &loginRes); err != nil {
+		t.Fatalf("decode login: %v", err)
+	}
+	// The SPA gets the identity from the login response (there is no /me).
+	if loginRes.User == nil || loginRes.User.Username != "admin" || loginRes.User.Role != config.RoleAdmin {
+		t.Fatalf("login response user = %+v, want the admin identity", loginRes.User)
 	}
 	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", token); got.Code != http.StatusOK {
 		t.Fatalf("protected route with token = %d, want 200", got.Code)
@@ -246,7 +255,7 @@ func TestLogoutRevokesOutstandingTokens(t *testing.T) {
 	if got := doJSON(r, http.MethodPost, "/api/auth/logout", "", token); got.Code != http.StatusOK {
 		t.Fatalf("logout = %d, want 200 (%s)", got.Code, got.Body.String())
 	}
-	if got := doJSON(r, http.MethodGet, "/api/auth/me", "", token); got.Code != http.StatusUnauthorized {
+	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", token); got.Code != http.StatusUnauthorized {
 		t.Fatalf("token after logout = %d, want 401", got.Code)
 	}
 
@@ -255,7 +264,7 @@ func TestLogoutRevokesOutstandingTokens(t *testing.T) {
 	if newToken == "" {
 		t.Fatal("login after logout failed")
 	}
-	if got := doJSON(r, http.MethodGet, "/api/auth/me", "", newToken); got.Code != http.StatusOK {
+	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", newToken); got.Code != http.StatusOK {
 		t.Fatalf("new token = %d, want 200", got.Code)
 	}
 }
@@ -305,9 +314,18 @@ func TestRegisterCreatesFirstAdmin(t *testing.T) {
 	}
 	var res struct {
 		AccessToken string `json:"access_token"`
+		User        *struct {
+			Username string `json:"username"`
+			Role     string `json:"role"`
+		} `json:"user"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil || res.AccessToken == "" {
 		t.Fatalf("register response missing access_token: %s", w.Body.String())
+	}
+	// The identity travels with the token so the SPA does not need a follow-up
+	// request to know who just registered.
+	if res.User == nil || res.User.Username != "root" || res.User.Role != config.RoleAdmin {
+		t.Fatalf("register response user = %+v, want the new admin", res.User)
 	}
 
 	u, err := client.User.Query().Only(t.Context())
@@ -322,8 +340,8 @@ func TestRegisterCreatesFirstAdmin(t *testing.T) {
 	}
 
 	// The new admin's token authenticates immediately.
-	if got := doJSON(r, http.MethodGet, "/api/auth/me", "", res.AccessToken); got.Code != http.StatusOK {
-		t.Fatalf("/me with registration token = %d, want 200", got.Code)
+	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", res.AccessToken); got.Code != http.StatusOK {
+		t.Fatalf("bookshelf with registration token = %d, want 200", got.Code)
 	}
 
 	// A second registration is rejected once initialized.
@@ -400,12 +418,57 @@ func TestStatusIsPublicAndReportsInitialized(t *testing.T) {
 	}
 	var res struct {
 		Initialized bool `json:"initialized"`
+		User        *struct {
+			Username string `json:"username"`
+		} `json:"user"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
 		t.Fatalf("decode status: %v", err)
 	}
 	if !res.Initialized {
 		t.Fatalf("status = %+v, want initialized", res)
+	}
+	if res.User != nil {
+		t.Fatalf("anonymous status included a user: %+v", res.User)
+	}
+}
+
+// The SPA restores a refresh with a single /api/auth/status call, so that
+// probe must return the signed-in identity instead of forcing a second /me
+// round-trip.
+func TestStatusIncludesUserForValidToken(t *testing.T) {
+	svc, _ := newTestService(t)
+	r := newTestRouter(svc)
+
+	token, w := login(t, r, "admin", "password123")
+	if token == "" {
+		t.Fatalf("login failed: %d %s", w.Code, w.Body.String())
+	}
+
+	w = doJSON(r, http.MethodGet, "/api/auth/status", "", token)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", w.Code, w.Body.String())
+	}
+	var res struct {
+		Initialized bool `json:"initialized"`
+		User        *struct {
+			ID       string `json:"id"`
+			UserID   string `json:"user_id"`
+			Username string `json:"username"`
+			Role     string `json:"role"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	if res.User == nil {
+		t.Fatalf("status without user for a valid token: %s", w.Body.String())
+	}
+	if res.User.Username != "admin" || res.User.Role != config.RoleAdmin {
+		t.Fatalf("status user = %+v, want the admin identity", res.User)
+	}
+	if res.User.ID == "" || res.User.ID != res.User.UserID {
+		t.Fatalf("status user ids = %q/%q, want one shared id", res.User.ID, res.User.UserID)
 	}
 }
 

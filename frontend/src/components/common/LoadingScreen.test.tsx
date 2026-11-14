@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { LoadingScreen, PageLoading } from "./LoadingScreen";
+import { LoadingScreen } from "./LoadingScreen";
 
 describe("LoadingScreen", () => {
   it("exposes a default accessible name for the spinner", () => {
@@ -37,20 +37,5 @@ describe("LoadingScreen", () => {
     );
     // And the message must stay out of the layout flow.
     expect(screen.getByText("正在加载漫画…").className).toContain("absolute");
-  });
-
-  it("anchors the in-shell page loader to the viewport, not the content box", () => {
-    const page = render(<PageLoading />);
-    const spinner = screen.getByRole("status");
-    // Fixed + inset-0 centers on the viewport regardless of the header or main
-    // padding, so swapping LoadingScreen for PageLoading keeps the circle still.
-    expect(spinner.parentElement?.className).toContain("fixed");
-    expect(spinner.parentElement?.className).toContain("inset-0");
-    // Same spinner box as LoadingScreen; a size change would read as a jump.
-    const pageClass = spinner.getAttribute("class");
-    page.unmount();
-
-    render(<LoadingScreen />);
-    expect(screen.getByRole("status").getAttribute("class")).toBe(pageClass);
   });
 });

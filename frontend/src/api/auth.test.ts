@@ -39,6 +39,13 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+const adminUser = {
+  id: "00000000-0000-0000-0000-000000000001",
+  user_id: "00000000-0000-0000-0000-000000000001",
+  username: "admin",
+  role: "admin",
+};
+
 afterEach(() => {
   vi.unstubAllGlobals();
   setAccessToken(null);
@@ -46,37 +53,34 @@ afterEach(() => {
 });
 
 describe("auth session", () => {
-  it("restores a logged-in user from the HttpOnly cookie", async () => {
-    mockFetch((url) => {
+  it("restores a logged-in user from a single status probe", async () => {
+    const me = {
+      id: "00000000-0000-0000-0000-000000000001",
+      user_id: "00000000-0000-0000-0000-000000000001",
+      username: "admin",
+      role: "admin",
+    };
+    const calls = mockFetch((url) => {
       if (url.endsWith("/api/auth/status")) {
-        return json({ initialized: true });
-      }
-      if (url.endsWith("/api/auth/me")) {
-        return json({
-          id: "00000000-0000-0000-0000-000000000001",
-          user_id: "00000000-0000-0000-0000-000000000001",
-          username: "admin",
-          role: "admin",
-        });
+        return json({ initialized: true, user: me });
       }
       return json({ error: "not found" }, 404);
     });
 
     await expect(fetchAuthSession()).resolves.toEqual({
       initialized: true,
-      user: {
-        id: "00000000-0000-0000-0000-000000000001",
-        user_id: "00000000-0000-0000-0000-000000000001",
-        username: "admin",
-        role: "admin",
-      },
+      user: me,
     });
+    // The refresh path must not pay for a second /me round-trip.
+    expect(calls.map((call) => call.url)).toEqual([
+      expect.stringMatching(/\/api\/auth\/status$/),
+    ]);
   });
 
-  it("treats a 401 from /me as an expired session", async () => {
+  it("treats a status probe without a user as signed out", async () => {
     mockFetch((url) => {
       if (url.endsWith("/api/auth/status")) {
-        return json({ initialized: true });
+        return json({ initialized: true, user: null });
       }
       return json({ error: "unauthorized" }, 401);
     });
@@ -96,27 +100,18 @@ describe("authenticated requests", () => {
           access_token: "signed.jwt.token",
           token_type: "Bearer",
           expires_in: 3600,
-        });
-      }
-      if (url.endsWith("/api/auth/me")) {
-        return json({
-          id: "00000000-0000-0000-0000-000000000001",
-          user_id: "00000000-0000-0000-0000-000000000001",
-          username: "admin",
-          role: "admin",
+          user: adminUser,
         });
       }
       return json({ ok: true });
     });
 
     await expect(login("admin", "password123")).resolves.toEqual({
-      user: {
-        id: "00000000-0000-0000-0000-000000000001",
-        user_id: "00000000-0000-0000-0000-000000000001",
-        username: "admin",
-        role: "admin",
-      },
+      user: adminUser,
     });
+
+    // The identity comes from the login response itself.
+    expect(calls.some((call) => call.url.endsWith("/api/auth/me"))).toBe(false);
 
     const loginCall = calls.find((call) => call.url.endsWith("/api/auth/login"));
     expect(JSON.parse(String(loginCall?.init?.body))).toMatchObject({
@@ -136,27 +131,17 @@ describe("authenticated requests", () => {
           access_token: "signed.jwt.token",
           token_type: "Bearer",
           expires_in: 3600,
-        });
-      }
-      if (url.endsWith("/api/auth/me")) {
-        return json({
-          id: "00000000-0000-0000-0000-000000000001",
-          user_id: "00000000-0000-0000-0000-000000000001",
-          username: "admin",
-          role: "admin",
+          user: adminUser,
         });
       }
       return json({ ok: true });
     });
 
     await expect(register("admin", "password123")).resolves.toEqual({
-      user: {
-        id: "00000000-0000-0000-0000-000000000001",
-        user_id: "00000000-0000-0000-0000-000000000001",
-        username: "admin",
-        role: "admin",
-      },
+      user: adminUser,
     });
+
+    expect(calls.some((call) => call.url.endsWith("/api/auth/me"))).toBe(false);
 
     const registerCall = calls.find((call) =>
       call.url.endsWith("/api/auth/register"),
@@ -180,14 +165,7 @@ describe("authenticated requests", () => {
           access_token: "signed.jwt.token",
           token_type: "Bearer",
           expires_in: 3600,
-        });
-      }
-      if (url.endsWith("/api/auth/me")) {
-        return json({
-          id: "00000000-0000-0000-0000-000000000001",
-          user_id: "00000000-0000-0000-0000-000000000001",
-          username: "admin",
-          role: "admin",
+          user: adminUser,
         });
       }
       return json({ success: true });

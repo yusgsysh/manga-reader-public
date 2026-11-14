@@ -170,7 +170,7 @@ MANGA_READER_AUTH_COOKIE_SECURE=auto
   ```
 
   命令会递增 `token_version` 撤销旧 Token，并把用户状态恢复为 `active`。
-- **登录接口**：`POST /api/auth/login` 只需要 `username` + `password`。成功后返回 `access_token` / `token_type` / `expires_in`，同时写入 `HttpOnly; SameSite=Lax; Secure(auto)` Cookie；JWT 的 `sub` 与 `user_id` 都是当前用户 ID。前端不把 Token 放进 `localStorage`，页面刷新后由 Cookie + `GET /api/auth/me` 恢复登录态。
+- **登录接口**：`POST /api/auth/login` 只需要 `username` + `password`。成功后返回 `access_token` / `token_type` / `expires_in` 以及当前用户 `user`，同时写入 `HttpOnly; SameSite=Lax; Secure(auto)` Cookie；JWT 的 `sub` 与 `user_id` 都是当前用户 ID。前端不把 Token 放进 `localStorage`，页面刷新后由 Cookie + `GET /api/auth/status` 恢复登录态。
 - **角色**：`admin` 管理实例级用户、节点和系统同步配置；`user` 只能使用业务功能和个人设置。普通用户的 JWT 调用 `/api/admin/*`、`/api/sync/config`、`/api/sync/status`、`/api/dev/*` 会得到 403。
 - **数据隔离**：`bookshelf`、`reading_progress`、`prefill_job`、`tag_preference`、`tag_sync_baseline`、`sync_change` 全部带 `user_id`，所有查询/创建/更新/删除都从 JWT 取用户 ID 并附加谓词。客户端传入的 `user_id`（路径、查询、Header、Body）一律被忽略。`gallery_cache`、缩略图等公共上游元数据继续全局共享。
 - **Cookie 与个人设置**：`user_setting` 每个用户一行，`cookie_ciphertext` 使用由 `JWT_SECRET` 派生的 AES-256-GCM 密钥加密；接口只返回是否配置、验证状态、站点等非敏感摘要。每个用户使用独立 HTTP Client / Cookie Jar（会话 Cookie 同时写入 exhentai.org 与 e-hentai.org 两个域），日志只记录长度不记录值。每用户可选浏览站点（`exhentai` 默认 / `e-hentai`）：搜索、列表、画廊页与种子页按所选站点抓取（两站 gallery id/token 通用）；标签同步固定走 exhentai（`s.exhentai.org` 变更 API 无 e-hentai 对应端点）。

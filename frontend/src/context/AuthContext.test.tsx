@@ -93,12 +93,11 @@ afterEach(() => {
 });
 
 describe("AuthProvider", () => {
-  it("restores the session from the HttpOnly cookie on refresh", async () => {
-    mockFetch((url) => {
+  it("restores the session from the HttpOnly cookie with one probe", async () => {
+    const calls = mockFetch((url) => {
       if (url.endsWith("/api/auth/status")) {
-        return json({ initialized: true });
+        return json({ initialized: true, user: meResponse });
       }
-      if (url.endsWith("/api/auth/me")) return json(meResponse);
       return json({ error: "not found" }, 404);
     });
 
@@ -107,6 +106,7 @@ describe("AuthProvider", () => {
     expect(await screen.findByText("alice")).toBeTruthy();
     expect(screen.getByTestId("admin").textContent).toBe("true");
     expect(screen.getByTestId("authed").textContent).toBe("true");
+    expect(calls.some((call) => call.url.endsWith("/api/auth/me"))).toBe(false);
   });
 
   it("exposes a terminal error when the session cannot be loaded", async () => {
@@ -121,27 +121,18 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("username").textContent).toBe("anon");
   });
 
-  it("updates the session after login and sends the Bearer token", async () => {
-    let meCalls = 0;
-    mockFetch((url, init) => {
+  it("updates the session from the login response", async () => {
+    const calls = mockFetch((url) => {
       if (url.endsWith("/api/auth/status")) {
-        return json({ initialized: true });
+        return json({ initialized: true, user: null });
       }
       if (url.endsWith("/api/auth/login")) {
         return json({
           access_token: "signed.jwt.token",
           token_type: "Bearer",
           expires_in: 3600,
+          user: meResponse,
         });
-      }
-      if (url.endsWith("/api/auth/me")) {
-        meCalls++;
-        if (meCalls === 1) return json({ error: "unauthorized" }, 401);
-        const headers = new Headers(init?.headers);
-        if (headers.get("Authorization") !== "Bearer signed.jwt.token") {
-          return json({ error: "missing token" }, 401);
-        }
-        return json(meResponse);
       }
       return json({ error: "not found" }, 404);
     });
@@ -153,14 +144,15 @@ describe("AuthProvider", () => {
 
     expect(await screen.findByText("alice")).toBeTruthy();
     expect(screen.getByTestId("authed").textContent).toBe("true");
+    // No follow-up identity request on the login path either.
+    expect(calls.some((call) => call.url.endsWith("/api/auth/me"))).toBe(false);
   });
 
   it("clears user data, cached queries, and the in-memory token on logout", async () => {
     const calls = mockFetch((url) => {
       if (url.endsWith("/api/auth/status")) {
-        return json({ initialized: true });
+        return json({ initialized: true, user: meResponse });
       }
-      if (url.endsWith("/api/auth/me")) return json(meResponse);
       if (url.endsWith("/api/auth/logout")) return json({ success: true });
       return json({ error: "not found" }, 404);
     });
@@ -186,9 +178,8 @@ describe("AuthProvider", () => {
   it("resets the session and caches on a 401 from any API call", async () => {
     mockFetch((url) => {
       if (url.endsWith("/api/auth/status")) {
-        return json({ initialized: true });
+        return json({ initialized: true, user: meResponse });
       }
-      if (url.endsWith("/api/auth/me")) return json(meResponse);
       if (url.endsWith("/api/bookshelf")) return json({ error: "unauthorized" }, 401);
       return json({ error: "not found" }, 404);
     });

@@ -6,7 +6,7 @@ ExHentai Web 漫画客户端的前端。
 
 ## 登录与认证
 
-后端始终启用多用户 JWT。未登录访问受保护页面时会跳转至 `/login`；登录表单只需要用户名和密码。登录成功后 JWT 由后端写入 `HttpOnly; SameSite=Lax` Cookie（前端只保留内存副本用于同标签页的 `Authorization` 头），刷新页面通过 `/api/auth/me` 恢复用户和角色。任何 API 返回 `401` 都会统一清理认证状态并跳回登录页。
+后端始终启用多用户 JWT。未登录访问受保护页面时会跳转至 `/login`；登录表单只需要用户名和密码。登录成功后 JWT 由后端写入 `HttpOnly; SameSite=Lax` Cookie（前端只保留内存副本用于同标签页的 `Authorization` 头），登录响应同时带回当前用户，刷新页面则通过 `/api/auth/status` 恢复用户和角色。任何 API 返回 `401` 都会统一清理认证状态并跳回登录页。
 
 「设置」页集中了个人设置（外观、ExHentai Cookie、标签规则、标签翻译数据库、数据同步）与管理员功能（用户管理、API Key）；管理员登录后才会看到「用户管理」与「API Key」两个区块，后端也会独立校验角色。每个用户的 ExHentai Cookie 与个人设置在「设置」页独立维护。
 

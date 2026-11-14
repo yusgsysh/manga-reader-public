@@ -302,12 +302,13 @@ const server = Bun.serve({
     }
 
     // Auth is always on; mock a signed-in admin so the SPA proceeds past the
-    // login wall without a real backend.
+    // login wall without a real backend. The SPA restores a refresh with this
+    // single probe (the backend includes the identity in /status too).
     if (path === "/api/auth/status") {
-      return json({ initialized: true });
-    }
-    if (path === "/api/auth/me") {
-      return json({ id: 1, user_id: 1, username: "admin", role: "admin" });
+      return json({
+        initialized: true,
+        user: { id: 1, user_id: 1, username: "admin", role: "admin" },
+      });
     }
 
     // Mocked dev-tools switch (the settings page toggles this).
