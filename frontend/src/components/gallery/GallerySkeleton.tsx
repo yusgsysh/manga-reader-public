@@ -47,6 +47,33 @@ function GallerySkeleton() {
   );
 }
 
+/*
+ * Invisible stand-in with exactly one card's footprint. The grids render one
+ * per queued card, so the list keeps its final height while cards stream in:
+ * the infinite-scroll sentinel stays at the real bottom (no eager prefetch of
+ * the page after next) and the document does not grow one row at a time.
+ * It paints nothing on purpose — the batch is already in memory, so a shimmer
+ * would be a lie.
+ */
+export function GalleryCardSlot({
+  withPosted = true,
+}: {
+  withPosted?: boolean;
+}) {
+  return (
+    <div className="gallery-slot" aria-hidden>
+      <div className="aspect-[3/4] rounded-xl" />
+      {/* Mirrors GalleryCard's text block so the row height never changes when
+          the real card takes the slot over. Keep in sync with GalleryCard. */}
+      <div className="mt-2 space-y-1.5">
+        <div className="min-h-10" />
+        <div className="h-5" />
+        {withPosted ? <div className="h-4" /> : null}
+      </div>
+    </div>
+  );
+}
+
 export function GalleryGridSkeleton({ count }: { count?: number }) {
   const columns = useGridColumnCount();
   const items = count ?? columns * 2;
