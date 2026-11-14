@@ -4,6 +4,8 @@ import {
   CornersIn,
   CornersOut,
   GearSix,
+  Pause,
+  Play,
   Question,
   SquaresFour,
   X,
@@ -12,16 +14,11 @@ import { cn } from "@cloudflare/kumo";
 import type { ViewerSettings } from "@yui540/comimi-react";
 import { useReaderPreferences } from "../../hooks/useReaderPreferences";
 import { IconButton } from "../ui";
-import { ComimiMascot } from "./ComimiMascot";
-import {
-  ReaderAbout,
-  ReaderPageList,
-  ReaderShortcuts,
-} from "./ReaderToolbarPanels";
+import { ReaderPageList, ReaderShortcuts } from "./ReaderToolbarPanels";
 
 const AUTO_TURN_SECONDS = [3, 5, 8, 10, 15, 20, 30];
 
-type ToolbarPanel = "settings" | "shortcuts" | "pages" | "about";
+type ToolbarPanel = "settings" | "shortcuts" | "pages";
 
 interface ReaderToolbarProps {
   title: string;
@@ -31,8 +28,10 @@ interface ReaderToolbarProps {
   token: string;
   total: number;
   getCurrentPage: () => number;
+  autoPageTurnEnabled: boolean;
   onBack: () => void;
   onToggleFullscreen: () => void;
+  onToggleAutoPageTurn: () => void;
   onGoToPage: (pageIndex: number) => void;
   onClosePanel: () => void;
   onUpdateSettings: (patch: Partial<ViewerSettings>) => void;
@@ -111,8 +110,10 @@ export function ReaderToolbar({
   token,
   total,
   getCurrentPage,
+  autoPageTurnEnabled,
   onBack,
   onToggleFullscreen,
+  onToggleAutoPageTurn,
   onGoToPage,
   onClosePanel,
   onUpdateSettings,
@@ -177,6 +178,18 @@ export function ReaderToolbar({
 
         <div className="flex items-center gap-0.5">
           <IconButton
+            label={autoPageTurnEnabled ? "停止自动播放" : "自动播放"}
+            aria-pressed={autoPageTurnEnabled}
+            onClick={onToggleAutoPageTurn}
+          >
+            {autoPageTurnEnabled ? (
+              <Pause className="size-5" weight="bold" />
+            ) : (
+              <Play className="size-5" weight="bold" />
+            )}
+          </IconButton>
+
+          <IconButton
             label={fullscreen ? "退出全屏" : "全屏"}
             aria-pressed={fullscreen}
             onClick={onToggleFullscreen}
@@ -214,15 +227,6 @@ export function ReaderToolbar({
             onClick={() => togglePanel("settings")}
           >
             <GearSix className="size-5" weight="bold" />
-          </IconButton>
-
-          <IconButton
-            label="关于 comimi"
-            aria-haspopup="dialog"
-            aria-expanded={openPanel === "about"}
-            onClick={() => togglePanel("about")}
-          >
-            <ComimiMascot className="size-5 text-kumo-subtle" />
           </IconButton>
         </div>
 
@@ -371,12 +375,6 @@ export function ReaderToolbar({
                 closePanel();
               }}
             />
-          </Panel>
-        )}
-
-        {openPanel === "about" && (
-          <Panel label="关于 comimi" onClose={closePanel}>
-            <ReaderAbout />
           </Panel>
         )}
       </header>

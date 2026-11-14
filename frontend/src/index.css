@@ -486,23 +486,6 @@ body {
   top: calc(64px + env(safe-area-inset-top, 0px));
 }
 
-/* comimi's rabbit mascot, recoloured for the app's top bar. */
-.reader-mascot > svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.reader-mascot .comimi-rabbit-body {
-  fill: currentColor;
-  opacity: 0.16;
-}
-
-.reader-mascot .comimi-rabbit-shade {
-  fill: currentColor;
-}
-
-
 /*
  * comimi hides the seek preview on hover-less (touch) devices because it only
  * wires `mousemove` to it. The library is patched to also drive the preview

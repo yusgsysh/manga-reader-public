@@ -74,6 +74,7 @@ export function ReaderPage() {
   const [viewerReady, setViewerReady] = useState(false);
   const [viewerSettingsState, setViewerSettingsState] =
     useState<ViewerSettings | null>(null);
+  const [autoPageTurnEnabled, setAutoPageTurnEnabled] = useState(false);
   // The app-level preference is appended to comimi's own settings sheet.
   const [settingsHost, setSettingsHost] = useState<HTMLElement | null>(null);
   // Read once: changing the preference later must not yank the current book
@@ -266,6 +267,10 @@ export function ReaderPage() {
     [],
   );
 
+  const handleToggleAutoPageTurn = useCallback(() => {
+    viewerRef.current?.toggleAutoPageTurn();
+  }, []);
+
   const handleReady = useCallback(() => {
     setViewerReady(true);
   }, []);
@@ -280,6 +285,7 @@ export function ReaderPage() {
     const state = viewer.getState();
     setViewerSettingsState(state.settings);
     setLayoutMode(state.layout.mode);
+    setAutoPageTurnEnabled(state.autoPageTurnEnabled);
     if (autoFullscreenOnOpenRef.current && state.layout.mode === "inline") {
       // The gallery's start-reading click already asked for native fullscreen
       // (`requestReaderFullscreenIfEnabled`). comimi's
@@ -307,6 +313,13 @@ export function ReaderPage() {
   const handleSettingsChange = useCallback(
     ({ settings }: { settings: ViewerSettings }) => {
       setViewerSettingsState(settings);
+    },
+    [],
+  );
+
+  const handleAutoPageTurnChange = useCallback(
+    ({ enabled }: { enabled: boolean }) => {
+      setAutoPageTurnEnabled(enabled);
     },
     [],
   );
@@ -405,8 +418,10 @@ export function ReaderPage() {
         token={token ?? ""}
         total={total}
         getCurrentPage={getCurrentPage}
+        autoPageTurnEnabled={autoPageTurnEnabled}
         onBack={handleBack}
         onToggleFullscreen={toggleFullscreen}
+        onToggleAutoPageTurn={handleToggleAutoPageTurn}
         onGoToPage={handleGoToPage}
         onClosePanel={handleClosePanel}
         onUpdateSettings={handleUpdateSettings}
@@ -432,6 +447,7 @@ export function ReaderPage() {
           onFullscreenRequest={toggleFullscreen}
           onLayoutChange={handleLayoutChange}
           onSettingsChange={handleSettingsChange}
+          onAutoPageTurnChange={handleAutoPageTurnChange}
           className="h-full w-full"
         />
       </div>
