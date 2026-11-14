@@ -203,7 +203,7 @@ function KeyList({ node }: { node: SyncNode }) {
               ))}
             </div>
             <Checkbox
-              label="允许读取 /metrics（监控）"
+              label={METRICS_SCOPE}
               checked={metricsAccess}
               onCheckedChange={(checked) => setMetricsAccess(Boolean(checked))}
             />

@@ -195,7 +195,7 @@ MANGA_READER_AUTH_COOKIE_SECURE=auto
 
 - `/metrics` 默认启用；**未配置凭证时仅允许回环地址访问**。两种跨主机抓取方式：
 
-  **① 页面管理的节点 Key（推荐）**：在「设置 → API Key」创建 Key 时勾选「允许读取 /metrics」，即授予 `metrics:read` scope。它与 `/api/sync/*` 使用同一把 Key，可轮换、撤销、按天过期。抓取时携带 `Authorization: Bearer mrk_...`。
+  **① 页面管理的节点 Key（推荐）**：在「设置 → API Key」创建 Key 时勾选「metrics:read」，即可用于读取 `/metrics`。它与 `/api/sync/*` 使用同一把 Key，可轮换、撤销、按天过期。抓取时携带 `Authorization: Bearer mrk_...`。
 
   **② 独立环境变量 Token**：适合独立部署的 Prometheus / 不希望在数据库里保存监控凭证的场景：
 
