@@ -188,14 +188,17 @@ try {
       await page.waitForSelector(".reader-shell", { timeout: 30000 });
       await sleep(1500);
       if (fullscreen) {
-        // Fullscreen now lives in comimi's dock switcher; the F key emits the
-        // fullscreenRequest event that ReaderPage routes to toggleFullscreen.
-        await page.keyboard.press("f");
+        // The top bar's fullscreen toggle drives the same layout switch.
+        await page
+          .locator("header")
+          .getByRole("button", { name: "全屏" })
+          .click();
         await sleep(500);
       }
-      await page.keyboard.press("m");
-      await page.waitForSelector(".comimi-menu-link", { timeout: 10000 });
-      await page.locator(".comimi-menu-link").first().click();
+      await page
+        .locator("header")
+        .getByRole("button", { name: "页面列表" })
+        .click();
       await page.waitForSelector(".comimi-menu-view-page-list", { timeout: 10000 });
       await sleep(1500);
       const state = () =>
@@ -295,24 +298,17 @@ try {
     await full.page.close();
   }
 
-  console.log("reader: menu back entry returns to the gallery");
+  console.log("reader: top bar back returns to the gallery");
   {
     const page = await browser.newPage();
     await page.goto(`${BASE}/reader/1001/tok`, { waitUntil: "domcontentloaded" });
     await page.waitForSelector(".reader-shell", { timeout: 30000 });
-    await page.keyboard.press("m");
-    await page.waitForSelector(".comimi-menu-link", { timeout: 10000 });
-    const back = page.locator(".comimi-menu-link").last();
-    const label = (await back.innerText()).trim();
-    check(
-      "menu shows the back entry below About comimi",
-      label.includes("返回画廊"),
-      label,
-    );
+    const back = page.locator("header").getByRole("button", { name: "返回画廊" });
+    check("top bar shows the back button", (await back.count()) === 1);
     await back.click();
     await page.waitForURL(`${BASE}/gallery/1001/tok`, { timeout: 10000 });
     check(
-      "back entry returns to the gallery",
+      "back returns to the gallery",
       new URL(page.url()).pathname === "/gallery/1001/tok",
       page.url(),
     );
@@ -335,9 +331,7 @@ try {
       .getByRole("button", { name: /^(开始阅读|继续阅读|重新阅读)/ })
       .click();
     await page.waitForSelector(".reader-shell", { timeout: 30000 });
-    await page.keyboard.press("m");
-    await page.waitForSelector(".comimi-menu-link", { timeout: 10000 });
-    await page.locator(".comimi-menu-link").last().click();
+    await page.locator("header").getByRole("button", { name: "返回画廊" }).click();
     await page.waitForURL(`${BASE}/gallery/1001/tok`, { timeout: 10000 });
     await page.waitForSelector('header a[href="/bookshelf"][aria-current="page"]', {
       timeout: 10000,
@@ -421,9 +415,7 @@ try {
     await page.waitForSelector(".reader-shell", { timeout: 30000 });
 
     // Leave the reader; the final progress save reorders the shelf.
-    await page.keyboard.press("m");
-    await page.waitForSelector(".comimi-menu-link", { timeout: 10000 });
-    await page.locator(".comimi-menu-link").last().click();
+    await page.locator("header").getByRole("button", { name: "返回画廊" }).click();
     await page.waitForURL(`${BASE}/gallery/1005/tok`, { timeout: 10000 });
 
     await page.getByRole("button", { name: "返回" }).click();
