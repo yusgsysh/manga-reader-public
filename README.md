@@ -120,15 +120,15 @@ backend/
 
 数据位于 Docker 命名卷中，`docker compose down` 不会丢失；如需彻底清除使用 `docker compose down -v`。
 
-## 公网部署（HTTPS + 三套独立认证）
+## 公网部署（HTTPS + 三类凭证）
 
-认证按接口用途拆分，凭证互不通用：
+认证按接口用途拆分；除显式授予 `metrics:read` 的节点 Key 可同时用于同步与监控外，凭证互不通用：
 
 | 接口类型 | 认证机制 |
 |----------|----------|
 | 用户业务 API（登录、书架、进度、Prefill、个人设置、用户管理） | `Authorization: Bearer <JWT>` |
 | 节点同步 API（`/api/sync/push`、`/api/sync/events`） | `Authorization: Bearer <Node API Key>` |
-| Metrics 内部接口 | 回环限制或独立 `MANGA_READER_METRICS_TOKEN` |
+| Metrics 内部接口 | 回环限制、独立 `MANGA_READER_METRICS_TOKEN`，或带 `metrics:read` 的节点 API Key |
 | Health / Readiness | 最小信息公开：`/healthz`、`/readyz` |
 
 - **HTTPS 必须在认证之前**：JWT 的 HttpOnly Cookie 和节点 API Key 都必须走 TLS。TLS 由前置层（云负载均衡 / Caddy / 前置 nginx）提供，同时负责 HTTP :80 → HTTPS :443 跳转；HSTS 也由该层配置。
@@ -174,7 +174,7 @@ MANGA_READER_AUTH_COOKIE_SECURE=auto
 - **角色**：`admin` 管理实例级用户、节点和系统同步配置；`user` 只能使用业务功能和个人设置。普通用户的 JWT 调用 `/api/admin/*`、`/api/sync/config`、`/api/sync/status`、`/api/dev/*` 会得到 403。
 - **数据隔离**：`bookshelf`、`reading_progress`、`prefill_job`、`tag_preference`、`tag_sync_baseline`、`sync_change` 全部带 `user_id`，所有查询/创建/更新/删除都从 JWT 取用户 ID 并附加谓词。客户端传入的 `user_id`（路径、查询、Header、Body）一律被忽略。`gallery_cache`、缩略图等公共上游元数据继续全局共享。
 - **Cookie 与个人设置**：`user_setting` 每个用户一行，`cookie_ciphertext` 使用由 `JWT_SECRET` 派生的 AES-256-GCM 密钥加密；接口只返回是否配置、验证状态、站点等非敏感摘要。每个用户使用独立 HTTP Client / Cookie Jar（会话 Cookie 同时写入 exhentai.org 与 e-hentai.org 两个域），日志只记录长度不记录值。每用户可选浏览站点（`exhentai` 默认 / `e-hentai`）：搜索、列表、画廊页与种子页按所选站点抓取（两站 gallery id/token 通用）；标签同步固定走 exhentai（`s.exhentai.org` 变更 API 无 e-hentai 对应端点）。
-- **系统级接口**：`/api/sync/push`、`/api/sync/events` 只接受 Node API Key；Metrics 使用独立 Token；用户 JWT 不能调用这些系统接口。
+- **系统级接口**：`/api/sync/push`、`/api/sync/events` 只接受 Node API Key；Metrics 接受独立 Token 或带 `metrics:read` 的 Node API Key；用户 JWT 不能调用这些系统接口。
 - **主键为 UUID（非自增）**：`users`、`bookshelf`、`reading_progress`、`user_setting`、`node`、`node_api_key`、`prefill_job` 的主键都是 UUID（UUIDv7，SQLite 以 16 字节 BLOB 存储、PostgreSQL 以 bytea 存储），`gallery_cache` / `tag_preference` / `tag_sync_baseline` / `app_setting` / `sync_state` 使用自然复合键或字符串键。自增整数主键只在 `sync_change` 保留（其 `id` 同时是复制游标，需要单调递增）。
 - **CSRF**：Cookie 仅用于同源请求；`csrfGuard` 会拒绝跨站 `Origin` / `Sec-Fetch-Site` 的写请求。反向代理必须透传 `Origin` / `Sec-Fetch-Site`，并保持应用与前端同源；HTTPS 终止在反代时还要设置 `X-Forwarded-Proto: https`，否则 `auto` 模式不会给 Cookie 加 `Secure`。
 - **登出**：`POST /api/auth/logout` 会递增 `users.token_version` 并清除 Cookie，所有已签发 Token 立即失效。
@@ -193,14 +193,18 @@ MANGA_READER_AUTH_COOKIE_SECURE=auto
 
 ### Metrics 与健康检查
 
-- `/metrics` 默认启用；**未配置 Token 时仅允许回环地址访问**。需要跨主机抓取时设置独立令牌：
+- `/metrics` 默认启用；**未配置凭证时仅允许回环地址访问**。两种跨主机抓取方式：
+
+  **① 页面管理的节点 Key（推荐）**：在「设置 → API Key」创建 Key 时勾选「允许读取 /metrics」，即授予 `metrics:read` scope。它与 `/api/sync/*` 使用同一把 Key，可轮换、撤销、按天过期。抓取时携带 `Authorization: Bearer mrk_...`。
+
+  **② 独立环境变量 Token**：适合独立部署的 Prometheus / 不希望在数据库里保存监控凭证的场景：
 
   ```env
   MANGA_READER_METRICS_ENABLED=true
   MANGA_READER_METRICS_TOKEN=<openssl rand -hex 32>
   ```
 
-  请求头使用 `Authorization: Bearer <METRICS_TOKEN>`。该 Token 与 JWT_SECRET、节点 API Key 完全独立。
+  请求头使用 `Authorization: Bearer <METRICS_TOKEN>` 或 `X-Metrics-Token: <METRICS_TOKEN>`。该 Token 与 JWT 独立；配置后即使回环请求也必须提供 Token。节点 Key 只有在显式勾选 `metrics:read` 后才能读取 `/metrics`，用户 JWT 始终被拒绝。
 
 - `/healthz` 是存活性检查，只返回 `{"status":"ok"}`；`/readyz` 检查数据库连接，只返回 `{"status":"ready"}` 或 `503 {"status":"unavailable"}`，不暴露 DSN、路径或密钥。
 
@@ -258,7 +262,7 @@ docker compose up -d
 `.env` 关键项：
 
 - `MANGA_READER_TARGET`：抓取目标，默认 `host.docker.internal:5173`（宿主机上主 compose 发布的 backend 端口；跨机抓取填 `http` 目标所在主机与端口）
-- `MANGA_READER_METRICS_TOKEN`：与 backend 的 `MANGA_READER_METRICS_TOKEN` 一致；Prometheus 使用 `Authorization: Bearer` 抓取。未设置时 backend 的 `/metrics` 只允许回环访问。
+- `MANGA_READER_METRICS_TOKEN`：与 backend 的 `MANGA_READER_METRICS_TOKEN` 一致；Prometheus 使用 `Authorization: Bearer` 抓取。未设置时 backend 的 `/metrics` 只允许回环访问，或改用在设置页创建的 `metrics:read` 节点 Key。
 - `GRAFANA_ADMIN_USER/PASSWORD`：Grafana 管理员
 
 Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5xx 比例 / P95 延迟、图片与 gallery 缓存 hit rate、MinIO 操作速率与延迟、10 秒文档短共享结果（含当前条目数）、上游请求与 P95 延迟、上游在途请求与重试放大、sad_panda / IP 封禁 / HTTP 错误判定、内存预算（已用 / 上限 / 等待者 / 获取等待 P95）、goroutines / 内存 / FD。指标口径见「可观测性（Prometheus 指标）」。
@@ -302,8 +306,8 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `ADMIN_USERNAME` | 否 | `admin` | 首次初始化（users 表为空）的管理员用户名（环境变量方式） |
 | `ADMIN_PASSWORD` | 否 | - | 首次初始化管理员密码（至少 8 位）；仅在 users 表为空时使用，不覆盖已有密码。留空则不启动期创建管理员，改为通过 Web 端 `/setup` 页面初始化 |
 | `MANGA_READER_AUTH_COOKIE_SECURE` | 否 | `auto` | 认证 Cookie 的 `Secure`：`auto`（TLS 或 `X-Forwarded-Proto=https` 时开启）/`true`/`false` |
-| `MANGA_READER_METRICS_ENABLED` | 否 | `true` | 启用 `/metrics`；未配置 Token 时仅回环可访问 |
-| `MANGA_READER_METRICS_TOKEN` | 否 | - | 独立 Metrics Token（至少 32 字符）；与 JWT/节点 API Key 不共用 |
+| `MANGA_READER_METRICS_ENABLED` | 否 | `true` | 启用 `/metrics`；未配置 Token 时仅回环可访问（或使用带 `metrics:read` 的节点 Key） |
+| `MANGA_READER_METRICS_TOKEN` | 否 | - | 可选独立 Metrics Token（至少 32 字符）；与 JWT 不共用。也可在页面创建带 `metrics:read` 的节点 Key |
 | `MANGA_READER_SYNC_ENABLED` | 否 | `true` | 启用节点同步宿主端点；节点与 API Key 通过数据库管理 |
 | `MANGA_READER_SYNC_REQUEST_TIMEOUT` | 否 | `30s` | 单次同步 push 的 HTTP 超时（1s–5m） |
 | `MANGA_READER_SYNC_API_KEY_MIN_LENGTH` | 否 | `32` | 节点 API Key 最小长度校验（不得低于 32） |

@@ -365,10 +365,14 @@ func run() error {
 		web.JSON(c, http.StatusOK, gin.H{"status": "ready"})
 	})
 
-	// Prometheus exposition is its own credential class: loopback-only when
-	// no token is configured, otherwise a dedicated metrics bearer token.
+	// Prometheus exposition accepts either the operator-wide metrics token or a
+	// node API key with metrics:read (same key management as /api/sync/*). With
+	// no token configured it stays loopback-only unless a node key is presented.
 	if cfg.Metrics.Enabled {
-		r.GET("/metrics", metrics.AuthMiddleware(cfg.Metrics.Token), gin.WrapH(metrics.Handler()))
+		r.GET("/metrics",
+			metrics.AuthMiddleware(cfg.Metrics.Token, nodeSvc.Middleware(node.ScopeMetricsRead)),
+			gin.WrapH(metrics.Handler()),
+		)
 	}
 
 	authSvc.RegisterRoutes(r)

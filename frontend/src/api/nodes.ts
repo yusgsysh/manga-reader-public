@@ -2,8 +2,10 @@ import { apiDelete, apiGet, apiPostJson, apiPut } from "./client";
 
 export type NodeStatus = "active" | "disabled";
 export type NodeKeyStatus = "active" | "revoked";
+/** Sync scopes are checked by default; metrics access is a separate opt-in. */
 export const NODE_SCOPES = ["sync:read", "sync:write", "sync:events"] as const;
-export type NodeScope = (typeof NODE_SCOPES)[number];
+export const METRICS_SCOPE = "metrics:read" as const;
+export type NodeScope = (typeof NODE_SCOPES)[number] | typeof METRICS_SCOPE;
 
 export interface SyncNode {
   id: string;
@@ -63,7 +65,7 @@ export function fetchNodeKeys(
 
 export function createNodeKey(
   id: string,
-  input?: { scopes?: NodeScope[]; expires_at?: string },
+  input?: { scopes?: NodeScope[]; expires_in_days?: number },
 ): Promise<CreatedNodeKey> {
   return apiPostJson<CreatedNodeKey>(`/api/admin/nodes/${id}/keys`, input ?? {});
 }
@@ -78,7 +80,7 @@ export function revokeNodeKey(
 export function rotateNodeKey(
   nodeId: string,
   keyId: string,
-  input?: { revoke_old?: boolean; expires_at?: string },
+  input?: { revoke_old?: boolean; expires_in_days?: number },
 ): Promise<CreatedNodeKey> {
   return apiPostJson<CreatedNodeKey>(
     `/api/admin/nodes/${nodeId}/keys/${keyId}/rotate`,

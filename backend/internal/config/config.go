@@ -65,8 +65,9 @@ func (c AuthConfig) ExpiresInSeconds() int {
 }
 
 // MetricsConfig controls the internal metrics/readiness surface. When Token
-// is empty, /metrics only answers loopback clients; with a token it requires
-// "Authorization: Bearer <token>" (independent from JWT and node API keys).
+// is empty, /metrics only answers loopback clients unless a node API key with
+// metrics:read is presented; with a token it requires "Authorization: Bearer
+// <token>" (independent from JWT) or a metrics:read node key.
 type MetricsConfig struct {
 	Enabled bool
 	Token   string

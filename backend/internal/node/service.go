@@ -22,18 +22,21 @@ import (
 	"manga-reader/internal/requestid"
 )
 
-// Sync scopes. A key must carry every scope required by the route.
+// Node API key scopes. A key must carry every scope required by the route.
+// Sync scopes are granted by default; metrics access is opt-in so a key minted
+// for sync cannot read the Prometheus surface without an explicit checkbox.
 const (
-	ScopeSyncRead  = "sync:read"
-	ScopeSyncWrite = "sync:write"
-	ScopeSyncEvent = "sync:events"
+	ScopeSyncRead    = "sync:read"
+	ScopeSyncWrite   = "sync:write"
+	ScopeSyncEvent   = "sync:events"
+	ScopeMetricsRead = "metrics:read"
 )
 
 // DefaultScopes are granted to a newly minted key.
 var DefaultScopes = []string{ScopeSyncRead, ScopeSyncWrite, ScopeSyncEvent}
 
 // AllScopes is the accepted scope allow-list for management input.
-var AllScopes = []string{ScopeSyncRead, ScopeSyncWrite, ScopeSyncEvent}
+var AllScopes = []string{ScopeSyncRead, ScopeSyncWrite, ScopeSyncEvent, ScopeMetricsRead}
 
 // Service verifies node keys against the database.
 type Service struct {

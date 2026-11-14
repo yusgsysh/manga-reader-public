@@ -9,6 +9,7 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import {
+  METRICS_SCOPE,
   NODE_SCOPES,
   createNode,
   createNodeKey,
@@ -33,7 +34,17 @@ function KeyList({ node }: { node: SyncNode }) {
   const queryClient = useQueryClient();
   const [plaintext, setPlaintext] = useState<string | null>(null);
   const [scopes, setScopes] = useState<NodeScope[]>([...NODE_SCOPES]);
-  const [expires, setExpires] = useState("");
+  const [metricsAccess, setMetricsAccess] = useState(false);
+  const [expiresDays, setExpiresDays] = useState("");
+
+  const days =
+    expiresDays.trim() === "" ? undefined : Number(expiresDays);
+  const validDays =
+    days === undefined ||
+    (Number.isInteger(days) && days >= 1 && days <= 3650);
+  const selectedScopes: NodeScope[] = metricsAccess
+    ? [...scopes, METRICS_SCOPE]
+    : scopes;
 
   const keysQuery = useQuery({
     queryKey: ["admin", "node-keys", node.id],
@@ -51,12 +62,12 @@ function KeyList({ node }: { node: SyncNode }) {
   const create = useMutation({
     mutationFn: () =>
       createNodeKey(node.id, {
-        scopes,
-        expires_at: expires ? new Date(expires).toISOString() : undefined,
+        scopes: selectedScopes,
+        expires_in_days: days,
       }),
     onSuccess: (result) => {
       setPlaintext(result.key);
-      setExpires("");
+      setExpiresDays("");
       refresh();
       toast.success("API Key 已创建", "完整密钥只显示这一次");
     },
@@ -126,17 +137,35 @@ function KeyList({ node }: { node: SyncNode }) {
             {scope}
           </label>
         ))}
-        <input
-          type="datetime-local"
-          aria-label="过期时间"
-          value={expires}
-          onChange={(event) => setExpires(event.target.value)}
-          className="rounded-lg border border-kumo-hairline bg-kumo-base px-2 py-1.5 text-xs text-kumo-default"
-        />
+        <label className="flex items-center gap-1.5 text-xs">
+          <input
+            type="checkbox"
+            checked={metricsAccess}
+            onChange={(event) => setMetricsAccess(event.target.checked)}
+          />
+          允许读取 /metrics（监控）
+        </label>
+        <label className="flex items-center gap-1.5 text-xs">
+          有效期
+          <input
+            type="number"
+            min={1}
+            max={3650}
+            step={1}
+            aria-label="有效期（天）"
+            placeholder="永久"
+            value={expiresDays}
+            onChange={(event) => setExpiresDays(event.target.value)}
+            className="w-20 rounded-lg border border-kumo-hairline bg-kumo-base px-2 py-1.5 text-xs text-kumo-default"
+          />
+          天
+        </label>
         <Button
           size="sm"
           onClick={() => create.mutate()}
-          disabled={create.isPending || scopes.length === 0}
+          disabled={
+            create.isPending || selectedScopes.length === 0 || !validDays
+          }
         >
           {create.isPending ? (
             <CircleNotch className="mr-1 size-3.5 animate-spin" />
@@ -176,6 +205,11 @@ function KeyList({ node }: { node: SyncNode }) {
               >
                 {key.status}
               </span>
+              {key.expires_at && (
+                <span className="text-kumo-subtle">
+                  过期 {formatDateTime(key.expires_at)}
+                </span>
+              )}
               {key.last_used_at && (
                 <span className="text-kumo-subtle">
                   最后使用 {formatDateTime(key.last_used_at)}
@@ -352,7 +386,7 @@ export function ApiManagementSection() {
   return (
     <Section
       title="API Key"
-      description="管理同步节点的 API Key（每个节点可有多把 Key）。节点 API Key 只用于 /api/sync/*，与用户 JWT 完全独立。"
+      description="管理节点 API Key（每个节点可有多把 Key）。sync:* 用于 /api/sync/*；勾选 metrics:read 后同一把 Key 也可读取 /metrics。与用户 JWT 完全独立。"
     >
       <div className="space-y-4">
         <div className="card-surface space-y-3 p-4">

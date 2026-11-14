@@ -253,11 +253,12 @@ All routes require an administrator JWT. A node is a trusted sync peer of the in
 | PUT | `/api/admin/nodes/:id` | `{ "name"?, "status"? }` |
 | DELETE | `/api/admin/nodes/:id` | - |
 | GET | `/api/admin/nodes/:id/keys` | - |
-| POST | `/api/admin/nodes/:id/keys` | `{ "scopes"?, "expires_at"? }` |
+| POST | `/api/admin/nodes/:id/keys` | `{ "scopes"?, "expires_in_days"? }`（`expires_at` 仍兼容） |
 | DELETE | `/api/admin/nodes/:id/keys/:keyId` | - |
-| POST | `/api/admin/nodes/:id/keys/:keyId/rotate` | `{ "revoke_old"?, "expires_at"? }` |
+| POST | `/api/admin/nodes/:id/keys/:keyId/rotate` | `{ "revoke_old"?, "expires_in_days"? }`（`expires_at` 仍兼容） |
 
-- Scopes: `sync:read`, `sync:write`, `sync:events`.
+- Scopes: `sync:read`, `sync:write`, `sync:events`（默认）与 `metrics:read`（可选，用于 `/metrics`）。
+- `expires_in_days` 为 1–3650 的整数，服务端按当前时间加天数计算过期时间；省略即永不过期。`expires_at` 仅在没有 `expires_in_days` 时使用。
 - `POST .../keys` and `.../rotate` return the full plaintext key **once** as `{"key":"mrk_...", "api_key":{...}}`; list/get only expose `key_prefix`.
 - Revocation is immediate. Rotation creates a new key and leaves the old one active unless `revoke_old` is true or the old key is explicitly deleted.
 - Sync changes carry `user_id`; a trusted node replicates all users' data without merging ownership.
@@ -266,7 +267,7 @@ All routes require an administrator JWT. A node is a trusted sync peer of the in
 
 - `/api/sync/config` and `/api/sync/status` are instance-wide: administrator JWT required.
 - `/api/dev/*` is administrator-only (and only registered when `MANGA_READER_DEV_TOOLS=true`).
-- `/metrics` uses its own bearer token (or loopback-only when unset); user JWTs and node keys are rejected.
+- `/metrics` accepts the dedicated `MANGA_READER_METRICS_TOKEN` or a node API key carrying `metrics:read`; with no token configured it is loopback-only unless a node key is presented. User JWTs are always rejected.
 - Node sync endpoints (`/api/sync/push`, `/api/sync/events`) accept only Node API Keys.
 
 ---
@@ -1605,7 +1606,7 @@ curl -N http://server:8080/api/sync/events -H 'Authorization: Bearer mrk_...'
 
 ### 29. Metrics（Prometheus）
 
-`GET /metrics` — Prometheus 文本格式（`Content-Type: text/plain; version=0.0.4`）。默认只允许回环地址访问；配置 `MANGA_READER_METRICS_TOKEN` 后必须携带 `Authorization: Bearer <token>` 或 `X-Metrics-Token`。该凭证与 JWT、节点 API Key 完全独立。`GET /healthz` 返回存活状态，`GET /readyz` 检查数据库连接，两者都只返回最小状态信息。
+`GET /metrics` — Prometheus 文本格式（`Content-Type: text/plain; version=0.0.4`）。三种访问方式：① 未配置任何凭证时仅允许回环地址；② 配置 `MANGA_READER_METRICS_TOKEN` 后携带 `Authorization: Bearer <token>` 或 `X-Metrics-Token`；③ 在设置页创建带 `metrics:read` 的节点 API Key，携带 `Authorization: Bearer mrk_...`。节点 Key 与 `/api/sync/*` 使用同一套创建、轮换、撤销与过期逻辑。用户 JWT 始终被拒绝。`GET /healthz` 返回存活状态，`GET /readyz` 检查数据库连接，两者都只返回最小状态信息。
 
 缓存命中率相关计数器（完整指标列表见根 README「可观测性」）：
 

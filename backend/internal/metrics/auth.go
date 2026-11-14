@@ -9,35 +9,66 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AuthMiddleware protects the Prometheus endpoint with credentials that are
-// completely independent from user JWTs and node API keys.
+// AuthMiddleware protects the Prometheus endpoint. Two credential classes are
+// accepted, and neither is a user JWT:
 //
-// With no token configured the endpoint is loopback-only (the default safe
-// deployment); a configured token is always required, including on loopback,
-// so a wrong token can never fall back to "local access".
-func AuthMiddleware(token string) gin.HandlerFunc {
+//   - the operator-wide token from MANGA_READER_METRICS_TOKEN, or
+//   - a node API key carrying metrics:read, verified by nodeAuth — the same
+//     middleware as /api/sync/*, so keys are issued, rotated and revoked from
+//     the settings page.
+//
+// With no token configured and no Authorization header the endpoint stays
+// loopback-only (the default safe deployment). A configured token is always
+// required, including on loopback, so a wrong token can never fall back to
+// "local access"; an explicit Authorization credential is always verified
+// rather than silently ignored.
+func AuthMiddleware(token string, nodeAuth gin.HandlerFunc) gin.HandlerFunc {
 	want := []byte(strings.TrimSpace(token))
 	return func(c *gin.Context) {
-		if len(want) == 0 {
-			if isLoopbackRequest(c.Request.RemoteAddr) {
-				c.Next()
-				return
-			}
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "metrics are restricted to loopback"})
-			return
-		}
-
-		got := bearerToken(c.GetHeader("Authorization"))
+		header := strings.TrimSpace(c.GetHeader("Authorization"))
+		got := bearerToken(header)
 		if got == "" {
 			got = strings.TrimSpace(c.GetHeader("X-Metrics-Token"))
 		}
-		if got == "" || subtle.ConstantTimeCompare([]byte(got), want) != 1 {
-			c.Header("WWW-Authenticate", `Bearer realm="metrics"`)
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid metrics token"})
+
+		if len(want) == 0 {
+			// No operator token: an explicit Authorization credential must be a
+			// node key; otherwise keep the loopback-only fallback.
+			if header == "" {
+				if isLoopbackRequest(c.Request.RemoteAddr) {
+					c.Next()
+					return
+				}
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "metrics are restricted to loopback"})
+				return
+			}
+			useNodeAuth(c, nodeAuth)
 			return
 		}
-		c.Next()
+
+		if got != "" && subtle.ConstantTimeCompare([]byte(got), want) == 1 {
+			c.Next()
+			return
+		}
+		if header != "" {
+			useNodeAuth(c, nodeAuth)
+			return
+		}
+		unauthorizedMetrics(c)
 	}
+}
+
+func useNodeAuth(c *gin.Context, nodeAuth gin.HandlerFunc) {
+	if nodeAuth == nil {
+		unauthorizedMetrics(c)
+		return
+	}
+	nodeAuth(c)
+}
+
+func unauthorizedMetrics(c *gin.Context) {
+	c.Header("WWW-Authenticate", `Bearer realm="metrics"`)
+	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid metrics token"})
 }
 
 func bearerToken(header string) string {

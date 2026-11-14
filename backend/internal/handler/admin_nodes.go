@@ -312,8 +312,9 @@ func (s *Server) handleAdminNodeKeyCreate(c *gin.Context) {
 	}
 	limitRequestBody(c, 64<<10)
 	var body struct {
-		Scopes    []string `json:"scopes"`
-		ExpiresAt *string  `json:"expires_at"`
+		Scopes        []string `json:"scopes"`
+		ExpiresAt     *string  `json:"expires_at"`
+		ExpiresInDays *int     `json:"expires_in_days"`
 	}
 	if err := web.BindJSON(c, &body); err != nil {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -324,9 +325,9 @@ func (s *Server) handleAdminNodeKeyCreate(c *gin.Context) {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid scopes"})
 		return
 	}
-	expires, ok := parseExpiry(body.ExpiresAt)
+	expires, ok := parseKeyExpiry(body.ExpiresAt, body.ExpiresInDays)
 	if !ok {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid expires_at"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid expiry"})
 		return
 	}
 	if _, err := s.DB.Client.Node.Get(c.Request.Context(), nodeID); err != nil {
@@ -402,16 +403,17 @@ func (s *Server) handleAdminNodeKeyRotate(c *gin.Context) {
 	}
 	limitRequestBody(c, 64<<10)
 	var body struct {
-		RevokeOld bool    `json:"revoke_old"`
-		ExpiresAt *string `json:"expires_at"`
+		RevokeOld     bool    `json:"revoke_old"`
+		ExpiresAt     *string `json:"expires_at"`
+		ExpiresInDays *int    `json:"expires_in_days"`
 	}
 	if err := web.BindJSON(c, &body); err != nil {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
-	expires, ok := parseExpiry(body.ExpiresAt)
+	expires, ok := parseKeyExpiry(body.ExpiresAt, body.ExpiresInDays)
 	if !ok {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid expires_at"})
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid expiry"})
 		return
 	}
 	old, err := s.DB.Client.NodeAPIKey.Query().
@@ -464,6 +466,24 @@ func nodeIDParam(c *gin.Context) (ident.UUID, bool) {
 		return ident.Nil(), false
 	}
 	return id, true
+}
+
+// maxKeyExpiryDays caps day-based expiry at ten years so a typo cannot mint a
+// key that outlives every sane rotation policy.
+const maxKeyExpiryDays = 3650
+
+// parseKeyExpiry resolves the two accepted expiry forms. expires_in_days is
+// the UI-facing form (choose a lifetime, not a calendar date); expires_at stays
+// for API clients and is only consulted when no day count was supplied.
+func parseKeyExpiry(expiresAt *string, expiresInDays *int) (*time.Time, bool) {
+	if expiresInDays != nil {
+		if *expiresInDays < 1 || *expiresInDays > maxKeyExpiryDays {
+			return nil, false
+		}
+		t := time.Now().UTC().AddDate(0, 0, *expiresInDays)
+		return &t, true
+	}
+	return parseExpiry(expiresAt)
 }
 
 func parseExpiry(raw *string) (*time.Time, bool) {
