@@ -76,15 +76,19 @@ export function LoginPage() {
     <div className="login-backdrop relative flex min-h-dvh flex-col text-kumo-default">
       <main className="page-enter relative flex flex-1 items-center justify-center px-4 py-16">
         <div className="w-full max-w-[24rem]">
-          <form noValidate onSubmit={handleSubmit} className="flex flex-col">
+          <form
+            noValidate
+            onSubmit={handleSubmit}
+            className="auth-panel flex flex-col p-6 sm:p-8"
+          >
             <div className="flex flex-col items-center text-center">
               <Logo className="[&_svg]:size-9" />
-              <h1 className="mt-6 text-[2rem] leading-[1.15] font-semibold tracking-[-0.02em] sm:text-[2.25rem]">
+              <h1 className="mt-5 text-[1.75rem] leading-[1.15] font-semibold tracking-[-0.02em] sm:text-[2rem]">
                 登录 Manga Reader
               </h1>
             </div>
 
-            <div className="mt-9 space-y-3">
+            <div className="mt-8 space-y-3">
               <div className="relative">
                 <label htmlFor="username" className="sr-only">
                   用户名
