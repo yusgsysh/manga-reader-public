@@ -15,8 +15,8 @@
 #     ├── 静态前端（构建时 embed 进二进制，不外挂静态文件）
 #     ├── /api/* 与 SPA 回退同进程处理
 #     ├── JWT 多用户认证（JWT_SECRET 必填）
-#     ├── Node API Key 节点同步 / 监控认证（数据库管理，管理员创建）
-#     ├── Metrics Token / metrics:read 节点 Key / 回环限制
+#     ├── 用户级同步 Key（数据库管理，在设置页按账号创建）
+#     ├── Metrics Token / 回环限制
 #     └── 数据卷 backend_data → /app/data
 #
 # 公网部署：JWT 登录必须置于 HTTPS 之后；PostgreSQL / MinIO 默认仅绑定回环地址，
@@ -48,14 +48,13 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       MANGA_READER_AUTH_COOKIE_SECURE: ${MANGA_READER_AUTH_COOKIE_SECURE:-auto}
 
-      # Metrics 内部接口（独立 Token；未设置时仅回环访问，或使用 metrics:read 节点 Key）
+      # Metrics 内部接口（独立 Token；未设置时仅回环访问）
       MANGA_READER_METRICS_ENABLED: ${MANGA_READER_METRICS_ENABLED:-true}
       MANGA_READER_METRICS_TOKEN: ${MANGA_READER_METRICS_TOKEN:-}
 
-      # 节点同步（API Key 在数据库管理，不使用环境变量）
+      # 同步宿主（用户级同步 Key 在数据库管理，不使用环境变量）
       MANGA_READER_SYNC_ENABLED: ${MANGA_READER_SYNC_ENABLED:-true}
       MANGA_READER_SYNC_REQUEST_TIMEOUT: ${MANGA_READER_SYNC_REQUEST_TIMEOUT:-30s}
-      MANGA_READER_SYNC_API_KEY_MIN_LENGTH: ${MANGA_READER_SYNC_API_KEY_MIN_LENGTH:-32}
 
       # HTTP 代理（出站走代理，.env 中的 HTTP_PROXY/HTTPS_PROXY/NO_PROXY）
       # 未设置时为空，Go 视为未配置代理即直连

@@ -51,10 +51,9 @@ Environment=MANGA_READER_DB_PATH=/app/data/manga-reader.db
 #Environment=MANGA_READER_METRICS_ENABLED=true
 #Environment=MANGA_READER_METRICS_TOKEN=<paste output of: openssl rand -hex 32>
 
-# 节点同步（Node API Key 由平台管理员在 /admin/nodes 创建，存数据库）
+# 同步宿主（用户级同步 Key 在设置页按账号创建，存数据库）
 #Environment=MANGA_READER_SYNC_ENABLED=true
 #Environment=MANGA_READER_SYNC_REQUEST_TIMEOUT=30s
-#Environment=MANGA_READER_SYNC_API_KEY_MIN_LENGTH=32
 
 # 数据卷：以 podman volume ls 实际名称为准
 Volume=manga-reader-public_backend_data:/app/data

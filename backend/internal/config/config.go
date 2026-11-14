@@ -19,7 +19,7 @@ type Config struct {
 	// independent from ImageCache. Enabled is opt-in via ZIP_ENABLED.
 	ZipArchive StorageConfig
 	LogLevel   string
-	// Sync configures the peer-facing sync host. Node API keys are stored in
+	// Sync configures the peer-facing sync host. User sync keys are stored in
 	// the database, never in the environment.
 	Sync SyncConfig
 	// DevTools enables the /api/dev/* debug endpoints (off by default). They
@@ -65,19 +65,17 @@ func (c AuthConfig) ExpiresInSeconds() int {
 }
 
 // MetricsConfig controls the internal metrics/readiness surface. When Token
-// is empty, /metrics only answers loopback clients unless a node API key with
-// metrics:read is presented; with a token it requires "Authorization: Bearer
-// <token>" (independent from JWT) or a metrics:read node key.
+// is empty, /metrics only answers loopback clients; with a token it requires
+// "Authorization: Bearer <token>" (independent from JWT and sync keys).
 type MetricsConfig struct {
 	Enabled bool
 	Token   string
 }
 
-// SyncConfig configures the node sync host. API keys remain database-managed.
+// SyncConfig configures the sync host. User sync keys remain database-managed.
 type SyncConfig struct {
-	Enabled         bool
-	RequestTimeout  time.Duration
-	APIKeyMinLength int
+	Enabled        bool
+	RequestTimeout time.Duration
 }
 
 // DatabaseConfig selects the database backend. Driver defaults to "sqlite";
@@ -182,9 +180,8 @@ func Load() (*Config, error) {
 		LogLevel: getEnv("LOG_LEVEL", "warn"),
 		DevTools: parseBoolEnv("MANGA_READER_DEV_TOOLS", false),
 		Sync: SyncConfig{
-			Enabled:         parseBoolEnv("MANGA_READER_SYNC_ENABLED", true),
-			RequestTimeout:  30 * time.Second,
-			APIKeyMinLength: 32,
+			Enabled:        parseBoolEnv("MANGA_READER_SYNC_ENABLED", true),
+			RequestTimeout: 30 * time.Second,
 		},
 		ImageCache: loadImageCache(),
 	}
@@ -202,14 +199,6 @@ func Load() (*Config, error) {
 		}
 		cfg.Sync.RequestTimeout = d
 	}
-	if raw := strings.TrimSpace(getEnv("MANGA_READER_SYNC_API_KEY_MIN_LENGTH", "")); raw != "" {
-		n, err := strconv.Atoi(raw)
-		if err != nil || n < 32 {
-			return nil, fmt.Errorf("MANGA_READER_SYNC_API_KEY_MIN_LENGTH must be at least 32")
-		}
-		cfg.Sync.APIKeyMinLength = n
-	}
-
 	authCfg, err := loadAuth()
 	if err != nil {
 		return nil, err
@@ -237,7 +226,7 @@ func Load() (*Config, error) {
 
 // loadMetrics reads the independent metrics token. An empty token keeps the
 // endpoint loopback-only; a configured token must be strong enough to stand
-// on its own and is never shared with JWT or node API keys.
+// on its own and is never shared with JWT or sync keys.
 func loadMetrics() (MetricsConfig, error) {
 	cfg := MetricsConfig{Enabled: parseBoolEnv("MANGA_READER_METRICS_ENABLED", true)}
 	token := strings.TrimSpace(getEnv("MANGA_READER_METRICS_TOKEN", ""))

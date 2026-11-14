@@ -97,7 +97,6 @@ type Row struct {
 // wins, so instances sharing a database keep their exact identity.
 type Change struct {
 	UserID    ident.UUID `json:"user_id"`
-	Username  string     `json:"username,omitempty"`
 	Entity    string     `json:"entity"`
 	GalleryID int64      `json:"gallery_id"`
 	Token     string     `json:"token"`

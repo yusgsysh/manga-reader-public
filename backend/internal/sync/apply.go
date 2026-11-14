@@ -14,11 +14,13 @@ import (
 	"manga-reader/internal/ent/gallerycache"
 	"manga-reader/internal/ent/readingprogress"
 	"manga-reader/internal/ent/syncchange"
-	"manga-reader/internal/ent/user"
 )
 
 // ApplyChanges merges peer changes into the local database with per-row
-// last-write-wins on updated_at.
+// last-write-wins on updated_at. owner is the local account the exchange is
+// scoped to: every private row is written under it (the credential already
+// selected the account, so the payload's user_id is not trusted), while
+// gallery_cache rows stay ownerless and global.
 //
 // It is deliberately not integrated with Record: rows that arrive from a peer
 // must not re-enter the local outbox, otherwise they would be pushed straight
@@ -28,51 +30,20 @@ import (
 //
 // Applying the same change twice is a no-op (equal timestamps are skipped),
 // which makes retries and echoes harmless.
-func ApplyChanges(ctx context.Context, client *ent.Client, changes []Change) (applied, skipped int, err error) {
-	return ApplyChangesForUser(ctx, client, changes, ident.Nil())
-}
-
-// ApplyChangesForUser is ApplyChanges with an optional forced owner. When
-// owner is set (a user-scoped sync key, or a client configured for one local
-// account), every private row is written under that account and the
-// user_id/username in the payload are ignored; the credential already scoped
-// the exchange. Gallery cache rows stay ownerless and global.
-func ApplyChangesForUser(ctx context.Context, client *ent.Client, changes []Change, owner ident.UUID) (applied, skipped int, err error) {
+func ApplyChanges(ctx context.Context, client *ent.Client, changes []Change, owner ident.UUID) (applied, skipped int, err error) {
 	tombstones, err := pendingTombstones(ctx, client)
-	if err != nil {
-		return 0, 0, err
-	}
-	users, err := loadUserDirectory(ctx, client)
 	if err != nil {
 		return 0, 0, err
 	}
 	for _, ch := range changes {
 		if ch.Entity != EntityGalleryCache {
-			if owner != ident.Nil() {
-				ch.UserID = owner
-				ch.Username = ""
-			} else {
-				// Accounts are created per instance, so the sender's user UUID
-				// may not exist here. Map it to the local account with the
-				// same username; a private row that cannot be attributed is
-				// skipped instead of being written under a ghost owner nobody
-				// can read.
-				if ch.UserID == ident.Nil() {
-					slog.Warn("skipping unowned sync change",
-						"entity", ch.Entity, "gallery_id", ch.GalleryID, "token", ch.Token)
-					skipped++
-					continue
-				}
-				localID, ok := users.resolve(ch.UserID, ch.Username)
-				if !ok {
-					slog.Warn("skipping sync change for unknown user",
-						"username", ch.Username, "user_id", ch.UserID.String(),
-						"entity", ch.Entity, "gallery_id", ch.GalleryID, "token", ch.Token)
-					skipped++
-					continue
-				}
-				ch.UserID = localID
+			if owner == ident.Nil() {
+				slog.Warn("skipping unowned sync change",
+					"entity", ch.Entity, "gallery_id", ch.GalleryID, "token", ch.Token)
+				skipped++
+				continue
 			}
+			ch.UserID = owner
 		}
 		// A pending local deletion outranks an older incoming row. Rows have
 		// no stored tombstone, so without this check a peer snapshot/delta
@@ -442,27 +413,18 @@ func applyBookshelf(ctx context.Context, client *ent.Client, ch Change) (bool, e
 	return true, nil
 }
 
-// ExportSnapshot returns the current state of all synced tables as upsert
-// changes (bootstrap transfer).
-func ExportSnapshot(ctx context.Context, client *ent.Client) ([]Change, error) {
-	return ExportSnapshotForUser(ctx, client, ident.Nil())
-}
-
-// ExportSnapshotForUser exports one account's private rows plus the shared
-// gallery cache. A nil owner keeps the instance-wide behaviour used by node
-// keys.
-func ExportSnapshotForUser(ctx context.Context, client *ent.Client, owner ident.UUID) ([]Change, error) {
-	progressQuery := client.ReadingProgress.Query()
-	bookshelfQuery := client.Bookshelf.Query()
-	if owner != ident.Nil() {
-		progressQuery = progressQuery.Where(readingprogress.UserIDEQ(owner))
-		bookshelfQuery = bookshelfQuery.Where(bookshelf.UserIDEQ(owner))
-	}
-	progressRows, err := progressQuery.All(ctx)
+// ExportSnapshot exports one account's private rows plus the shared gallery
+// cache as upsert changes (bootstrap transfer).
+func ExportSnapshot(ctx context.Context, client *ent.Client, owner ident.UUID) ([]Change, error) {
+	progressRows, err := client.ReadingProgress.Query().
+		Where(readingprogress.UserIDEQ(owner)).
+		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("export reading progress: %w", err)
 	}
-	bookshelfRows, err := bookshelfQuery.All(ctx)
+	bookshelfRows, err := client.Bookshelf.Query().
+		Where(bookshelf.UserIDEQ(owner)).
+		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("export bookshelf: %w", err)
 	}
@@ -471,23 +433,10 @@ func ExportSnapshotForUser(ctx context.Context, client *ent.Client, owner ident.
 		return nil, fmt.Errorf("export gallery cache: %w", err)
 	}
 
-	owners := make([]ident.UUID, 0, len(progressRows)+len(bookshelfRows))
-	for _, p := range progressRows {
-		owners = append(owners, p.UserID)
-	}
-	for _, b := range bookshelfRows {
-		owners = append(owners, b.UserID)
-	}
-	usernames, err := loadUsernames(ctx, client, owners)
-	if err != nil {
-		return nil, err
-	}
-
 	changes := make([]Change, 0, len(progressRows)+len(bookshelfRows)+len(cacheRows))
 	for _, p := range progressRows {
 		changes = append(changes, Change{
 			UserID:    p.UserID,
-			Username:  usernames[p.UserID],
 			Entity:    EntityReadingProgress,
 			GalleryID: p.GalleryID,
 			Token:     p.Token,
@@ -504,7 +453,6 @@ func ExportSnapshotForUser(ctx context.Context, client *ent.Client, owner ident.
 	for _, b := range bookshelfRows {
 		changes = append(changes, Change{
 			UserID:    b.UserID,
-			Username:  usernames[b.UserID],
 			Entity:    EntityBookshelf,
 			GalleryID: b.GalleryID,
 			Token:     b.Token,
@@ -538,78 +486,6 @@ type changeKey struct {
 
 func changeKeyOf(ch Change) changeKey {
 	return changeKey{userID: ch.UserID, entity: ch.Entity, galleryID: ch.GalleryID, token: ch.Token}
-}
-
-// userDirectory resolves a peer-side owner onto a local account. Accounts are
-// created independently on each instance (random UUIDv7), so the same person
-// has a different user_id on the other side; the username is the stable link
-// between them.
-type userDirectory struct {
-	byID   map[ident.UUID]ident.UUID
-	byName map[string]ident.UUID
-}
-
-func loadUserDirectory(ctx context.Context, client *ent.Client) (*userDirectory, error) {
-	users, err := client.User.Query().All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("read sync users: %w", err)
-	}
-	d := &userDirectory{
-		byID:   make(map[ident.UUID]ident.UUID, len(users)),
-		byName: make(map[string]ident.UUID, len(users)),
-	}
-	for _, u := range users {
-		d.byID[u.ID] = u.ID
-		d.byName[u.Username] = u.ID
-	}
-	return d, nil
-}
-
-// resolve returns the local owner for a remote change. The sender's UUID wins
-// when it names an account here (same database or an earlier mapping);
-// otherwise the username identifies the same person. Changes from peers that
-// predate username propagation keep their original UUID, matching the old
-// behaviour.
-func (d *userDirectory) resolve(id ident.UUID, username string) (ident.UUID, bool) {
-	if local, ok := d.byID[id]; ok {
-		return local, true
-	}
-	if username == "" {
-		return id, true
-	}
-	if local, ok := d.byName[username]; ok {
-		return local, true
-	}
-	return ident.Nil(), false
-}
-
-// loadUsernames maps owners to usernames for the wire payload so the receiver
-// can match accounts whose UUIDs differ.
-func loadUsernames(ctx context.Context, client *ent.Client, ids []ident.UUID) (map[ident.UUID]string, error) {
-	names := make(map[ident.UUID]string, len(ids))
-	unique := make([]ident.UUID, 0, len(ids))
-	seen := make(map[ident.UUID]struct{}, len(ids))
-	for _, id := range ids {
-		if id == ident.Nil() {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		unique = append(unique, id)
-	}
-	if len(unique) == 0 {
-		return names, nil
-	}
-	users, err := client.User.Query().Where(user.IDIn(unique...)).All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("read sync usernames: %w", err)
-	}
-	for _, u := range users {
-		names[u.ID] = u.Username
-	}
-	return names, nil
 }
 
 // pendingTombstones returns the deletion time of every row whose newest outbox
@@ -646,23 +522,16 @@ func pendingTombstones(ctx context.Context, client *ent.Client) (map[changeKey]t
 //
 // The watermark is read before the export: a row written while the snapshot is
 // collected keeps an outbox id above it and is pushed as a delta next cycle.
-func BootstrapChanges(ctx context.Context, client *ent.Client) ([]Change, int, error) {
-	return BootstrapChangesForUser(ctx, client, ident.Nil())
-}
-
-// BootstrapChangesForUser is BootstrapChanges scoped to one account (nil owner
-// = instance-wide). A user-scoped epoch only transfers that user's private
-// rows plus the shared gallery cache.
-func BootstrapChangesForUser(ctx context.Context, client *ent.Client, owner ident.UUID) ([]Change, int, error) {
+func BootstrapChanges(ctx context.Context, client *ent.Client, owner ident.UUID) ([]Change, int, error) {
 	watermark, err := maxOutboxID(ctx, client)
 	if err != nil {
 		return nil, 0, err
 	}
-	changes, err := ExportSnapshotForUser(ctx, client, owner)
+	changes, err := ExportSnapshot(ctx, client, owner)
 	if err != nil {
 		return nil, 0, err
 	}
-	deltas, _, err := ReadChangesSinceForUser(ctx, client, 0, owner)
+	deltas, _, err := ReadChangesSince(ctx, client, 0, owner)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -692,28 +561,20 @@ func BootstrapChangesForUser(ctx context.Context, client *ent.Client, owner iden
 // its own copy.
 //
 // The second return value is the current outbox maximum (the new cursor).
-func ReadChangesSince(ctx context.Context, client *ent.Client, cursor int) ([]Change, int, error) {
-	return ReadChangesSinceForUser(ctx, client, cursor, ident.Nil())
-}
-
-// ReadChangesSinceForUser is ReadChangesSince scoped to one account: private
-// entries for other users are never returned to a user-scoped peer, while the
-// ownerless gallery_cache stream is shared. A nil owner keeps the
-// instance-wide behaviour.
-func ReadChangesSinceForUser(ctx context.Context, client *ent.Client, cursor int, owner ident.UUID) ([]Change, int, error) {
+func ReadChangesSince(ctx context.Context, client *ent.Client, cursor int, owner ident.UUID) ([]Change, int, error) {
 	maxID, err := maxOutboxID(ctx, client)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	query := client.SyncChange.Query().Where(syncchange.IDGT(cursor))
-	if owner != ident.Nil() {
-		query = query.Where(syncchange.Or(
-			syncchange.UserIDEQ(owner),
-			syncchange.UserIDEQ(ident.Nil()),
-		))
-	}
-	entries, err := query.
+	entries, err := client.SyncChange.Query().
+		Where(
+			syncchange.IDGT(cursor),
+			syncchange.Or(
+				syncchange.UserIDEQ(owner),
+				syncchange.UserIDEQ(ident.Nil()),
+			),
+		).
 		Order(ent.Asc(syncchange.FieldID)).
 		All(ctx)
 	if err != nil {
@@ -736,21 +597,12 @@ func ReadChangesSinceForUser(ctx context.Context, client *ent.Client, cursor int
 	}
 
 	changes := make([]Change, 0, len(order))
-	owners := make([]ident.UUID, 0, len(order))
-	for _, k := range order {
-		owners = append(owners, k.userID)
-	}
-	usernames, err := loadUsernames(ctx, client, owners)
-	if err != nil {
-		return nil, 0, err
-	}
 	for _, k := range order {
 		e := latest[k]
 		if e.Op == OpDelete {
 			deletedAt := e.ChangedAt
 			changes = append(changes, Change{
 				UserID:    e.UserID,
-				Username:  usernames[e.UserID],
 				Entity:    e.Entity,
 				GalleryID: e.GalleryID,
 				Token:     e.Token,
@@ -767,7 +619,6 @@ func ReadChangesSinceForUser(ctx context.Context, client *ent.Client, cursor int
 			deletedAt := e.ChangedAt
 			changes = append(changes, Change{
 				UserID:    e.UserID,
-				Username:  usernames[e.UserID],
 				Entity:    e.Entity,
 				GalleryID: e.GalleryID,
 				Token:     e.Token,
@@ -778,7 +629,6 @@ func ReadChangesSinceForUser(ctx context.Context, client *ent.Client, cursor int
 		}
 		changes = append(changes, Change{
 			UserID:    e.UserID,
-			Username:  usernames[e.UserID],
 			Entity:    e.Entity,
 			GalleryID: e.GalleryID,
 			Token:     e.Token,
@@ -876,27 +726,20 @@ func galleryCacheRow(g *ent.GalleryCache) *Row {
 	}
 }
 
-// pruneOutbox removes pushed entries. Callers must only prune up to a cursor
-// the peer has confirmed holding.
-func pruneOutbox(ctx context.Context, client *ent.Client, cursor int) error {
-	return pruneOutboxForUser(ctx, client, cursor, ident.Nil())
-}
-
-// pruneOutboxForUser prunes an account's delivered entries plus the shared
-// gallery_cache stream. Other users' entries stay for their own peers, so a
-// user-scoped exchange can never destroy another account's changes.
-func pruneOutboxForUser(ctx context.Context, client *ent.Client, cursor int, owner ident.UUID) error {
+// pruneOutbox removes an account's pushed entries plus the shared gallery_cache
+// stream. Other users' entries stay for their own peers, so a user-scoped
+// exchange can never destroy another account's changes. Callers must only
+// prune up to a cursor the peer has confirmed holding.
+func pruneOutbox(ctx context.Context, client *ent.Client, cursor int, owner ident.UUID) error {
 	if cursor <= 0 {
 		return nil
 	}
-	query := client.SyncChange.Delete().Where(syncchange.IDLTE(cursor))
-	if owner != ident.Nil() {
-		query = client.SyncChange.Delete().Where(
+	if _, err := client.SyncChange.Delete().
+		Where(
 			syncchange.IDLTE(cursor),
 			syncchange.Or(syncchange.UserIDEQ(owner), syncchange.UserIDEQ(ident.Nil())),
-		)
-	}
-	if _, err := query.Exec(ctx); err != nil {
+		).
+		Exec(ctx); err != nil {
 		return fmt.Errorf("prune outbox: %w", err)
 	}
 	return nil

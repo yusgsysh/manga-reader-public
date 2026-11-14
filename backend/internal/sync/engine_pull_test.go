@@ -32,8 +32,9 @@ func TestEnginePullsLiveChanges(t *testing.T) {
 
 	clientSvc := NewService(clientClient, Options{})
 	enabled, url, token := true, ts.URL, "tok"
+	owner := testID(1)
 	if _, err := clientSvc.SaveClientConfig(t.Context(), ConfigUpdate{
-		Enabled: &enabled, ServerURL: &url, Token: &token,
+		Enabled: &enabled, ServerURL: &url, Token: &token, UserID: &owner,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -109,8 +110,9 @@ func TestFullResyncUsesNewerPeerRow(t *testing.T) {
 
 	clientSvc := NewService(clientClient, Options{})
 	enabled, url, token := true, ts.URL, "tok"
+	owner := testID(1)
 	if _, err := clientSvc.SaveClientConfig(t.Context(), ConfigUpdate{
-		Enabled: &enabled, ServerURL: &url, Token: &token,
+		Enabled: &enabled, ServerURL: &url, Token: &token, UserID: &owner,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -139,8 +141,9 @@ func TestEnginePullsBookshelfAndGalleryCache(t *testing.T) {
 
 	clientSvc := NewService(clientClient, Options{})
 	enabled, url, token := true, ts.URL, "tok"
+	owner := testID(1)
 	if _, err := clientSvc.SaveClientConfig(t.Context(), ConfigUpdate{
-		Enabled: &enabled, ServerURL: &url, Token: &token,
+		Enabled: &enabled, ServerURL: &url, Token: &token, UserID: &owner,
 	}); err != nil {
 		t.Fatal(err)
 	}

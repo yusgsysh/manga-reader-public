@@ -111,7 +111,7 @@ Multi-user mode is always on. `JWT_SECRET` is optional: when unset the API gener
 
 ### Public vs protected
 
-Public (no user JWT): `/api/auth/login`, `/api/auth/register` (first-admin setup only), `/api/auth/status`. Peer sync endpoints `/api/sync/push` and `/api/sync/events` require a Node API Key instead (separate middleware).
+Public (no user JWT): `/api/auth/login`, `/api/auth/register` (first-admin setup only), `/api/auth/status`. Peer sync endpoints `/api/sync/push` and `/api/sync/events` require a user sync key instead (separate middleware).
 
 Every other `/api/*` route requires a valid user JWT: search, galleries, image proxies (the browser sends the same-origin HttpOnly cookie), `/api/auth/logout`, `/api/bookshelf*`, `/api/progress*`, `/api/recently-read`, `/api/reading-progress/cleanup`, `/api/tag-settings*`, `/api/prefill*`, `/api/settings*`, `/api/sync/config`, `/api/sync/status`, `/api/dev/*`, `/api/admin/*`. The middleware is default-deny.
 
@@ -247,34 +247,12 @@ Cookie responses contain only a non-secret summary:
 - The last active administrator cannot be demoted, disabled or deleted; an administrator cannot delete their own account.
 - Deleting a user removes their private rows (bookshelf, progress, prefill jobs, tag preferences/baseline, outbox, settings) in one transaction.
 
-### 0.7 Node and API-key administration (admin)
-
-All routes require an administrator JWT. A node is a trusted sync peer of the instance and is no longer bound to a tenant.
-
-| Method | Path | Body |
-|--------|------|------|
-| GET | `/api/admin/nodes` | - |
-| POST | `/api/admin/nodes` | `{ "name", "status"? }` |
-| GET | `/api/admin/nodes/:id` | - |
-| PUT | `/api/admin/nodes/:id` | `{ "name"?, "status"? }` |
-| DELETE | `/api/admin/nodes/:id` | - |
-| GET | `/api/admin/nodes/:id/keys` | - |
-| POST | `/api/admin/nodes/:id/keys` | `{ "scopes"?, "expires_in_days"?, "expires_at"? }` |
-| DELETE | `/api/admin/nodes/:id/keys/:keyId` | - |
-| POST | `/api/admin/nodes/:id/keys/:keyId/rotate` | `{ "revoke_old"?, "expires_in_days"?, "expires_at"? }` |
-
-- Scopes: `sync:read`, `sync:write`, `sync:events`（默认）与 `metrics:read`（可选，用于 `/metrics`）。
-- `expires_in_days` 为 1–3650 的整数，服务端按当前时间加天数计算过期时间；省略即永不过期。`expires_at`（RFC 3339，必须晚于当前时间）用于指定绝对到期时间，仅在没有 `expires_in_days` 时使用。
-- `POST .../keys` and `.../rotate` return the full plaintext key **once** as `{"key":"mrk_...", "api_key":{...}}`; list/get only expose `key_prefix`.
-- Revocation is immediate. Rotation creates a new key and leaves the old one active unless `revoke_old` is true or the old key is explicitly deleted.
-- Sync changes carry `user_id`; a trusted node replicates all users' data without merging ownership.
-
-### 0.8 System-level endpoints
+### 0.7 System-level endpoints
 
 - `/api/sync/config` and `/api/sync/status` are instance-wide: administrator JWT required.
 - `/api/dev/*` is administrator-only (and only registered when `MANGA_READER_DEV_TOOLS=true`).
-- `/metrics` accepts the dedicated `MANGA_READER_METRICS_TOKEN` or a node API key carrying `metrics:read`; with no token configured it is loopback-only unless a node key is presented. User JWTs are always rejected.
-- Node sync endpoints (`/api/sync/push`, `/api/sync/events`) accept only Node API Keys.
+- `/metrics` accepts the dedicated `MANGA_READER_METRICS_TOKEN`; with no token configured it is loopback-only. User JWTs and sync keys are always rejected.
+- Sync endpoints (`/api/sync/push`, `/api/sync/events`) accept only user sync keys.
 
 ---
 
@@ -1570,7 +1548,7 @@ Cache-Control: no-store
 
 **宿主端点（`MANGA_READER_SYNC_ENABLED=true` 时注册）：**
 
-鉴权：`Authorization: Bearer <Node API Key 或用户级同步 Key>`。中间件先按节点 Key、再按用户级 Key 解析；节点 Key 是实例级，用户级 Key 绑定一个账号。失败返回 `401`，Scope 不足返回 `403`。用户 JWT 不能访问这些端点。节点 Key 的变更携带 `user_id`/`username`，对端按用户写入；用户级 Key 的私有变更强制归属到该 Key 的账号，并且只返回该账号的变更。
+鉴权：`Authorization: Bearer <用户级同步 Key>`。中间件解析 Key 的 SHA-256 哈希、校验用户状态和 key 状态；失败返回 `401`。用户 JWT 不能访问这些端点。私有变更强制归属到 Key 的账号，并且只返回该账号的变更（`gallery_cache` 双方共享）。
 
 `POST /api/sync/push` — 一步推 + 拉。请求：
 
@@ -1580,12 +1558,10 @@ Cache-Control: no-store
   "cursor": 12,
   "snapshot": false,
   "changes": [
-    { "user_id": "7a6c…", "username": "admin",
-      "entity": "reading_progress", "gallery_id": 100, "token": "abc", "op": "upsert",
+    { "entity": "reading_progress", "gallery_id": 100, "token": "abc", "op": "upsert",
       "row": { "gallery_id": 100, "token": "abc", "current_page": 5, "progress": 0.5,
                "completed": false, "created_at": "...", "updated_at": "..." } },
-    { "user_id": "7a6c…", "username": "admin",
-      "entity": "bookshelf", "gallery_id": 200, "token": "def", "op": "delete",
+    { "entity": "bookshelf", "gallery_id": 200, "token": "def", "op": "delete",
       "deleted_at": "..." }
   ]
 }
@@ -1600,20 +1576,20 @@ Cache-Control: no-store
 { "cursor": 15, "changes": [ ... ], "applied": 3, "skipped": 1 }
 ```
 
-- `applied`：LWW 胜出并落库的远端行数；`skipped`：过期、回声或无法归属用户而跳过。
+- `applied`：LWW 胜出并落库的远端行数；`skipped`：过期、回声或无法归属而跳过。
 - `cursor`：当前 outbox 最大 id，调用方**无条件采纳**（服务端重置时可回退）。
-- 账号归属：各实例的账号 UUID 独立生成，`user_id` 在两端通常不同。接收方先按 `user_id` 匹配本地账号，找不到再按 `username` 匹配；两者都找不到时该变更被跳过（不会写入无主数据）。因此两端应使用相同的用户名。
+- 账号归属：私有变更统一写入 Key 绑定的账号，请求里的 `user_id` 不会扩大或改变范围；客户端只拉取该账号的数据。
 
 `GET /api/sync/events` — 宿主 SSE。连接后推送 `data: {"cursor": N}`；此后每次 outbox 新增推送 `data: {"cursor": M}`（`M > N`）。客户端收到后延迟去抖（2s）执行 push 循环，心跳间隔 25s，断线指数退避（1s→60s），并有 60s 轮询兜底。
 
 **示例：**
 
 ```bash
-# 平台管理员通过 /api/admin/nodes 与 /api/admin/nodes/:id/keys 创建节点和 API Key 后：
+# 在服务端「数据同步」页为当前账号创建同步 Key 后：
 curl -X PUT http://localhost:8080/api/sync/config -H 'Content-Type: application/json' \
   -d '{"enabled":true,"server_url":"http://server:8080","token":"mrk_..."}'
 
-# 手动推 + 拉（节点 API Key）
+# 手动推 + 拉（用户级同步 Key）
 curl -X POST http://server:8080/api/sync/push \
   -H 'Authorization: Bearer mrk_...' \
   -H 'Content-Type: application/json' \
@@ -1625,13 +1601,13 @@ curl -N http://server:8080/api/sync/events -H 'Authorization: Bearer mrk_...'
 
 同步请求的 `request_id` 会写入审计日志；数据合并仍按行 LWW 幂等。API Key 明文只在创建/轮换时返回一次，错误日志不记录完整 Key。
 
-**Error Responses:** `400` 配置无效、`401` Key 无效/撤销/过期/节点禁用、`403` Scope 不足、`404` 宿主端点未启用。
+**Error Responses:** `400` 配置无效、`401` Key 无效/撤销/过期/用户禁用、`404` 宿主端点未启用。
 
 ---
 
 ### 29. Metrics（Prometheus）
 
-`GET /metrics` — Prometheus 文本格式（`Content-Type: text/plain; version=0.0.4`）。三种访问方式：① 未配置任何凭证时仅允许回环地址；② 配置 `MANGA_READER_METRICS_TOKEN` 后携带 `Authorization: Bearer <token>` 或 `X-Metrics-Token`；③ 在设置页创建带 `metrics:read` 的节点 API Key，携带 `Authorization: Bearer mrk_...`。节点 Key 与 `/api/sync/*` 使用同一套创建、轮换、撤销与过期逻辑。用户 JWT 始终被拒绝。`GET /healthz` 返回存活状态，`GET /readyz` 检查数据库连接，两者都只返回最小状态信息。
+`GET /metrics` — Prometheus 文本格式（`Content-Type: text/plain; version=0.0.4`）。两种访问方式：① 未配置任何凭证时仅允许回环地址；② 配置 `MANGA_READER_METRICS_TOKEN` 后携带 `Authorization: Bearer <token>` 或 `X-Metrics-Token`。用户 JWT 与同步 Key 始终被拒绝。`GET /healthz` 返回存活状态，`GET /readyz` 检查数据库连接，两者都只返回最小状态信息。
 
 缓存命中率相关计数器（完整指标列表见根 README「可观测性」）：
 

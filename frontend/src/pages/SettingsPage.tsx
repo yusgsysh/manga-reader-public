@@ -47,7 +47,6 @@ import { useAuth } from "../context/auth";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { TagRulesSection } from "../components/settings/TagRulesSection";
 import { UserManagementSection } from "../components/settings/UserManagementSection";
-import { ApiManagementSection } from "../components/settings/ApiManagementSection";
 import { SettingsSidebar } from "../components/settings/SettingsSidebar";
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
@@ -970,13 +969,6 @@ const SECTION_DEFS: SectionDef[] = [
     group: "admin",
     show: "admin",
     element: <UserManagementSection />,
-  },
-  {
-    id: "api-keys",
-    label: "API Key",
-    group: "admin",
-    show: "admin",
-    element: <ApiManagementSection />,
   },
   {
     id: "dev-tools",

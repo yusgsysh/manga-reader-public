@@ -2,7 +2,7 @@
 // traffic, the app's own HTTP surface, the image payload memory budget and Go
 // runtime/process stats. The registry is package-private so tests can gather
 // isolated snapshots; production mounts Handler at /metrics behind the metrics
-// auth middleware (operator token or a metrics:read node API key).
+// auth middleware (operator token, loopback-only without one).
 package metrics
 
 import (

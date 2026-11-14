@@ -20,8 +20,8 @@ import (
 	"manga-reader/internal/ent/usersynckey"
 	"manga-reader/internal/ident"
 	"manga-reader/internal/metrics"
-	nodeauth "manga-reader/internal/node"
 	"manga-reader/internal/requestid"
+	"manga-reader/internal/synckey"
 	"manga-reader/internal/web"
 )
 
@@ -37,7 +37,7 @@ type Service struct {
 	client      *ent.Client
 	hub         *Hub
 	hostEnabled bool
-	nodeAuth    func(scopes ...string) gin.HandlerFunc
+	keyAuth     func(scopes ...string) gin.HandlerFunc
 	engine      *Engine
 	// clientActive mirrors ClientConfig.Active(); the outbox is only written
 	// when this instance can actually exchange changes with a peer.
@@ -80,9 +80,9 @@ type Options struct {
 	// HostEnabled mounts the peer-facing routes. Authentication is supplied
 	// separately as a node-API-key middleware.
 	HostEnabled bool
-	// NodeAuth validates Authorization: Bearer <node API key> and requires
+	// KeyAuth validates Authorization: Bearer <user sync key> and requires
 	// the scopes passed to it. It must not accept user JWTs.
-	NodeAuth func(scopes ...string) gin.HandlerFunc
+	KeyAuth func(scopes ...string) gin.HandlerFunc
 	// DisableInactiveOutbox stops appending outbox rows when no peer is
 	// configured, so a single-instance deployment does not grow sync_change.
 	DisableInactiveOutbox bool
@@ -96,7 +96,7 @@ func NewService(client *ent.Client, opts Options) *Service {
 		client:                client,
 		hub:                   NewHub(),
 		hostEnabled:           opts.HostEnabled,
-		nodeAuth:              opts.NodeAuth,
+		keyAuth:               opts.KeyAuth,
 		disableInactiveOutbox: opts.DisableInactiveOutbox,
 	}
 	s.engine = newEngine(s)
@@ -121,9 +121,9 @@ func (s *Service) RegisterRoutes(r gin.IRouter) {
 	r.GET("/api/sync/keys", s.handleUserKeyList)
 	r.POST("/api/sync/keys", s.handleUserKeyCreate)
 	r.DELETE("/api/sync/keys/:id", s.handleUserKeyRevoke)
-	if s.hostEnabled && s.nodeAuth != nil {
-		r.POST("/api/sync/push", s.nodeAuth(nodeauth.ScopeSyncWrite), s.handlePush)
-		r.GET("/api/sync/events", s.nodeAuth(nodeauth.ScopeSyncEvent), s.handlePeerEvents)
+	if s.hostEnabled && s.keyAuth != nil {
+		r.POST("/api/sync/push", s.keyAuth(synckey.ScopeSyncWrite), s.handlePush)
+		r.GET("/api/sync/events", s.keyAuth(synckey.ScopeSyncEvent), s.handlePeerEvents)
 	}
 }
 
@@ -142,7 +142,7 @@ func (s *Service) handlePush(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	identity, ok := nodeauth.From(c)
+	identity, ok := synckey.From(c)
 	if !ok {
 		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "node identity missing"})
 		return
@@ -150,11 +150,8 @@ func (s *Service) handlePush(c *gin.Context) {
 	// A user sync key scopes the whole exchange to its account: incoming
 	// private rows are written under that user and only that user's changes
 	// (plus the shared gallery cache) go back.
-	owner := ident.Nil()
-	if identity.UserScoped() {
-		owner = identity.UserID
-	}
-	applied, skipped, err := ApplyChangesForUser(ctx, s.client, req.Changes, owner)
+	owner := identity.UserID
+	applied, skipped, err := ApplyChanges(ctx, s.client, req.Changes, owner)
 	if err != nil {
 		slog.Error("apply sync changes failed", "error", err)
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "apply changes failed"})
@@ -172,9 +169,9 @@ func (s *Service) handlePush(c *gin.Context) {
 		// A bootstrap carries the full live snapshot plus outbox tombstones,
 		// so deletions made before this peer ever synced still propagate
 		// instead of being resurrected by the other side's snapshot.
-		changes, cursor, err = BootstrapChangesForUser(ctx, s.client, owner)
+		changes, cursor, err = BootstrapChanges(ctx, s.client, owner)
 	} else {
-		changes, cursor, err = ReadChangesSinceForUser(ctx, s.client, req.Cursor, owner)
+		changes, cursor, err = ReadChangesSince(ctx, s.client, req.Cursor, owner)
 	}
 	if err != nil {
 		slog.Error("collect sync changes failed", "error", err)
@@ -188,14 +185,14 @@ func (s *Service) handlePush(c *gin.Context) {
 	// pruning then would destroy changes the client has never seen. A
 	// user-scoped exchange only prunes its own entries.
 	if req.Cursor > 0 && req.Cursor <= cursor {
-		if err := pruneOutboxForUser(ctx, s.client, req.Cursor, owner); err != nil {
+		if err := pruneOutbox(ctx, s.client, req.Cursor, owner); err != nil {
 			slog.Warn("prune sync outbox failed", "error", err)
 		}
 	}
 
 	slog.Info("node sync push",
 		"request_id", requestid.From(c),
-		"node_id", identity.NodeID,
+		"user_id", identity.UserID,
 		"applied", applied,
 		"skipped", skipped,
 		"changes_in", len(req.Changes),
@@ -213,9 +210,9 @@ func (s *Service) handlePush(c *gin.Context) {
 
 // handlePeerEvents streams change notifications to remote sync engines.
 func (s *Service) handlePeerEvents(c *gin.Context) {
-	if identity, ok := nodeauth.From(c); ok {
-		slog.Info("node sync events connected",
-			"request_id", requestid.From(c), "node_id", identity.NodeID)
+	if identity, ok := synckey.From(c); ok {
+		slog.Info("sync events connected",
+			"request_id", requestid.From(c), "user_id", identity.UserID)
 	}
 	sub, cancel := s.hub.SubscribePeer()
 	s.serveEvents(c, sub, cancel, func() any {
@@ -481,7 +478,7 @@ func (s *Service) handleUserKeyCreate(c *gin.Context) {
 		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	material, err := nodeauth.GenerateKey()
+	material, err := synckey.GenerateKey()
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "generate sync key failed"})
 		return

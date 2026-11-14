@@ -9,8 +9,6 @@ import (
 	"manga-reader/internal/ent/appsetting"
 	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/gallerycache"
-	"manga-reader/internal/ent/node"
-	"manga-reader/internal/ent/nodeapikey"
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/readingprogress"
 	"manga-reader/internal/ent/syncchange"
@@ -89,8 +87,6 @@ func checkColumn(t, c string) error {
 			appsetting.Table:      appsetting.ValidColumn,
 			bookshelf.Table:       bookshelf.ValidColumn,
 			gallerycache.Table:    gallerycache.ValidColumn,
-			node.Table:            node.ValidColumn,
-			nodeapikey.Table:      nodeapikey.ValidColumn,
 			prefilljob.Table:      prefilljob.ValidColumn,
 			readingprogress.Table: readingprogress.ValidColumn,
 			syncchange.Table:      syncchange.ValidColumn,

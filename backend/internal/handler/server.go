@@ -128,17 +128,6 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 	r.PATCH("/api/admin/users/:id/status", s.handleAdminUserStatus)
 	r.DELETE("/api/admin/users/:id", s.handleAdminUserDelete)
 
-	// Node and node API-key administration (admin only).
-	r.GET("/api/admin/nodes", s.handleAdminNodeList)
-	r.POST("/api/admin/nodes", s.handleAdminNodeCreate)
-	r.GET("/api/admin/nodes/:id", s.handleAdminNodeGet)
-	r.PUT("/api/admin/nodes/:id", s.handleAdminNodeUpdate)
-	r.DELETE("/api/admin/nodes/:id", s.handleAdminNodeDelete)
-	r.GET("/api/admin/nodes/:id/keys", s.handleAdminNodeKeyList)
-	r.POST("/api/admin/nodes/:id/keys", s.handleAdminNodeKeyCreate)
-	r.DELETE("/api/admin/nodes/:id/keys/:keyId", s.handleAdminNodeKeyRevoke)
-	r.POST("/api/admin/nodes/:id/keys/:keyId/rotate", s.handleAdminNodeKeyRotate)
-
 	r.GET("/api/gallery/:id/:token", s.handleGetGallery)
 	r.GET("/api/gallery/:id/:token/details", s.handleGalleryDetails)
 	r.GET("/api/gallery/:id/:token/pages", s.handleGalleryPages)

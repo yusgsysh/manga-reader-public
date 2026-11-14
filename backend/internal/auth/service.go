@@ -143,13 +143,13 @@ func (s *Service) IsInitialized(ctx context.Context) (bool, error) {
 // touches user data, including gallery/search/image proxies (which need the
 // caller's ExHentai cookie and are reachable from <img>/EventSource through the
 // HttpOnly session cookie), requires an authenticated user. Sync peer endpoints
-// keep their own Node API Key middleware and never accept a user JWT.
+// keep their own sync-key middleware and never accept a user JWT.
 var publicAPIs = map[string]struct{}{
 	"/api/auth/login":    {},
 	"/api/auth/register": {},
 	"/api/auth/status":   {},
 
-	// Peer sync is authenticated by Node API Key middleware in the sync service.
+	// Peer sync is authenticated by sync-key middleware in the sync service.
 	"/api/sync/push":   {},
 	"/api/sync/events": {},
 }

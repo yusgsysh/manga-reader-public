@@ -21,7 +21,7 @@ func newEnginePair(t *testing.T) (serverClient, clientClient *ent.Client, server
 	ts := httptest.NewServer(newTestRouter(serverSvc))
 	t.Cleanup(ts.Close)
 	clientSvc = NewService(clientClient, Options{})
-	cfg = ClientConfig{Enabled: true, ServerURL: ts.URL, Token: "tok"}
+	cfg = ClientConfig{Enabled: true, ServerURL: ts.URL, Token: "tok", UserID: testID(1)}
 	return serverClient, clientClient, serverSvc, clientSvc, cfg
 }
 
@@ -94,7 +94,7 @@ func TestBootstrapChangesTombstones(t *testing.T) {
 		t.Fatalf("record upsert: %v", err)
 	}
 
-	changes, watermark, err := BootstrapChanges(t.Context(), client)
+	changes, watermark, err := BootstrapChanges(t.Context(), client, testID(1))
 	if err != nil {
 		t.Fatalf("bootstrap changes: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestApplyChangesKeepsPendingTombstone(t *testing.T) {
 		UserID: testID(1), Entity: EntityReadingProgress, GalleryID: 3, Token: "tok", Op: OpUpsert,
 		Row: &Row{CurrentPage: 1, Progress: 0.1, CreatedAt: now.Add(-time.Hour), UpdatedAt: now.Add(-time.Hour)},
 	}
-	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{older})
+	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{older}, testID(1))
 	if err != nil {
 		t.Fatalf("apply older: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestApplyChangesKeepsPendingTombstone(t *testing.T) {
 		UserID: testID(1), Entity: EntityReadingProgress, GalleryID: 3, Token: "tok", Op: OpUpsert,
 		Row: &Row{CurrentPage: 2, Progress: 0.2, CreatedAt: now, UpdatedAt: now.Add(time.Hour)},
 	}
-	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{newer})
+	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{newer}, testID(1))
 	if err != nil {
 		t.Fatalf("apply newer: %v", err)
 	}
@@ -176,8 +176,9 @@ func TestResyncEndpointResetsState(t *testing.T) {
 	router := newTestRouter(svc)
 
 	enabled, serverURL, token := true, "https://peer.example.com", "node-key"
+	owner := testID(1)
 	if _, err := svc.SaveClientConfig(t.Context(), ConfigUpdate{
-		Enabled: &enabled, ServerURL: &serverURL, Token: &token,
+		Enabled: &enabled, ServerURL: &serverURL, Token: &token, UserID: &owner,
 	}); err != nil {
 		t.Fatalf("save config: %v", err)
 	}

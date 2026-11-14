@@ -20,10 +20,10 @@ import (
 	"manga-reader/internal/database"
 	"manga-reader/internal/handler"
 	"manga-reader/internal/metrics"
-	"manga-reader/internal/node"
 	"manga-reader/internal/requestid"
 	"manga-reader/internal/storage"
 	synclib "manga-reader/internal/sync"
+	"manga-reader/internal/synckey"
 	"manga-reader/internal/usercookie"
 	"manga-reader/internal/web"
 )
@@ -241,15 +241,15 @@ func run() error {
 		logger.Info("generated and persisted a new JWT secret (JWT_SECRET was not set)")
 	}
 
-	nodeSvc := node.New(db.Client)
+	keySvc := synckey.New(db.Client)
 	syncSvc := synclib.NewService(db.Client, synclib.Options{
 		HostEnabled:           cfg.Sync.Enabled,
-		NodeAuth:              nodeSvc.AnyMiddleware,
+		KeyAuth:               keySvc.Middleware,
 		RequestTimeout:        cfg.Sync.RequestTimeout,
 		DisableInactiveOutbox: true,
 	})
 	if cfg.Sync.Enabled {
-		logger.Info("node sync host enabled")
+		logger.Info("sync host enabled")
 	}
 
 	// No startup sweep of gallery_cache: the read-through cache deliberately
@@ -341,8 +341,8 @@ func run() error {
 	r.Use(CORSMiddleware(corsOrigins))
 	r.Use(securityHeadersMiddleware())
 	r.Use(csrfGuard(corsOrigins))
-	// Default-deny for /api/*: only publicAPIs and node-key sync routes pass
-	// without a valid user JWT.
+	// Default-deny for /api/*: only publicAPIs and the sync-key peer routes
+	// pass without a valid user JWT.
 	r.Use(authSvc.Middleware())
 	r.Use(adminOnlyMiddleware())
 
@@ -366,12 +366,11 @@ func run() error {
 		web.JSON(c, http.StatusOK, gin.H{"status": "ready"})
 	})
 
-	// Prometheus exposition accepts either the operator-wide metrics token or a
-	// node API key with metrics:read (same key management as /api/sync/*). With
-	// no token configured it stays loopback-only unless a node key is presented.
+	// Prometheus exposition accepts the operator-wide metrics token; with no
+	// token configured it stays loopback-only.
 	if cfg.Metrics.Enabled {
 		r.GET("/metrics",
-			metrics.AuthMiddleware(cfg.Metrics.Token, nodeSvc.Middleware(node.ScopeMetricsRead)),
+			metrics.AuthMiddleware(cfg.Metrics.Token),
 			gin.WrapH(metrics.Handler()),
 		)
 	}

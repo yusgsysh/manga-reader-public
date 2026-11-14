@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -18,10 +19,25 @@ import (
 	"manga-reader/internal/ent/tagsyncbaseline"
 	"manga-reader/internal/ent/user"
 	"manga-reader/internal/ent/usersetting"
+	"manga-reader/internal/requestid"
 	"manga-reader/internal/web"
 )
 
 const timeLayout = "2006-01-02T15:04:05Z07:00"
+
+// audit writes one security-relevant action line. Request ids correlate it
+// with the access log; the actor comes from the verified principal.
+func audit(c *gin.Context, action string, attrs ...any) {
+	base := []any{
+		"request_id", requestid.From(c),
+		"action", action,
+		"result", "ok",
+	}
+	if principal, ok := auth.PrincipalFrom(c); ok {
+		base = append(base, "actor_user_id", principal.ID)
+	}
+	slog.Info("security audit", append(base, attrs...)...)
+}
 
 type userJSON struct {
 	ID        ident.UUID `json:"id"`

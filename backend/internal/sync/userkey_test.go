@@ -15,12 +15,12 @@ import (
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/syncchange"
 	"manga-reader/internal/ident"
-	nodeauth "manga-reader/internal/node"
+	"manga-reader/internal/synckey"
 )
 
 func seedUserSyncKey(t *testing.T, client *ent.Client, userID ident.UUID) string {
 	t.Helper()
-	material, err := nodeauth.GenerateKey()
+	material, err := synckey.GenerateKey()
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestUserSyncKeyScopesExchange(t *testing.T) {
 
 	serverSvc := NewService(serverClient, Options{
 		HostEnabled: true,
-		NodeAuth:    nodeauth.New(serverClient).AnyMiddleware,
+		KeyAuth:     synckey.New(serverClient).Middleware,
 	})
 	seedProgressFor(t, serverClient, serverUser, 1, "mine", 5, now.Add(-time.Minute))
 	seedProgressFor(t, serverClient, otherUser, 2, "other", 7, now.Add(-time.Minute))

@@ -15,12 +15,6 @@ type Bookshelf func(*sql.Selector)
 // GalleryCache is the predicate function for gallerycache builders.
 type GalleryCache func(*sql.Selector)
 
-// Node is the predicate function for node builders.
-type Node func(*sql.Selector)
-
-// NodeAPIKey is the predicate function for nodeapikey builders.
-type NodeAPIKey func(*sql.Selector)
-
 // PrefillJob is the predicate function for prefilljob builders.
 type PrefillJob func(*sql.Selector)
 

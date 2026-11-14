@@ -7,7 +7,6 @@ import (
 	json "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -18,11 +17,10 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 	_ "modernc.org/sqlite"
 
-	"manga-reader/internal/config"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/gallerycache"
 	"manga-reader/internal/ent/readingprogress"
-	nodeauth "manga-reader/internal/node"
+	"manga-reader/internal/synckey"
 )
 
 // testID returns a deterministic UUID whose last byte is n.
@@ -64,10 +62,10 @@ func newTestRouter(svc *Service) *gin.Engine {
 	return r
 }
 
-// testNodeAuth is a lightweight stand-in for node.Service; the real API-key
-// verifier is covered by node package tests. Sync tests only need a trusted
-// node identity on the Gin context.
-func testNodeAuth(validToken string) func(...string) gin.HandlerFunc {
+// testKeyAuth is a lightweight stand-in for synckey.Service; the real key
+// verifier is covered by the synckey package tests. Sync tests only need a
+// trusted user identity on the Gin context.
+func testKeyAuth(validToken string) func(...string) gin.HandlerFunc {
 	return func(scopes ...string) gin.HandlerFunc {
 		return func(c *gin.Context) {
 			header := c.GetHeader("Authorization")
@@ -75,15 +73,17 @@ func testNodeAuth(validToken string) func(...string) gin.HandlerFunc {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 				return
 			}
-			allowed := append([]string{nodeauth.ScopeSyncRead, nodeauth.ScopeSyncWrite, nodeauth.ScopeSyncEvent}, scopes...)
-			nodeauth.WithGin(c, nodeauth.Identity{NodeID: testID(1), Scopes: allowed})
+			synckey.WithGin(c, synckey.Identity{
+				UserID: testID(1),
+				Scopes: []string{synckey.ScopeSyncWrite, synckey.ScopeSyncEvent},
+			})
 			c.Next()
 		}
 	}
 }
 
 func newHostService(client *ent.Client, token string) *Service {
-	return NewService(client, Options{HostEnabled: true, NodeAuth: testNodeAuth(token)})
+	return NewService(client, Options{HostEnabled: true, KeyAuth: testKeyAuth(token)})
 }
 
 func seedProgress(t *testing.T, client *ent.Client, galleryID int64, token string, page int, updatedAt time.Time) {
@@ -149,7 +149,7 @@ func TestApplyChangesLastWriteWins(t *testing.T) {
 		UserID: testID(1), Entity: EntityReadingProgress, GalleryID: 1, Token: "tok", Op: OpUpsert,
 		Row: &Row{CurrentPage: 3, Progress: 0.3, CreatedAt: base, UpdatedAt: base.Add(-time.Minute)},
 	}
-	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{older})
+	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{older}, testID(1))
 	if err != nil {
 		t.Fatalf("apply older: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestApplyChangesLastWriteWins(t *testing.T) {
 		UserID: testID(1), Entity: EntityReadingProgress, GalleryID: 1, Token: "tok", Op: OpUpsert,
 		Row: &Row{CurrentPage: 7, Progress: 0.7, CreatedAt: base, UpdatedAt: base.Add(time.Minute)},
 	}
-	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{newer})
+	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{newer}, testID(1))
 	if err != nil {
 		t.Fatalf("apply newer: %v", err)
 	}
@@ -183,12 +183,12 @@ func TestApplyChangesIdempotent(t *testing.T) {
 		UserID: testID(1), Entity: EntityReadingProgress, GalleryID: 5, Token: "abc", Op: OpUpsert,
 		Row: &Row{CurrentPage: 2, Progress: 0.2, CreatedAt: now, UpdatedAt: now},
 	}
-	applied, _, err := ApplyChanges(t.Context(), client, []Change{ch})
+	applied, _, err := ApplyChanges(t.Context(), client, []Change{ch}, testID(1))
 	if err != nil || applied != 1 {
 		t.Fatalf("first apply = %d, err %v", applied, err)
 	}
 	// Echo: the same change re-applied must be a no-op (equal timestamps).
-	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{ch})
+	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{ch}, testID(1))
 	if err != nil {
 		t.Fatalf("second apply: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestApplyDeleteTombstoneLWW(t *testing.T) {
 		UserID: testID(1), Entity: EntityReadingProgress, GalleryID: 9, Token: "tok",
 		Op: OpDelete, DeletedAt: &old,
 	}
-	applied, _, err := ApplyChanges(t.Context(), client, []Change{delOld})
+	applied, _, err := ApplyChanges(t.Context(), client, []Change{delOld}, testID(1))
 	if err != nil {
 		t.Fatalf("apply old tombstone: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestApplyDeleteTombstoneLWW(t *testing.T) {
 		UserID: testID(1), Entity: EntityReadingProgress, GalleryID: 9, Token: "tok",
 		Op: OpDelete, DeletedAt: &fresh,
 	}
-	applied, _, err = ApplyChanges(t.Context(), client, []Change{delNew})
+	applied, _, err = ApplyChanges(t.Context(), client, []Change{delNew}, testID(1))
 	if err != nil {
 		t.Fatalf("apply new tombstone: %v", err)
 	}
@@ -292,7 +292,7 @@ func TestReadChangesSinceCoalescesPerRecord(t *testing.T) {
 		t.Fatalf("delete row: %v", err)
 	}
 
-	changes, maxID, err := ReadChangesSince(t.Context(), client, 0)
+	changes, maxID, err := ReadChangesSince(t.Context(), client, 0, testID(1))
 	if err != nil {
 		t.Fatalf("read changes: %v", err)
 	}
@@ -321,7 +321,7 @@ func TestPushBootstrapAndDelta(t *testing.T) {
 	seedProgress(t, clientClient, 200, "cli", 6, now.Add(-time.Hour))
 
 	// Bootstrap: client snapshot -> server, server snapshot -> client.
-	snap, err := ExportSnapshot(t.Context(), clientClient)
+	snap, err := ExportSnapshot(t.Context(), clientClient, testID(1))
 	if err != nil {
 		t.Fatalf("export client snapshot: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestPushBootstrapAndDelta(t *testing.T) {
 	if !found {
 		t.Fatalf("bootstrap response changes = %+v, missing server row 100", resp.Changes)
 	}
-	if _, _, err := ApplyChanges(t.Context(), clientClient, resp.Changes); err != nil {
+	if _, _, err := ApplyChanges(t.Context(), clientClient, resp.Changes, testID(1)); err != nil {
 		t.Fatalf("client apply bootstrap: %v", err)
 	}
 	if getProgress(t, clientClient, 100, "srv") == nil {
@@ -364,7 +364,7 @@ func TestPushBootstrapAndDelta(t *testing.T) {
 		Exec(t.Context()); err != nil {
 		t.Fatalf("update client row: %v", err)
 	}
-	delta, _, err := ReadChangesSince(t.Context(), clientClient, 0)
+	delta, _, err := ReadChangesSince(t.Context(), clientClient, 0, testID(1))
 	if err != nil {
 		t.Fatalf("read delta: %v", err)
 	}
@@ -647,7 +647,7 @@ func TestEngineSnapshotWatermark(t *testing.T) {
 		t.Fatalf("record: %v", err)
 	}
 
-	changes, watermark, err := engine.buildPushChanges(t.Context(), ident.Nil(), EngineState{Bootstrapped: false})
+	changes, watermark, err := engine.buildPushChanges(t.Context(), testID(1), EngineState{Bootstrapped: false})
 	if err != nil {
 		t.Fatalf("bootstrap build: %v", err)
 	}
@@ -658,7 +658,7 @@ func TestEngineSnapshotWatermark(t *testing.T) {
 		t.Fatalf("watermark = %d, want 1 (outbox entries covered by the snapshot)", watermark)
 	}
 
-	changes, watermark, err = engine.buildPushChanges(t.Context(), ident.Nil(), EngineState{Bootstrapped: true, LastPushedID: 1})
+	changes, watermark, err = engine.buildPushChanges(t.Context(), testID(1), EngineState{Bootstrapped: true, LastPushedID: 1})
 	if err != nil {
 		t.Fatalf("delta build: %v", err)
 	}
@@ -717,7 +717,7 @@ func TestApplyGalleryCacheCreateAndMerge(t *testing.T) {
 			RatingCount: 10,
 		},
 	}
-	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{create})
+	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{create}, testID(1))
 	if err != nil || applied != 1 || skipped != 0 {
 		t.Fatalf("create apply = %d/%d, err %v", applied, skipped, err)
 	}
@@ -744,7 +744,7 @@ func TestApplyGalleryCacheCreateAndMerge(t *testing.T) {
 			Uploader:    "NewUploader",
 		},
 	}
-	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{newer})
+	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{newer}, testID(1))
 	if err != nil || applied != 1 || skipped != 0 {
 		t.Fatalf("merge apply = %d/%d, err %v", applied, skipped, err)
 	}
@@ -782,7 +782,7 @@ func TestApplyGalleryCacheCreateAndMerge(t *testing.T) {
 			Title: "Stale Title",
 		},
 	}
-	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{stale})
+	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{stale}, testID(1))
 	if err != nil {
 		t.Fatalf("stale apply error: %v", err)
 	}
@@ -805,7 +805,7 @@ func TestApplyGalleryCacheTombstone(t *testing.T) {
 		Entity: EntityGalleryCache, GalleryID: 99, Token: "tok", Op: OpDelete,
 		DeletedAt: &[]time.Time{base.Add(time.Minute)}[0],
 	}
-	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{del})
+	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{del}, testID(1))
 	if err != nil || applied != 1 || skipped != 0 {
 		t.Fatalf("delete apply = %d/%d, err %v", applied, skipped, err)
 	}
@@ -814,7 +814,7 @@ func TestApplyGalleryCacheTombstone(t *testing.T) {
 	}
 
 	// Re-applying same tombstone: row gone -> skipped.
-	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{del})
+	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{del}, testID(1))
 	if err != nil || applied != 0 || skipped != 1 {
 		t.Fatalf("repeat delete = %d/%d, err %v", applied, skipped, err)
 	}
@@ -825,7 +825,7 @@ func TestApplyGalleryCacheTombstone(t *testing.T) {
 		DeletedAt: &[]time.Time{base.Add(-time.Minute)}[0],
 	}
 	seedGalleryCacheRow(t, client, 99, "tok", base.Add(time.Hour)) // reseed with newer row
-	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{olderDel})
+	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{olderDel}, testID(1))
 	if err != nil || applied != 0 || skipped != 1 {
 		t.Fatalf("older tombstone = %d/%d, err %v", applied, skipped, err)
 	}
@@ -839,7 +839,7 @@ func TestExportSnapshotIncludesGalleryCache(t *testing.T) {
 	now := time.Now().UTC()
 	seedGalleryCacheRow(t, client, 77, "snapTok", now)
 
-	snap, err := ExportSnapshot(t.Context(), client)
+	snap, err := ExportSnapshot(t.Context(), client, testID(1))
 	if err != nil {
 		t.Fatalf("export snapshot: %v", err)
 	}
@@ -874,7 +874,7 @@ func TestReadChangesSinceFetchesGalleryCacheRow(t *testing.T) {
 		t.Fatalf("record upsert: %v", err)
 	}
 
-	changes, maxID, err := ReadChangesSince(t.Context(), client, 0)
+	changes, maxID, err := ReadChangesSince(t.Context(), client, 0, testID(1))
 	if err != nil {
 		t.Fatalf("read changes: %v", err)
 	}
@@ -961,7 +961,7 @@ func TestApplyChangesSkipsInvalidRow(t *testing.T) {
 		Row: &Row{CurrentPage: 1, Progress: 1.5, CreatedAt: base, UpdatedAt: base},
 	}
 
-	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{valid, invalid})
+	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{valid, invalid}, testID(1))
 	if err != nil {
 		t.Fatalf("invalid row must not abort the batch: %v", err)
 	}
@@ -970,94 +970,6 @@ func TestApplyChangesSkipsInvalidRow(t *testing.T) {
 	}
 	if p := getProgress(t, client, 1, "tok"); p == nil || p.CurrentPage != 2 {
 		t.Fatalf("valid row not applied: %+v", p)
-	}
-}
-
-// seedNodeKey creates an active node and returns a one-time
-// plaintext key carrying exactly the requested scopes.
-func seedNodeKey(t *testing.T, client *ent.Client, scopes []string) string {
-	t.Helper()
-	nodeRow, err := client.Node.Create().
-		SetName("node-" + strconv.FormatInt(time.Now().UnixNano(), 10)).
-		SetStatus(config.StatusActive).Save(t.Context())
-	if err != nil {
-		t.Fatalf("create node: %v", err)
-	}
-	material, err := nodeauth.GenerateKey()
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
-	}
-	if _, err := client.NodeAPIKey.Create().
-		SetNodeID(nodeRow.ID).SetKeyHash(material.Hash).SetKeyPrefix(material.Prefix).
-		SetScopes(scopes).SetStatus(config.StatusActive).Save(t.Context()); err != nil {
-		t.Fatalf("create key: %v", err)
-	}
-	return material.Plaintext
-}
-
-func TestPushPreservesUserOwnership(t *testing.T) {
-	serverClient := newTestClient(t)
-	key := seedNodeKey(t, serverClient, nodeauth.DefaultScopes)
-	now := time.Now().UTC()
-	for _, tc := range []struct {
-		userID  ident.UUID
-		gallery int64
-		token   string
-	}{
-		{testID(1), 1, "user-1"},
-		{testID(2), 2, "user-2"},
-	} {
-		if _, err := serverClient.ReadingProgress.Create().
-			SetUserID(tc.userID).SetGalleryID(tc.gallery).SetToken(tc.token).
-			SetCurrentPage(1).SetProgress(0.1).SetCreatedAt(now).SetUpdatedAt(now).
-			Save(t.Context()); err != nil {
-			t.Fatalf("seed user %d: %v", tc.userID, err)
-		}
-	}
-	svc := NewService(serverClient, Options{
-		HostEnabled: true,
-		NodeAuth:    nodeauth.New(serverClient).Middleware,
-	})
-	router := newTestRouter(svc)
-	w, resp := doPush(t, router, key, PushRequest{Cursor: 0, Snapshot: true})
-	if w.Code != http.StatusOK {
-		t.Fatalf("push = %d %s", w.Code, w.Body.String())
-	}
-	owners := map[ident.UUID]bool{}
-	for _, ch := range resp.Changes {
-		owners[ch.UserID] = true
-	}
-	if len(resp.Changes) != 2 || !owners[testID(1)] || !owners[testID(2)] {
-		t.Fatalf("snapshot = %+v, want both users' rows with their user_id", resp.Changes)
-	}
-}
-
-func TestPushRequiresNodeScopeAndActiveKey(t *testing.T) {
-	client := newTestClient(t)
-	readOnly := seedNodeKey(t, client, []string{nodeauth.ScopeSyncRead})
-	valid := seedNodeKey(t, client, nodeauth.DefaultScopes)
-	svc := NewService(client, Options{
-		HostEnabled: true,
-		NodeAuth:    nodeauth.New(client).Middleware,
-	})
-	router := newTestRouter(svc)
-
-	if w, _ := doPush(t, router, "", PushRequest{}); w.Code != http.StatusUnauthorized {
-		t.Fatalf("no key = %d, want 401", w.Code)
-	}
-	if w, _ := doPush(t, router, readOnly, PushRequest{}); w.Code != http.StatusForbidden {
-		t.Fatalf("read-only key = %d, want 403", w.Code)
-	}
-	if w, _ := doPush(t, router, valid, PushRequest{}); w.Code != http.StatusOK {
-		t.Fatalf("write key = %d, want 200", w.Code)
-	}
-
-	if _, err := client.NodeAPIKey.Update().
-		SetStatus("revoked").Save(t.Context()); err != nil {
-		t.Fatalf("revoke keys: %v", err)
-	}
-	if w, _ := doPush(t, router, valid, PushRequest{}); w.Code != http.StatusUnauthorized {
-		t.Fatalf("revoked write key = %d, want 401", w.Code)
 	}
 }
 
@@ -1085,7 +997,7 @@ func TestPushCycleRetriesAfterFailure(t *testing.T) {
 	defer server.Close()
 
 	engine := newEngine(svc)
-	cfg := ClientConfig{ServerURL: server.URL, Token: "node-key", Enabled: true}
+	cfg := ClientConfig{ServerURL: server.URL, Token: "node-key", Enabled: true, UserID: testID(1)}
 	engine.pushCycle(t.Context(), cfg)
 
 	state, err := svc.LoadEngineState(t.Context())

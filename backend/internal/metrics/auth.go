@@ -9,20 +9,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AuthMiddleware protects the Prometheus endpoint. Two credential classes are
-// accepted, and neither is a user JWT:
-//
-//   - the operator-wide token from MANGA_READER_METRICS_TOKEN, or
-//   - a node API key carrying metrics:read, verified by nodeAuth — the same
-//     middleware as /api/sync/*, so keys are issued, rotated and revoked from
-//     the settings page.
-//
-// With no token configured and no Authorization header the endpoint stays
+// AuthMiddleware protects the Prometheus endpoint with the operator-wide token
+// from MANGA_READER_METRICS_TOKEN. With no token configured the endpoint stays
 // loopback-only (the default safe deployment). A configured token is always
 // required, including on loopback, so a wrong token can never fall back to
 // "local access"; an explicit Authorization credential is always verified
-// rather than silently ignored.
-func AuthMiddleware(token string, nodeAuth gin.HandlerFunc) gin.HandlerFunc {
+// rather than silently ignored. User JWTs and sync keys are not metrics
+// credentials.
+func AuthMiddleware(token string) gin.HandlerFunc {
 	want := []byte(strings.TrimSpace(token))
 	return func(c *gin.Context) {
 		header := strings.TrimSpace(c.GetHeader("Authorization"))
@@ -32,8 +26,6 @@ func AuthMiddleware(token string, nodeAuth gin.HandlerFunc) gin.HandlerFunc {
 		}
 
 		if len(want) == 0 {
-			// No operator token: an explicit Authorization credential must be a
-			// node key; otherwise keep the loopback-only fallback.
 			if header == "" {
 				if isLoopbackRequest(c.Request.RemoteAddr) {
 					c.Next()
@@ -42,7 +34,7 @@ func AuthMiddleware(token string, nodeAuth gin.HandlerFunc) gin.HandlerFunc {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "metrics are restricted to loopback"})
 				return
 			}
-			useNodeAuth(c, nodeAuth)
+			unauthorizedMetrics(c)
 			return
 		}
 
@@ -50,20 +42,8 @@ func AuthMiddleware(token string, nodeAuth gin.HandlerFunc) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		if header != "" {
-			useNodeAuth(c, nodeAuth)
-			return
-		}
 		unauthorizedMetrics(c)
 	}
-}
-
-func useNodeAuth(c *gin.Context, nodeAuth gin.HandlerFunc) {
-	if nodeAuth == nil {
-		unauthorizedMetrics(c)
-		return
-	}
-	nodeAuth(c)
 }
 
 func unauthorizedMetrics(c *gin.Context) {

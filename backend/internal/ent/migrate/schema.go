@@ -78,64 +78,6 @@ var (
 		Columns:    GalleryCacheColumns,
 		PrimaryKey: []*schema.Column{GalleryCacheColumns[0], GalleryCacheColumns[1]},
 	}
-	// NodeColumns holds the columns for the "node" table.
-	NodeColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
-		{Name: "name", Type: field.TypeString},
-		{Name: "status", Type: field.TypeString, Default: "active"},
-		{Name: "last_seen_at", Type: field.TypeTime, Nullable: true},
-		{Name: "created_at", Type: field.TypeTime},
-		{Name: "updated_at", Type: field.TypeTime},
-	}
-	// NodeTable holds the schema information for the "node" table.
-	NodeTable = &schema.Table{
-		Name:       "node",
-		Columns:    NodeColumns,
-		PrimaryKey: []*schema.Column{NodeColumns[0]},
-		Indexes: []*schema.Index{
-			{
-				Name:    "node_name",
-				Unique:  true,
-				Columns: []*schema.Column{NodeColumns[1]},
-			},
-			{
-				Name:    "node_status",
-				Unique:  false,
-				Columns: []*schema.Column{NodeColumns[2]},
-			},
-		},
-	}
-	// NodeAPIKeyColumns holds the columns for the "node_api_key" table.
-	NodeAPIKeyColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
-		{Name: "node_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
-		{Name: "key_hash", Type: field.TypeString, Unique: true},
-		{Name: "key_prefix", Type: field.TypeString},
-		{Name: "scopes", Type: field.TypeJSON, Nullable: true},
-		{Name: "status", Type: field.TypeString, Default: "active"},
-		{Name: "expires_at", Type: field.TypeTime, Nullable: true},
-		{Name: "last_used_at", Type: field.TypeTime, Nullable: true},
-		{Name: "created_at", Type: field.TypeTime},
-		{Name: "revoked_at", Type: field.TypeTime, Nullable: true},
-	}
-	// NodeAPIKeyTable holds the schema information for the "node_api_key" table.
-	NodeAPIKeyTable = &schema.Table{
-		Name:       "node_api_key",
-		Columns:    NodeAPIKeyColumns,
-		PrimaryKey: []*schema.Column{NodeAPIKeyColumns[0]},
-		Indexes: []*schema.Index{
-			{
-				Name:    "nodeapikey_node_id_status",
-				Unique:  false,
-				Columns: []*schema.Column{NodeAPIKeyColumns[1], NodeAPIKeyColumns[5]},
-			},
-			{
-				Name:    "nodeapikey_key_prefix",
-				Unique:  false,
-				Columns: []*schema.Column{NodeAPIKeyColumns[3]},
-			},
-		},
-	}
 	// PrefillJobColumns holds the columns for the "prefill_job" table.
 	PrefillJobColumns = []*schema.Column{
 		{Name: "job_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
@@ -344,8 +286,6 @@ var (
 		AppSettingTable,
 		BookshelfTable,
 		GalleryCacheTable,
-		NodeTable,
-		NodeAPIKeyTable,
 		PrefillJobTable,
 		ReadingProgressTable,
 		SyncChangeTable,
@@ -367,12 +307,6 @@ func init() {
 	}
 	GalleryCacheTable.Annotation = &entsql.Annotation{
 		Table: "gallery_cache",
-	}
-	NodeTable.Annotation = &entsql.Annotation{
-		Table: "node",
-	}
-	NodeAPIKeyTable.Annotation = &entsql.Annotation{
-		Table: "node_api_key",
 	}
 	PrefillJobTable.Annotation = &entsql.Annotation{
 		Table: "prefill_job",

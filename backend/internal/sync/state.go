@@ -35,14 +35,14 @@ type ClientConfig struct {
 	Token     string `json:"token"`
 	// UserID is the local account this configuration syncs. Private rows are
 	// filtered to it, and pulled rows are written under it, so the peer's
-	// credential only has to name *its* account. Nil means the legacy
-	// instance-wide exchange (node API key).
+	// credential only has to name *its* account. A config without it is
+	// inactive until the settings page saves (and binds) it.
 	UserID ident.UUID `json:"user_id"`
 }
 
 // Active reports whether the engine has enough configuration to run.
 func (c ClientConfig) Active() bool {
-	return c.Enabled && c.ServerURL != "" && c.Token != ""
+	return c.Enabled && c.ServerURL != "" && c.Token != "" && c.UserID != ident.Nil()
 }
 
 // EngineState is the persisted replication bookkeeping.
