@@ -1058,11 +1058,12 @@ func prefillImageExt(contentType, pageURL string) string {
 	return archive.ExtForContentType(contentType, pageURL)
 }
 
-// prefillArchiveKey names a stored ZIP archive object. It is scoped by user ID
-// so multi-user deployments keep their archives isolated, and by job ID so each
-// job produces a distinct, reproducible object.
-func prefillArchiveKey(userID, jobID ident.UUID) string {
-	return userID.String() + "/" + jobID.String() + ".zip"
+// prefillArchiveKey names a stored ZIP archive object. The final path segment
+// keeps the human-readable gallery title (sanitized) as the object name, while
+// the user ID and job ID live in the path so multi-user deployments stay
+// isolated and two jobs that share a title never collide.
+func prefillArchiveKey(userID, jobID ident.UUID, title string) string {
+	return userID.String() + "/" + jobID.String() + "/" + prefillZipFilename(title) + ".zip"
 }
 
 // fetchPage returns one page's raw image bytes and content type. With the image
@@ -1092,7 +1093,7 @@ func (s *Server) fetchPage(ctx context.Context, userID ident.UUID, pageURL strin
 // the on-the-fly download behaviour; a ZIP consisting of nothing but failures
 // is not kept.
 func (m *prefillManager) buildArchive(s *Server, ctx context.Context, run *prefillRun, row *ent.PrefillJob) (storage.ObjectInfo, error) {
-	key := prefillArchiveKey(row.UserID, row.ID)
+	key := prefillArchiveKey(row.UserID, row.ID, row.Title)
 	fetch := func(fctx context.Context, pageURL string) ([]byte, string, error) {
 		pageCtx, cancel := context.WithTimeout(fctx, prefillPageTimeout)
 		defer cancel()
@@ -1125,12 +1126,13 @@ func (m *prefillManager) buildArchive(s *Server, ctx context.Context, run *prefi
 }
 
 // prefillZipFilename mirrors the frontend's sanitizeFilename so archives are
-// named consistently with the previous client-side ZIP downloads.
+// named consistently with the previous client-side ZIP downloads. It also
+// strips "/" so the result is safe as a single object-key path segment.
 func prefillZipFilename(title string) string {
 	var b strings.Builder
 	for _, r := range title {
 		switch {
-		case r == '"' || r == '\\' || strings.ContainsRune(`<>:|?*`, r):
+		case r == '"' || r == '\\' || strings.ContainsRune(`<>:|?*/`, r):
 			b.WriteRune(' ')
 		case r < 0x20 || r == 0x7f:
 			b.WriteRune(' ')

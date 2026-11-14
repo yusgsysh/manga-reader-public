@@ -22,6 +22,7 @@ import (
 	"manga-reader/internal/cache"
 	"manga-reader/internal/database"
 	"manga-reader/internal/ent"
+	"manga-reader/internal/ident"
 )
 
 // ==================== Test Infrastructure ====================
@@ -962,12 +963,15 @@ func TestPrefillHelpers(t *testing.T) {
 	if got := prefillZipFilename(""); got != "download" {
 		t.Errorf("empty title = %q, want download", got)
 	}
-	if got := prefillZipFilename(`a<b>c:d|e?f*g"h\i`); strings.ContainsAny(got, `<>:|?*"\`) {
+	if got := prefillZipFilename(`a<b>c:d|e?f*g"h\i/j`); strings.ContainsAny(got, `<>:|?*"\`+"/") {
 		t.Errorf("sanitized = %q still contains forbidden chars", got)
 	}
 	long := strings.Repeat("x", 200)
 	if got := prefillZipFilename(long); len([]rune(got)) > 100 {
 		t.Errorf("long title len = %d, want <= 100", len([]rune(got)))
+	}
+	if got := prefillArchiveKey(ident.MustParse("00000000-0000-0000-0000-000000000001"), ident.MustParse("00000000-0000-0000-0000-000000000002"), "My Gallery"); got != "00000000-0000-0000-0000-000000000001/00000000-0000-0000-0000-000000000002/My Gallery.zip" {
+		t.Errorf("archive key = %q", got)
 	}
 	if got := asciiFallback("测试"); got == "测试" || !isASCIIStr(got) {
 		t.Errorf("asciiFallback(测试) = %q, want ASCII underscores", got)
