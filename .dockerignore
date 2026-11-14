@@ -1,10 +1,17 @@
 # Build context for the root Dockerfile (single image: frontend + backend).
+# Keep this list tight: every entry here is bytes CI has to ship to the builder
+# and, more importantly, data BuildKit has to checksum before it can reuse a
+# cached layer.
 .git
 .github
 .forgejo
+.playwright-mcp
 deploy
+.gocache
 
-# API design files are not part of the image
+# Docs, local env template and compose file are not part of the image
+**/*.md
+docker-compose.yml
 Manga Reader API
 
 # Frontend build artifacts — the frontend stage starts clean
@@ -15,6 +22,9 @@ frontend/e2e
 # Backend build artifacts — the backend stage builds its own binary
 backend/data
 backend/manga-reader
+backend/*.db
+backend/*.db-wal
+backend/*.db-shm
 
 # Local frontend bundle drops (stale assets must never be embedded)
 backend/internal/web/dist/*
@@ -23,5 +33,4 @@ backend/internal/web/dist/*
 # Secrets and local config never enter the image
 .env
 .env.*
-!.env.example
 secrets

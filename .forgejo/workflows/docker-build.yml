@@ -168,26 +168,34 @@ jobs:
       #
       #   image:
       #     manga-reader:latest
+      #     manga-reader:<sha>   (rollback / pinning)
       #
       #   cache:
       #     manga-reader:buildcache
       #
-      # This works independently from GitHub Actions Cache.
+      # One writer only: the build cache is imported by every run but exported
+      # only from main pushes, so concurrent PR builds cannot overwrite each
+      # other's cache with a partially-warm result.
+      #
+      # This works independently from GitHub Actions Cache. BuildKit also
+      # reuses the cache mounts declared in the Dockerfile (Bun downloads,
+      # Go build cache) from the persistent self-hosted builder.
       # ----------------------------------------------------------
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          # PR runs validate the image; they must not move `latest`.
+          push: ${{ github.event_name != 'pull_request' }}
 
           tags: |
             ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
 
           cache-from: |
             type=registry,ref=${{ env.IMAGE }}:buildcache
 
-          cache-to: |
-            type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
+          cache-to: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && format('type=registry,ref={0}:buildcache,mode=max', env.IMAGE) || '' }}
 
           provenance: false
           sbom: false

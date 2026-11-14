@@ -12,6 +12,15 @@
 #              into the Go binary (//go:embed), so the runtime container
 #              serves API + static files from one process — no mounted
 #              static files, no reverse proxy sidecar.
+#
+# Layer caching:
+#   * manifest/lockfile copies come before source copies, so a source-only
+#     change reuses the dependency layer.
+#   * BuildKit cache mounts (Docker 23+ / buildx) keep Bun's download cache and
+#     Go's build cache outside the image layers. They are shared between local
+#     builds and self-hosted builders (a warm builder skips both downloads and
+#     rebuilds). Exportable caches (`type=gha` / `type=registry`) still hold the
+#     dependency layers themselves, so CI does not re-download either.
 
 # ---- Frontend build ----
 FROM oven/bun:1 AS frontend
@@ -23,7 +32,8 @@ WORKDIR /app
 # `bun install --frozen-lockfile` fails without the patch files.
 COPY frontend/package.json frontend/bun.lock ./
 COPY frontend/patches ./patches
-RUN bun install --frozen-lockfile
+RUN --mount=type=cache,id=manga-bun-install,target=/root/.bun/install/cache,sharing=locked \
+    bun install --frozen-lockfile
 
 COPY frontend/ .
 RUN bun run db:update
@@ -37,7 +47,9 @@ FROM golang:1.27-alpine AS builder
 
 WORKDIR /src
 
-# Cache module dependencies
+# Module layer: no cache mount here on purpose — the downloaded modules must
+# live in the layer so an exported image cache (gha / registry) restores them
+# on a cold builder as well.
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
@@ -47,9 +59,15 @@ COPY backend/ .
 RUN rm -rf internal/web/dist
 COPY --from=frontend /app/dist ./internal/web/dist
 
-# Build static binary (modernc.org/sqlite is pure-Go, no CGO needed)
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/manga-reader . \
-    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/reset-admin ./cmd/reset-admin
+# Build static binary (modernc.org/sqlite is pure-Go, no CGO needed).
+# The Go build cache is a mount: warm builders skip recompiling stdlib and
+# unchanged packages, and it never bloats the layer cache. GOCACHE is
+# concurrency-safe (content-addressed + atomic writes), so it is left at the
+# default sharing=shared — locked would serialize parallel builds that share
+# one builder.
+RUN --mount=type=cache,id=manga-go-build,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/manga-reader . \
+    && CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/reset-admin ./cmd/reset-admin
 
 # ---- Runtime stage ----
 FROM alpine:3.22

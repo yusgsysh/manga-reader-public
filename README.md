@@ -226,7 +226,7 @@ cd ../frontend && bun run test
 
 | Workflow | 触发 | 作用 |
 |----------|------|------|
-| `docker-build.yml` | push 到 `main`、PR | 检测 `frontend/`、`backend/` 或根 `Dockerfile` 变更 → 构建并推送 `git.09270721.xyz/abc/manga-reader:latest`（仅自检/备用）；push 到 `main` 且有变更时在服务器上 `docker compose pull && docker compose up -d` 部署 compose 引用的镜像 `ghcr.io/yusgsysh/manga-reader:latest`（PR 只构建不部署） |
+| `docker-build.yml` | push 到 `main`、PR | 检测 `frontend/`、`backend/` 或根 `Dockerfile` 变更 → 构建单镜像；push 到 `main` 时推送 `git.09270721.xyz/abc/manga-reader:latest` 与 `:<sha>`（可回滚），PR 只构建不推送、不写构建缓存；push 到 `main` 且有变更时在服务器上 `docker compose pull && docker compose up -d` 部署 compose 引用的镜像 `ghcr.io/yusgsysh/manga-reader:latest` |
 | `frontend-tests.yml` | push 到 `main`、PR | 在 `oven/bun:1` 容器内跑单测（vitest）+ reader e2e（Playwright） |
 | `deploy.yml` | 手动（workflow_dispatch） | 单独执行一次 pull + 重启部署 |
 
@@ -234,9 +234,12 @@ cd ../frontend && bun run test
 
 | Job | 触发 | 作用 |
 |-----|------|------|
-| `backend-test` | push 到 `main`、PR | `gofmt` + `go vet` + `go test ./...` |
-| `frontend-test` | push 到 `main`、PR | `bun install --frozen-lockfile` + lint + 单测 + 生产构建 |
-| `docker` | 上面两个都成功后 | 构建单镜像；push 到 `main`/手动触发时推送 `ghcr.io/yusgsysh/manga-reader`（compose / quadlet 引用的镜像），PR 只构建不推送 |
+| `backend-test` | push 到 `main`、PR | `gofmt` + `go vet` + `go test ./...`（`setup-go` 缓存 module/build cache） |
+| `frontend-test` | push 到 `main`、PR | `bun install --frozen-lockfile`（缓存 Bun 下载目录）+ lint + 单测 + 生产构建 |
+| `docker-validate` | PR | 与上面两个 job **并行**构建单镜像做校验，不推送；与发布 job 共用 `type=gha` 缓存 scope |
+| `docker-publish` | push 到 `main`、手动触发 | 等两个测试 job 成功后构建并推送 `ghcr.io/yusgsysh/manga-reader`（compose / quadlet 引用的镜像） |
+
+Dockerfile 侧的缓存策略：manifest/lockfile 先于源码复制，`bun install` 与 `go build` 使用 BuildKit cache mount（Bun 下载缓存、Go 编译缓存，不进镜像层、不占导出缓存）；Go 依赖层刻意不用 cache mount，保证 `type=gha` / `type=registry` 导出的缓存能在冷 runner 上还原 module。
 
 本地构建同名镜像（覆盖 compose 引用的镜像，便于不依赖 CI 调试）：
 

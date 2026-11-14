@@ -11,8 +11,10 @@ on:
 
   workflow_dispatch:
 
+# One run per branch/PR: a new push cancels the superseded run instead of
+# letting both compete for the same cache keys and runner minutes.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -36,10 +38,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
+      # Caches the module cache and the build cache, so unchanged packages are
+      # not recompiled between runs.
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
+          cache: true
           cache-dependency-path: backend/go.sum
 
       - name: Check formatting
@@ -80,6 +85,17 @@ jobs:
         with:
           bun-version: latest
 
+      # Bun's global download cache (tarballs only — node_modules still comes
+      # from the lockfile). Mirrors the cache mount in the Dockerfile, so a
+      # lockfile-unchanged install is mostly local I/O.
+      - name: Cache Bun downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -93,18 +109,54 @@ jobs:
         run: bun run build
 
   # ------------------------------------------------------------
-  # Single image — built only when all tests above succeeded.
-  # The frontend bundle is compiled and embedded into the Go binary
-  # by the root Dockerfile, so API + static files ship together.
+  # Image build on pull requests.
+  #
+  # Runs in parallel with the test jobs on purpose: the image is only
+  # validation here (nothing is pushed), so waiting for the tests would just
+  # add their runtime to the critical path. Same cache scope as the publish
+  # job, which means PR builds warm main's layers and vice versa.
+  # ------------------------------------------------------------
+  docker-validate:
+    name: Build Docker Image (PR)
+    if: github.event_name == 'pull_request'
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build (no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          cache-from: type=gha,scope=manga-reader
+          cache-to: type=gha,scope=manga-reader,mode=max
+          provenance: false
+          sbom: false
+
+  # ------------------------------------------------------------
+  # Image publish on main / manual runs.
+  #
+  # Waits for both test jobs: this is the artifact that gets deployed, so it
+  # must not be built (or pushed) from a red tree.
   #
   # push to main / manual run:
   #   pushed to ghcr.io/<owner>/manga-reader
-  #
-  # pull_request:
-  #   built as validation only, not pushed
   # ------------------------------------------------------------
-  docker:
-    name: Build Docker Image
+  docker-publish:
+    name: Build and Push Docker Image
+    if: github.event_name != 'pull_request'
+
     needs:
       - backend-test
       - frontend-test
@@ -134,7 +186,6 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Login to GitHub Container Registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -148,7 +199,6 @@ jobs:
           images: ${{ steps.base.outputs.name }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
 
@@ -156,7 +206,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=manga-reader
@@ -173,7 +223,8 @@ jobs:
     needs:
       - backend-test
       - frontend-test
-      - docker
+      - docker-validate
+      - docker-publish
 
     if: always()
 
@@ -186,8 +237,9 @@ jobs:
         env:
           BACKEND_RESULT: ${{ needs.backend-test.result }}
           FRONTEND_RESULT: ${{ needs.frontend-test.result }}
-          DOCKER_RESULT: ${{ needs.docker.result }}
-          IMAGE_TAGS: ${{ needs.docker.outputs.tags }}
+          DOCKER_VALIDATE_RESULT: ${{ needs.docker-validate.result }}
+          DOCKER_PUBLISH_RESULT: ${{ needs.docker-publish.result }}
+          IMAGE_TAGS: ${{ needs.docker-publish.outputs.tags }}
           COMMIT_SHA: ${{ github.sha }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message || github.event.pull_request.title }}
           COMMIT_AUTHOR: ${{ github.event.head_commit.author.name || github.event.pull_request.user.login || github.actor }}
@@ -209,6 +261,15 @@ jobs:
           SHORT_SHA="${COMMIT_SHA:0:7}"
           COMMIT_URL="${SERVER_URL}/${REPO}/commit/${COMMIT_SHA}"
           RUN_URL="${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
+
+          # Only one of the two image jobs runs per event; report whichever did.
+          if [[ -n "${DOCKER_PUBLISH_RESULT:-}" ]]; then
+            DOCKER_RESULT="${DOCKER_PUBLISH_RESULT}"
+            DOCKER_LABEL="Build and Push Docker Image"
+          else
+            DOCKER_RESULT="${DOCKER_VALIDATE_RESULT:-skipped}"
+            DOCKER_LABEL="Build Docker Image (PR)"
+          fi
 
           {
             echo "## CI Summary"
@@ -238,7 +299,7 @@ jobs:
             echo "| --- | --- |"
             echo "| Backend Tests | ${BACKEND_RESULT} |"
             echo "| Frontend Tests | ${FRONTEND_RESULT} |"
-            echo "| Build Docker Image | ${DOCKER_RESULT} |"
+            echo "| ${DOCKER_LABEL} | ${DOCKER_RESULT} |"
             if [[ -n "${IMAGE_TAGS:-}" ]]; then
               echo
               echo "### Image tags"
