@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useSearchParams } from "react-router";
 import { Button } from "@cloudflare/kumo";
 import { ArrowLeft } from "@phosphor-icons/react";
 import {
   MangaViewer,
+  type LayoutMode,
   type MangaViewerHandle,
+  type ViewerPanel,
   type ViewerSettings,
 } from "@yui540/comimi-react";
 import { useGallery, useGalleryPages, useReadingProgress } from "../hooks/useReaderData";
@@ -25,7 +28,10 @@ import {
 } from "../lib/thumbnails";
 import { ErrorState } from "../components/common/ErrorState";
 import { LoadingScreen } from "../components/common/LoadingScreen";
+import { ReaderToolbar } from "../components/reader/ReaderToolbar";
+import { ReaderSettingsPreference } from "../components/reader/ReaderSettingsPreference";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { getReaderPreferences } from "../lib/readerPrefs";
 
 // 菜单底部返回入口的文案：补丁只引用 key，库内没有内置。
 const READER_TRANSLATIONS = { "menu.backToGallery": "返回画廊" };
@@ -59,6 +65,23 @@ export function ReaderPage() {
   // below cannot reset the reader back to the saved progress.
   const [pageOverride] = useState<number | null>(() =>
     parsePageParam(searchParams.get("page")),
+  );
+
+  // Reader chrome (top bar) mirrors the viewer state instead of owning it.
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("inline");
+  const [nativeFullscreen, setNativeFullscreen] = useState(
+    () => typeof document !== "undefined" && document.fullscreenElement !== null,
+  );
+  const [activePanel, setActivePanel] = useState<ViewerPanel>("none");
+  const [viewerReady, setViewerReady] = useState(false);
+  const [viewerSettingsState, setViewerSettingsState] =
+    useState<ViewerSettings | null>(null);
+  // The app-level preference is appended to comimi's own settings sheet.
+  const [settingsHost, setSettingsHost] = useState<HTMLElement | null>(null);
+  // Read once: changing the preference later must not yank the current book
+  // into fullscreen, only the next one that is opened.
+  const autoFullscreenOnOpenRef = useRef(
+    getReaderPreferences().autoFullscreenOnStart,
   );
 
   const isDark = resolvedMode === "dark";
@@ -100,8 +123,10 @@ export function ReaderPage() {
   // 用户通过浏览器/系统手势退出原生全屏时，库不会自行回到 inline，这里补齐。
   useEffect(() => {
     const handleFullscreenChange = () => {
+      const active = document.fullscreenElement !== null;
+      setNativeFullscreen(active);
       const viewer = viewerRef.current;
-      if (!viewer || document.fullscreenElement) return;
+      if (!viewer || active) return;
       const mode = viewer.getState().layout.mode;
       if (mode === "nativeFullscreen" || mode === "browserFullscreen") {
         void viewer.setLayoutMode("inline");
@@ -111,6 +136,31 @@ export function ReaderPage() {
     return () =>
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
+
+  // The app preference appends a row to comimi's settings sheet. The sheet is
+  // created by the library after the viewer mounts, so wait for it instead of
+  // assuming it exists.
+  useEffect(() => {
+    if (!shellEl) return;
+    const findHost = () =>
+      shellEl.querySelector<HTMLElement>(".comimi-settings-panel-inner");
+    const attach = () => {
+      const found = findHost();
+      if (!found) return;
+      observer.disconnect();
+      setSettingsHost(found);
+    };
+    // The sheet is built after the viewer's first update, and on a cached
+    // mount it may already be there before this effect runs. Check on the next
+    // frame and listen for the rest instead of setting state synchronously.
+    const observer = new MutationObserver(attach);
+    observer.observe(shellEl, { childList: true, subtree: true });
+    const frame = requestAnimationFrame(attach);
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [shellEl]);
 
   // 离开路由时主动退出全屏，不依赖「节点移除浏览器自动退出」的时机
   useEffect(
@@ -193,6 +243,65 @@ export function ReaderPage() {
     goBack();
   }, [flushProgress, goBack]);
 
+  // The top bar drives the library's panels instead of duplicating them.
+  const handleOpenPanel = useCallback((panel: ViewerPanel) => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    viewer.setPanel(viewer.getState().panel === panel ? "none" : panel);
+  }, []);
+
+  const handleClosePanel = useCallback(() => {
+    viewerRef.current?.setPanel("none");
+  }, []);
+
+  const handleUpdateSettings = useCallback(
+    (patch: Partial<ViewerSettings>) => {
+      void viewerRef.current?.updateSettings(patch);
+    },
+    [],
+  );
+
+  const handleReady = useCallback(() => {
+    setViewerReady(true);
+  }, []);
+
+  // Once the viewer is ready, seed the chrome from its state and apply the
+  // "start in fullscreen" preference. The comimi-react instance is only
+  // available after its mount effect, so this cannot run on the first commit.
+  useEffect(() => {
+    if (!viewerReady) return;
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const state = viewer.getState();
+    setViewerSettingsState(state.settings);
+    setLayoutMode(state.layout.mode);
+    setActivePanel(state.panel);
+    if (autoFullscreenOnOpenRef.current && state.layout.mode === "inline") {
+      void viewer.setLayoutMode("browserFullscreen");
+    }
+  }, [viewerReady]);
+
+  const handleLayoutChange = useCallback(
+    ({ layoutMode: nextMode }: { layoutMode: LayoutMode }) => {
+      setLayoutMode(nextMode);
+    },
+    [],
+  );
+
+  const handlePanelChange = useCallback(
+    ({ panel }: { panel: ViewerPanel }) => {
+      setActivePanel(panel);
+    },
+    [],
+  );
+
+  const handleSettingsChange = useCallback(
+    ({ settings }: { settings: ViewerSettings }) => {
+      setViewerSettingsState(settings);
+    },
+    [],
+  );
+
   // Fixed page slots from the authoritative total: comimi sees the full count
   // from the first render and never rebuilds its page list, so the total and
   // thumbnails stay put while the real page URLs stream into the store.
@@ -271,12 +380,27 @@ export function ReaderPage() {
     );
   }
 
+  const isFullscreen = layoutMode !== "inline" || nativeFullscreen;
+
   return (
     <div
       ref={attachShell}
+      data-fullscreen={isFullscreen}
       className="reader-shell flex h-[100dvh] flex-col bg-kumo-base"
     >
-      {/* Reader：返回与全屏入口都在 comimi 内（菜单 + dock 视图切换器） */}
+      <ReaderToolbar
+        title={gallery.title}
+        fullscreen={isFullscreen}
+        activePanel={activePanel}
+        viewerSettings={viewerSettingsState}
+        onBack={handleBack}
+        onToggleFullscreen={toggleFullscreen}
+        onOpenPanel={handleOpenPanel}
+        onClosePanel={handleClosePanel}
+        onUpdateSettings={handleUpdateSettings}
+      />
+
+      {/* Reader：返回与全屏入口在上方工具栏，comimi 自己的浮动菜单头行已隐藏 */}
       <div className="min-h-0 flex-1">
         <MangaViewer
           // Remount on gallery change so `initialPageIndex` applies to the new
@@ -290,12 +414,20 @@ export function ReaderPage() {
           storage={{ enabled: false }}
           settings={viewerSettings}
           resolvePageSrc={resolvePageSrc}
+          onReady={handleReady}
           onPageChange={handlePageChange}
           onBack={handleBack}
           onFullscreenRequest={toggleFullscreen}
+          onLayoutChange={handleLayoutChange}
+          onPanelChange={handlePanelChange}
+          onSettingsChange={handleSettingsChange}
           className="h-full w-full"
         />
       </div>
+
+      {/* App-level reader preference, appended to comimi's settings sheet. */}
+      {settingsHost &&
+        createPortal(<ReaderSettingsPreference />, settingsHost)}
     </div>
   );
 }

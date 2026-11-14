@@ -32,6 +32,7 @@ import { Chip, Section, useToast } from "../components/ui";
 import { CategoryChip } from "../components/gallery/CategoryChip";
 import { GalleryTorrentsDialog } from "../components/gallery/GalleryTorrentsDialog";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { requestReaderFullscreenIfEnabled } from "../lib/readerPrefs";
 
 function DetailSkeleton() {
   return (
@@ -329,13 +330,16 @@ export function GalleryDetailPage() {
             <div className="flex flex-wrap items-center gap-2.5">
               <Button
                 variant="primary"
-                onClick={() =>
+                onClick={() => {
+                  // Still inside the click, so the browser accepts the native
+                  // fullscreen request when the preference is on.
+                  requestReaderFullscreenIfEnabled();
                   navigate(
                     progress?.completed
                       ? `/reader/${id}/${token}?restart=1`
                       : `/reader/${id}/${token}`,
-                  )
-                }
+                  );
+                }}
               >
                 <BookOpen
                   className="mr-1.5 size-4"

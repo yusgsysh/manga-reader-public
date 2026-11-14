@@ -34,6 +34,7 @@ import {
 } from "../api/settings";
 import { useTheme } from "../hooks/useTheme";
 import { useTagTranslation } from "../hooks/useTagTranslation";
+import { useReaderPreferences } from "../hooks/useReaderPreferences";
 import { SETTINGS_STALE_TIME } from "../lib/cacheConfig";
 import { ACCENT_PRESETS, DEFAULT_ACCENT, isPresetAccent } from "../lib/accent";
 import { formatDateTime } from "../lib/time";
@@ -443,8 +444,27 @@ function AppearanceSection() {
   );
 }
 
-function TagDatabaseSection() {
-  const { info, updateStatus, update } = useTagTranslation();
+function ReaderSection() {
+  const { autoFullscreenOnStart, setAutoFullscreenOnStart } =
+    useReaderPreferences();
+
+  return (
+    <Section title="阅读器">
+      <div className="card-surface p-4 text-sm">
+        <Switch
+          label="开始阅读时自动全屏"
+          checked={autoFullscreenOnStart}
+          onCheckedChange={setAutoFullscreenOnStart}
+        />
+        <p className="mt-2 text-xs leading-relaxed text-kumo-subtle">
+          从画廊点「开始阅读」或页面缩略图时自动进入全屏。浏览器拒绝原生全屏时，阅读页仍会占满窗口。
+        </p>
+      </div>
+    </Section>
+  );
+}
+
+function TagDatabaseSection() {  const { info, updateStatus, update } = useTagTranslation();
   const toast = useToast();
   const updating = updateStatus === "loading";
 
@@ -831,6 +851,13 @@ const SECTION_DEFS: SectionDef[] = [
     group: "general",
     show: "always",
     element: <AppearanceSection />,
+  },
+  {
+    id: "reader",
+    label: "阅读器",
+    group: "general",
+    show: "always",
+    element: <ReaderSection />,
   },
   {
     id: "cookie",

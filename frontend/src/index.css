@@ -431,6 +431,62 @@ body {
 }
 
 /*
+ * Reader chrome lives in the app's top bar (see ReaderToolbar): hide comimi's
+ * own floating menu pill and the mascot that decorates its top-right corner so
+ * the same controls are not shown twice. The panels themselves stay, because
+ * the top bar opens them through the viewer API.
+ */
+.reader-shell .comimi-menu-top,
+.reader-shell .comimi-menu-panel > .comimi-rabbit {
+  display: none;
+}
+
+/* The top bar owns the settings entry now; the dock keeps its other buttons. */
+.reader-shell .comimi-controls-dock .comimi-settings {
+  display: none;
+}
+
+/* The app's top bar sits above the stage, so panels unfold below it. */
+.reader-shell .comimi-root .comimi-menu-panel {
+  top: 16px;
+  left: 16px;
+  width: min(500px, calc(100% - 32px));
+}
+
+@media (max-width: 767px) {
+  .reader-shell .comimi-root .comimi-menu-panel {
+    top: 8px;
+    left: 8px;
+    width: calc(100% - 16px);
+  }
+}
+
+/*
+ * In fullscreen the top bar floats over the viewer (`position: fixed`), so the
+ * panels need to clear it instead of sliding underneath.
+ */
+.reader-shell[data-fullscreen="true"] .comimi-root .comimi-menu-panel {
+  top: calc(64px + env(safe-area-inset-top, 0px));
+}
+
+/* comimi's rabbit mascot, recoloured for the app's top bar. */
+.reader-mascot > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.reader-mascot .comimi-rabbit-body {
+  fill: currentColor;
+  opacity: 0.16;
+}
+
+.reader-mascot .comimi-rabbit-shade {
+  fill: currentColor;
+}
+
+
+/*
  * comimi hides the seek preview on hover-less (touch) devices because it only
  * wires `mousemove` to it. The library is patched to also drive the preview
  * from `touchstart`/`touchmove`, so keep it visible and let the patched
