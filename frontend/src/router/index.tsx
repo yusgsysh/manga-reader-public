@@ -23,7 +23,7 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     element: (
-      <LazyPage>
+      <LazyPage fullscreen>
         <LoginPage />
       </LazyPage>
     ),
@@ -31,7 +31,7 @@ export const router = createBrowserRouter([
   {
     path: "/setup",
     element: (
-      <LazyPage>
+      <LazyPage fullscreen>
         <SetupPage />
       </LazyPage>
     ),

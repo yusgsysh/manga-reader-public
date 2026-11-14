@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
-import { Button, Loader } from "@cloudflare/kumo";
+import { Button } from "@cloudflare/kumo";
 import { ArrowLeft } from "@phosphor-icons/react";
 import {
   MangaViewer,
@@ -24,6 +24,7 @@ import {
   THUMBNAIL_CONCURRENCY,
 } from "../lib/thumbnails";
 import { ErrorState } from "../components/common/ErrorState";
+import { LoadingScreen } from "../components/common/LoadingScreen";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 // 菜单底部返回入口的文案：补丁只引用 key，库内没有内置。
@@ -234,12 +235,7 @@ export function ReaderPage() {
   useDocumentTitle(gallery?.title);
 
   if (loading) {
-    return (
-      <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-kumo-base">
-        <Loader size={32} />
-        <p className="text-sm text-kumo-subtle">正在加载漫画…</p>
-      </div>
-    );
+    return <LoadingScreen message="正在加载漫画…" />;
   }
 
   if (error) {

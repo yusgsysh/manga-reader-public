@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { useParams } from "react-router";
 import { Loader } from "@cloudflare/kumo";
+import { LoadingScreen } from "../components/common/LoadingScreen";
 
 export const HomePage = lazy(() =>
   import("../pages/HomePage").then((m) => ({ default: m.HomePage })),
@@ -55,16 +56,23 @@ function PageLoading() {
   );
 }
 
-export function LazyPage({ children }: { children: ReactNode }) {
-  return <Suspense fallback={<PageLoading />}>{children}</Suspense>;
+export function LazyPage({
+  children,
+  fullscreen = false,
+}: {
+  children: ReactNode;
+  /** Use the viewport-centered loader for standalone routes (login, setup). */
+  fullscreen?: boolean;
+}) {
+  return (
+    <Suspense fallback={fullscreen ? <LoadingScreen /> : <PageLoading />}>
+      {children}
+    </Suspense>
+  );
 }
 
 export function ReaderLoading() {
-  return (
-    <div className="flex h-[100dvh] items-center justify-center bg-kumo-base">
-      <Loader size={32} />
-    </div>
-  );
+  return <LoadingScreen message="正在加载漫画…" />;
 }
 
 // Remount the reader when the gallery changes so all reader state (frozen page

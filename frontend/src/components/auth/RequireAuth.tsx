@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router";
-import { Loader } from "@cloudflare/kumo";
 import { useAuth } from "../../context/auth";
 import { ErrorState } from "../common/ErrorState";
+import { LoadingScreen } from "../common/LoadingScreen";
 
 /**
  * Route guard for all application pages. An unauthenticated visitor is sent to
@@ -13,11 +13,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const location = useLocation();
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-kumo-base">
-        <Loader size={32} />
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (error) {

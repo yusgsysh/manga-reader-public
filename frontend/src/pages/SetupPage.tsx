@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router";
-import { Button, Input, Loader } from "@cloudflare/kumo";
+import { Button, Input } from "@cloudflare/kumo";
 import {
   CircleNotch,
   Eye,
@@ -10,6 +10,7 @@ import {
 } from "@phosphor-icons/react";
 import { ApiRequestError } from "../api/client";
 import { ErrorBanner } from "../components/common/ErrorBanner";
+import { LoadingScreen } from "../components/common/LoadingScreen";
 import { Logo } from "../components/ui";
 import { useAuth } from "../context/auth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -45,11 +46,7 @@ export function SetupPage() {
   useDocumentTitle("初始化");
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-kumo-base">
-        <Loader size={32} />
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (isAuthenticated || session?.initialized) return <Navigate to="/" replace />;
