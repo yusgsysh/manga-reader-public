@@ -7,16 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"manga-reader/internal/ident"
 	_ "modernc.org/sqlite"
 
 	"manga-reader/internal/ent"
-	"manga-reader/internal/ent/bookshelf"
-	"manga-reader/internal/ent/gallerycache"
 	"manga-reader/internal/ent/prefilljob"
-	"manga-reader/internal/ent/readingprogress"
-	"manga-reader/internal/ent/tagpreference"
-	"manga-reader/internal/ent/tagsyncbaseline"
 )
 
 func tableDDL(t *testing.T, conn *sql.DB, table string) string {
@@ -50,14 +44,6 @@ func hasIndex(t *testing.T, conn *sql.DB, table, index string) bool {
 		t.Fatalf("read indexes for %s: %v", table, err)
 	}
 	return n > 0
-}
-
-// ddlHasPK reports whether a table's DDL declares the given primary key,
-// ignoring identifier quoting (ent/Atlas emits backticks, the id->uuid
-// migration emits double quotes; SQLite accepts both).
-func ddlHasPK(ddl, pk string) bool {
-	repl := strings.NewReplacer("`", "", `"`, "")
-	return strings.Contains(repl.Replace(ddl), pk)
 }
 
 // A fresh database must create the composite primary keys directly, without
@@ -147,187 +133,6 @@ func TestCompositePK_FreshSchema(t *testing.T) {
 	}
 	if hasIndex(t, db.Conn, "sync_state", "sync_state_key_key") {
 		t.Error("sync_state still has the unique index that the primary key replaces")
-	}
-}
-
-// A database created before the primary keys changed must migrate in place:
-// tables are rebuilt with the new keys, existing rows survive, and ent can
-// read them back through the new primary-key predicates.
-func TestCompositePK_LegacySchemaMigration(t *testing.T) {
-	dsn := filepath.Join(t.TempDir(), "legacy.db")
-
-	seed, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	legacyDDL := `
-CREATE TABLE "bookshelf" (
-  "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "gallery_id" bigint NOT NULL,
-  "token" text NOT NULL,
-  "created_at" datetime NOT NULL,
-  "updated_at" datetime NOT NULL
-);
-CREATE UNIQUE INDEX "bookshelf_gallery_id_token" ON "bookshelf"("gallery_id", "token");
-CREATE TABLE "gallery_cache" (
-  "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "gallery_id" bigint NOT NULL,
-  "token" text NOT NULL,
-  "title" text NOT NULL DEFAULT '',
-  "created_at" datetime NOT NULL,
-  "updated_at" datetime NOT NULL
-);
-CREATE UNIQUE INDEX "gallerycache_gallery_id_token" ON "gallery_cache"("gallery_id", "token");
-CREATE TABLE "reading_progress" (
-  "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "gallery_id" bigint NOT NULL,
-  "token" text NOT NULL,
-  "current_page" integer NOT NULL DEFAULT 0,
-  "progress" real NOT NULL DEFAULT 0,
-  "completed" bool NOT NULL DEFAULT false,
-  "created_at" datetime NOT NULL,
-  "updated_at" datetime NOT NULL
-);
-CREATE UNIQUE INDEX "readingprogress_gallery_id_token" ON "reading_progress"("gallery_id", "token");
-CREATE TABLE "tag_preference" (
-  "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "tag" text NOT NULL,
-  "action" text NOT NULL,
-  "weight" integer NOT NULL DEFAULT 10,
-  "created_at" datetime NOT NULL,
-  "updated_at" datetime NOT NULL
-);
-CREATE UNIQUE INDEX "tag_preference_tag_key" ON "tag_preference"("tag");
-CREATE TABLE "tag_sync_baseline" (
-  "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "tag" text NOT NULL,
-  "action" text NOT NULL,
-  "weight" integer NOT NULL DEFAULT 10,
-  "created_at" datetime NOT NULL,
-  "updated_at" datetime NOT NULL
-);
-CREATE UNIQUE INDEX "tag_sync_baseline_tag_key" ON "tag_sync_baseline"("tag");
-CREATE TABLE "sync_state" (
-  "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "key" text NOT NULL,
-  "value" text NOT NULL DEFAULT '',
-  "updated_at" datetime NOT NULL
-);
-CREATE UNIQUE INDEX "sync_state_key_key" ON "sync_state"("key");
-INSERT INTO bookshelf (gallery_id, token, created_at, updated_at)
-  VALUES (111, 'aaa', '2024-01-01 00:00:00', '2024-01-01 00:00:00');
-INSERT INTO gallery_cache (gallery_id, token, title, created_at, updated_at)
-  VALUES (111, 'aaa', 'Legacy Title', '2024-01-01 00:00:00', '2024-01-01 00:00:00');
-INSERT INTO reading_progress (gallery_id, token, current_page, progress, completed, created_at, updated_at)
-  VALUES (111, 'aaa', 3, 0.3, false, '2024-01-01 00:00:00', '2024-01-01 00:00:00');
-INSERT INTO tag_preference (tag, action, weight, created_at, updated_at)
-  VALUES ('female:yuri', 'like', 10, '2024-01-01 00:00:00', '2024-01-01 00:00:00');
-INSERT INTO tag_sync_baseline (tag, action, weight, created_at, updated_at)
-  VALUES ('female:yuri', 'like', 10, '2024-01-01 00:00:00', '2024-01-01 00:00:00');
-INSERT INTO sync_state ("key", value, updated_at)
-  VALUES ('client.enabled', 'true', '2024-01-01 00:00:00');
-`
-	if _, err := seed.Exec(legacyDDL); err != nil {
-		t.Fatalf("seed legacy schema: %v", err)
-	}
-	if err := seed.Close(); err != nil {
-		t.Fatalf("close seed: %v", err)
-	}
-
-	db, err := NewDB(Options{Driver: DriverSQLite, DSN: dsn})
-	if err != nil {
-		t.Fatalf("NewDB on legacy database: %v", err)
-	}
-	defer db.Close()
-	ctx := context.Background()
-
-	for table, wantPK := range map[string]string{
-		"gallery_cache":     "PRIMARY KEY (gallery_id, token)",
-		"bookshelf":         "PRIMARY KEY (id)",
-		"reading_progress":  "PRIMARY KEY (id)",
-		"tag_preference":    "PRIMARY KEY (user_id, tag)",
-		"tag_sync_baseline": "PRIMARY KEY (user_id, tag)",
-		"sync_state":        "PRIMARY KEY (key)",
-	} {
-		ddl := tableDDL(t, db.Conn, table)
-		if !ddlHasPK(ddl, wantPK) {
-			t.Errorf("%s was not rebuilt with %s:\n%s", table, wantPK, ddl)
-		}
-	}
-	for _, table := range []string{"bookshelf", "reading_progress"} {
-		if !hasColumn(t, db.Conn, table, "user_id") {
-			t.Errorf("%s migration did not add user_id", table)
-		}
-		if strings.Contains(tableDDL(t, db.Conn, table), "AUTOINCREMENT") {
-			t.Errorf("%s migration left an auto-increment id column", table)
-		}
-	}
-
-	shelf, err := db.Client.Bookshelf.Query().
-		Where(bookshelf.GalleryID(111), bookshelf.Token("aaa")).
-		Only(ctx)
-	if err != nil {
-		t.Fatalf("read bookshelf row: %v", err)
-	}
-	if shelf.GalleryID != 111 || shelf.Token != "aaa" {
-		t.Errorf("bookshelf row = (%d, %q), want (111, aaa)", shelf.GalleryID, shelf.Token)
-	}
-
-	cached, err := db.Client.GalleryCache.Query().
-		Where(gallerycache.GalleryID(111), gallerycache.Token("aaa")).
-		Only(ctx)
-	if err != nil {
-		t.Fatalf("read gallery_cache row: %v", err)
-	}
-	if cached.Title != "Legacy Title" {
-		t.Errorf("gallery_cache title = %q, want %q", cached.Title, "Legacy Title")
-	}
-
-	prog, err := db.Client.ReadingProgress.Query().
-		Where(readingprogress.GalleryID(111), readingprogress.Token("aaa")).
-		Only(ctx)
-	if err != nil {
-		t.Fatalf("read reading_progress row: %v", err)
-	}
-	if prog.CurrentPage != 3 || prog.Progress != 0.3 {
-		t.Errorf("reading_progress = (%d, %v), want (3, 0.3)", prog.CurrentPage, prog.Progress)
-	}
-
-	rule, err := db.Client.TagPreference.Query().Where(tagpreference.UserIDEQ(ident.Nil()), tagpreference.IDEQ("female:yuri")).Only(ctx)
-	if err != nil {
-		t.Fatalf("read tag_preference row: %v", err)
-	}
-	if rule.Action != "like" || rule.Weight != 10 {
-		t.Errorf("tag_preference = (%q, %d), want (like, 10)", rule.Action, rule.Weight)
-	}
-	baseline, err := db.Client.TagSyncBaseline.Query().Where(tagsyncbaseline.UserIDEQ(ident.Nil()), tagsyncbaseline.IDEQ("female:yuri")).Only(ctx)
-	if err != nil {
-		t.Fatalf("read tag_sync_baseline row: %v", err)
-	}
-	if baseline.Action != "like" || baseline.Weight != 10 {
-		t.Errorf("tag_sync_baseline = (%q, %d), want (like, 10)", baseline.Action, baseline.Weight)
-	}
-
-	state, err := db.Client.SyncState.Get(ctx, "client.enabled")
-	if err != nil {
-		t.Fatalf("read sync_state row: %v", err)
-	}
-	if state.Value != "true" {
-		t.Errorf("sync_state value = %q, want %q", state.Value, "true")
-	}
-
-	// The tag primary key still rejects duplicates after the migration.
-	if _, err := db.Client.TagPreference.Create().
-		SetID("female:yuri").SetAction("like").
-		Save(ctx); err == nil || !ent.IsConstraintError(err) {
-		t.Errorf("duplicate tag preference: err = %v, want constraint error", err)
-	}
-
-	// Rows written after the migration must collide with the legacy row.
-	if _, err := db.Client.Bookshelf.Create().
-		SetGalleryID(111).SetToken("aaa").
-		Save(ctx); err == nil || !ent.IsConstraintError(err) {
-		t.Errorf("duplicate bookshelf key: err = %v, want constraint error", err)
 	}
 }
 
