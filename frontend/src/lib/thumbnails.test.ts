@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import {
   createThumbnailQueue,
   isPageThumbnailURL,
+  loadThumbnails,
   pageThumbnailIndex,
 } from "./thumbnails";
 
@@ -179,5 +181,48 @@ describe("createThumbnailQueue", () => {
     expect(img.src).toBe("a");
 
     queue.stop();
+  });
+});
+
+describe("loadThumbnails", () => {
+  const thumbURL = (index: number) =>
+    `http://localhost:8080/api/image-cache/page-thumbnail?id=1&token=tok&index=${index}`;
+
+  it("leaves the seek-preview thumbnail to load natively", () => {
+    const root = document.createElement("div");
+
+    // A page-list thumbnail: intercepted and deferred by the queue.
+    const listThumb = document.createElement("div");
+    listThumb.className = "comimi-page-list-thumb";
+    const listImg = document.createElement("img");
+    listImg.src = thumbURL(3);
+    listThumb.append(listImg);
+
+    // A seek-preview thumbnail: created on hover by comimi with a direct src.
+    const seekPreview = document.createElement("div");
+    seekPreview.className = "comimi-seek-preview";
+    const seekThumbs = document.createElement("div");
+    seekThumbs.className = "comimi-seek-preview-thumbs";
+    const seekThumb = document.createElement("div");
+    seekThumb.className = "comimi-seek-preview-thumb";
+    const seekImg = document.createElement("img");
+    seekImg.src = thumbURL(9);
+    seekThumb.append(seekImg);
+    seekThumbs.append(seekThumb);
+    seekPreview.append(seekThumbs);
+
+    root.append(listThumb, seekPreview);
+    document.body.append(root);
+
+    // A zero limit blocks every index-addressed page-list thumbnail, so the
+    // page-list img would be left blank if intercepted. The seek preview must
+    // bypass both the queue and the limit.
+    const handle = loadThumbnails(root, { concurrency: 1, getLimit: () => 0 });
+
+    expect(listImg.hasAttribute("src")).toBe(false);
+    expect(seekImg.getAttribute("src")).toBe(thumbURL(9));
+
+    handle();
+    root.remove();
   });
 });

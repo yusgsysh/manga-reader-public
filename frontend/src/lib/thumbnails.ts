@@ -149,6 +149,11 @@ export function loadThumbnails(
 
   const defer = (node: Node) => {
     if (!(node instanceof HTMLImageElement)) return;
+    // comimi builds the seek-preview thumbnail on demand (hover over the seek
+    // bar) and sets its src directly. Intercepting it would remove that src and
+    // gate it behind `getLimit` (the streamed-page cap), so hovering an
+    // unstreamed page would show a blank preview. Leave it to load natively.
+    if (node.closest(".comimi-seek-preview")) return;
     const stored = node.dataset[LAZY_SRC];
     const url = stored ?? node.src;
     if (!url || !isPageThumbnailURL(url)) return;
