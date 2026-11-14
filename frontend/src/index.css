@@ -442,9 +442,25 @@ body {
   display: none;
 }
 
-/* The top bar owns the settings entry now; the dock keeps its other buttons. */
+/*
+ * The top bar owns settings and the reader chrome now only needs the seek bar:
+ * hide the dock's autoplay, page-mode (single/spread) and view-mode
+ * (fullscreen) buttons that sit below the progress bar, then collapse the
+ * now-empty controls row so the dock is a single progress-bar row.
+ */
+.reader-shell .comimi-controls-dock .comimi-autoplay,
+.reader-shell .comimi-controls-dock .comimi-page-mode,
+.reader-shell .comimi-controls-dock .comimi-view-switcher,
 .reader-shell .comimi-controls-dock .comimi-settings {
   display: none;
+}
+
+.reader-shell .comimi-controls-dock .comimi-controls-row {
+  display: none;
+}
+
+.reader-shell .comimi-controls-dock .comimi-seek {
+  margin-bottom: 0;
 }
 
 /* comimi's keyboard-opened menu panel unfolds below the app's top bar. */
