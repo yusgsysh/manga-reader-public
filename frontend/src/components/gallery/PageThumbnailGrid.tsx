@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { pageThumbnailUrl } from "../../lib/image";
 import { loadThumbnails, THUMBNAIL_CONCURRENCY } from "../../lib/thumbnails";
-import { requestReaderFullscreenIfEnabled } from "../../lib/readerPrefs";
 import { SimplePagination } from "../common/SimplePagination";
 
 const PER_PAGE = 20;
@@ -34,7 +33,6 @@ function PageThumbnail({
       to={`/reader/${id}/${token}?page=${index}`}
       className="page-thumb-item"
       aria-label={`第 ${index + 1} 页`}
-      onClick={requestReaderFullscreenIfEnabled}
     >
       {src && !failed ? (
         <img
