@@ -89,7 +89,7 @@ export function BookshelfPage() {
         <EmptyState message="没有符合条件的画廊" />
       ) : (
         <>
-          <BookshelfGrid items={filtered} loadingMore={isFetchingNextPage} />
+          <BookshelfGrid items={filtered} />
           <InfiniteScrollTrigger
             hasNextPage={!!hasNextPage}
             isFetchingNextPage={isFetchingNextPage}

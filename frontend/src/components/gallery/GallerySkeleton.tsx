@@ -1,24 +1,32 @@
-import { useRef } from "react";
+import { useEffect, useState } from "react";
 import { Skeleton } from "../ui";
-import { useGridColumns } from "../../hooks/useGridColumns";
 
-/*
- * One shimmering card-shaped frame. Used for the initial load and, inside the
- * grids, while the next page is in flight.
- *
- * `withPosted` mirrors whether the real card renders its posted-date line
- * (bookshelf/history cards have none), so the row height never changes when
- * the placeholder is swapped for the real card.
- */
-export function GallerySkeleton({
-  withPosted = true,
-  className,
-}: {
-  withPosted?: boolean;
-  className?: string;
-}) {
+function columnsForWidth(width: number): number {
+  if (width < 480) return 2;
+  if (width < 768) return 3;
+  if (width < 1024) return 4;
+  if (width < 1440) return 5;
+  if (width < 1920) return 6;
+  return 7;
+}
+
+function useGridColumnCount(): number {
+  const [columns, setColumns] = useState(() =>
+    columnsForWidth(window.innerWidth),
+  );
+
+  useEffect(() => {
+    const onResize = () => setColumns(columnsForWidth(window.innerWidth));
+    window.addEventListener("resize", onResize, { passive: true });
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  return columns;
+}
+
+function GallerySkeleton() {
   return (
-    <div className={className} aria-hidden>
+    <div>
       {/* Same cover chrome as GalleryCard (rounded-xl + hairline ring) so the
           placeholder does not visibly shift when the real cover paints in. */}
       <Skeleton className="aspect-[3/4] rounded-xl ring-1 ring-kumo-hairline/70" />
@@ -31,23 +39,21 @@ export function GallerySkeleton({
           <Skeleton className="h-5 w-16 rounded-full" />
           <Skeleton className="h-4 w-8" />
         </div>
-        {withPosted ? (
-          <div className="flex justify-end">
-            <Skeleton className="h-4 w-16" />
-          </div>
-        ) : null}
+        <div className="flex justify-end">
+          <Skeleton className="h-4 w-16" />
+        </div>
       </div>
     </div>
   );
 }
 
 export function GalleryGridSkeleton({ count }: { count?: number }) {
-  const gridRef = useRef<HTMLDivElement>(null);
-  const columns = useGridColumns(gridRef);
+  const columns = useGridColumnCount();
+  const items = count ?? columns * 2;
 
   return (
-    <div ref={gridRef} className="gallery-grid">
-      {Array.from({ length: count ?? columns * 2 }).map((_, i) => (
+    <div className="gallery-grid">
+      {Array.from({ length: items }).map((_, i) => (
         <GallerySkeleton key={i} />
       ))}
     </div>
