@@ -196,24 +196,22 @@ Increments `users.token_version` and clears the auth cookie. All tokens issued b
 { "success": true }
 ```
 
-### 0.5 Personal settings and ExHentai Cookie
+### 0.5 ExHentai Cookie and site preference
 
 All routes are scoped to the JWT user.
 
 | Method | Path | Body |
 |--------|------|------|
-| GET | `/api/settings` | - |
-| PUT | `/api/settings` | `{ "preferences": {...}, "site"?: "exhentai" \| "e-hentai" }` |
 | GET | `/api/settings/cookie` | - |
 | PUT | `/api/settings/cookie` | `{ "cookie"?: "ipb_member_id=...; ...", "ipb_member_id"?, "ipb_pass_hash"?, "igneous"?, "sk"?, "site"? }` |
+| DELETE | `/api/settings/cookie` | - |
+| POST | `/api/settings/cookie/verify` | - |
 
 Cookie settings accept either a browser-style `cookie` header or the four
 individual fields. When a cookie is already configured, supplying only some
 fields (for example a freshly rotated `igneous`) merges into the stored
 credentials; a body with no credential fields and only `site` changes just the
 site preference.
-| DELETE | `/api/settings/cookie` | - |
-| POST | `/api/settings/cookie/verify` | - |
 
 Cookie responses contain only a non-secret summary:
 
@@ -233,7 +231,6 @@ Cookie responses contain only a non-secret summary:
 - Each user gets a separate HTTP client and cookie jar; every ExHentai API/scrape request uses the current user's session.
 - The per-user `site` picks the browsing host: `exhentai` (default) scrapes exhentai.org, `e-hentai` scrapes e-hentai.org (search, listings, gallery pages, torrents; gallery ids/tokens are valid on both). The session cookie jar authenticates both hosts. Tag synchronisation always uses exhentai — the `s.exhentai.org` mutation API has no e-hentai equivalent.
 - `status` is `unset`, `unverified`, `valid` or `invalid`; `verify` performs one authenticated upstream request.
-- Preferences are an arbitrary JSON object stored per user (search defaults, tag filters, display, reader, preload, image policy, etc.).
 
 ### 0.6 User administration (admin)
 

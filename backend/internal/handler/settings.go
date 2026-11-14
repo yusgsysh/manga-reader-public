@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -194,78 +193,4 @@ func (s *Server) handleCookieVerify(c *gin.Context) {
 		return
 	}
 	web.JSON(c, http.StatusOK, summary)
-}
-
-// handleSettingsGet returns the user's personal preferences plus a non-secret
-// cookie summary. Nothing here is shared with another account.
-func (s *Server) handleSettingsGet(c *gin.Context) {
-	uid, ok := s.requireUser(c)
-	if !ok {
-		return
-	}
-	svc := s.requireCookieService(c)
-	if svc == nil {
-		return
-	}
-	prefs, err := svc.Preferences(c.Request.Context(), uid)
-	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read settings failed"})
-		return
-	}
-	summary, err := svc.Summary(c.Request.Context(), uid)
-	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read settings failed"})
-		return
-	}
-	web.JSON(c, http.StatusOK, gin.H{
-		"preferences": prefs,
-		"site":        summary.Site,
-		"cookie":      summary,
-	})
-}
-
-// handleSettingsPut replaces the preference document. The cookie has its own
-// write endpoint, so it cannot be set accidentally through this body.
-func (s *Server) handleSettingsPut(c *gin.Context) {
-	uid, ok := s.requireUser(c)
-	if !ok {
-		return
-	}
-	svc := s.requireCookieService(c)
-	if svc == nil {
-		return
-	}
-	limitRequestBody(c, 256<<10)
-	var body struct {
-		Preferences map[string]any `json:"preferences"`
-		Site        string         `json:"site"`
-	}
-	if err := web.BindJSON(c, &body); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
-		return
-	}
-	if body.Preferences == nil {
-		body.Preferences = map[string]any{}
-	}
-	if strings.TrimSpace(body.Site) != "" {
-		if _, err := svc.SaveSite(c.Request.Context(), uid, body.Site); err != nil {
-			web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-	}
-	if err := svc.SavePreferences(c.Request.Context(), uid, body.Preferences); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save settings failed: %v", err)})
-		return
-	}
-	prefs, err := svc.Preferences(c.Request.Context(), uid)
-	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read settings failed"})
-		return
-	}
-	summary, _ := svc.Summary(c.Request.Context(), uid)
-	web.JSON(c, http.StatusOK, gin.H{
-		"preferences": prefs,
-		"site":        summary.Site,
-		"cookie":      summary,
-	})
 }

@@ -20,7 +20,7 @@
 - 多用户：实例级账号体系，JWT 中的 `user_id` 是唯一数据归属；管理员 / 普通用户两级角色
 - 严格数据隔离：书架、阅读进度、标签规则、Prefill 任务、同步 outbox 全部带 `user_id`，查询/更新/删除均附加当前用户谓词
 - 每用户独立 ExHentai Cookie：AES-256-GCM 加密存储、独立 Cookie Jar/HTTP Client、单独验证状态，绝不跨账号共享
-- 每用户个人设置：ExHentai 站点、搜索默认参数、标签过滤、显示/阅读器/预加载偏好集中保存在 `user_setting`
+- 每用户 ExHentai 设置：站点偏好与加密 Cookie 集中保存在 `user_setting`
 - JWT 登录页（Argon2id 密码哈希、HttpOnly Cookie、服务端登出撤销）
 - 节点同步使用数据库管理的独立 Node API Key（SHA-256 哈希、Scopes、轮换/撤销），与用户 JWT 完全分离；同步变更保留 `user_id`
 

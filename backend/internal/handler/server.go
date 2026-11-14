@@ -114,9 +114,7 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 		r.PUT("/api/dev/upstream-down", s.handleDevUpstreamDownPut)
 	}
 
-	// Personal settings and the per-user ExHentai session.
-	r.GET("/api/settings", s.handleSettingsGet)
-	r.PUT("/api/settings", s.handleSettingsPut)
+	// Per-user ExHentai session and site preference.
 	r.GET("/api/settings/cookie", s.handleCookieGet)
 	r.PUT("/api/settings/cookie", s.handleCookiePut)
 	r.DELETE("/api/settings/cookie", s.handleCookieDelete)

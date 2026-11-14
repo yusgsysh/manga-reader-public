@@ -214,7 +214,7 @@ func TestMultiUserBusinessDataIsolation(t *testing.T) {
 	}
 }
 
-func TestMultiUserCookieAndSettingsIsolation(t *testing.T) {
+func TestMultiUserCookieIsolation(t *testing.T) {
 	f := newMUFixture(t)
 	tokenA, tokenB := f.login(t, "user-a"), f.login(t, "user-b")
 
@@ -254,21 +254,6 @@ func TestMultiUserCookieAndSettingsIsolation(t *testing.T) {
 	}
 	if clientA == clientB {
 		t.Fatal("two users share one HTTP client / cookie jar")
-	}
-
-	// Personal preferences are isolated too.
-	prefsA := map[string]any{"preferences": map[string]any{"reader": map[string]any{"direction": "rtl"}}, "site": "e-hentai"}
-	if w := f.do(t, http.MethodPut, "/api/settings", prefsA, tokenA); w.Code != http.StatusOK {
-		t.Fatalf("put A settings = %d %s", w.Code, w.Body.String())
-	}
-	var settingsB struct {
-		Preferences map[string]any `json:"preferences"`
-	}
-	if err := json.Unmarshal(f.do(t, http.MethodGet, "/api/settings", nil, tokenB).Body.Bytes(), &settingsB); err != nil {
-		t.Fatalf("decode B settings: %v", err)
-	}
-	if len(settingsB.Preferences) != 0 {
-		t.Fatalf("B saw A preferences: %+v", settingsB.Preferences)
 	}
 
 	// Clearing A's cookie leaves B's session intact.
