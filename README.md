@@ -92,7 +92,7 @@ backend/
    ADMIN_PASSWORD=change-me-strong-password
    ```
 
-   启动后登录，在「设置 → ExHentai 账号」为每个账号分别填写 Cookie。
+   启动后登录，在「设置 → 账号」为每个账号分别填写 Cookie。
    服务端加密存储并按用户隔离；Cookie 不再通过环境变量配置。
 
 2. 启动服务（单镜像：Gin API + 内嵌前端由 GitHub Actions 构建推送到 `ghcr.io/yusgsysh/manga-reader`，compose 直接拉取，仓库内无 `build:` 配置）。GHCR 包为私有时先登录（PAT 需 `read:packages`）：
@@ -320,14 +320,14 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `HTTPS_PROXY` | 否 | - | 同上，用于 `https://` 目标（ExHentai 等） |
 | `NO_PROXY` | 否 | - | 绕过代理的主机/网段（内网 MinIO、数据库、compose 服务名等） |
 
-> ExHentai Cookie 完全按用户配置：登录后在「设置 → ExHentai 账号」为每个用户单独填写，服务端加密存库。没有任何 ExHentai Cookie 相关的环境变量（`MANGA_READER_AUTH_COOKIE_SECURE` 只控制登录 JWT 的 HttpOnly Cookie 属性）。
+> ExHentai Cookie 完全按用户配置：登录后在「设置 → 账号」为每个用户单独填写，服务端加密存库。没有任何 ExHentai Cookie 相关的环境变量（`MANGA_READER_AUTH_COOKIE_SECURE` 只控制登录 JWT 的 HttpOnly Cookie 属性）。
 
 ### ExHentai 返回 sad panda
 
 sad panda 是 ExHentai 拒绝会话的响应（HTTP 200 + 空白页面），不是网络故障。按顺序排查：
 
 1. `ipb_member_id` / `ipb_pass_hash` 是否还有效：改过密码或在别处退出登录都会让它们失效，需要重新从浏览器复制。
-2. `igneous` 是否过期：它随每次登录轮换，旧值会让 ExHentai 直接返回 sad panda，即使 `ipb_pass_hash` 仍然有效。后端检测到 sad panda 时会丢弃该 cookie 并重试一次，成功后由响应写入新的 `igneous`，日志里会出现 `exhentai rejected the igneous cookie; retrying without it`；在「设置 → ExHentai 账号」重新保存 Cookie 可以省掉这次往返。
+2. `igneous` 是否过期：它随每次登录轮换，旧值会让 ExHentai 直接返回 sad panda，即使 `ipb_pass_hash` 仍然有效。后端检测到 sad panda 时会丢弃该 cookie 并重试一次，成功后由响应写入新的 `igneous`，日志里会出现 `exhentai rejected the igneous cookie; retrying without it`；在「设置 → 账号」重新保存 Cookie 可以省掉这次往返。
 3. 出口 IP 是否被限制：ExHentai 对机房 IP、公共代理常返回 sad panda 或 IP 封禁页，可换出口或配置 `HTTPS_PROXY`。
 4. `sk` 只影响标签过滤，与登录无关，缺它不会导致 sad panda。
 

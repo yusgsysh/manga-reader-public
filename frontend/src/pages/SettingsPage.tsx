@@ -190,7 +190,7 @@ function CookieSection() {
   ];
 
   return (
-    <Section title="ExHentai 账号">
+    <Section title="账号">
       <div className="card-surface space-y-4 p-4 text-sm">
         {query.isLoading ? (
           <div className="flex items-center gap-2 text-kumo-subtle">
@@ -275,7 +275,7 @@ function CookieSection() {
                 {save.isPending && (
                   <CircleNotch className="mr-1 size-4 animate-spin" />
                 )}
-                保存 Cookie
+                保存
               </Button>
               <Button
                 size="sm"
@@ -761,7 +761,7 @@ const SECTION_DEFS: SectionDef[] = [
   },
   {
     id: "cookie",
-    label: "ExHentai 账号",
+    label: "账号",
     group: "general",
     show: "always",
     element: <CookieSection />,
@@ -788,13 +788,6 @@ const SECTION_DEFS: SectionDef[] = [
     element: <SyncSection />,
   },
   {
-    id: "dev-tools",
-    label: "调试工具",
-    group: "debug",
-    show: "global",
-    element: <DevToolsSection />,
-  },
-  {
     id: "users",
     label: "用户管理",
     group: "admin",
@@ -808,9 +801,16 @@ const SECTION_DEFS: SectionDef[] = [
     show: "admin",
     element: <ApiManagementSection />,
   },
+  {
+    id: "dev-tools",
+    label: "调试工具",
+    group: "debug",
+    show: "global",
+    element: <DevToolsSection />,
+  },
 ];
 
-const GROUP_ORDER = ["general", "tags", "sync", "debug", "admin"] as const;
+const GROUP_ORDER = ["general", "tags", "sync", "admin", "debug"] as const;
 
 const GROUP_LABELS: Record<(typeof GROUP_ORDER)[number], string> = {
   general: "通用",
