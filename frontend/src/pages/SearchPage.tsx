@@ -336,7 +336,7 @@ export function SearchPage() {
       {!isLoading && !error && galleries.length > 0 && (
         <div>
           <p className="mb-3 text-sm text-kumo-subtle">共找到 {total} 个结果</p>
-          <GalleryGrid loadingMore={isFetchingNextPage} galleries={galleries} />
+          <GalleryGrid galleries={galleries} />
           <InfiniteScrollTrigger
             hasNextPage={!!hasNextPage}
             isFetchingNextPage={isFetchingNextPage}

@@ -79,7 +79,7 @@ export function SubscriptionsPage() {
         />
       ) : (
         <>
-          <GalleryGrid loadingMore={isFetchingNextPage} galleries={galleries} />
+          <GalleryGrid galleries={galleries} />
           <InfiniteScrollTrigger
             hasNextPage={!!hasNextPage}
             isFetchingNextPage={isFetchingNextPage}
