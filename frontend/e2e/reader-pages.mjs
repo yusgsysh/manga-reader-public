@@ -225,7 +225,9 @@ try {
               r.bottom <= win.b
             );
           });
-          const placeholder = (img) => img.src.startsWith("data:");
+          // A thumbnail still waiting in the queue has no `src` attribute:
+          // loadThumbnails clears it (removeAttribute) until a slot frees up.
+          const placeholder = (img) => !img.getAttribute("src");
           return {
             layout:
               document.querySelector(".comimi-root")?.dataset.layout ?? null,

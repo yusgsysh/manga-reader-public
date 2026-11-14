@@ -4,9 +4,6 @@
 // concurrency-limited queue: every thumbnail is loaded as soon as it appears,
 // never gated on the viewport, but only `concurrency` requests are in flight.
 
-const PLACEHOLDER =
-  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-
 const LAZY_FLAG = "lazyThumb";
 // The original URL is kept on the node so a later run (effect re-run,
 // re-parented node) can adopt images that a previous run already deferred.
@@ -158,13 +155,18 @@ export function loadThumbnails(
     if (node.dataset[LAZY_FLAG] !== "1") {
       node.dataset[LAZY_FLAG] = "1";
       node.dataset[LAZY_SRC] = url;
-      node.src = PLACEHOLDER;
-    } else if (node.getAttribute("src") !== PLACEHOLDER) {
+      // Clear src instead of pointing it at a placeholder image: a 1x1 GIF
+      // placeholder fires its own `load`, which consumers (React onLoad,
+      // comimi) mistake for the real thumbnail and hide the loading shimmer
+      // for every still-queued tile. A src-less <img> neither loads nor fires
+      // events, so the shimmer stays until the queue assigns the real URL.
+      node.removeAttribute("src");
+    } else if (node.hasAttribute("src")) {
       // Already loading or loaded (possibly by a previous run).
       return;
     }
-    // Still a placeholder. Skip if it is beyond the current limit; a later
-    // refresh() re-runs defer and enqueues it once the limit has grown.
+    // Still waiting for a slot. Skip if it is beyond the current limit; a
+    // later refresh() re-runs defer and enqueues it once the limit has grown.
     if (!allowed(url)) return;
     // Queue it now, or re-queue it if an earlier run was cleaned up while it
     // was waiting.
