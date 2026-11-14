@@ -9,6 +9,7 @@ import {
   Select,
 } from "@cloudflare/kumo";
 import {
+  ArrowsClockwise,
   CalendarBlank,
   CircleNotch,
   Plus,
@@ -16,9 +17,10 @@ import {
 } from "@phosphor-icons/react";
 import {
   createUserSyncKey,
+  deleteUserSyncKey,
   fetchSyncStatus,
   fetchUserSyncKeys,
-  revokeUserSyncKey,
+  rotateUserSyncKey,
   type CreateUserSyncKeyInput,
   type UserSyncKey,
 } from "../../api/sync";
@@ -128,13 +130,23 @@ export function ApiKeySection() {
     onError: (error) => toast.error("创建 API Key 失败", error),
   });
 
-  const revoke = useMutation({
-    mutationFn: (key: UserSyncKey) => revokeUserSyncKey(key.id),
+  const rotate = useMutation({
+    mutationFn: (key: UserSyncKey) => rotateUserSyncKey(key.id),
+    onSuccess: (result) => {
+      setPlaintext(result.key);
+      refresh();
+      toast.success("API Key 已轮换", "旧 Key 已失效");
+    },
+    onError: (error) => toast.error("轮换 API Key 失败", error),
+  });
+
+  const remove = useMutation({
+    mutationFn: (key: UserSyncKey) => deleteUserSyncKey(key.id),
     onSuccess: () => {
       refresh();
-      toast.success("API Key 已撤销");
+      toast.success("API Key 已删除");
     },
-    onError: (error) => toast.error("撤销 API Key 失败", error),
+    onError: (error) => toast.error("删除 API Key 失败", error),
   });
 
   return (
@@ -319,13 +331,22 @@ export function ApiKeySection() {
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => revoke.mutate(key)}
-                      disabled={revoke.isPending}
+                      onClick={() => rotate.mutate(key)}
+                      disabled={rotate.isPending}
                     >
-                      <Trash className="mr-1 size-3.5" />
-                      撤销
+                      <ArrowsClockwise className="mr-1 size-3.5" />
+                      轮换
                     </Button>
                   )}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => remove.mutate(key)}
+                    disabled={remove.isPending}
+                  >
+                    <Trash className="mr-1 size-3.5" />
+                    删除
+                  </Button>
                 </div>
               ))
             ) : (

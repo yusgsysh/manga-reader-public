@@ -22,7 +22,7 @@
 - 每用户独立 ExHentai Cookie：AES-256-GCM 加密存储、独立 Cookie Jar/HTTP Client、单独验证状态，绝不跨账号共享
 - 每用户 ExHentai 设置：站点偏好与加密 Cookie 集中保存在 `user_setting`
 - JWT 登录页（Argon2id 密码哈希、HttpOnly Cookie、服务端登出撤销）
-- 同步使用数据库管理的用户级同步 Key（SHA-256 哈希、可撤销，一把 Key 只同步一个账号），与用户 JWT 完全分离
+- 同步使用数据库管理的用户级同步 Key（SHA-256 哈希、可删除/轮换，一把 Key 只同步一个账号），与用户 JWT 完全分离
 
 ## 目录结构
 
@@ -186,7 +186,7 @@ MANGA_READER_AUTH_COOKIE_SECURE=auto
 
 - **一把 Key 一个账号**：在服务端「设置 → API Key」为当前账号创建（`/api/sync/keys`），可设置名称与有效期（7/30/60/90/180/365 天、自定义日期或永不过期）；数据库只保存 SHA-256 哈希和显示前缀，完整明文只在创建响应中出现一次。
 - **归属固定**：持有该 Key 的对端推送的私有数据全部归属到 Key 的账号；拉取时也只返回该账号的私有数据（`gallery_cache` 为公共元数据，双方共享）。两端不需要相同用户名或相同用户 UUID。
-- **撤销**：Key 可随时撤销，撤销后立即拒绝认证；同步请求记录 `request_id` 审计日志，数据合并按行 LWW 幂等。
+- **删除 / 轮换**：Key 可随时删除（立即失效）或轮换（生成同名新 Key 并删除旧 Key）；同步请求记录 `request_id` 审计日志，数据合并按行 LWW 幂等。
 - **客户端配置**：桌面端设置页填写服务器地址 + Key；请求使用 `Authorization: Bearer <Key>`，配置绑定保存它的当前账号。用户 JWT 不能访问同步端点。
 
 ### Metrics 与健康检查
@@ -210,7 +210,7 @@ go test ./internal/auth/ ./internal/synckey/ ./internal/metrics/ ./internal/sync
 cd ../frontend && bun run test
 ```
 
-覆盖：JWT 登录/失效/篡改、用户级同步 Key 认证/撤销/过期/禁用、同步按用户归属与隔离、Metrics 回环与独立 Token、跨用户书架/进度/Prefill/标签/设置/Cookie 隔离、管理员权限。
+覆盖：JWT 登录/失效/篡改、用户级同步 Key 认证/删除/轮换/过期/禁用、同步按用户归属与隔离、Metrics 回环与独立 Token、跨用户书架/进度/Prefill/标签/设置/Cookie 隔离、管理员权限。
 
 ## CI 与部署
 

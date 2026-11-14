@@ -1542,7 +1542,8 @@ Cache-Control: no-store
   { "name": "desktop-home", "expires_in_days": 30 }
   ```
   `name` 最长 100 字符；`expires_in_days` 为 1–3650；也可用 `expires_at`（RFC 3339，必须晚于当前时间）指定绝对到期时间，两者同时提供时以 `expires_in_days` 为准；都不提供则永不过期。
-- `DELETE /api/sync/keys/:id` — 撤销当前账号的 Key。
+- `POST /api/sync/keys/:id/rotate` — 轮换：生成一把新 Key 并删除旧 Key（新 Key 沿用名称；原有效期仍在未来则沿用，否则不过期）。
+- `DELETE /api/sync/keys/:id` — 删除当前账号的 Key，立即失效。
 
 用户级 Key 用于“一个 Key 只同步一个账号”：持有该 Key 的对端推送的私有数据全部归属到 Key 的账号，拉取时也只返回该账号的私有数据（`gallery_cache` 为公共元数据，双方共享）。两端不需要相同用户名或相同用户 UUID。创建 Key 需要本实例启用同步宿主（`MANGA_READER_SYNC_ENABLED=true`），否则返回 `409`。
 
@@ -1605,7 +1606,7 @@ curl -N http://server:8080/api/sync/events -H 'Authorization: Bearer mrk_...'
 
 同步请求的 `request_id` 会写入审计日志；数据合并仍按行 LWW 幂等。API Key 明文只在创建/轮换时返回一次，错误日志不记录完整 Key。
 
-**Error Responses:** `400` 配置无效、`401` Key 无效/撤销/过期/用户禁用、`404` 宿主端点未启用。
+**Error Responses:** `400` 配置无效、`401` Key 无效/过期/用户禁用、`404` 宿主端点未启用。
 
 ---
 

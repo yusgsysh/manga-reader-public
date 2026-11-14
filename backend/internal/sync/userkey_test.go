@@ -164,19 +164,51 @@ func TestUserSyncKeyEndpoints(t *testing.T) {
 		t.Fatalf("list = %+v, want the created key", list.Keys)
 	}
 
-	w = do(http.MethodDelete, "/api/sync/keys/"+created.APIKey.ID.String(), nil)
+	// Rotation replaces the key in place: same name/expiry, new id, old row gone.
+	w = do(http.MethodPost, "/api/sync/keys/"+created.APIKey.ID.String()+"/rotate", nil)
 	if w.Code != http.StatusOK {
-		t.Fatalf("revoke key = %d, body %s", w.Code, w.Body.String())
+		t.Fatalf("rotate key = %d, body %s", w.Code, w.Body.String())
 	}
-	var revoked userSyncKeyJSON
-	if err := js.Unmarshal(w.Body.Bytes(), &revoked); err != nil {
-		t.Fatalf("decode revoke: %v", err)
+	var rotated struct {
+		Key    string          `json:"key"`
+		APIKey userSyncKeyJSON `json:"api_key"`
 	}
-	if revoked.Status != "revoked" {
-		t.Fatalf("revoked status = %q", revoked.Status)
+	if err := js.Unmarshal(w.Body.Bytes(), &rotated); err != nil {
+		t.Fatalf("decode rotate: %v", err)
+	}
+	if rotated.APIKey.ID == created.APIKey.ID {
+		t.Fatal("rotate returned the same key id")
+	}
+	if rotated.APIKey.Name != "laptop" {
+		t.Fatalf("rotated name = %q, want laptop", rotated.APIKey.Name)
+	}
+	if rotated.APIKey.ExpiresAt == nil || created.APIKey.ExpiresAt == nil ||
+		!rotated.APIKey.ExpiresAt.Equal(*created.APIKey.ExpiresAt) {
+		t.Fatalf("rotated expiry = %v, want %v", rotated.APIKey.ExpiresAt, created.APIKey.ExpiresAt)
+	}
+	if n, _ := client.UserSyncKey.Query().Count(t.Context()); n != 1 {
+		t.Fatalf("keys after rotate = %d, want 1", n)
 	}
 
-	// Another account's key cannot be revoked through this principal.
+	// Deleting removes the row entirely.
+	w = do(http.MethodDelete, "/api/sync/keys/"+rotated.APIKey.ID.String(), nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("delete key = %d, body %s", w.Code, w.Body.String())
+	}
+	var deleted struct {
+		Deleted bool `json:"deleted"`
+	}
+	if err := js.Unmarshal(w.Body.Bytes(), &deleted); err != nil {
+		t.Fatalf("decode delete: %v", err)
+	}
+	if !deleted.Deleted {
+		t.Fatal("delete did not report success")
+	}
+	if n, _ := client.UserSyncKey.Query().Count(t.Context()); n != 0 {
+		t.Fatalf("keys after delete = %d, want 0", n)
+	}
+
+	// Another account's key cannot be rotated or deleted through this principal.
 	otherKey := seedUserSyncKey(t, client, other)
 	otherID := ""
 	rows, _ := client.UserSyncKey.Query().All(t.Context())
@@ -189,7 +221,10 @@ func TestUserSyncKeyEndpoints(t *testing.T) {
 		t.Fatal("failed to seed other user's key")
 	}
 	if w := do(http.MethodDelete, "/api/sync/keys/"+otherID, nil); w.Code != http.StatusNotFound {
-		t.Fatalf("revoke another user's key = %d, want 404", w.Code)
+		t.Fatalf("delete another user's key = %d, want 404", w.Code)
+	}
+	if w := do(http.MethodPost, "/api/sync/keys/"+otherID+"/rotate", nil); w.Code != http.StatusNotFound {
+		t.Fatalf("rotate another user's key = %d, want 404", w.Code)
 	}
 
 	// Bad lifetimes are rejected instead of silently creating a key.

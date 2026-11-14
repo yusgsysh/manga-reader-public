@@ -92,6 +92,10 @@ export function createUserSyncKey(
   return apiPostJson<CreatedUserSyncKey>("/api/sync/keys", input);
 }
 
-export function revokeUserSyncKey(id: string): Promise<UserSyncKey> {
-  return apiDelete<UserSyncKey>(`/api/sync/keys/${id}`);
+export function rotateUserSyncKey(id: string): Promise<CreatedUserSyncKey> {
+  return apiPost<CreatedUserSyncKey>(`/api/sync/keys/${id}/rotate`);
+}
+
+export function deleteUserSyncKey(id: string): Promise<{ deleted: boolean }> {
+  return apiDelete<{ deleted: boolean }>(`/api/sync/keys/${id}`);
 }

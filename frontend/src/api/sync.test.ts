@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   SYNC_KEY_MASK,
   createUserSyncKey,
+  deleteUserSyncKey,
   fetchSyncConfig,
   fetchSyncStatus,
   fetchUserSyncKeys,
-  revokeUserSyncKey,
+  rotateUserSyncKey,
   saveSyncConfig,
   startFullSync,
 } from "./sync";
@@ -107,11 +108,15 @@ describe("sync api", () => {
       body: JSON.stringify({ name: "laptop", expires_in_days: 30 }),
     });
 
-    fetchMock.mockResolvedValueOnce(jsonResponse({ ...key, status: "revoked" }));
-    await expect(revokeUserSyncKey("key-1")).resolves.toEqual({
-      ...key,
-      status: "revoked",
-    });
+    fetchMock.mockResolvedValueOnce(jsonResponse(created));
+    await expect(rotateUserSyncKey("key-1")).resolves.toEqual(created);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `${BASE}/api/sync/keys/key-1/rotate`,
+      { method: "POST" },
+    );
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ deleted: true }));
+    await expect(deleteUserSyncKey("key-1")).resolves.toEqual({ deleted: true });
     expect(fetchMock).toHaveBeenLastCalledWith(
       `${BASE}/api/sync/keys/key-1`,
       { method: "DELETE" },

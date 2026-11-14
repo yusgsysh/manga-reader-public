@@ -121,7 +121,8 @@ func (s *Service) RegisterRoutes(r gin.IRouter) {
 	r.POST("/api/sync/resync", s.handleResync)
 	r.GET("/api/sync/keys", s.handleUserKeyList)
 	r.POST("/api/sync/keys", s.handleUserKeyCreate)
-	r.DELETE("/api/sync/keys/:id", s.handleUserKeyRevoke)
+	r.POST("/api/sync/keys/:id/rotate", s.handleUserKeyRotate)
+	r.DELETE("/api/sync/keys/:id", s.handleUserKeyDelete)
 	if s.hostEnabled && s.keyAuth != nil {
 		r.POST("/api/sync/push", s.keyAuth(synckey.ScopeSyncWrite), s.handlePush)
 		r.GET("/api/sync/events", s.keyAuth(synckey.ScopeSyncEvent), s.handlePeerEvents)
@@ -558,8 +559,10 @@ func syncKeyExpiry(now time.Time, days *int, at *string) (*time.Time, error) {
 	return nil, nil
 }
 
-// handleUserKeyRevoke revokes one of the current account's keys.
-func (s *Service) handleUserKeyRevoke(c *gin.Context) {
+// handleUserKeyRotate replaces a key with a freshly generated one in a single
+// transaction. The name is kept, and a still-valid expiry is carried over; the
+// old key is deleted, so it stops working as soon as the rotation commits.
+func (s *Service) handleUserKeyRotate(c *gin.Context) {
 	if !s.requireHost(c) {
 		return
 	}
@@ -573,9 +576,10 @@ func (s *Service) handleUserKeyRevoke(c *gin.Context) {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid key id"})
 		return
 	}
-	row, err := s.client.UserSyncKey.Query().
+	ctx := c.Request.Context()
+	old, err := s.client.UserSyncKey.Query().
 		Where(usersynckey.ID(keyID), usersynckey.UserIDEQ(uid)).
-		Only(c.Request.Context())
+		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
 			web.JSON(c, http.StatusNotFound, gin.H{"error": "sync key not found"})
@@ -584,20 +588,82 @@ func (s *Service) handleUserKeyRevoke(c *gin.Context) {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync key failed"})
 		return
 	}
-	if row.Status != "revoked" {
-		now := time.Now().UTC()
-		row, err = s.client.UserSyncKey.UpdateOneID(row.ID).
-			SetStatus("revoked").
-			SetRevokedAt(now).
-			Save(c.Request.Context())
-		if err != nil {
-			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "revoke sync key failed"})
-			return
-		}
+	material, err := synckey.GenerateKey()
+	if err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "generate sync key failed"})
+		return
 	}
-	slog.Info("security audit", "action", "sync_key.revoke",
-		"request_id", requestid.From(c), "actor_user_id", uid, "key_id", row.ID, "result", "ok")
-	web.JSON(c, http.StatusOK, userSyncKeyResponse(row))
+
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "rotate sync key failed"})
+		return
+	}
+	create := tx.UserSyncKey.Create().
+		SetUserID(uid).
+		SetName(old.Name).
+		SetKeyHash(material.Hash).
+		SetKeyPrefix(material.Prefix).
+		SetStatus(config.StatusActive)
+	if old.ExpiresAt != nil && old.ExpiresAt.After(time.Now().UTC()) {
+		create.SetExpiresAt(*old.ExpiresAt)
+	}
+	created, err := create.Save(ctx)
+	if err != nil {
+		_ = tx.Rollback()
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "rotate sync key failed"})
+		return
+	}
+	if _, err := tx.UserSyncKey.Delete().
+		Where(usersynckey.ID(keyID), usersynckey.UserIDEQ(uid)).
+		Exec(ctx); err != nil {
+		_ = tx.Rollback()
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "rotate sync key failed"})
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "rotate sync key failed"})
+		return
+	}
+	slog.Info("security audit", "action", "sync_key.rotate",
+		"request_id", requestid.From(c), "actor_user_id", uid,
+		"old_key_id", keyID, "new_key_id", created.ID, "result", "ok")
+	web.JSON(c, http.StatusOK, gin.H{
+		"key":     material.Plaintext,
+		"api_key": userSyncKeyResponse(created),
+	})
+}
+
+// handleUserKeyDelete removes one of the current account's keys. Deleting an
+// active key invalidates it immediately, exactly like a revocation would.
+func (s *Service) handleUserKeyDelete(c *gin.Context) {
+	if !s.requireHost(c) {
+		return
+	}
+	uid, ok := currentUserID(c)
+	if !ok {
+		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	keyID, err := ident.Parse(c.Param("id"))
+	if err != nil {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid key id"})
+		return
+	}
+	deleted, err := s.client.UserSyncKey.Delete().
+		Where(usersynckey.ID(keyID), usersynckey.UserIDEQ(uid)).
+		Exec(c.Request.Context())
+	if err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete sync key failed"})
+		return
+	}
+	if deleted == 0 {
+		web.JSON(c, http.StatusNotFound, gin.H{"error": "sync key not found"})
+		return
+	}
+	slog.Info("security audit", "action", "sync_key.delete",
+		"request_id", requestid.From(c), "actor_user_id", uid, "key_id", keyID, "result", "ok")
+	web.JSON(c, http.StatusOK, gin.H{"deleted": true})
 }
 
 func (s *Service) handleStatus(c *gin.Context) {
