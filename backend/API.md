@@ -1536,8 +1536,12 @@ Cache-Control: no-store
 
 **用户级同步 Key（用户 JWT，当前登录账号）：**
 
-- `GET /api/sync/keys` — 列出当前账号的同步 Key（只返回 `key_prefix` 等元数据）。
-- `POST /api/sync/keys` — 为当前账号创建 Key；明文 `key` 只在响应中出现一次。
+- `GET /api/sync/keys` — 列出当前账号的同步 Key（含 `name`、`key_prefix`、`expires_at`、`last_used_at`、`status`）。
+- `POST /api/sync/keys` — 为当前账号创建 Key；明文 `key` 只在响应中出现一次。请求体可选：
+  ```json
+  { "name": "desktop-home", "expires_in_days": 30 }
+  ```
+  `name` 最长 100 字符；`expires_in_days` 为 1–3650；也可用 `expires_at`（RFC 3339，必须晚于当前时间）指定绝对到期时间，两者同时提供时以 `expires_in_days` 为准；都不提供则永不过期。
 - `DELETE /api/sync/keys/:id` — 撤销当前账号的 Key。
 
 用户级 Key 用于“一个 Key 只同步一个账号”：持有该 Key 的对端推送的私有数据全部归属到 Key 的账号，拉取时也只返回该账号的私有数据（`gallery_cache` 为公共元数据，双方共享）。两端不需要相同用户名或相同用户 UUID。创建 Key 需要本实例启用同步宿主（`MANGA_READER_SYNC_ENABLED=true`），否则返回 `409`。

@@ -36,6 +36,9 @@ func (UserSyncKey) Fields() []ent.Field {
 			SchemaType(uuidSchemaType),
 		field.UUID("user_id", ident.UUID{}).
 			SchemaType(uuidSchemaType),
+		// name is a human label shown on the settings page ("laptop",
+		// "home-server"). It is not an identifier and may repeat.
+		field.String("name").Default(""),
 		field.String("key_hash").NotEmpty().Unique().Sensitive(),
 		// key_prefix is safe to display and narrows verification candidates
 		// before the constant-time hash comparison.

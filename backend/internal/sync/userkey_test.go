@@ -119,14 +119,17 @@ func TestUserSyncKeyEndpoints(t *testing.T) {
 	})
 	svc.RegisterRoutes(router)
 
-	do := func(method, path string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(method, path, bytes.NewReader(nil))
+	do := func(method, path string, body []byte) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, bytes.NewReader(body))
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 		return w
 	}
 
-	w := do(http.MethodPost, "/api/sync/keys")
+	w := do(http.MethodPost, "/api/sync/keys", []byte(`{"name":"laptop","expires_in_days":30}`))
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create key = %d, body %s", w.Code, w.Body.String())
 	}
@@ -137,11 +140,17 @@ func TestUserSyncKeyEndpoints(t *testing.T) {
 	if err := js.Unmarshal(w.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode create: %v", err)
 	}
+	if created.APIKey.Name != "laptop" {
+		t.Fatalf("name = %q, want laptop", created.APIKey.Name)
+	}
+	if created.APIKey.ExpiresAt == nil || !created.APIKey.ExpiresAt.After(time.Now().Add(29*24*time.Hour)) {
+		t.Fatalf("expires_at = %v, want ~30 days out", created.APIKey.ExpiresAt)
+	}
 	if len(created.Key) < 20 {
 		t.Fatalf("plaintext key = %q, want a full secret", created.Key)
 	}
 
-	w = do(http.MethodGet, "/api/sync/keys")
+	w = do(http.MethodGet, "/api/sync/keys", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("list keys = %d", w.Code)
 	}
@@ -155,7 +164,7 @@ func TestUserSyncKeyEndpoints(t *testing.T) {
 		t.Fatalf("list = %+v, want the created key", list.Keys)
 	}
 
-	w = do(http.MethodDelete, "/api/sync/keys/"+created.APIKey.ID.String())
+	w = do(http.MethodDelete, "/api/sync/keys/"+created.APIKey.ID.String(), nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("revoke key = %d, body %s", w.Code, w.Body.String())
 	}
@@ -179,8 +188,20 @@ func TestUserSyncKeyEndpoints(t *testing.T) {
 	if otherID == "" || otherKey == "" {
 		t.Fatal("failed to seed other user's key")
 	}
-	if w := do(http.MethodDelete, "/api/sync/keys/"+otherID); w.Code != http.StatusNotFound {
+	if w := do(http.MethodDelete, "/api/sync/keys/"+otherID, nil); w.Code != http.StatusNotFound {
 		t.Fatalf("revoke another user's key = %d, want 404", w.Code)
+	}
+
+	// Bad lifetimes are rejected instead of silently creating a key.
+	for _, body := range []string{
+		`{"expires_in_days":0}`,
+		`{"expires_in_days":3651}`,
+		`{"expires_at":"2000-01-01T00:00:00Z"}`,
+		`{"expires_at":"not-a-date"}`,
+	} {
+		if w := do(http.MethodPost, "/api/sync/keys", []byte(body)); w.Code != http.StatusBadRequest {
+			t.Fatalf("create with %s = %d, want 400", body, w.Code)
+		}
 	}
 }
 

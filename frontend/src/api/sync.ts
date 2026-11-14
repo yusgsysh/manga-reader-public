@@ -35,6 +35,7 @@ export interface SyncStatus {
 
 export interface UserSyncKey {
   id: string;
+  name: string;
   key_prefix: string;
   status: "active" | "revoked";
   expires_at: string | null;
@@ -47,6 +48,12 @@ export interface CreatedUserSyncKey {
   /** Full plaintext key, returned only once. */
   key: string;
   api_key: UserSyncKey;
+}
+
+export interface CreateUserSyncKeyInput {
+  name?: string;
+  expires_in_days?: number;
+  expires_at?: string;
 }
 
 export function fetchSyncConfig(): Promise<SyncConfig> {
@@ -79,8 +86,10 @@ export function fetchUserSyncKeys(): Promise<{ keys: UserSyncKey[] }> {
   return apiGet<{ keys: UserSyncKey[] }>("/api/sync/keys");
 }
 
-export function createUserSyncKey(): Promise<CreatedUserSyncKey> {
-  return apiPostJson<CreatedUserSyncKey>("/api/sync/keys");
+export function createUserSyncKey(
+  input: CreateUserSyncKeyInput = {},
+): Promise<CreatedUserSyncKey> {
+  return apiPostJson<CreatedUserSyncKey>("/api/sync/keys", input);
 }
 
 export function revokeUserSyncKey(id: string): Promise<UserSyncKey> {

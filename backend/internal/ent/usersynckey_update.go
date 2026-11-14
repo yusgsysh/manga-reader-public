@@ -43,6 +43,20 @@ func (_u *UserSyncKeyUpdate) SetNillableUserID(v *ident.UUID) *UserSyncKeyUpdate
 	return _u
 }
 
+// SetName sets the "name" field.
+func (_u *UserSyncKeyUpdate) SetName(v string) *UserSyncKeyUpdate {
+	_u.mutation.SetName(v)
+	return _u
+}
+
+// SetNillableName sets the "name" field if the given value is not nil.
+func (_u *UserSyncKeyUpdate) SetNillableName(v *string) *UserSyncKeyUpdate {
+	if v != nil {
+		_u.SetName(*v)
+	}
+	return _u
+}
+
 // SetKeyHash sets the "key_hash" field.
 func (_u *UserSyncKeyUpdate) SetKeyHash(v string) *UserSyncKeyUpdate {
 	_u.mutation.SetKeyHash(v)
@@ -207,6 +221,9 @@ func (_u *UserSyncKeyUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(usersynckey.FieldUserID, field.TypeUUID, value)
 	}
+	if value, ok := _u.mutation.Name(); ok {
+		_spec.SetField(usersynckey.FieldName, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.KeyHash(); ok {
 		_spec.SetField(usersynckey.FieldKeyHash, field.TypeString, value)
 	}
@@ -264,6 +281,20 @@ func (_u *UserSyncKeyUpdateOne) SetUserID(v ident.UUID) *UserSyncKeyUpdateOne {
 func (_u *UserSyncKeyUpdateOne) SetNillableUserID(v *ident.UUID) *UserSyncKeyUpdateOne {
 	if v != nil {
 		_u.SetUserID(*v)
+	}
+	return _u
+}
+
+// SetName sets the "name" field.
+func (_u *UserSyncKeyUpdateOne) SetName(v string) *UserSyncKeyUpdateOne {
+	_u.mutation.SetName(v)
+	return _u
+}
+
+// SetNillableName sets the "name" field if the given value is not nil.
+func (_u *UserSyncKeyUpdateOne) SetNillableName(v *string) *UserSyncKeyUpdateOne {
+	if v != nil {
+		_u.SetName(*v)
 	}
 	return _u
 }
@@ -461,6 +492,9 @@ func (_u *UserSyncKeyUpdateOne) sqlSave(ctx context.Context) (_node *UserSyncKey
 	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(usersynckey.FieldUserID, field.TypeUUID, value)
+	}
+	if value, ok := _u.mutation.Name(); ok {
+		_spec.SetField(usersynckey.FieldName, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.KeyHash(); ok {
 		_spec.SetField(usersynckey.FieldKeyHash, field.TypeString, value)

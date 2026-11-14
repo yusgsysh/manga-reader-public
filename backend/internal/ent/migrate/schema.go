@@ -255,6 +255,7 @@ var (
 	UserSyncKeyColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
 		{Name: "user_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
+		{Name: "name", Type: field.TypeString, Default: ""},
 		{Name: "key_hash", Type: field.TypeString, Unique: true},
 		{Name: "key_prefix", Type: field.TypeString},
 		{Name: "status", Type: field.TypeString, Default: "active"},
@@ -272,12 +273,12 @@ var (
 			{
 				Name:    "usersynckey_user_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{UserSyncKeyColumns[1], UserSyncKeyColumns[4]},
+				Columns: []*schema.Column{UserSyncKeyColumns[1], UserSyncKeyColumns[5]},
 			},
 			{
 				Name:    "usersynckey_key_prefix",
 				Unique:  false,
-				Columns: []*schema.Column{UserSyncKeyColumns[3]},
+				Columns: []*schema.Column{UserSyncKeyColumns[4]},
 			},
 		},
 	}

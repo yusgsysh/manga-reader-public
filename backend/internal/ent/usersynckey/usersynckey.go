@@ -16,6 +16,8 @@ const (
 	FieldID = "id"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
+	// FieldName holds the string denoting the name field in the database.
+	FieldName = "name"
 	// FieldKeyHash holds the string denoting the key_hash field in the database.
 	FieldKeyHash = "key_hash"
 	// FieldKeyPrefix holds the string denoting the key_prefix field in the database.
@@ -38,6 +40,7 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldUserID,
+	FieldName,
 	FieldKeyHash,
 	FieldKeyPrefix,
 	FieldStatus,
@@ -58,6 +61,8 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultName holds the default value on creation for the "name" field.
+	DefaultName string
 	// KeyHashValidator is a validator for the "key_hash" field. It is called by the builders before save.
 	KeyHashValidator func(string) error
 	// KeyPrefixValidator is a validator for the "key_prefix" field. It is called by the builders before save.
@@ -81,6 +86,11 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 // ByUserID orders the results by the user_id field.
 func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUserID, opts...).ToFunc()
+}
+
+// ByName orders the results by the name field.
+func ByName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldName, opts...).ToFunc()
 }
 
 // ByKeyHash orders the results by the key_hash field.

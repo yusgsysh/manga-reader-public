@@ -85,6 +85,7 @@ describe("sync api", () => {
   it("user sync key helpers use /api/sync/keys", async () => {
     const key: UserSyncKey = {
       id: "key-1",
+      name: "laptop",
       key_prefix: "mrk_abcdefgh",
       status: "active",
       expires_at: null,
@@ -99,11 +100,11 @@ describe("sync api", () => {
     expect(fetchMock).toHaveBeenLastCalledWith(`${BASE}/api/sync/keys`, undefined);
 
     fetchMock.mockResolvedValueOnce(jsonResponse(created, 201));
-    await expect(createUserSyncKey()).resolves.toEqual(created);
+    await expect(createUserSyncKey({ name: "laptop", expires_in_days: 30 })).resolves.toEqual(created);
     expect(fetchMock).toHaveBeenLastCalledWith(`${BASE}/api/sync/keys`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: undefined,
+      body: JSON.stringify({ name: "laptop", expires_in_days: 30 }),
     });
 
     fetchMock.mockResolvedValueOnce(jsonResponse({ ...key, status: "revoked" }));

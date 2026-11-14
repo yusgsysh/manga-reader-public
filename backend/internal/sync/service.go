@@ -4,6 +4,7 @@ import (
 	"context"
 	json "encoding/json/v2"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -144,7 +145,7 @@ func (s *Service) handlePush(c *gin.Context) {
 	ctx := c.Request.Context()
 	identity, ok := synckey.From(c)
 	if !ok {
-		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "node identity missing"})
+		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "sync identity missing"})
 		return
 	}
 	// A user sync key scopes the whole exchange to its account: incoming
@@ -190,7 +191,7 @@ func (s *Service) handlePush(c *gin.Context) {
 		}
 	}
 
-	slog.Info("node sync push",
+	slog.Info("sync push",
 		"request_id", requestid.From(c),
 		"user_id", identity.UserID,
 		"applied", applied,
@@ -409,6 +410,7 @@ func (s *Service) handleResync(c *gin.Context) {
 
 type userSyncKeyJSON struct {
 	ID         ident.UUID `json:"id"`
+	Name       string     `json:"name"`
 	KeyPrefix  string     `json:"key_prefix"`
 	Status     string     `json:"status"`
 	ExpiresAt  *time.Time `json:"expires_at"`
@@ -419,7 +421,7 @@ type userSyncKeyJSON struct {
 
 func userSyncKeyResponse(k *ent.UserSyncKey) userSyncKeyJSON {
 	return userSyncKeyJSON{
-		ID: k.ID, KeyPrefix: k.KeyPrefix, Status: k.Status,
+		ID: k.ID, Name: k.Name, KeyPrefix: k.KeyPrefix, Status: k.Status,
 		ExpiresAt: k.ExpiresAt, LastUsedAt: k.LastUsedAt,
 		CreatedAt: k.CreatedAt, RevokedAt: k.RevokedAt,
 	}
@@ -467,8 +469,9 @@ func (s *Service) handleUserKeyList(c *gin.Context) {
 	web.JSON(c, http.StatusOK, gin.H{"keys": out})
 }
 
-// handleUserKeyCreate mints a key bound to the current account. The plaintext
-// is returned exactly once.
+// handleUserKeyCreate mints a key bound to the current account. The body may
+// carry a human name and an optional lifetime (days or an absolute RFC 3339
+// time); the plaintext is returned exactly once.
 func (s *Service) handleUserKeyCreate(c *gin.Context) {
 	if !s.requireHost(c) {
 		return
@@ -478,17 +481,42 @@ func (s *Service) handleUserKeyCreate(c *gin.Context) {
 		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
+	var body struct {
+		Name          string  `json:"name"`
+		ExpiresInDays *int    `json:"expires_in_days"`
+		ExpiresAt     *string `json:"expires_at"`
+	}
+	if err := web.BindJSON(c, &body); err != nil && !errors.Is(err, io.EOF) {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	name := strings.TrimSpace(body.Name)
+	if len([]rune(name)) > maxSyncKeyName {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "name is too long"})
+		return
+	}
+	expires, err := syncKeyExpiry(time.Now().UTC(), body.ExpiresInDays, body.ExpiresAt)
+	if err != nil {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	material, err := synckey.GenerateKey()
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "generate sync key failed"})
 		return
 	}
-	row, err := s.client.UserSyncKey.Create().
+	create := s.client.UserSyncKey.Create().
 		SetUserID(uid).
+		SetName(name).
 		SetKeyHash(material.Hash).
 		SetKeyPrefix(material.Prefix).
-		SetStatus(config.StatusActive).
-		Save(c.Request.Context())
+		SetStatus(config.StatusActive)
+	if expires != nil {
+		create.SetExpiresAt(*expires)
+	}
+	row, err := create.Save(c.Request.Context())
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create sync key failed"})
 		return
@@ -499,6 +527,35 @@ func (s *Service) handleUserKeyCreate(c *gin.Context) {
 		"key":     material.Plaintext,
 		"api_key": userSyncKeyResponse(row),
 	})
+}
+
+// maxSyncKeyName bounds the display label so a key cannot store an unbounded
+// string.
+const maxSyncKeyName = 100
+
+// syncKeyExpiry validates the lifetime input. A day count wins over an
+// absolute time, mirroring the old key-management API; both nil means the key
+// never expires.
+func syncKeyExpiry(now time.Time, days *int, at *string) (*time.Time, error) {
+	if days != nil {
+		if *days < 1 || *days > 3650 {
+			return nil, errors.New("expires_in_days must be between 1 and 3650")
+		}
+		expires := now.AddDate(0, 0, *days)
+		return &expires, nil
+	}
+	if at != nil && strings.TrimSpace(*at) != "" {
+		parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*at))
+		if err != nil {
+			return nil, errors.New("expires_at must be an RFC 3339 timestamp")
+		}
+		if !parsed.After(now) {
+			return nil, errors.New("expires_at must be in the future")
+		}
+		utc := parsed.UTC()
+		return &utc, nil
+	}
+	return nil, nil
 }
 
 // handleUserKeyRevoke revokes one of the current account's keys.

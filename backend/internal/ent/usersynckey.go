@@ -20,6 +20,8 @@ type UserSyncKey struct {
 	ID ident.UUID `json:"id,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID ident.UUID `json:"user_id,omitempty"`
+	// Name holds the value of the "name" field.
+	Name string `json:"name,omitempty"`
 	// KeyHash holds the value of the "key_hash" field.
 	KeyHash string `json:"-"`
 	// KeyPrefix holds the value of the "key_prefix" field.
@@ -44,7 +46,7 @@ func (*UserSyncKey) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case usersynckey.FieldID, usersynckey.FieldUserID:
 			values[i] = new(ident.UUID)
-		case usersynckey.FieldKeyHash, usersynckey.FieldKeyPrefix, usersynckey.FieldStatus:
+		case usersynckey.FieldName, usersynckey.FieldKeyHash, usersynckey.FieldKeyPrefix, usersynckey.FieldStatus:
 			values[i] = new(sql.NullString)
 		case usersynckey.FieldExpiresAt, usersynckey.FieldLastUsedAt, usersynckey.FieldCreatedAt, usersynckey.FieldRevokedAt:
 			values[i] = new(sql.NullTime)
@@ -74,6 +76,12 @@ func (_m *UserSyncKey) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
 			} else if value != nil {
 				_m.UserID = *value
+			}
+		case usersynckey.FieldName:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field name", values[i])
+			} else if value.Valid {
+				_m.Name = value.String
 			}
 		case usersynckey.FieldKeyHash:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -158,6 +166,9 @@ func (_m *UserSyncKey) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("user_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.UserID))
+	builder.WriteString(", ")
+	builder.WriteString("name=")
+	builder.WriteString(_m.Name)
 	builder.WriteString(", ")
 	builder.WriteString("key_hash=<sensitive>")
 	builder.WriteString(", ")

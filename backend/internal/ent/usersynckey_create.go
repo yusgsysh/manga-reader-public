@@ -27,6 +27,20 @@ func (_c *UserSyncKeyCreate) SetUserID(v ident.UUID) *UserSyncKeyCreate {
 	return _c
 }
 
+// SetName sets the "name" field.
+func (_c *UserSyncKeyCreate) SetName(v string) *UserSyncKeyCreate {
+	_c.mutation.SetName(v)
+	return _c
+}
+
+// SetNillableName sets the "name" field if the given value is not nil.
+func (_c *UserSyncKeyCreate) SetNillableName(v *string) *UserSyncKeyCreate {
+	if v != nil {
+		_c.SetName(*v)
+	}
+	return _c
+}
+
 // SetKeyHash sets the "key_hash" field.
 func (_c *UserSyncKeyCreate) SetKeyHash(v string) *UserSyncKeyCreate {
 	_c.mutation.SetKeyHash(v)
@@ -158,6 +172,10 @@ func (_c *UserSyncKeyCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *UserSyncKeyCreate) defaults() {
+	if _, ok := _c.mutation.Name(); !ok {
+		v := usersynckey.DefaultName
+		_c.mutation.SetName(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := usersynckey.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -176,6 +194,9 @@ func (_c *UserSyncKeyCreate) defaults() {
 func (_c *UserSyncKeyCreate) check() error {
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "UserSyncKey.user_id"`)}
+	}
+	if _, ok := _c.mutation.Name(); !ok {
+		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "UserSyncKey.name"`)}
 	}
 	if _, ok := _c.mutation.KeyHash(); !ok {
 		return &ValidationError{Name: "key_hash", err: errors.New(`ent: missing required field "UserSyncKey.key_hash"`)}
@@ -237,6 +258,10 @@ func (_c *UserSyncKeyCreate) createSpec() (*UserSyncKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(usersynckey.FieldUserID, field.TypeUUID, value)
 		_node.UserID = value
+	}
+	if value, ok := _c.mutation.Name(); ok {
+		_spec.SetField(usersynckey.FieldName, field.TypeString, value)
+		_node.Name = value
 	}
 	if value, ok := _c.mutation.KeyHash(); ok {
 		_spec.SetField(usersynckey.FieldKeyHash, field.TypeString, value)

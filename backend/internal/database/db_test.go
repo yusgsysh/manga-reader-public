@@ -1,6 +1,7 @@
 package database
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 
@@ -108,4 +109,49 @@ func testUUID(n byte) ident.UUID {
 	var id ident.UUID
 	id[15] = n
 	return id
+}
+
+func TestNewDB_DropsRetiredNodeTables(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy-keys.db")
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open legacy db: %v", err)
+	}
+	for _, stmt := range []string{
+		`CREATE TABLE node (id blob primary key)`,
+		`CREATE TABLE node_api_key (id blob primary key, node_id blob)`,
+	} {
+		if _, err := raw.Exec(stmt); err != nil {
+			raw.Close()
+			t.Fatalf("create legacy table: %v", err)
+		}
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close legacy db: %v", err)
+	}
+
+	db, err := NewDB(Options{Driver: DriverSQLite, DSN: path})
+	if err != nil {
+		t.Fatalf("NewDB: %v", err)
+	}
+	defer db.Close()
+
+	for _, table := range []string{"node", "node_api_key"} {
+		var n int
+		if err := db.Conn.QueryRowContext(t.Context(),
+			`SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&n); err != nil {
+			t.Fatalf("read sqlite_master: %v", err)
+		}
+		if n != 0 {
+			t.Fatalf("retired table %q still exists", table)
+		}
+	}
+	var n int
+	if err := db.Conn.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM sqlite_master WHERE type='table' AND name='user_sync_key'`).Scan(&n); err != nil {
+		t.Fatalf("read sqlite_master: %v", err)
+	}
+	if n != 1 {
+		t.Fatal("user_sync_key table is missing")
+	}
 }

@@ -184,7 +184,7 @@ MANGA_READER_AUTH_COOKIE_SECURE=auto
 
 ### 用户级同步 Key
 
-- **一把 Key 一个账号**：在服务端「设置 → 数据同步 → 服务端同步 Key」为当前账号创建（`/api/sync/keys`），数据库只保存 SHA-256 哈希和显示前缀，完整明文只在创建响应中出现一次。
+- **一把 Key 一个账号**：在服务端「设置 → API Key」为当前账号创建（`/api/sync/keys`），可设置名称与有效期（7/30/60/90/180/365 天、自定义日期或永不过期）；数据库只保存 SHA-256 哈希和显示前缀，完整明文只在创建响应中出现一次。
 - **归属固定**：持有该 Key 的对端推送的私有数据全部归属到 Key 的账号；拉取时也只返回该账号的私有数据（`gallery_cache` 为公共元数据，双方共享）。两端不需要相同用户名或相同用户 UUID。
 - **撤销**：Key 可随时撤销，撤销后立即拒绝认证；同步请求记录 `request_id` 审计日志，数据合并按行 LWW 幂等。
 - **客户端配置**：桌面端设置页填写服务器地址 + Key；请求使用 `Authorization: Bearer <Key>`，配置绑定保存它的当前账号。用户 JWT 不能访问同步端点。
@@ -305,7 +305,7 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `MANGA_READER_AUTH_COOKIE_SECURE` | 否 | `auto` | 认证 Cookie 的 `Secure`：`auto`（TLS 或 `X-Forwarded-Proto=https` 时开启）/`true`/`false` |
 | `MANGA_READER_METRICS_ENABLED` | 否 | `true` | 启用 `/metrics`；未配置 Token 时仅回环可访问 |
 | `MANGA_READER_METRICS_TOKEN` | 否 | - | 可选独立 Metrics Token（至少 32 字符）；与 JWT、同步 Key 不共用 |
-| `MANGA_READER_SYNC_ENABLED` | 否 | `true` | 启用同步宿主端点；用户级同步 Key 在设置页创建、数据库管理 |
+| `MANGA_READER_SYNC_ENABLED` | 否 | `true` | 启用同步宿主端点；用户级同步 Key 在「设置 → API Key」创建、数据库管理 |
 | `MANGA_READER_SYNC_REQUEST_TIMEOUT` | 否 | `30s` | 单次同步 push 的 HTTP 超时（1s–5m） |
 | `MANGA_READER_DEV_TOOLS` | 否 | `false` | 启用 `/api/dev/*` 调试接口（可运行时模拟 ExHentai 不可用，见 `backend/API.md` Dev Tools） |
 | `MANGA_READER_MEM_BUDGET` | 否 | 不限制（`0`） | 进程内图片缓冲的字节预算（下载、精灵图解码等驻留内存的操作按大小预留，超出则排队）；默认不限制，设为正数才启用；可用 `MiB`/`MB` 后缀 |
@@ -496,7 +496,7 @@ curl -X POST http://localhost:8080/api/reading-progress/cleanup?days=0
 多实例双向同步**阅读进度、书架与画廊缓存**（settings 不同步），所有连接由桌面端主动发起（NAT 友好）：
 
 - **服务端**：`MANGA_READER_SYNC_ENABLED=true` 时挂载同步端点。
-- **推荐：用户级同步 Key**：服务端在设置页「数据同步」为当前账号创建 Key（`POST /api/sync/keys`，只保存 SHA-256 哈希，明文只显示一次）。桌面端「数据同步」填入服务端地址 + 该 Key 并启用。服务端把收到的私有行全部归属到 Key 的账号，并且只返回该账号的数据（画廊缓存为公共元数据，双方共享），因此**两端不需要相同用户名或相同用户 UUID**。
+- **推荐：用户级同步 Key**：服务端在「设置 → API Key」为当前账号创建 Key（`POST /api/sync/keys`，只保存 SHA-256 哈希，明文只显示一次）。桌面端「数据同步」填入服务端地址 + 该 Key 并启用。服务端把收到的私有行全部归属到 Key 的账号，并且只返回该账号的数据（画廊缓存为公共元数据，双方共享），因此**两端不需要相同用户名或相同用户 UUID**。
 - **桌面端 / 客户端**：设置页「数据同步」填服务端地址 + Key 并启用（配置存 `sync_state` 表，并绑定保存配置的当前账号）。请求使用 `Authorization: Bearer <Key>`，不再使用 Basic Auth 或全局同步令牌。
 - 双方通过 `POST /api/sync/push` 推送 + 拉取，`GET /api/sync/events` SSE 监听对端新变更（写后 2s 去抖推送，心跳 25s，断线退避 1s→60s，60s 轮询兜底）。同步 Key 需要 `sync:write`（push）或 `sync:events`（SSE）。
 - 合并规则：按行 LWW（`updated_at` 新者胜），删除用 tombstone；首次连接返回全量快照（同时带上 outbox 中未送达的删除 tombstone，避免首次同步把已删除的行重新复活）；更换 `server_url` 会自动重置同步游标与引导标记，对新对端重新全量（`gallery_cache` 行在 LWW 胜出时按字段合并，空值不覆盖，镜像本地 upsert 语义）。

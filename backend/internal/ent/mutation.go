@@ -8025,6 +8025,7 @@ type UserSyncKeyMutation struct {
 	typ           string
 	id            *ident.UUID
 	user_id       *ident.UUID
+	name          *string
 	key_hash      *string
 	key_prefix    *string
 	status        *string
@@ -8176,6 +8177,42 @@ func (m *UserSyncKeyMutation) OldUserID(ctx context.Context) (v ident.UUID, err 
 // ResetUserID resets all changes to the "user_id" field.
 func (m *UserSyncKeyMutation) ResetUserID() {
 	m.user_id = nil
+}
+
+// SetName sets the "name" field.
+func (m *UserSyncKeyMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *UserSyncKeyMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the UserSyncKey entity.
+// If the UserSyncKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSyncKeyMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *UserSyncKeyMutation) ResetName() {
+	m.name = nil
 }
 
 // SetKeyHash sets the "key_hash" field.
@@ -8503,9 +8540,12 @@ func (m *UserSyncKeyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserSyncKeyMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	if m.user_id != nil {
 		fields = append(fields, usersynckey.FieldUserID)
+	}
+	if m.name != nil {
+		fields = append(fields, usersynckey.FieldName)
 	}
 	if m.key_hash != nil {
 		fields = append(fields, usersynckey.FieldKeyHash)
@@ -8538,6 +8578,8 @@ func (m *UserSyncKeyMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case usersynckey.FieldUserID:
 		return m.UserID()
+	case usersynckey.FieldName:
+		return m.Name()
 	case usersynckey.FieldKeyHash:
 		return m.KeyHash()
 	case usersynckey.FieldKeyPrefix:
@@ -8563,6 +8605,8 @@ func (m *UserSyncKeyMutation) OldField(ctx context.Context, name string) (ent.Va
 	switch name {
 	case usersynckey.FieldUserID:
 		return m.OldUserID(ctx)
+	case usersynckey.FieldName:
+		return m.OldName(ctx)
 	case usersynckey.FieldKeyHash:
 		return m.OldKeyHash(ctx)
 	case usersynckey.FieldKeyPrefix:
@@ -8592,6 +8636,13 @@ func (m *UserSyncKeyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUserID(v)
+		return nil
+	case usersynckey.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
 		return nil
 	case usersynckey.FieldKeyHash:
 		v, ok := value.(string)
@@ -8714,6 +8765,9 @@ func (m *UserSyncKeyMutation) ResetField(name string) error {
 	switch name {
 	case usersynckey.FieldUserID:
 		m.ResetUserID()
+		return nil
+	case usersynckey.FieldName:
+		m.ResetName()
 		return nil
 	case usersynckey.FieldKeyHash:
 		m.ResetKeyHash()

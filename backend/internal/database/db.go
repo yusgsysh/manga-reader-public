@@ -99,6 +99,15 @@ func initClient(conn *sql.DB, dialectName string) (*DB, error) {
 
 	migrateCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+	// The instance-wide key system was removed in favour of user sync keys.
+	// Drop its retired tables so old credential hashes do not linger; this is
+	// idempotent on both backends and runs before the structural migration.
+	for _, table := range []string{"node_api_key", "node"} {
+		if _, err := conn.ExecContext(migrateCtx, "DROP TABLE IF EXISTS "+table); err != nil {
+			client.Close()
+			return nil, fmt.Errorf("drop retired table %s: %w", table, err)
+		}
+	}
 	if err := client.Schema.Create(migrateCtx,
 		migrate.WithDropIndex(true),
 		migrate.WithDropColumn(true),
