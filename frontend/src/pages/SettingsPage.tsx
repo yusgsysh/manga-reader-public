@@ -640,7 +640,7 @@ function SyncSection() {
       ]) {
         void queryClient.invalidateQueries({ queryKey });
       }
-      toast.success("已开始重新同步");
+      toast.success("已开始全量同步");
     },
     onError: (error) => {
       toast.error("全量同步失败", error);
@@ -776,7 +776,7 @@ function SyncSection() {
               ) : (
                 <ArrowsClockwise className="mr-1 size-4" weight="bold" />
               )}
-              重新全量同步
+              全量同步
             </Button>
           </div>
         </div>
@@ -785,7 +785,7 @@ function SyncSection() {
       <Dialog.Root open={resyncOpen} onOpenChange={setResyncOpen}>
         <Dialog className="w-[min(92vw,26rem)] p-6">
           <Dialog.Title className="text-base font-semibold">
-            重新全量同步？
+            开始全量同步？
           </Dialog.Title>
           <Dialog.Description className="mt-1 text-sm text-kumo-subtle">
             将重新交换两端完整数据，按更新时间合并。
@@ -799,7 +799,7 @@ function SyncSection() {
               {resyncMutation.isPending && (
                 <CircleNotch className="mr-1 size-4 animate-spin" />
               )}
-              重新同步
+              开始同步
             </Button>
           </div>
         </Dialog>
