@@ -89,7 +89,7 @@ jobs:
       # from the lockfile). Mirrors the cache mount in the Dockerfile, so a
       # lockfile-unchanged install is mostly local I/O.
       - name: Cache Bun downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('frontend/bun.lock') }}

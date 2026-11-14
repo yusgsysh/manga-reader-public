@@ -70,7 +70,7 @@ RUN --mount=type=cache,id=manga-go-build,target=/root/.cache/go-build \
     && CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/reset-admin ./cmd/reset-admin
 
 # ---- Runtime stage ----
-FROM alpine:3.22
+FROM alpine:latest
 
 # CA certificates for HTTPS requests to ExHentai, tzdata for time handling
 RUN apk add --no-cache ca-certificates tzdata \
