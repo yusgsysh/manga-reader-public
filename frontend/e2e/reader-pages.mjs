@@ -450,6 +450,7 @@ try {
     const page = await browser.newPage();
     await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" });
     await page.waitForSelector("text=调试工具", { timeout: 30000 });
+    await page.getByRole("button", { name: "调试工具" }).click();
     await page.waitForSelector("text=模拟 ExHentai 不可用", { timeout: 30000 });
     const hint = await page.getByText("调试接口未开启").count();
     check("shows the toggle when dev tools are enabled", hint === 0, `${hint} hint`);
@@ -470,6 +471,8 @@ try {
       route.fulfill({ status: 404, contentType: "application/json", body: '{"error":"not found"}' }),
     );
     await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("text=调试工具", { timeout: 30000 });
+    await page.getByRole("button", { name: "调试工具" }).click();
     await page.waitForSelector("text=调试接口未开启", { timeout: 30000 });
     const toggle = await page.getByText("模拟 ExHentai 不可用").count();
     check("shows a not-enabled hint when dev tools are off", toggle === 0, `${toggle} toggle`);
