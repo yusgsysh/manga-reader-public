@@ -20,6 +20,7 @@ import (
 	"manga-reader/internal/ent/tagsyncbaseline"
 	"manga-reader/internal/ent/user"
 	"manga-reader/internal/ent/usersetting"
+	"manga-reader/internal/ent/usersynckey"
 	"manga-reader/internal/ident"
 	"manga-reader/internal/model"
 	"sync"
@@ -51,6 +52,7 @@ const (
 	TypeTagSyncBaseline = "TagSyncBaseline"
 	TypeUser            = "User"
 	TypeUserSetting     = "UserSetting"
+	TypeUserSyncKey     = "UserSyncKey"
 )
 
 // AppSettingMutation represents an operation that mutates the AppSetting nodes in the graph.
@@ -9448,4 +9450,774 @@ func (m *UserSettingMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *UserSettingMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown UserSetting edge %s", name)
+}
+
+// UserSyncKeyMutation represents an operation that mutates the UserSyncKey nodes in the graph.
+type UserSyncKeyMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *ident.UUID
+	user_id       *ident.UUID
+	key_hash      *string
+	key_prefix    *string
+	status        *string
+	expires_at    *time.Time
+	last_used_at  *time.Time
+	created_at    *time.Time
+	revoked_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*UserSyncKey, error)
+	predicates    []predicate.UserSyncKey
+}
+
+var _ ent.Mutation = (*UserSyncKeyMutation)(nil)
+
+// usersynckeyOption allows management of the mutation configuration using functional options.
+type usersynckeyOption func(*UserSyncKeyMutation)
+
+// newUserSyncKeyMutation creates new mutation for the UserSyncKey entity.
+func newUserSyncKeyMutation(c config, op Op, opts ...usersynckeyOption) *UserSyncKeyMutation {
+	m := &UserSyncKeyMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeUserSyncKey,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withUserSyncKeyID sets the ID field of the mutation.
+func withUserSyncKeyID(id ident.UUID) usersynckeyOption {
+	return func(m *UserSyncKeyMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *UserSyncKey
+		)
+		m.oldValue = func(ctx context.Context) (*UserSyncKey, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().UserSyncKey.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withUserSyncKey sets the old UserSyncKey of the mutation.
+func withUserSyncKey(node *UserSyncKey) usersynckeyOption {
+	return func(m *UserSyncKeyMutation) {
+		m.oldValue = func(context.Context) (*UserSyncKey, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m UserSyncKeyMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m UserSyncKeyMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of UserSyncKey entities.
+func (m *UserSyncKeyMutation) SetID(id ident.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *UserSyncKeyMutation) ID() (id ident.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *UserSyncKeyMutation) IDs(ctx context.Context) ([]ident.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []ident.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().UserSyncKey.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetUserID sets the "user_id" field.
+func (m *UserSyncKeyMutation) SetUserID(i ident.UUID) {
+	m.user_id = &i
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *UserSyncKeyMutation) UserID() (r ident.UUID, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the UserSyncKey entity.
+// If the UserSyncKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSyncKeyMutation) OldUserID(ctx context.Context) (v ident.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *UserSyncKeyMutation) ResetUserID() {
+	m.user_id = nil
+}
+
+// SetKeyHash sets the "key_hash" field.
+func (m *UserSyncKeyMutation) SetKeyHash(s string) {
+	m.key_hash = &s
+}
+
+// KeyHash returns the value of the "key_hash" field in the mutation.
+func (m *UserSyncKeyMutation) KeyHash() (r string, exists bool) {
+	v := m.key_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKeyHash returns the old "key_hash" field's value of the UserSyncKey entity.
+// If the UserSyncKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSyncKeyMutation) OldKeyHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKeyHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKeyHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKeyHash: %w", err)
+	}
+	return oldValue.KeyHash, nil
+}
+
+// ResetKeyHash resets all changes to the "key_hash" field.
+func (m *UserSyncKeyMutation) ResetKeyHash() {
+	m.key_hash = nil
+}
+
+// SetKeyPrefix sets the "key_prefix" field.
+func (m *UserSyncKeyMutation) SetKeyPrefix(s string) {
+	m.key_prefix = &s
+}
+
+// KeyPrefix returns the value of the "key_prefix" field in the mutation.
+func (m *UserSyncKeyMutation) KeyPrefix() (r string, exists bool) {
+	v := m.key_prefix
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKeyPrefix returns the old "key_prefix" field's value of the UserSyncKey entity.
+// If the UserSyncKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSyncKeyMutation) OldKeyPrefix(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKeyPrefix is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKeyPrefix requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKeyPrefix: %w", err)
+	}
+	return oldValue.KeyPrefix, nil
+}
+
+// ResetKeyPrefix resets all changes to the "key_prefix" field.
+func (m *UserSyncKeyMutation) ResetKeyPrefix() {
+	m.key_prefix = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *UserSyncKeyMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *UserSyncKeyMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the UserSyncKey entity.
+// If the UserSyncKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSyncKeyMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *UserSyncKeyMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (m *UserSyncKeyMutation) SetExpiresAt(t time.Time) {
+	m.expires_at = &t
+}
+
+// ExpiresAt returns the value of the "expires_at" field in the mutation.
+func (m *UserSyncKeyMutation) ExpiresAt() (r time.Time, exists bool) {
+	v := m.expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpiresAt returns the old "expires_at" field's value of the UserSyncKey entity.
+// If the UserSyncKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSyncKeyMutation) OldExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpiresAt: %w", err)
+	}
+	return oldValue.ExpiresAt, nil
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (m *UserSyncKeyMutation) ClearExpiresAt() {
+	m.expires_at = nil
+	m.clearedFields[usersynckey.FieldExpiresAt] = struct{}{}
+}
+
+// ExpiresAtCleared returns if the "expires_at" field was cleared in this mutation.
+func (m *UserSyncKeyMutation) ExpiresAtCleared() bool {
+	_, ok := m.clearedFields[usersynckey.FieldExpiresAt]
+	return ok
+}
+
+// ResetExpiresAt resets all changes to the "expires_at" field.
+func (m *UserSyncKeyMutation) ResetExpiresAt() {
+	m.expires_at = nil
+	delete(m.clearedFields, usersynckey.FieldExpiresAt)
+}
+
+// SetLastUsedAt sets the "last_used_at" field.
+func (m *UserSyncKeyMutation) SetLastUsedAt(t time.Time) {
+	m.last_used_at = &t
+}
+
+// LastUsedAt returns the value of the "last_used_at" field in the mutation.
+func (m *UserSyncKeyMutation) LastUsedAt() (r time.Time, exists bool) {
+	v := m.last_used_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastUsedAt returns the old "last_used_at" field's value of the UserSyncKey entity.
+// If the UserSyncKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSyncKeyMutation) OldLastUsedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastUsedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastUsedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastUsedAt: %w", err)
+	}
+	return oldValue.LastUsedAt, nil
+}
+
+// ClearLastUsedAt clears the value of the "last_used_at" field.
+func (m *UserSyncKeyMutation) ClearLastUsedAt() {
+	m.last_used_at = nil
+	m.clearedFields[usersynckey.FieldLastUsedAt] = struct{}{}
+}
+
+// LastUsedAtCleared returns if the "last_used_at" field was cleared in this mutation.
+func (m *UserSyncKeyMutation) LastUsedAtCleared() bool {
+	_, ok := m.clearedFields[usersynckey.FieldLastUsedAt]
+	return ok
+}
+
+// ResetLastUsedAt resets all changes to the "last_used_at" field.
+func (m *UserSyncKeyMutation) ResetLastUsedAt() {
+	m.last_used_at = nil
+	delete(m.clearedFields, usersynckey.FieldLastUsedAt)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *UserSyncKeyMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *UserSyncKeyMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the UserSyncKey entity.
+// If the UserSyncKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSyncKeyMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *UserSyncKeyMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetRevokedAt sets the "revoked_at" field.
+func (m *UserSyncKeyMutation) SetRevokedAt(t time.Time) {
+	m.revoked_at = &t
+}
+
+// RevokedAt returns the value of the "revoked_at" field in the mutation.
+func (m *UserSyncKeyMutation) RevokedAt() (r time.Time, exists bool) {
+	v := m.revoked_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRevokedAt returns the old "revoked_at" field's value of the UserSyncKey entity.
+// If the UserSyncKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSyncKeyMutation) OldRevokedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRevokedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRevokedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRevokedAt: %w", err)
+	}
+	return oldValue.RevokedAt, nil
+}
+
+// ClearRevokedAt clears the value of the "revoked_at" field.
+func (m *UserSyncKeyMutation) ClearRevokedAt() {
+	m.revoked_at = nil
+	m.clearedFields[usersynckey.FieldRevokedAt] = struct{}{}
+}
+
+// RevokedAtCleared returns if the "revoked_at" field was cleared in this mutation.
+func (m *UserSyncKeyMutation) RevokedAtCleared() bool {
+	_, ok := m.clearedFields[usersynckey.FieldRevokedAt]
+	return ok
+}
+
+// ResetRevokedAt resets all changes to the "revoked_at" field.
+func (m *UserSyncKeyMutation) ResetRevokedAt() {
+	m.revoked_at = nil
+	delete(m.clearedFields, usersynckey.FieldRevokedAt)
+}
+
+// Where appends a list predicates to the UserSyncKeyMutation builder.
+func (m *UserSyncKeyMutation) Where(ps ...predicate.UserSyncKey) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the UserSyncKeyMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *UserSyncKeyMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.UserSyncKey, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *UserSyncKeyMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *UserSyncKeyMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (UserSyncKey).
+func (m *UserSyncKeyMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *UserSyncKeyMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.user_id != nil {
+		fields = append(fields, usersynckey.FieldUserID)
+	}
+	if m.key_hash != nil {
+		fields = append(fields, usersynckey.FieldKeyHash)
+	}
+	if m.key_prefix != nil {
+		fields = append(fields, usersynckey.FieldKeyPrefix)
+	}
+	if m.status != nil {
+		fields = append(fields, usersynckey.FieldStatus)
+	}
+	if m.expires_at != nil {
+		fields = append(fields, usersynckey.FieldExpiresAt)
+	}
+	if m.last_used_at != nil {
+		fields = append(fields, usersynckey.FieldLastUsedAt)
+	}
+	if m.created_at != nil {
+		fields = append(fields, usersynckey.FieldCreatedAt)
+	}
+	if m.revoked_at != nil {
+		fields = append(fields, usersynckey.FieldRevokedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *UserSyncKeyMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case usersynckey.FieldUserID:
+		return m.UserID()
+	case usersynckey.FieldKeyHash:
+		return m.KeyHash()
+	case usersynckey.FieldKeyPrefix:
+		return m.KeyPrefix()
+	case usersynckey.FieldStatus:
+		return m.Status()
+	case usersynckey.FieldExpiresAt:
+		return m.ExpiresAt()
+	case usersynckey.FieldLastUsedAt:
+		return m.LastUsedAt()
+	case usersynckey.FieldCreatedAt:
+		return m.CreatedAt()
+	case usersynckey.FieldRevokedAt:
+		return m.RevokedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *UserSyncKeyMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case usersynckey.FieldUserID:
+		return m.OldUserID(ctx)
+	case usersynckey.FieldKeyHash:
+		return m.OldKeyHash(ctx)
+	case usersynckey.FieldKeyPrefix:
+		return m.OldKeyPrefix(ctx)
+	case usersynckey.FieldStatus:
+		return m.OldStatus(ctx)
+	case usersynckey.FieldExpiresAt:
+		return m.OldExpiresAt(ctx)
+	case usersynckey.FieldLastUsedAt:
+		return m.OldLastUsedAt(ctx)
+	case usersynckey.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case usersynckey.FieldRevokedAt:
+		return m.OldRevokedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown UserSyncKey field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *UserSyncKeyMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case usersynckey.FieldUserID:
+		v, ok := value.(ident.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case usersynckey.FieldKeyHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKeyHash(v)
+		return nil
+	case usersynckey.FieldKeyPrefix:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKeyPrefix(v)
+		return nil
+	case usersynckey.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case usersynckey.FieldExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpiresAt(v)
+		return nil
+	case usersynckey.FieldLastUsedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastUsedAt(v)
+		return nil
+	case usersynckey.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case usersynckey.FieldRevokedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRevokedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown UserSyncKey field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *UserSyncKeyMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *UserSyncKeyMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *UserSyncKeyMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown UserSyncKey numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *UserSyncKeyMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(usersynckey.FieldExpiresAt) {
+		fields = append(fields, usersynckey.FieldExpiresAt)
+	}
+	if m.FieldCleared(usersynckey.FieldLastUsedAt) {
+		fields = append(fields, usersynckey.FieldLastUsedAt)
+	}
+	if m.FieldCleared(usersynckey.FieldRevokedAt) {
+		fields = append(fields, usersynckey.FieldRevokedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *UserSyncKeyMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *UserSyncKeyMutation) ClearField(name string) error {
+	switch name {
+	case usersynckey.FieldExpiresAt:
+		m.ClearExpiresAt()
+		return nil
+	case usersynckey.FieldLastUsedAt:
+		m.ClearLastUsedAt()
+		return nil
+	case usersynckey.FieldRevokedAt:
+		m.ClearRevokedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown UserSyncKey nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *UserSyncKeyMutation) ResetField(name string) error {
+	switch name {
+	case usersynckey.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case usersynckey.FieldKeyHash:
+		m.ResetKeyHash()
+		return nil
+	case usersynckey.FieldKeyPrefix:
+		m.ResetKeyPrefix()
+		return nil
+	case usersynckey.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case usersynckey.FieldExpiresAt:
+		m.ResetExpiresAt()
+		return nil
+	case usersynckey.FieldLastUsedAt:
+		m.ResetLastUsedAt()
+		return nil
+	case usersynckey.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case usersynckey.FieldRevokedAt:
+		m.ResetRevokedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown UserSyncKey field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *UserSyncKeyMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *UserSyncKeyMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *UserSyncKeyMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *UserSyncKeyMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *UserSyncKeyMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *UserSyncKeyMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *UserSyncKeyMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown UserSyncKey unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *UserSyncKeyMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown UserSyncKey edge %s", name)
 }

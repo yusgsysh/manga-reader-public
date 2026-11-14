@@ -16,8 +16,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchUpstreamDown, setUpstreamDown } from "../api/dev";
 import {
   SYNC_KEY_MASK,
+  createUserSyncKey,
   fetchSyncConfig,
   fetchSyncStatus,
+  fetchUserSyncKeys,
+  revokeUserSyncKey,
   saveSyncConfig,
   startFullSync,
   type SyncConfig,
@@ -648,6 +651,36 @@ function SyncSection() {
   });
 
   const status = statusQuery.data;
+  const hostEnabled = status?.host_enabled === true;
+  const keysQuery = useQuery({
+    queryKey: ["sync-keys"],
+    queryFn: fetchUserSyncKeys,
+    enabled: hostEnabled,
+    retry: false,
+    staleTime: 0,
+  });
+  const [plaintextKey, setPlaintextKey] = useState("");
+  const createKeyMutation = useMutation({
+    mutationFn: createUserSyncKey,
+    onSuccess: (result) => {
+      setPlaintextKey(result.key);
+      void queryClient.invalidateQueries({ queryKey: ["sync-keys"] });
+      toast.success("同步 Key 已创建");
+    },
+    onError: (error) => {
+      toast.error("创建同步 Key 失败", error);
+    },
+  });
+  const revokeKeyMutation = useMutation({
+    mutationFn: revokeUserSyncKey,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["sync-keys"] });
+      toast.success("同步 Key 已撤销");
+    },
+    onError: (error) => {
+      toast.error("撤销同步 Key 失败", error);
+    },
+  });
 
   return (
     <Section title="数据同步">
@@ -720,9 +753,14 @@ function SyncSection() {
                   保存
                 </Button>
                 <p className="text-xs text-kumo-subtle">
-                  双向同步阅读进度与书架；两端需使用相同用户名，密钥见下方「API Key」。
+                  双向同步阅读进度与书架；Key 在服务端「数据同步」页创建后填入。
                 </p>
               </div>
+              {config?.username && (
+                <p className="text-xs text-kumo-subtle">
+                  同步账号：{config.username}
+                </p>
+              )}
             </>
           )}
         </div>
@@ -780,6 +818,78 @@ function SyncSection() {
             </Button>
           </div>
         </div>
+
+        {hostEnabled && (
+          <div className="card-surface space-y-3 p-4 text-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-medium">服务端同步 Key</div>
+                <p className="mt-0.5 text-xs text-kumo-subtle">
+                  为当前账号创建，供另一端填写。
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => createKeyMutation.mutate()}
+                disabled={createKeyMutation.isPending}
+              >
+                {createKeyMutation.isPending && (
+                  <CircleNotch className="mr-1 size-4 animate-spin" />
+                )}
+                创建 Key
+              </Button>
+            </div>
+
+            {plaintextKey && (
+              <div className="rounded-xl border border-kumo-success/30 bg-kumo-success/10 p-3">
+                <div className="text-xs font-medium text-kumo-success">
+                  完整 Key（只显示一次）
+                </div>
+                <code className="mt-2 block break-all rounded-lg bg-kumo-base p-2 text-xs">
+                  {plaintextKey}
+                </code>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="mt-2"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(plaintextKey);
+                    toast.info("已复制到剪贴板");
+                  }}
+                >
+                  复制
+                </Button>
+              </div>
+            )}
+
+            {(keysQuery.data?.keys.length ?? 0) > 0 && (
+              <ul className="space-y-1.5">
+                {keysQuery.data!.keys.map((key) => (
+                  <li
+                    key={key.id}
+                    className="flex items-center justify-between gap-3 text-xs"
+                  >
+                    <span className="font-mono">{key.key_prefix}…</span>
+                    <span className="text-kumo-subtle">
+                      {key.status === "active" ? "有效" : "已撤销"}
+                    </span>
+                    {key.status === "active" && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => revokeKeyMutation.mutate(key.id)}
+                        disabled={revokeKeyMutation.isPending}
+                      >
+                        撤销
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
 
       <Dialog.Root open={resyncOpen} onOpenChange={setResyncOpen}>

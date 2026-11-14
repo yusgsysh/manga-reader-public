@@ -647,7 +647,7 @@ func TestEngineSnapshotWatermark(t *testing.T) {
 		t.Fatalf("record: %v", err)
 	}
 
-	changes, watermark, err := engine.buildPushChanges(t.Context(), EngineState{Bootstrapped: false})
+	changes, watermark, err := engine.buildPushChanges(t.Context(), ident.Nil(), EngineState{Bootstrapped: false})
 	if err != nil {
 		t.Fatalf("bootstrap build: %v", err)
 	}
@@ -658,7 +658,7 @@ func TestEngineSnapshotWatermark(t *testing.T) {
 		t.Fatalf("watermark = %d, want 1 (outbox entries covered by the snapshot)", watermark)
 	}
 
-	changes, watermark, err = engine.buildPushChanges(t.Context(), EngineState{Bootstrapped: true, LastPushedID: 1})
+	changes, watermark, err = engine.buildPushChanges(t.Context(), ident.Nil(), EngineState{Bootstrapped: true, LastPushedID: 1})
 	if err != nil {
 		t.Fatalf("delta build: %v", err)
 	}

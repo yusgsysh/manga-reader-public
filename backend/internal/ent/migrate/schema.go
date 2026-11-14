@@ -309,6 +309,36 @@ var (
 		Columns:    UserSettingColumns,
 		PrimaryKey: []*schema.Column{UserSettingColumns[0]},
 	}
+	// UserSyncKeyColumns holds the columns for the "user_sync_key" table.
+	UserSyncKeyColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
+		{Name: "user_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
+		{Name: "key_hash", Type: field.TypeString, Unique: true},
+		{Name: "key_prefix", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString, Default: "active"},
+		{Name: "expires_at", Type: field.TypeTime, Nullable: true},
+		{Name: "last_used_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "revoked_at", Type: field.TypeTime, Nullable: true},
+	}
+	// UserSyncKeyTable holds the schema information for the "user_sync_key" table.
+	UserSyncKeyTable = &schema.Table{
+		Name:       "user_sync_key",
+		Columns:    UserSyncKeyColumns,
+		PrimaryKey: []*schema.Column{UserSyncKeyColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "usersynckey_user_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{UserSyncKeyColumns[1], UserSyncKeyColumns[4]},
+			},
+			{
+				Name:    "usersynckey_key_prefix",
+				Unique:  false,
+				Columns: []*schema.Column{UserSyncKeyColumns[3]},
+			},
+		},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		AppSettingTable,
@@ -324,6 +354,7 @@ var (
 		TagSyncBaselineTable,
 		UsersTable,
 		UserSettingTable,
+		UserSyncKeyTable,
 	}
 )
 
@@ -366,5 +397,8 @@ func init() {
 	}
 	UserSettingTable.Annotation = &entsql.Annotation{
 		Table: "user_setting",
+	}
+	UserSyncKeyTable.Annotation = &entsql.Annotation{
+		Table: "user_sync_key",
 	}
 }

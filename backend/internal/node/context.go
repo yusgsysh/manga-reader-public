@@ -14,14 +14,20 @@ const (
 
 type nodeContextKey string
 
-// Identity is the trusted node behind an authenticated sync request. Nothing
-// in it comes from request parameters; NodeID/Scopes are resolved from the API
-// key row and its node.
+// Identity is the trusted peer behind an authenticated sync request. Node keys
+// are instance-wide (UserID is nil); user sync keys carry the account they are
+// allowed to replicate, so the host attributes every private row to that user.
 type Identity struct {
 	NodeID ident.UUID
+	UserID ident.UUID
 	Name   string
 	Scopes []string
 	KeyID  ident.UUID
+}
+
+// UserScoped reports whether the credential is bound to a single account.
+func (i Identity) UserScoped() bool {
+	return i.UserID != ident.Nil()
 }
 
 // WithGin attaches the identity to the request.

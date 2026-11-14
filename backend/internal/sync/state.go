@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"manga-reader/internal/ident"
+
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/syncstate"
 )
@@ -17,6 +19,7 @@ const (
 	keyEnabled      = "client.enabled"
 	keyServerURL    = "client.server_url"
 	keyToken        = "client.token"
+	keyUserID       = "client.user_id"
 	keyCursor       = "state.cursor"
 	keyLastPushedID = "state.last_pushed_id"
 	keyBootstrapped = "state.bootstrapped"
@@ -30,6 +33,11 @@ type ClientConfig struct {
 	Enabled   bool   `json:"enabled"`
 	ServerURL string `json:"server_url"`
 	Token     string `json:"token"`
+	// UserID is the local account this configuration syncs. Private rows are
+	// filtered to it, and pulled rows are written under it, so the peer's
+	// credential only has to name *its* account. Nil means the legacy
+	// instance-wide exchange (node API key).
+	UserID ident.UUID `json:"user_id"`
 }
 
 // Active reports whether the engine has enough configuration to run.
@@ -102,11 +110,21 @@ func (s *Service) LoadClientConfig(ctx context.Context) (ClientConfig, error) {
 	if err != nil {
 		return cfg, err
 	}
+	userRaw, _, err := s.getState(ctx, keyUserID)
+	if err != nil {
+		return cfg, err
+	}
 	enabled, _ := strconv.ParseBool(enabledRaw)
 	cfg.Enabled = enabled
 	cfg.ServerURL = strings.TrimRight(strings.TrimSpace(urlRaw), "/")
 	cfg.Token = strings.TrimSpace(tokenRaw)
+	if userRaw != "" {
+		if uid, parseErr := ident.Parse(userRaw); parseErr == nil {
+			cfg.UserID = uid
+		}
+	}
 	s.clientActive.Store(cfg.Active())
+	s.clientUser.Store(cfg.UserID)
 	return cfg, nil
 }
 
@@ -116,6 +134,9 @@ type ConfigUpdate struct {
 	Enabled   *bool   `json:"enabled"`
 	ServerURL *string `json:"server_url"`
 	Token     *string `json:"token"`
+	// UserID is set by the HTTP handler from the verified JWT, never from the
+	// request body, so a client cannot claim to sync another account.
+	UserID *ident.UUID `json:"-"`
 }
 
 // SaveClientConfig applies a partial update and reports the resulting config.
@@ -126,6 +147,7 @@ func (s *Service) SaveClientConfig(ctx context.Context, in ConfigUpdate) (Client
 	}
 
 	peerChanged := false
+	userChanged := false
 	if in.Enabled != nil {
 		current.Enabled = *in.Enabled
 	}
@@ -140,6 +162,13 @@ func (s *Service) SaveClientConfig(ctx context.Context, in ConfigUpdate) (Client
 			peerChanged = true
 			current.ServerURL = u
 		}
+	}
+	if in.UserID != nil && *in.UserID != ident.Nil() && *in.UserID != current.UserID {
+		// The previous account's cursor/watermark do not describe this
+		// account's stream, and its pending entries must not be replayed as
+		// the new owner.
+		userChanged = true
+		current.UserID = *in.UserID
 	}
 	if in.Token != nil {
 		t := strings.TrimSpace(*in.Token)
@@ -160,12 +189,27 @@ func (s *Service) SaveClientConfig(ctx context.Context, in ConfigUpdate) (Client
 	if err := s.setState(ctx, keyToken, current.Token); err != nil {
 		return current, err
 	}
-	if peerChanged {
+	userRaw := ""
+	if current.UserID != ident.Nil() {
+		userRaw = current.UserID.String()
+	}
+	if err := s.setState(ctx, keyUserID, userRaw); err != nil {
+		return current, err
+	}
+	if peerChanged || userChanged {
 		if err := s.resetEngineState(ctx); err != nil {
 			return current, err
 		}
 	}
+	if userChanged && !s.hostEnabled {
+		// A pure client only ever served the previous account, so its pending
+		// entries have no other consumer. A host keeps its outbox for peers.
+		if err := s.clearOutbox(ctx); err != nil {
+			return current, err
+		}
+	}
 	s.clientActive.Store(current.Active())
+	s.clientUser.Store(current.UserID)
 	s.engine.Reload()
 	return current, nil
 }
@@ -178,6 +222,16 @@ func (s *Service) resetEngineState(ctx context.Context) error {
 		if err := s.setState(ctx, key, ""); err != nil {
 			return fmt.Errorf("reset sync state %q: %w", key, err)
 		}
+	}
+	return nil
+}
+
+// clearOutbox drops queued changes. Used when the configured account changes:
+// its entries belong to the previous owner and a fresh bootstrap re-snapshots
+// every live row anyway.
+func (s *Service) clearOutbox(ctx context.Context) error {
+	if _, err := s.client.SyncChange.Delete().Exec(ctx); err != nil {
+		return fmt.Errorf("clear sync outbox: %w", err)
 	}
 	return nil
 }

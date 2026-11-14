@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from "./client";
+import { apiDelete, apiGet, apiPost, apiPostJson, apiPut } from "./client";
 
 /** Returned in place of a stored node API key; sending it back keeps the secret. */
 export const SYNC_KEY_MASK = "********";
@@ -8,6 +8,8 @@ export interface SyncConfig {
   server_url: string;
   /** Masked (********) when an API key is stored, empty otherwise. */
   token: string;
+  /** Local account this configuration syncs (set when the config is saved). */
+  username?: string;
 }
 
 export interface SyncConfigUpdate {
@@ -27,6 +29,24 @@ export interface SyncStatus {
   cursor: number;
   last_pushed_id: number;
   pending: number;
+  /** This instance accepts peers, so it can mint user sync keys. */
+  host_enabled: boolean;
+}
+
+export interface UserSyncKey {
+  id: string;
+  key_prefix: string;
+  status: "active" | "revoked";
+  expires_at: string | null;
+  last_used_at: string | null;
+  created_at: string;
+  revoked_at: string | null;
+}
+
+export interface CreatedUserSyncKey {
+  /** Full plaintext key, returned only once. */
+  key: string;
+  api_key: UserSyncKey;
 }
 
 export function fetchSyncConfig(): Promise<SyncConfig> {
@@ -52,4 +72,17 @@ export interface SyncResyncResult {
  */
 export function startFullSync(): Promise<SyncResyncResult> {
   return apiPost<SyncResyncResult>("/api/sync/resync");
+}
+
+/** Keys bound to the current account, for peers that sync only this user. */
+export function fetchUserSyncKeys(): Promise<{ keys: UserSyncKey[] }> {
+  return apiGet<{ keys: UserSyncKey[] }>("/api/sync/keys");
+}
+
+export function createUserSyncKey(): Promise<CreatedUserSyncKey> {
+  return apiPostJson<CreatedUserSyncKey>("/api/sync/keys");
+}
+
+export function revokeUserSyncKey(id: string): Promise<UserSyncKey> {
+  return apiDelete<UserSyncKey>(`/api/sync/keys/${id}`);
 }

@@ -13,8 +13,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"manga-reader/internal/auth"
+	"manga-reader/internal/config"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/syncchange"
+	"manga-reader/internal/ent/usersynckey"
+	"manga-reader/internal/ident"
 	"manga-reader/internal/metrics"
 	nodeauth "manga-reader/internal/node"
 	"manga-reader/internal/requestid"
@@ -42,6 +46,10 @@ type Service struct {
 	// reset could land between a cycle's state load and its save, and the
 	// cycle's stale state would silently overwrite the reset.
 	pushMu stdSync.Mutex
+	// clientUser is the local account this instance syncs (Nil = the legacy
+	// instance-wide exchange). On a pure client, writes for other accounts are
+	// not queued so a user-scoped peer never receives them.
+	clientUser atomic.Value
 	// disableInactiveOutbox makes record() a no-op when no peer is
 	// configured. Production opts in; unit tests that exercise the outbox
 	// mechanism directly leave it off.
@@ -56,6 +64,15 @@ func (s *Service) recordEnabled() bool {
 		return true
 	}
 	return !s.disableInactiveOutbox
+}
+
+// syncedUser returns the local account bound to the client configuration, or
+// the nil UUID for the legacy instance-wide exchange.
+func (s *Service) syncedUser() ident.UUID {
+	if v := s.clientUser.Load(); v != nil {
+		return v.(ident.UUID)
+	}
+	return ident.Nil()
 }
 
 // Options configures a Service.
@@ -101,6 +118,9 @@ func (s *Service) RegisterRoutes(r gin.IRouter) {
 	r.PUT("/api/sync/config", s.handleConfigPut)
 	r.GET("/api/sync/status", s.handleStatus)
 	r.POST("/api/sync/resync", s.handleResync)
+	r.GET("/api/sync/keys", s.handleUserKeyList)
+	r.POST("/api/sync/keys", s.handleUserKeyCreate)
+	r.DELETE("/api/sync/keys/:id", s.handleUserKeyRevoke)
 	if s.hostEnabled && s.nodeAuth != nil {
 		r.POST("/api/sync/push", s.nodeAuth(nodeauth.ScopeSyncWrite), s.handlePush)
 		r.GET("/api/sync/events", s.nodeAuth(nodeauth.ScopeSyncEvent), s.handlePeerEvents)
@@ -127,7 +147,14 @@ func (s *Service) handlePush(c *gin.Context) {
 		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "node identity missing"})
 		return
 	}
-	applied, skipped, err := ApplyChanges(ctx, s.client, req.Changes)
+	// A user sync key scopes the whole exchange to its account: incoming
+	// private rows are written under that user and only that user's changes
+	// (plus the shared gallery cache) go back.
+	owner := ident.Nil()
+	if identity.UserScoped() {
+		owner = identity.UserID
+	}
+	applied, skipped, err := ApplyChangesForUser(ctx, s.client, req.Changes, owner)
 	if err != nil {
 		slog.Error("apply sync changes failed", "error", err)
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "apply changes failed"})
@@ -145,9 +172,9 @@ func (s *Service) handlePush(c *gin.Context) {
 		// A bootstrap carries the full live snapshot plus outbox tombstones,
 		// so deletions made before this peer ever synced still propagate
 		// instead of being resurrected by the other side's snapshot.
-		changes, cursor, err = BootstrapChanges(ctx, s.client)
+		changes, cursor, err = BootstrapChangesForUser(ctx, s.client, owner)
 	} else {
-		changes, cursor, err = ReadChangesSince(ctx, s.client, req.Cursor)
+		changes, cursor, err = ReadChangesSinceForUser(ctx, s.client, req.Cursor, owner)
 	}
 	if err != nil {
 		slog.Error("collect sync changes failed", "error", err)
@@ -158,9 +185,10 @@ func (s *Service) handlePush(c *gin.Context) {
 	// Entries at or below the caller's cursor are already held there. Only
 	// prune when the cursor is plausible for this outbox: a cursor above the
 	// outbox max means the host was reset (rewind) or the client is stale, and
-	// pruning then would destroy changes the client has never seen.
+	// pruning then would destroy changes the client has never seen. A
+	// user-scoped exchange only prunes its own entries.
 	if req.Cursor > 0 && req.Cursor <= cursor {
-		if err := pruneOutbox(ctx, s.client, req.Cursor); err != nil {
+		if err := pruneOutboxForUser(ctx, s.client, req.Cursor, owner); err != nil {
 			slog.Warn("prune sync outbox failed", "error", err)
 		}
 	}
@@ -268,6 +296,21 @@ type configResponse struct {
 	Enabled   bool   `json:"enabled"`
 	ServerURL string `json:"server_url"`
 	Token     string `json:"token"`
+	// Username names the local account this configuration syncs. Empty for a
+	// legacy instance-wide config.
+	Username string `json:"username,omitempty"`
+}
+
+// configOwnerName resolves the configured local account for display.
+func (s *Service) configOwnerName(ctx context.Context, cfg ClientConfig) string {
+	if cfg.UserID == ident.Nil() {
+		return ""
+	}
+	u, err := s.client.User.Get(ctx, cfg.UserID)
+	if err != nil {
+		return ""
+	}
+	return u.Username
 }
 
 func (s *Service) handleConfigGet(c *gin.Context) {
@@ -276,7 +319,11 @@ func (s *Service) handleConfigGet(c *gin.Context) {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync config failed"})
 		return
 	}
-	resp := configResponse{Enabled: cfg.Enabled, ServerURL: cfg.ServerURL}
+	resp := configResponse{
+		Enabled:   cfg.Enabled,
+		ServerURL: cfg.ServerURL,
+		Username:  s.configOwnerName(c.Request.Context(), cfg),
+	}
 	if cfg.Token != "" {
 		resp.Token = Mask
 	}
@@ -297,12 +344,22 @@ func (s *Service) handleConfigPut(c *gin.Context) {
 			return
 		}
 	}
+	// Bind the configuration to the account that saved it. The token is a
+	// user sync key for that account on the peer; the local owner is taken
+	// from the verified JWT, never from the request body.
+	if principal, ok := auth.PrincipalFrom(c); ok && principal.ID != ident.Nil() {
+		in.UserID = &principal.ID
+	}
 	cfg, err := s.SaveClientConfig(c.Request.Context(), in)
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "save sync config failed"})
 		return
 	}
-	resp := configResponse{Enabled: cfg.Enabled, ServerURL: cfg.ServerURL}
+	resp := configResponse{
+		Enabled:   cfg.Enabled,
+		ServerURL: cfg.ServerURL,
+		Username:  s.configOwnerName(c.Request.Context(), cfg),
+	}
 	if cfg.Token != "" {
 		resp.Token = Mask
 	}
@@ -323,6 +380,9 @@ type statusResponse struct {
 	Cursor       int        `json:"cursor"`
 	LastPushedID int        `json:"last_pushed_id"`
 	Pending      int        `json:"pending"`
+	// HostEnabled reports that this instance mounts the peer endpoints, so the
+	// settings page can offer to mint a user sync key.
+	HostEnabled bool `json:"host_enabled"`
 }
 
 // handleResync forces a full bidirectional exchange: it clears the replication
@@ -350,6 +410,142 @@ func (s *Service) handleResync(c *gin.Context) {
 	web.JSON(c, http.StatusOK, gin.H{"ok": true})
 }
 
+type userSyncKeyJSON struct {
+	ID         ident.UUID `json:"id"`
+	KeyPrefix  string     `json:"key_prefix"`
+	Status     string     `json:"status"`
+	ExpiresAt  *time.Time `json:"expires_at"`
+	LastUsedAt *time.Time `json:"last_used_at"`
+	CreatedAt  time.Time  `json:"created_at"`
+	RevokedAt  *time.Time `json:"revoked_at"`
+}
+
+func userSyncKeyResponse(k *ent.UserSyncKey) userSyncKeyJSON {
+	return userSyncKeyJSON{
+		ID: k.ID, KeyPrefix: k.KeyPrefix, Status: k.Status,
+		ExpiresAt: k.ExpiresAt, LastUsedAt: k.LastUsedAt,
+		CreatedAt: k.CreatedAt, RevokedAt: k.RevokedAt,
+	}
+}
+
+// currentUserID returns the JWT account, which owns user sync keys.
+func currentUserID(c *gin.Context) (ident.UUID, bool) {
+	principal, ok := auth.PrincipalFrom(c)
+	if !ok || principal.ID == ident.Nil() {
+		return ident.Nil(), false
+	}
+	return principal.ID, true
+}
+
+func (s *Service) requireHost(c *gin.Context) bool {
+	if !s.hostEnabled {
+		web.JSON(c, http.StatusConflict, gin.H{"error": "sync host is not enabled"})
+		return false
+	}
+	return true
+}
+
+// handleUserKeyList lists the current account's sync keys (prefixes only).
+func (s *Service) handleUserKeyList(c *gin.Context) {
+	if !s.requireHost(c) {
+		return
+	}
+	uid, ok := currentUserID(c)
+	if !ok {
+		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	rows, err := s.client.UserSyncKey.Query().
+		Where(usersynckey.UserIDEQ(uid)).
+		Order(ent.Desc(usersynckey.FieldCreatedAt)).
+		All(c.Request.Context())
+	if err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "list sync keys failed"})
+		return
+	}
+	out := make([]userSyncKeyJSON, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, userSyncKeyResponse(row))
+	}
+	web.JSON(c, http.StatusOK, gin.H{"keys": out})
+}
+
+// handleUserKeyCreate mints a key bound to the current account. The plaintext
+// is returned exactly once.
+func (s *Service) handleUserKeyCreate(c *gin.Context) {
+	if !s.requireHost(c) {
+		return
+	}
+	uid, ok := currentUserID(c)
+	if !ok {
+		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	material, err := nodeauth.GenerateKey()
+	if err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "generate sync key failed"})
+		return
+	}
+	row, err := s.client.UserSyncKey.Create().
+		SetUserID(uid).
+		SetKeyHash(material.Hash).
+		SetKeyPrefix(material.Prefix).
+		SetStatus(config.StatusActive).
+		Save(c.Request.Context())
+	if err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create sync key failed"})
+		return
+	}
+	slog.Info("security audit", "action", "sync_key.create",
+		"request_id", requestid.From(c), "actor_user_id", uid, "key_id", row.ID, "result", "ok")
+	web.JSON(c, http.StatusCreated, gin.H{
+		"key":     material.Plaintext,
+		"api_key": userSyncKeyResponse(row),
+	})
+}
+
+// handleUserKeyRevoke revokes one of the current account's keys.
+func (s *Service) handleUserKeyRevoke(c *gin.Context) {
+	if !s.requireHost(c) {
+		return
+	}
+	uid, ok := currentUserID(c)
+	if !ok {
+		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	keyID, err := ident.Parse(c.Param("id"))
+	if err != nil {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid key id"})
+		return
+	}
+	row, err := s.client.UserSyncKey.Query().
+		Where(usersynckey.ID(keyID), usersynckey.UserIDEQ(uid)).
+		Only(c.Request.Context())
+	if err != nil {
+		if ent.IsNotFound(err) {
+			web.JSON(c, http.StatusNotFound, gin.H{"error": "sync key not found"})
+			return
+		}
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync key failed"})
+		return
+	}
+	if row.Status != "revoked" {
+		now := time.Now().UTC()
+		row, err = s.client.UserSyncKey.UpdateOneID(row.ID).
+			SetStatus("revoked").
+			SetRevokedAt(now).
+			Save(c.Request.Context())
+		if err != nil {
+			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "revoke sync key failed"})
+			return
+		}
+	}
+	slog.Info("security audit", "action", "sync_key.revoke",
+		"request_id", requestid.From(c), "actor_user_id", uid, "key_id", row.ID, "result", "ok")
+	web.JSON(c, http.StatusOK, userSyncKeyResponse(row))
+}
+
 func (s *Service) handleStatus(c *gin.Context) {
 	ctx := c.Request.Context()
 	cfg, err := s.LoadClientConfig(ctx)
@@ -364,9 +560,14 @@ func (s *Service) handleStatus(c *gin.Context) {
 	}
 	pending := 0
 	if cfg.Active() {
-		pending, err = s.client.SyncChange.Query().
-			Where(syncchange.IDGT(st.LastPushedID)).
-			Count(ctx)
+		query := s.client.SyncChange.Query().Where(syncchange.IDGT(st.LastPushedID))
+		if cfg.UserID != ident.Nil() {
+			query = query.Where(syncchange.Or(
+				syncchange.UserIDEQ(cfg.UserID),
+				syncchange.UserIDEQ(ident.Nil()),
+			))
+		}
+		pending, err = query.Count(ctx)
 		if err != nil {
 			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "count pending changes failed"})
 			return
@@ -382,6 +583,7 @@ func (s *Service) handleStatus(c *gin.Context) {
 		Cursor:       st.Cursor,
 		LastPushedID: st.LastPushedID,
 		Pending:      pending,
+		HostEnabled:  s.hostEnabled,
 	})
 }
 

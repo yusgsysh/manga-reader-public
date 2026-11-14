@@ -24,7 +24,7 @@ func (s *Service) RecordDelete(ctx context.Context, userID ident.UUID, entity st
 
 // RecordDeletes appends tombstones for a batch of removed records.
 func (s *Service) RecordDeletes(ctx context.Context, userID ident.UUID, entity string, keys []Key) error {
-	if len(keys) == 0 || !s.recordEnabled() {
+	if len(keys) == 0 || !s.recordEnabled() || !s.shouldRecord(userID) {
 		return nil
 	}
 	builders := make([]*ent.SyncChangeCreate, 0, len(keys))
@@ -45,7 +45,7 @@ func (s *Service) RecordDeletes(ctx context.Context, userID ident.UUID, entity s
 }
 
 func (s *Service) record(ctx context.Context, userID ident.UUID, entity, op string, galleryID int64, token string) error {
-	if !s.recordEnabled() {
+	if !s.recordEnabled() || !s.shouldRecord(userID) {
 		return nil
 	}
 	if _, err := s.client.SyncChange.Create().
@@ -60,6 +60,17 @@ func (s *Service) record(ctx context.Context, userID ident.UUID, entity, op stri
 	s.hub.NotifyPeer()
 	s.hub.NotifyLocal()
 	return nil
+}
+
+// shouldRecord reports whether a write belongs to the account this instance
+// syncs. A host always records every user (its outbox feeds every peer); a
+// pure client drops other accounts so a user-scoped key never receives them.
+func (s *Service) shouldRecord(userID ident.UUID) bool {
+	if s.hostEnabled || userID == ident.Nil() {
+		return true
+	}
+	owner := s.syncedUser()
+	return owner == ident.Nil() || userID == owner
 }
 
 // maxOutboxID returns the current instance-wide outbox maximum (0 when empty).

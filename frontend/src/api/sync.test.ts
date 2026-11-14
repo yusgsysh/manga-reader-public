@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   SYNC_KEY_MASK,
+  createUserSyncKey,
   fetchSyncConfig,
   fetchSyncStatus,
+  fetchUserSyncKeys,
+  revokeUserSyncKey,
   saveSyncConfig,
   startFullSync,
 } from "./sync";
-import type { SyncConfig, SyncStatus } from "./sync";
+import type { CreatedUserSyncKey, SyncConfig, SyncStatus, UserSyncKey } from "./sync";
 
 const BASE = "http://localhost:8080";
 
@@ -25,6 +28,7 @@ const sampleStatus: SyncStatus = {
   cursor: 12,
   last_pushed_id: 4,
   pending: 0,
+  host_enabled: false,
 };
 
 const fetchMock = vi.fn();
@@ -76,5 +80,40 @@ describe("sync api", () => {
     expect(fetchMock).toHaveBeenCalledWith(`${BASE}/api/sync/resync`, {
       method: "POST",
     });
+  });
+
+  it("user sync key helpers use /api/sync/keys", async () => {
+    const key: UserSyncKey = {
+      id: "key-1",
+      key_prefix: "mrk_abcdefgh",
+      status: "active",
+      expires_at: null,
+      last_used_at: null,
+      created_at: "2026-01-01T00:00:00Z",
+      revoked_at: null,
+    };
+    const created: CreatedUserSyncKey = { key: "mrk_secret", api_key: key };
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ keys: [key] }));
+    await expect(fetchUserSyncKeys()).resolves.toEqual({ keys: [key] });
+    expect(fetchMock).toHaveBeenLastCalledWith(`${BASE}/api/sync/keys`, undefined);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(created, 201));
+    await expect(createUserSyncKey()).resolves.toEqual(created);
+    expect(fetchMock).toHaveBeenLastCalledWith(`${BASE}/api/sync/keys`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: undefined,
+    });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ...key, status: "revoked" }));
+    await expect(revokeUserSyncKey("key-1")).resolves.toEqual({
+      ...key,
+      status: "revoked",
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `${BASE}/api/sync/keys/key-1`,
+      { method: "DELETE" },
+    );
   });
 });

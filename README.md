@@ -502,16 +502,18 @@ curl -X POST http://localhost:8080/api/reading-progress/cleanup?days=0
 
 多实例双向同步**阅读进度、书架与画廊缓存**（settings 不同步），所有连接由桌面端主动发起（NAT 友好）：
 
-- **服务端**：`MANGA_READER_SYNC_ENABLED=true` 时挂载节点同步端点；节点和 API Key 由管理员在 `/admin/nodes` 创建，API Key 只保存 SHA-256 哈希。
-- **桌面端 / 客户端**：设置页「数据同步」填服务端地址 + 该节点的一次性 API Key 并启用（配置存 `sync_state` 表）。请求使用 `Authorization: Bearer <Node API Key>`，不再使用 Basic Auth 或全局同步令牌。
+- **服务端**：`MANGA_READER_SYNC_ENABLED=true` 时挂载同步端点。
+- **推荐：用户级同步 Key**：服务端在设置页「数据同步」为当前账号创建 Key（`POST /api/sync/keys`，只保存 SHA-256 哈希，明文只显示一次）。桌面端「数据同步」填入服务端地址 + 该 Key 并启用。服务端把收到的私有行全部归属到 Key 的账号，并且只返回该账号的数据（画廊缓存为公共元数据，双方共享），因此**两端不需要相同用户名或相同用户 UUID**。
+- **旧版节点 Key**：管理员仍可在 `/admin/nodes` 创建实例级节点 Key；它交换全实例 outbox，私有行按 `user_id` / `username` 匹配账号，这种模式要求两端用户名一致。
+- **桌面端 / 客户端**：设置页「数据同步」填服务端地址 + Key 并启用（配置存 `sync_state` 表，并绑定保存配置的当前账号）。请求使用 `Authorization: Bearer <Key>`，不再使用 Basic Auth 或全局同步令牌。
 - 双方通过 `POST /api/sync/push` 推送 + 拉取，`GET /api/sync/events` SSE 监听对端新变更（写后 2s 去抖推送，心跳 25s，断线退避 1s→60s，60s 轮询兜底）。节点 API Key 需要 `sync:write`（push）或 `sync:events`（SSE）。
 - 合并规则：按行 LWW（`updated_at` 新者胜），删除用 tombstone；首次连接返回全量快照（同时带上 outbox 中未送达的删除 tombstone，避免首次同步把已删除的行重新复活）；更换 `server_url` 会自动重置同步游标与引导标记，对新对端重新全量（`gallery_cache` 行在 LWW 胜出时按字段合并，空值不覆盖，镜像本地 upsert 语义）。
 - 设置页「数据同步」提供「全量同步」按钮（`POST /api/sync/resync`）：清空同步游标并唤醒引擎，下一次交换重新上传本端全量数据并拉取对端全量数据。用于长时间断连、对端重建或两端数据已经不一致时的手动修复。
-- 节点是受信任的同步对端，交换全实例 outbox/snapshot；每条变更携带 `user_id` 与 `username`，对端先按 `user_id` 匹配本地账号，找不到再按用户名匹配（各实例的账号 UUID 独立生成），因此**两端应使用相同的用户名**。请求里的 `node_id`/`user_id` 不会扩大范围，同步请求带 `request_id` 写入审计日志。
+- 节点（或用户 Key）是受信任的同步对端。节点 Key 交换全实例 outbox/snapshot，每条变更携带 `user_id` 与 `username`，对端先按 `user_id` 匹配本地账号，找不到再按用户名匹配（各实例的账号 UUID 独立生成），因此这种模式要求两端用户名一致；用户级 Key 则直接按 Key 的账号落库。请求里的 `node_id`/`user_id` 不会扩大范围，同步请求带 `request_id` 写入审计日志。
 - 桌面端本地通过 `GET /api/events/changes` SSE 通知前端刷新（该端点使用用户 JWT）。
 
 ```bash
-# 管理员在 /admin/nodes 创建节点与 API Key 后，桌面端配置：
+# 在服务端「数据同步」页为当前账号创建同步 Key 后，桌面端配置：
 curl -X PUT http://localhost:8080/api/sync/config -H 'Content-Type: application/json' \
   -d '{"enabled":true,"server_url":"http://server:8080","token":"mrk_..."}'
 

@@ -22,6 +22,7 @@ import (
 	"manga-reader/internal/ent/syncstate"
 	"manga-reader/internal/ent/user"
 	"manga-reader/internal/ent/usersetting"
+	"manga-reader/internal/ent/usersynckey"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
@@ -59,6 +60,8 @@ type Client struct {
 	User *UserClient
 	// UserSetting is the client for interacting with the UserSetting builders.
 	UserSetting *UserSettingClient
+	// UserSyncKey is the client for interacting with the UserSyncKey builders.
+	UserSyncKey *UserSyncKeyClient
 }
 
 // NewClient creates a new client configured with the given options.
@@ -83,6 +86,7 @@ func (c *Client) init() {
 	c.TagSyncBaseline = NewTagSyncBaselineClient(c.config)
 	c.User = NewUserClient(c.config)
 	c.UserSetting = NewUserSettingClient(c.config)
+	c.UserSyncKey = NewUserSyncKeyClient(c.config)
 }
 
 type (
@@ -188,6 +192,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		TagSyncBaseline: NewTagSyncBaselineClient(cfg),
 		User:            NewUserClient(cfg),
 		UserSetting:     NewUserSettingClient(cfg),
+		UserSyncKey:     NewUserSyncKeyClient(cfg),
 	}, nil
 }
 
@@ -220,6 +225,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		TagSyncBaseline: NewTagSyncBaselineClient(cfg),
 		User:            NewUserClient(cfg),
 		UserSetting:     NewUserSettingClient(cfg),
+		UserSyncKey:     NewUserSyncKeyClient(cfg),
 	}, nil
 }
 
@@ -251,7 +257,7 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.AppSetting, c.Bookshelf, c.GalleryCache, c.Node, c.NodeAPIKey, c.PrefillJob,
 		c.ReadingProgress, c.SyncChange, c.SyncState, c.TagPreference,
-		c.TagSyncBaseline, c.User, c.UserSetting,
+		c.TagSyncBaseline, c.User, c.UserSetting, c.UserSyncKey,
 	} {
 		n.Use(hooks...)
 	}
@@ -263,7 +269,7 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.AppSetting, c.Bookshelf, c.GalleryCache, c.Node, c.NodeAPIKey, c.PrefillJob,
 		c.ReadingProgress, c.SyncChange, c.SyncState, c.TagPreference,
-		c.TagSyncBaseline, c.User, c.UserSetting,
+		c.TagSyncBaseline, c.User, c.UserSetting, c.UserSyncKey,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -298,6 +304,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.User.mutate(ctx, m)
 	case *UserSettingMutation:
 		return c.UserSetting.mutate(ctx, m)
+	case *UserSyncKeyMutation:
+		return c.UserSyncKey.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
 	}
@@ -1939,16 +1947,149 @@ func (c *UserSettingClient) mutate(ctx context.Context, m *UserSettingMutation) 
 	}
 }
 
+// UserSyncKeyClient is a client for the UserSyncKey schema.
+type UserSyncKeyClient struct {
+	config
+}
+
+// NewUserSyncKeyClient returns a client for the UserSyncKey from the given config.
+func NewUserSyncKeyClient(c config) *UserSyncKeyClient {
+	return &UserSyncKeyClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `usersynckey.Hooks(f(g(h())))`.
+func (c *UserSyncKeyClient) Use(hooks ...Hook) {
+	c.hooks.UserSyncKey = append(c.hooks.UserSyncKey, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `usersynckey.Intercept(f(g(h())))`.
+func (c *UserSyncKeyClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UserSyncKey = append(c.inters.UserSyncKey, interceptors...)
+}
+
+// Create returns a builder for creating a UserSyncKey entity.
+func (c *UserSyncKeyClient) Create() *UserSyncKeyCreate {
+	mutation := newUserSyncKeyMutation(c.config, OpCreate)
+	return &UserSyncKeyCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UserSyncKey entities.
+func (c *UserSyncKeyClient) CreateBulk(builders ...*UserSyncKeyCreate) *UserSyncKeyCreateBulk {
+	return &UserSyncKeyCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UserSyncKeyClient) MapCreateBulk(slice any, setFunc func(*UserSyncKeyCreate, int)) *UserSyncKeyCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UserSyncKeyCreateBulk{err: fmt.Errorf("calling to UserSyncKeyClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UserSyncKeyCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UserSyncKeyCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UserSyncKey.
+func (c *UserSyncKeyClient) Update() *UserSyncKeyUpdate {
+	mutation := newUserSyncKeyMutation(c.config, OpUpdate)
+	return &UserSyncKeyUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UserSyncKeyClient) UpdateOne(_m *UserSyncKey) *UserSyncKeyUpdateOne {
+	mutation := newUserSyncKeyMutation(c.config, OpUpdateOne, withUserSyncKey(_m))
+	return &UserSyncKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UserSyncKeyClient) UpdateOneID(id ident.UUID) *UserSyncKeyUpdateOne {
+	mutation := newUserSyncKeyMutation(c.config, OpUpdateOne, withUserSyncKeyID(id))
+	return &UserSyncKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UserSyncKey.
+func (c *UserSyncKeyClient) Delete() *UserSyncKeyDelete {
+	mutation := newUserSyncKeyMutation(c.config, OpDelete)
+	return &UserSyncKeyDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UserSyncKeyClient) DeleteOne(_m *UserSyncKey) *UserSyncKeyDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UserSyncKeyClient) DeleteOneID(id ident.UUID) *UserSyncKeyDeleteOne {
+	builder := c.Delete().Where(usersynckey.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UserSyncKeyDeleteOne{builder}
+}
+
+// Query returns a query builder for UserSyncKey.
+func (c *UserSyncKeyClient) Query() *UserSyncKeyQuery {
+	return &UserSyncKeyQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUserSyncKey},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UserSyncKey entity by its id.
+func (c *UserSyncKeyClient) Get(ctx context.Context, id ident.UUID) (*UserSyncKey, error) {
+	return c.Query().Where(usersynckey.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UserSyncKeyClient) GetX(ctx context.Context, id ident.UUID) *UserSyncKey {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UserSyncKeyClient) Hooks() []Hook {
+	return c.hooks.UserSyncKey
+}
+
+// Interceptors returns the client interceptors.
+func (c *UserSyncKeyClient) Interceptors() []Interceptor {
+	return c.inters.UserSyncKey
+}
+
+func (c *UserSyncKeyClient) mutate(ctx context.Context, m *UserSyncKeyMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UserSyncKeyCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UserSyncKeyUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UserSyncKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UserSyncKeyDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UserSyncKey mutation op: %q", m.Op())
+	}
+}
+
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
 		AppSetting, Bookshelf, GalleryCache, Node, NodeAPIKey, PrefillJob,
 		ReadingProgress, SyncChange, SyncState, TagPreference, TagSyncBaseline, User,
-		UserSetting []ent.Hook
+		UserSetting, UserSyncKey []ent.Hook
 	}
 	inters struct {
 		AppSetting, Bookshelf, GalleryCache, Node, NodeAPIKey, PrefillJob,
 		ReadingProgress, SyncChange, SyncState, TagPreference, TagSyncBaseline, User,
-		UserSetting []ent.Interceptor
+		UserSetting, UserSyncKey []ent.Interceptor
 	}
 )

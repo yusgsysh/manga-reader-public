@@ -1556,13 +1556,21 @@ Cache-Control: no-store
 
 未配置同步（`enabled` 为 false、缺少 `server_url` 或 token）时返回 `409`。
 
+**用户级同步 Key（用户 JWT，当前登录账号）：**
+
+- `GET /api/sync/keys` — 列出当前账号的同步 Key（只返回 `key_prefix` 等元数据）。
+- `POST /api/sync/keys` — 为当前账号创建 Key；明文 `key` 只在响应中出现一次。
+- `DELETE /api/sync/keys/:id` — 撤销当前账号的 Key。
+
+用户级 Key 用于“一个 Key 只同步一个账号”：持有该 Key 的对端推送的私有数据全部归属到 Key 的账号，拉取时也只返回该账号的私有数据（`gallery_cache` 为公共元数据，双方共享）。两端不需要相同用户名或相同用户 UUID。创建 Key 需要本实例启用同步宿主（`MANGA_READER_SYNC_ENABLED=true`），否则返回 `409`。
+
 **本地事件流（供前端刷新，用户 JWT）：**
 
 `GET /api/events/changes` — SSE，连接后立即推送 `data: {}`；本地任意同步数据变更（含远端应用）再推 `data: {}`。该路径由 Gin 直接流式写出（无反代缓冲，`WriteTimeout` 未设置）。
 
 **宿主端点（`MANGA_READER_SYNC_ENABLED=true` 时注册）：**
 
-鉴权：`Authorization: Bearer <Node API Key>`。中间件解析 Key 的 SHA-256 哈希、校验节点状态和 Scopes；失败返回 `401`，Scope 不足返回 `403`。用户 JWT 不能访问这些端点。变更携带 `user_id`，对端按用户写入。
+鉴权：`Authorization: Bearer <Node API Key 或用户级同步 Key>`。中间件先按节点 Key、再按用户级 Key 解析；节点 Key 是实例级，用户级 Key 绑定一个账号。失败返回 `401`，Scope 不足返回 `403`。用户 JWT 不能访问这些端点。节点 Key 的变更携带 `user_id`/`username`，对端按用户写入；用户级 Key 的私有变更强制归属到该 Key 的账号，并且只返回该账号的变更。
 
 `POST /api/sync/push` — 一步推 + 拉。请求：
 

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"manga-reader/internal/ident"
 )
 
 const (
@@ -168,7 +170,7 @@ func (e *Engine) pushCycle(ctx context.Context, cfg ClientConfig) {
 		return
 	}
 
-	changes, watermark, err := e.buildPushChanges(ctx, st)
+	changes, watermark, err := e.buildPushChanges(ctx, cfg.UserID, st)
 	if err != nil {
 		syncSetError(ctx, e.svc, fmt.Sprintf("build changes: %v", err))
 		return
@@ -186,7 +188,7 @@ func (e *Engine) pushCycle(ctx context.Context, cfg ClientConfig) {
 	}
 
 	if len(resp.Changes) > 0 {
-		applied, _, applyErr := ApplyChanges(ctx, e.svc.client, resp.Changes)
+		applied, _, applyErr := ApplyChangesForUser(ctx, e.svc.client, resp.Changes, cfg.UserID)
 		if applyErr != nil {
 			syncSetError(ctx, e.svc, fmt.Sprintf("apply: %v", applyErr))
 			return
@@ -208,7 +210,7 @@ func (e *Engine) pushCycle(ctx context.Context, cfg ClientConfig) {
 		syncSetError(ctx, e.svc, fmt.Sprintf("save state: %v", err))
 		return
 	}
-	if err := pruneOutbox(ctx, e.svc.client, watermark); err != nil {
+	if err := pruneOutboxForUser(ctx, e.svc.client, watermark, cfg.UserID); err != nil {
 		slog.Warn("sync: prune local outbox failed", "error", err)
 	}
 }
@@ -216,15 +218,16 @@ func (e *Engine) pushCycle(ctx context.Context, cfg ClientConfig) {
 // buildPushChanges returns the changes to push and the outbox watermark they
 // were built from (the new last_pushed_id).
 //
-// On the first sync the whole local dataset is sent as a snapshot plus any
-// tombstones still in the outbox (see BootstrapChanges); entries already
-// covered by it keep an outbox id at or below the watermark and are pruned
-// once the exchange succeeds.
-func (e *Engine) buildPushChanges(ctx context.Context, st EngineState) ([]Change, int, error) {
+// owner scopes the exchange to one local account (nil = instance-wide). On the
+// first sync the whole scoped dataset is sent as a snapshot plus any tombstones
+// still in the outbox (see BootstrapChangesForUser); entries already covered by
+// it keep an outbox id at or below the watermark and are pruned once the
+// exchange succeeds.
+func (e *Engine) buildPushChanges(ctx context.Context, owner ident.UUID, st EngineState) ([]Change, int, error) {
 	if !st.Bootstrapped {
-		return BootstrapChanges(ctx, e.svc.client)
+		return BootstrapChangesForUser(ctx, e.svc.client, owner)
 	}
-	return ReadChangesSince(ctx, e.svc.client, st.LastPushedID)
+	return ReadChangesSinceForUser(ctx, e.svc.client, st.LastPushedID, owner)
 }
 
 func (e *Engine) sendPush(ctx context.Context, cfg ClientConfig, req PushRequest) (PushResponse, error) {

@@ -38,6 +38,8 @@ type Tx struct {
 	User *UserClient
 	// UserSetting is the client for interacting with the UserSetting builders.
 	UserSetting *UserSettingClient
+	// UserSyncKey is the client for interacting with the UserSyncKey builders.
+	UserSyncKey *UserSyncKeyClient
 
 	// lazily loaded.
 	client     *Client
@@ -182,6 +184,7 @@ func (tx *Tx) init() {
 	tx.TagSyncBaseline = NewTagSyncBaselineClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 	tx.UserSetting = NewUserSettingClient(tx.config)
+	tx.UserSyncKey = NewUserSyncKeyClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.

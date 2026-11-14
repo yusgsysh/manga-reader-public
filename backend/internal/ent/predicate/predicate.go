@@ -44,3 +44,6 @@ type User func(*sql.Selector)
 
 // UserSetting is the predicate function for usersetting builders.
 type UserSetting func(*sql.Selector)
+
+// UserSyncKey is the predicate function for usersynckey builders.
+type UserSyncKey func(*sql.Selector)

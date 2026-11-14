@@ -19,6 +19,7 @@ import (
 	"manga-reader/internal/config"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/nodeapikey"
+	"manga-reader/internal/ent/usersynckey"
 	"manga-reader/internal/requestid"
 )
 
@@ -65,67 +66,141 @@ func New(db *ent.Client) *Service {
 // every listed scope. No fallback to any other credential type exists.
 func (s *Service) Middleware(requiredScopes ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		raw, ok := nodeBearer(c.GetHeader("Authorization"))
-		if !ok {
-			s.reject(c, "missing bearer key")
-			return
-		}
-		prefix := DisplayPrefix(raw)
-		hash := HashKey(raw)
-
-		keys, err := s.db.NodeAPIKey.Query().
-			Where(
-				nodeapikey.KeyPrefixEQ(prefix),
-				nodeapikey.StatusEQ(config.StatusActive),
-			).
-			All(c.Request.Context())
-		if err != nil {
-			s.reject(c, "key lookup failed")
-			return
-		}
-
-		var matched *ent.NodeAPIKey
-		for _, key := range keys {
-			if subtle.ConstantTimeCompare([]byte(key.KeyHash), []byte(hash)) == 1 {
-				matched = key
-				break
-			}
-		}
-		if matched == nil {
-			s.reject(c, "key not found")
-			return
-		}
-		now := time.Now().UTC()
-		if matched.ExpiresAt != nil && !matched.ExpiresAt.After(now) {
-			s.reject(c, "key expired")
-			return
-		}
-
-		n, err := s.db.Node.Get(c.Request.Context(), matched.NodeID)
-		if err != nil || n.Status != config.StatusActive {
-			s.reject(c, "node disabled or missing")
-			return
-		}
-		identity := Identity{
-			NodeID: n.ID,
-			Name:   n.Name,
-			Scopes: append([]string(nil), matched.Scopes...),
-			KeyID:  matched.ID,
-		}
-		for _, scope := range requiredScopes {
-			if !identity.HasScope(scope) {
-				webAbort(c, http.StatusForbidden, "api key scope not allowed")
-				return
-			}
-		}
-
-		// Best-effort usage bookkeeping; auth already succeeded.
-		_, _ = s.db.NodeAPIKey.UpdateOneID(matched.ID).SetLastUsedAt(now).Save(c.Request.Context())
-		_, _ = s.db.Node.UpdateOneID(n.ID).SetLastSeenAt(now).Save(c.Request.Context())
-
-		WithGin(c, identity)
-		c.Next()
+		s.authenticate(c, requiredScopes, false)
 	}
+}
+
+// AnyMiddleware accepts either a node API key (instance-wide) or a user sync
+// key (one account). Sync routes use it so both peer models keep working; the
+// resolved Identity tells the handler whether to scope the exchange to a user.
+func (s *Service) AnyMiddleware(requiredScopes ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		s.authenticate(c, requiredScopes, true)
+	}
+}
+
+func (s *Service) authenticate(c *gin.Context, requiredScopes []string, allowUserKeys bool) {
+	raw, ok := nodeBearer(c.GetHeader("Authorization"))
+	if !ok {
+		s.reject(c, "missing bearer key")
+		return
+	}
+	prefix := DisplayPrefix(raw)
+	hash := HashKey(raw)
+	now := time.Now().UTC()
+
+	keys, err := s.db.NodeAPIKey.Query().
+		Where(
+			nodeapikey.KeyPrefixEQ(prefix),
+			nodeapikey.StatusEQ(config.StatusActive),
+		).
+		All(c.Request.Context())
+	if err != nil {
+		s.reject(c, "key lookup failed")
+		return
+	}
+
+	var matched *ent.NodeAPIKey
+	for _, key := range keys {
+		if subtle.ConstantTimeCompare([]byte(key.KeyHash), []byte(hash)) == 1 {
+			matched = key
+			break
+		}
+	}
+	if matched != nil {
+		s.finishNodeKey(c, matched, requiredScopes, now)
+		return
+	}
+	if !allowUserKeys {
+		s.reject(c, "key not found")
+		return
+	}
+
+	userKeys, err := s.db.UserSyncKey.Query().
+		Where(
+			usersynckey.KeyPrefixEQ(prefix),
+			usersynckey.StatusEQ(config.StatusActive),
+		).
+		All(c.Request.Context())
+	if err != nil {
+		s.reject(c, "key lookup failed")
+		return
+	}
+	var matchedUser *ent.UserSyncKey
+	for _, key := range userKeys {
+		if subtle.ConstantTimeCompare([]byte(key.KeyHash), []byte(hash)) == 1 {
+			matchedUser = key
+			break
+		}
+	}
+	if matchedUser == nil {
+		s.reject(c, "key not found")
+		return
+	}
+	s.finishUserKey(c, matchedUser, requiredScopes, now)
+}
+
+func (s *Service) finishNodeKey(c *gin.Context, matched *ent.NodeAPIKey, requiredScopes []string, now time.Time) {
+	if matched.ExpiresAt != nil && !matched.ExpiresAt.After(now) {
+		s.reject(c, "key expired")
+		return
+	}
+
+	n, err := s.db.Node.Get(c.Request.Context(), matched.NodeID)
+	if err != nil || n.Status != config.StatusActive {
+		s.reject(c, "node disabled or missing")
+		return
+	}
+	identity := Identity{
+		NodeID: n.ID,
+		Name:   n.Name,
+		Scopes: append([]string(nil), matched.Scopes...),
+		KeyID:  matched.ID,
+	}
+	for _, scope := range requiredScopes {
+		if !identity.HasScope(scope) {
+			webAbort(c, http.StatusForbidden, "api key scope not allowed")
+			return
+		}
+	}
+
+	// Best-effort usage bookkeeping; auth already succeeded.
+	_, _ = s.db.NodeAPIKey.UpdateOneID(matched.ID).SetLastUsedAt(now).Save(c.Request.Context())
+	_, _ = s.db.Node.UpdateOneID(n.ID).SetLastSeenAt(now).Save(c.Request.Context())
+
+	WithGin(c, identity)
+	c.Next()
+}
+
+func (s *Service) finishUserKey(c *gin.Context, matched *ent.UserSyncKey, requiredScopes []string, now time.Time) {
+	if matched.ExpiresAt != nil && !matched.ExpiresAt.After(now) {
+		s.reject(c, "key expired")
+		return
+	}
+	u, err := s.db.User.Get(c.Request.Context(), matched.UserID)
+	if err != nil || u.Status != config.StatusActive {
+		s.reject(c, "user disabled or missing")
+		return
+	}
+	// A user key is always a full sync credential for its account; node-only
+	// scopes such as metrics:read are never granted.
+	identity := Identity{
+		UserID: matched.UserID,
+		Name:   u.Username,
+		Scopes: append([]string(nil), DefaultScopes...),
+		KeyID:  matched.ID,
+	}
+	for _, scope := range requiredScopes {
+		if !identity.HasScope(scope) {
+			webAbort(c, http.StatusForbidden, "api key scope not allowed")
+			return
+		}
+	}
+
+	_, _ = s.db.UserSyncKey.UpdateOneID(matched.ID).SetLastUsedAt(now).Save(c.Request.Context())
+
+	WithGin(c, identity)
+	c.Next()
 }
 
 func (s *Service) reject(c *gin.Context, reason string) {

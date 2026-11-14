@@ -244,7 +244,7 @@ func run() error {
 	nodeSvc := node.New(db.Client)
 	syncSvc := synclib.NewService(db.Client, synclib.Options{
 		HostEnabled:           cfg.Sync.Enabled,
-		NodeAuth:              nodeSvc.Middleware,
+		NodeAuth:              nodeSvc.AnyMiddleware,
 		RequestTimeout:        cfg.Sync.RequestTimeout,
 		DisableInactiveOutbox: true,
 	})

@@ -501,7 +501,7 @@ export function ApiManagementSection() {
   return (
     <Section
       title="API Key"
-      description="管理节点 API Key（每个节点可有多把 Key）。sync:write 用于同步推送、sync:events 用于事件流；metrics:read 可读取 /metrics。与用户 JWT 独立。"
+      description="管理实例级节点 API Key（sync:write 推送、sync:events 事件流；metrics:read 读取 /metrics）。用户级同步 Key 在「数据同步」页创建。"
     >
       <div className="space-y-4">
         <div className="card-surface space-y-3 p-4">

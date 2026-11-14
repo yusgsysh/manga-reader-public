@@ -164,6 +164,18 @@ func (f UserSettingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value,
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserSettingMutation", m)
 }
 
+// The UserSyncKeyFunc type is an adapter to allow the use of ordinary
+// function as UserSyncKey mutator.
+type UserSyncKeyFunc func(context.Context, *ent.UserSyncKeyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UserSyncKeyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UserSyncKeyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserSyncKeyMutation", m)
+}
+
 // Condition is a hook condition function.
 type Condition func(context.Context, ent.Mutation) bool
 

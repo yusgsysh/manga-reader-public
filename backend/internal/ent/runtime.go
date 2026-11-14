@@ -17,6 +17,7 @@ import (
 	"manga-reader/internal/ent/tagsyncbaseline"
 	"manga-reader/internal/ent/user"
 	"manga-reader/internal/ent/usersetting"
+	"manga-reader/internal/ent/usersynckey"
 	"manga-reader/internal/ident"
 	"time"
 )
@@ -411,4 +412,26 @@ func init() {
 	usersetting.DefaultUpdatedAt = usersettingDescUpdatedAt.Default.(func() time.Time)
 	// usersetting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	usersetting.UpdateDefaultUpdatedAt = usersettingDescUpdatedAt.UpdateDefault.(func() time.Time)
+	usersynckeyFields := schema.UserSyncKey{}.Fields()
+	_ = usersynckeyFields
+	// usersynckeyDescKeyHash is the schema descriptor for key_hash field.
+	usersynckeyDescKeyHash := usersynckeyFields[2].Descriptor()
+	// usersynckey.KeyHashValidator is a validator for the "key_hash" field. It is called by the builders before save.
+	usersynckey.KeyHashValidator = usersynckeyDescKeyHash.Validators[0].(func(string) error)
+	// usersynckeyDescKeyPrefix is the schema descriptor for key_prefix field.
+	usersynckeyDescKeyPrefix := usersynckeyFields[3].Descriptor()
+	// usersynckey.KeyPrefixValidator is a validator for the "key_prefix" field. It is called by the builders before save.
+	usersynckey.KeyPrefixValidator = usersynckeyDescKeyPrefix.Validators[0].(func(string) error)
+	// usersynckeyDescStatus is the schema descriptor for status field.
+	usersynckeyDescStatus := usersynckeyFields[4].Descriptor()
+	// usersynckey.DefaultStatus holds the default value on creation for the status field.
+	usersynckey.DefaultStatus = usersynckeyDescStatus.Default.(string)
+	// usersynckeyDescCreatedAt is the schema descriptor for created_at field.
+	usersynckeyDescCreatedAt := usersynckeyFields[7].Descriptor()
+	// usersynckey.DefaultCreatedAt holds the default value on creation for the created_at field.
+	usersynckey.DefaultCreatedAt = usersynckeyDescCreatedAt.Default.(func() time.Time)
+	// usersynckeyDescID is the schema descriptor for id field.
+	usersynckeyDescID := usersynckeyFields[0].Descriptor()
+	// usersynckey.DefaultID holds the default value on creation for the id field.
+	usersynckey.DefaultID = usersynckeyDescID.Default.(func() ident.UUID)
 }
