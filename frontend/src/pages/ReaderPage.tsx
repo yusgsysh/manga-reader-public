@@ -7,7 +7,6 @@ import {
   MangaViewer,
   type LayoutMode,
   type MangaViewerHandle,
-  type ViewerPanel,
   type ViewerSettings,
 } from "@yui540/comimi-react";
 import { useGallery, useGalleryPages, useReadingProgress } from "../hooks/useReaderData";
@@ -72,7 +71,6 @@ export function ReaderPage() {
   const [nativeFullscreen, setNativeFullscreen] = useState(
     () => typeof document !== "undefined" && document.fullscreenElement !== null,
   );
-  const [activePanel, setActivePanel] = useState<ViewerPanel>("none");
   const [viewerReady, setViewerReady] = useState(false);
   const [viewerSettingsState, setViewerSettingsState] =
     useState<ViewerSettings | null>(null);
@@ -243,16 +241,23 @@ export function ReaderPage() {
     goBack();
   }, [flushProgress, goBack]);
 
-  // The top bar drives the library's panels instead of duplicating them.
-  const handleOpenPanel = useCallback((panel: ViewerPanel) => {
-    const viewer = viewerRef.current;
-    if (!viewer) return;
-    viewer.setPanel(viewer.getState().panel === panel ? "none" : panel);
-  }, []);
-
+  // Close the library's own panel (reachable via its keyboard shortcuts) when
+  // an app panel opens, so the two never overlap.
   const handleClosePanel = useCallback(() => {
     viewerRef.current?.setPanel("none");
   }, []);
+
+  const handleGoToPage = useCallback((pageIndex: number) => {
+    viewerRef.current?.goToPage(pageIndex);
+  }, []);
+
+  // The page list reads the live viewer position instead of mirroring it into
+  // state: comimi keeps the source of truth, so the highlight can never lag
+  // behind (e.g. after the viewer remounts on a gallery change).
+  const getCurrentPage = useCallback(
+    () => viewerRef.current?.getState().currentPageIndex ?? 0,
+    [],
+  );
 
   const handleUpdateSettings = useCallback(
     (patch: Partial<ViewerSettings>) => {
@@ -275,7 +280,6 @@ export function ReaderPage() {
     const state = viewer.getState();
     setViewerSettingsState(state.settings);
     setLayoutMode(state.layout.mode);
-    setActivePanel(state.panel);
     if (autoFullscreenOnOpenRef.current && state.layout.mode === "inline") {
       void viewer.setLayoutMode("browserFullscreen");
     }
@@ -284,13 +288,6 @@ export function ReaderPage() {
   const handleLayoutChange = useCallback(
     ({ layoutMode: nextMode }: { layoutMode: LayoutMode }) => {
       setLayoutMode(nextMode);
-    },
-    [],
-  );
-
-  const handlePanelChange = useCallback(
-    ({ panel }: { panel: ViewerPanel }) => {
-      setActivePanel(panel);
     },
     [],
   );
@@ -391,11 +388,14 @@ export function ReaderPage() {
       <ReaderToolbar
         title={gallery.title}
         fullscreen={isFullscreen}
-        activePanel={activePanel}
         viewerSettings={viewerSettingsState}
+        id={id}
+        token={token ?? ""}
+        total={total}
+        getCurrentPage={getCurrentPage}
         onBack={handleBack}
         onToggleFullscreen={toggleFullscreen}
-        onOpenPanel={handleOpenPanel}
+        onGoToPage={handleGoToPage}
         onClosePanel={handleClosePanel}
         onUpdateSettings={handleUpdateSettings}
       />
@@ -419,7 +419,6 @@ export function ReaderPage() {
           onBack={handleBack}
           onFullscreenRequest={toggleFullscreen}
           onLayoutChange={handleLayoutChange}
-          onPanelChange={handlePanelChange}
           onSettingsChange={handleSettingsChange}
           className="h-full w-full"
         />

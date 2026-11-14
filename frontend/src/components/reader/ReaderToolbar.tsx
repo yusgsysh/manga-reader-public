@@ -9,21 +9,31 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { cn } from "@cloudflare/kumo";
-import type { ViewerPanel, ViewerSettings } from "@yui540/comimi-react";
+import type { ViewerSettings } from "@yui540/comimi-react";
 import { useReaderPreferences } from "../../hooks/useReaderPreferences";
 import { IconButton } from "../ui";
 import { ComimiMascot } from "./ComimiMascot";
+import {
+  ReaderAbout,
+  ReaderPageList,
+  ReaderShortcuts,
+} from "./ReaderToolbarPanels";
 
 const AUTO_TURN_SECONDS = [3, 5, 8, 10, 15, 20, 30];
+
+type ToolbarPanel = "settings" | "shortcuts" | "pages" | "about";
 
 interface ReaderToolbarProps {
   title: string;
   fullscreen: boolean;
-  activePanel: ViewerPanel;
   viewerSettings: ViewerSettings | null;
+  id: number;
+  token: string;
+  total: number;
+  getCurrentPage: () => number;
   onBack: () => void;
   onToggleFullscreen: () => void;
-  onOpenPanel: (panel: ViewerPanel) => void;
+  onGoToPage: (pageIndex: number) => void;
   onClosePanel: () => void;
   onUpdateSettings: (patch: Partial<ViewerSettings>) => void;
 }
@@ -54,55 +64,87 @@ function Segment({
   );
 }
 
+/** A drop-down that unfolds below the top bar, right-aligned like the gear. */
+function Panel({
+  label,
+  wide,
+  onClose,
+  children,
+}: {
+  label: string;
+  wide?: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-label={label}
+      className={cn(
+        "absolute top-full right-2 z-[1002] mt-1 space-y-4 rounded-2xl border border-kumo-hairline bg-kumo-base p-4 shadow-xl",
+        wide
+          ? "w-[min(30rem,calc(100vw-1rem))]"
+          : "w-[min(22rem,calc(100vw-1rem))]",
+      )}
+    >
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-kumo-default">{label}</h2>
+        <IconButton label="关闭" size="sm" onClick={onClose}>
+          <X className="size-4" weight="bold" />
+        </IconButton>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 /**
- * Komga-style reader chrome: the way back and the title on the left, the
- * reader actions on the right. It replaces comimi's floating menu pill, so
- * the library's own top row is hidden in `index.css`.
+ * Komga-style reader chrome: back and title on the left, reader actions on the
+ * right. Each action opens an app-owned panel anchored to the button — the
+ * library's own menu/pages/shortcuts/about panels are no longer used here.
  */
 export function ReaderToolbar({
   title,
   fullscreen,
-  activePanel,
   viewerSettings,
+  id,
+  token,
+  total,
+  getCurrentPage,
   onBack,
   onToggleFullscreen,
-  onOpenPanel,
+  onGoToPage,
   onClosePanel,
   onUpdateSettings,
 }: ReaderToolbarProps) {
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [openPanel, setOpenPanel] = useState<ToolbarPanel | null>(null);
   const { autoFullscreenOnStart, setAutoFullscreenOnStart } =
     useReaderPreferences();
 
-  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const closePanel = useCallback(() => setOpenPanel(null), []);
 
-  const toggleSettings = useCallback(() => {
-    setSettingsOpen((open) => {
-      if (!open) onClosePanel();
-      return !open;
-    });
-  }, [onClosePanel]);
-
-  const openPanel = useCallback(
-    (panel: ViewerPanel) => {
-      setSettingsOpen(false);
-      onOpenPanel(panel);
+  const togglePanel = useCallback(
+    (panel: ToolbarPanel) => {
+      // Close the library's own panel (reachable via its keyboard shortcuts)
+      // whenever an app panel opens, so the two never overlap.
+      if (openPanel !== panel) onClosePanel();
+      setOpenPanel((current) => (current === panel ? null : panel));
     },
-    [onOpenPanel],
+    [openPanel, onClosePanel],
   );
 
-  // Escape belongs to the open settings sheet; keep comimi's Esc-to-inline
-  // shortcut from firing underneath it.
+  // Escape closes the open panel; keep comimi's Esc-to-inline shortcut from
+  // firing underneath it.
   useEffect(() => {
-    if (!settingsOpen) return;
+    if (!openPanel) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.stopPropagation();
-      setSettingsOpen(false);
+      setOpenPanel(null);
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [settingsOpen]);
+  }, [openPanel]);
 
   const intervalSeconds = viewerSettings
     ? Math.round(viewerSettings.autoPageTurnIntervalMs / 1000)
@@ -110,12 +152,12 @@ export function ReaderToolbar({
 
   return (
     <>
-      {settingsOpen && (
+      {openPanel && (
         <button
           type="button"
-          aria-label="关闭阅读设置"
+          aria-label="关闭阅读面板"
           className="fixed inset-0 z-[1000] cursor-default"
-          onClick={closeSettings}
+          onClick={closePanel}
         />
       )}
       <header
@@ -125,75 +167,67 @@ export function ReaderToolbar({
           fullscreen && "fixed inset-x-0 top-0",
         )}
       >
-      <IconButton label="返回画廊" onClick={onBack}>
-        <ArrowLeft className="size-5" weight="bold" />
-      </IconButton>
-
-      <h1 className="min-w-0 flex-1 truncate px-1 text-[15px] font-semibold text-kumo-default">
-        {title}
-      </h1>
-
-      <div className="flex items-center gap-0.5">
-        <IconButton
-          label={fullscreen ? "退出全屏" : "全屏"}
-          aria-pressed={fullscreen}
-          onClick={onToggleFullscreen}
-        >
-          {fullscreen ? (
-            <CornersIn className="size-5" weight="bold" />
-          ) : (
-            <CornersOut className="size-5" weight="bold" />
-          )}
+        <IconButton label="返回画廊" onClick={onBack}>
+          <ArrowLeft className="size-5" weight="bold" />
         </IconButton>
 
-        <IconButton
-          label="键盘快捷键"
-          aria-pressed={activePanel === "shortcuts"}
-          className="hidden sm:flex"
-          onClick={() => openPanel("shortcuts")}
-        >
-          <Question className="size-5" weight="bold" />
-        </IconButton>
+        <h1 className="min-w-0 flex-1 truncate px-1 text-[15px] font-semibold text-kumo-default">
+          {title}
+        </h1>
 
-        <IconButton
-          label="页面列表"
-          aria-pressed={activePanel === "pages"}
-          onClick={() => openPanel("pages")}
-        >
-          <SquaresFour className="size-5" weight="bold" />
-        </IconButton>
-
-        <IconButton
-          label="阅读设置"
-          aria-expanded={settingsOpen}
-          onClick={toggleSettings}
-        >
-          <GearSix className="size-5" weight="bold" />
-        </IconButton>
-
-        <IconButton
-          label="关于 comimi"
-          aria-pressed={activePanel === "about"}
-          onClick={() => openPanel("about")}
-        >
-          <ComimiMascot className="size-5 text-kumo-subtle" />
-        </IconButton>
-      </div>
-
-      {settingsOpen && (
-        <>
-          <div
-            role="dialog"
-            aria-label="阅读设置"
-            className="absolute top-full right-2 z-[1002] mt-1 w-[min(22rem,calc(100vw-1rem))] space-y-4 rounded-2xl border border-kumo-hairline bg-kumo-base p-4 shadow-xl"
+        <div className="flex items-center gap-0.5">
+          <IconButton
+            label={fullscreen ? "退出全屏" : "全屏"}
+            aria-pressed={fullscreen}
+            onClick={onToggleFullscreen}
           >
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-kumo-default">阅读设置</h2>
-              <IconButton label="关闭" size="sm" onClick={closeSettings}>
-                <X className="size-4" weight="bold" />
-              </IconButton>
-            </div>
+            {fullscreen ? (
+              <CornersIn className="size-5" weight="bold" />
+            ) : (
+              <CornersOut className="size-5" weight="bold" />
+            )}
+          </IconButton>
 
+          <IconButton
+            label="键盘快捷键"
+            aria-haspopup="dialog"
+            aria-expanded={openPanel === "shortcuts"}
+            className="hidden sm:flex"
+            onClick={() => togglePanel("shortcuts")}
+          >
+            <Question className="size-5" weight="bold" />
+          </IconButton>
+
+          <IconButton
+            label="页面列表"
+            aria-haspopup="dialog"
+            aria-expanded={openPanel === "pages"}
+            onClick={() => togglePanel("pages")}
+          >
+            <SquaresFour className="size-5" weight="bold" />
+          </IconButton>
+
+          <IconButton
+            label="阅读设置"
+            aria-haspopup="dialog"
+            aria-expanded={openPanel === "settings"}
+            onClick={() => togglePanel("settings")}
+          >
+            <GearSix className="size-5" weight="bold" />
+          </IconButton>
+
+          <IconButton
+            label="关于 comimi"
+            aria-haspopup="dialog"
+            aria-expanded={openPanel === "about"}
+            onClick={() => togglePanel("about")}
+          >
+            <ComimiMascot className="size-5 text-kumo-subtle" />
+          </IconButton>
+        </div>
+
+        {openPanel === "settings" && (
+          <Panel label="阅读设置" onClose={closePanel}>
             <div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm font-medium text-kumo-default">
@@ -204,9 +238,7 @@ export function ReaderToolbar({
                   role="switch"
                   aria-checked={autoFullscreenOnStart}
                   aria-label="开始阅读时自动全屏"
-                  onClick={() =>
-                    setAutoFullscreenOnStart(!autoFullscreenOnStart)
-                  }
+                  onClick={() => setAutoFullscreenOnStart(!autoFullscreenOnStart)}
                   className={cn(
                     "relative h-6 w-11 shrink-0 rounded-full transition-colors",
                     autoFullscreenOnStart
@@ -234,17 +266,13 @@ export function ReaderToolbar({
               <div className="grid grid-cols-2 gap-1 rounded-lg bg-kumo-recessed p-1">
                 <Segment
                   active={viewerSettings?.readingDirection === "rtl"}
-                  onClick={() =>
-                    onUpdateSettings({ readingDirection: "rtl" })
-                  }
+                  onClick={() => onUpdateSettings({ readingDirection: "rtl" })}
                 >
                   从右到左
                 </Segment>
                 <Segment
                   active={viewerSettings?.readingDirection === "ltr"}
-                  onClick={() =>
-                    onUpdateSettings({ readingDirection: "ltr" })
-                  }
+                  onClick={() => onUpdateSettings({ readingDirection: "ltr" })}
                 >
                   从左到右
                 </Segment>
@@ -322,14 +350,36 @@ export function ReaderToolbar({
                 ))}
               </select>
             </div>
+          </Panel>
+        )}
 
-            <p className="border-t border-kumo-hairline pt-3 text-xs text-kumo-subtle">
-              键盘快捷键见右上角的 <kbd className="rounded bg-kumo-recessed px-1">?</kbd> 按钮。
-            </p>
-          </div>
-        </>
-      )}
-    </header>
+        {openPanel === "shortcuts" && (
+          <Panel label="键盘快捷键" onClose={closePanel}>
+            <ReaderShortcuts />
+          </Panel>
+        )}
+
+        {openPanel === "pages" && (
+          <Panel label="页面列表" wide onClose={closePanel}>
+            <ReaderPageList
+              id={id}
+              token={token}
+              total={total}
+              currentPage={getCurrentPage()}
+              onGoToPage={(pageIndex) => {
+                onGoToPage(pageIndex);
+                closePanel();
+              }}
+            />
+          </Panel>
+        )}
+
+        {openPanel === "about" && (
+          <Panel label="关于 comimi" onClose={closePanel}>
+            <ReaderAbout />
+          </Panel>
+        )}
+      </header>
     </>
   );
 }

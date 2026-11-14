@@ -433,8 +433,9 @@ body {
 /*
  * Reader chrome lives in the app's top bar (see ReaderToolbar): hide comimi's
  * own floating menu pill and the mascot that decorates its top-right corner so
- * the same controls are not shown twice. The panels themselves stay, because
- * the top bar opens them through the viewer API.
+ * the same controls are not shown twice. The library's own panels stay, but are
+ * only reachable through comimi's keyboard shortcuts (`m`/`s`); the top bar
+ * opens its own app-owned panels instead.
  */
 .reader-shell .comimi-menu-top,
 .reader-shell .comimi-menu-panel > .comimi-rabbit {
@@ -446,7 +447,7 @@ body {
   display: none;
 }
 
-/* The app's top bar sits above the stage, so panels unfold below it. */
+/* comimi's keyboard-opened menu panel unfolds below the app's top bar. */
 .reader-shell .comimi-root .comimi-menu-panel {
   top: 16px;
   left: 16px;

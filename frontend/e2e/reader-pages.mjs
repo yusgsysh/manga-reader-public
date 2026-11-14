@@ -199,7 +199,7 @@ try {
         .locator("header")
         .getByRole("button", { name: "页面列表" })
         .click();
-      await page.waitForSelector(".comimi-menu-view-page-list", { timeout: 10000 });
+      await page.waitForSelector(".reader-page-list", { timeout: 10000 });
       await sleep(1500);
       const state = () =>
         page.evaluate(() => {
@@ -207,7 +207,7 @@ try {
           // clips the list, so viewport bounds alone would count the
           // thumbnails hidden below the scroll window too.
           const box = document
-            .querySelector(".comimi-page-list-inner")
+            .querySelector(".reader-page-list")
             .getBoundingClientRect();
           const win = {
             l: box.left + 4,
@@ -216,7 +216,7 @@ try {
             b: box.bottom - 4,
           };
           const imgs = [
-            ...document.querySelectorAll(".comimi-page-list-item img"),
+            ...document.querySelectorAll(".reader-page-list-item img"),
           ];
           const visible = imgs.filter((img) => {
             const r = img.getBoundingClientRect();
@@ -285,7 +285,7 @@ try {
 
     // The queue must keep feeding while the list scrolls in fullscreen.
     await full.page.evaluate(() => {
-      const inner = document.querySelector(".comimi-page-list-inner");
+      const inner = document.querySelector(".reader-page-list");
       inner.scrollTop = inner.scrollHeight;
     });
     await sleep(1500);

@@ -1,0 +1,288 @@
+import { useEffect, useRef, useState } from "react";
+import { ArrowSquareOut } from "@phosphor-icons/react";
+import { pageThumbnailUrl } from "../../lib/image";
+import { ComimiMascot } from "./ComimiMascot";
+
+/*
+ * App-owned reader panels, rendered from the reader top bar.
+ *
+ * comimi ships its own menu/shortcuts/pages/about views, but those live inside
+ * the library's floating menu panel and are opened through `viewer.setPanel`.
+ * The app's top bar (ReaderToolbar) replaces them with these native panels so
+ * they appear anchored to the top-right buttons instead of comimi's top-left
+ * menu, and are fully under app control.
+ */
+
+// comimi metadata. The library keeps these internal (`dist/index.js`) and does
+// not export them, so mirror the installed version here.
+const COMIMI_VERSION = "0.26.0";
+const COMIMI_REPOSITORY_URL = "https://github.com/yui540/comimi";
+const COMIMI_SITE_URL = "https://yui540.com/comimi";
+
+/* ------------------------------------------------------------------ */
+/* Keyboard shortcuts                                                  */
+/* ------------------------------------------------------------------ */
+
+interface Shortcut {
+  keys: string[];
+  label: string;
+}
+
+interface ShortcutSection {
+  title: string;
+  /** Wrap items into a flowing multi-column list instead of one per row. */
+  wrap?: boolean;
+  items: Shortcut[];
+}
+
+// Mirrors comimi's own shortcut sheet (`buildShortcutView`), with the labels
+// the app already shows elsewhere. "显示模式" is shown because the app does
+// not lock the layout mode.
+const SHORTCUT_SECTIONS: ShortcutSection[] = [
+  {
+    title: "翻页",
+    items: [
+      { keys: ["←", "Space"], label: "向左移动" },
+      { keys: ["→", "Space + Shift"], label: "向右移动" },
+      { keys: ["A"], label: "自动播放" },
+    ],
+  },
+  {
+    title: "显示模式",
+    wrap: true,
+    items: [
+      { keys: ["N", "Esc"], label: "标准" },
+      { keys: ["F"], label: "全屏" },
+    ],
+  },
+  {
+    title: "通用",
+    wrap: true,
+    items: [
+      { keys: ["O"], label: "切换控制层" },
+      { keys: ["M"], label: "菜单" },
+      { keys: ["P"], label: "切换跨页" },
+      { keys: ["C"], label: "切换封面" },
+      { keys: ["S"], label: "设置" },
+    ],
+  },
+];
+
+function KeyBadge({ keys }: { keys: string[] }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {keys.map((key, index) => (
+        <span key={key} className="inline-flex items-center gap-1.5">
+          {index > 0 && (
+            <span className="text-[11px] text-kumo-subtle" aria-hidden>
+              /
+            </span>
+          )}
+          <kbd className="min-w-5 rounded-md bg-kumo-recessed px-1.5 py-0.5 text-center text-xs font-semibold text-kumo-default">
+            {key}
+          </kbd>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+export function ReaderShortcuts() {
+  return (
+    <div className="space-y-5">
+      {SHORTCUT_SECTIONS.map((section) => (
+        <div key={section.title}>
+          <div className="mb-2 text-xs font-semibold text-kumo-subtle">
+            {section.title}
+          </div>
+          <div
+            className={
+              section.wrap
+                ? "flex flex-wrap gap-x-5 gap-y-2.5"
+                : "space-y-2.5"
+            }
+          >
+            {section.items.map((item) => (
+              <div key={item.label} className="flex items-center gap-2.5">
+                <KeyBadge keys={item.keys} />
+                <span className="text-sm text-kumo-default">{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Page list                                                           */
+/* ------------------------------------------------------------------ */
+
+interface ReaderPageListProps {
+  id: number;
+  token: string;
+  total: number;
+  currentPage: number;
+  onGoToPage: (pageIndex: number) => void;
+}
+
+function PageThumb({
+  id,
+  token,
+  index,
+  active,
+  onSelect,
+}: {
+  id: number;
+  token: string;
+  index: number;
+  active: boolean;
+  onSelect: (pageIndex: number) => void;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  // Index-addressed thumbnail; the backend resolves the sprite itself.
+  const src = token ? pageThumbnailUrl(id, token, index) : "";
+  const showShimmer = src !== "" && !loaded && !failed;
+
+  return (
+    <button
+      type="button"
+      aria-label={`第 ${index + 1} 页`}
+      aria-current={active ? "page" : undefined}
+      onClick={() => onSelect(index)}
+      className="reader-page-list-item group relative block aspect-[100/141] overflow-hidden rounded-md border border-kumo-hairline bg-kumo-recessed transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)]"
+    >
+      {src && !failed ? (
+        <img
+          src={src}
+          alt={`第 ${index + 1} 页`}
+          decoding="async"
+          className="app-image block h-full w-full object-cover"
+          onLoad={() => setLoaded(true)}
+          onError={() => {
+            setFailed(true);
+            setLoaded(true);
+          }}
+        />
+      ) : (
+        <span
+          className="block h-full w-full bg-gradient-to-br from-kumo-recessed to-kumo-tint"
+          aria-hidden
+        />
+      )}
+      {showShimmer && (
+        // The wrapper is absolute while .skeleton-shimmer keeps
+        // `position: relative`, so the shimmer fills the tile.
+        <span className="absolute inset-0 overflow-hidden" aria-hidden>
+          <span className="skeleton-shimmer h-full w-full bg-kumo-recessed" />
+        </span>
+      )}
+      <span className="absolute right-1 bottom-1 rounded-full bg-black/65 px-1.5 py-0.5 text-[11px] font-semibold leading-relaxed text-white tabular-nums">
+        {index + 1}
+      </span>
+      {active && (
+        <span
+          className="absolute inset-0 rounded-md ring-2 ring-[var(--app-accent)]"
+          aria-hidden
+        />
+      )}
+    </button>
+  );
+}
+
+export function ReaderPageList({
+  id,
+  token,
+  total,
+  currentPage,
+  onGoToPage,
+}: ReaderPageListProps) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Centre the current page when the list opens so deep progress is visible.
+  useEffect(() => {
+    const container = listRef.current;
+    const active =
+      container?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!container || !active) return;
+    const target =
+      active.offsetTop - container.clientHeight / 2 + active.offsetHeight / 2;
+    container.scrollTop = Math.max(0, target);
+  }, []);
+
+  return (
+    <div
+      ref={listRef}
+      className="reader-page-list relative grid max-h-[60vh] grid-cols-4 gap-2.5 overflow-y-auto overscroll-contain pr-1 sm:grid-cols-5"
+    >
+      {Array.from({ length: total }, (_, index) => (
+        <PageThumb
+          key={index}
+          id={id}
+          token={token}
+          index={index}
+          active={index === currentPage}
+          onSelect={onGoToPage}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* About comimi                                                        */
+/* ------------------------------------------------------------------ */
+
+export function ReaderAbout() {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 rounded-xl bg-kumo-recessed px-4 py-3">
+        <ComimiMascot className="size-9 text-kumo-default" />
+        <div>
+          <div className="text-sm font-semibold text-kumo-default">comimi</div>
+          <div className="text-xs text-kumo-subtle">开源漫画阅读器</div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between px-1 text-sm">
+        <span className="font-medium text-kumo-subtle">版本</span>
+        <span className="font-mono text-xs font-semibold text-kumo-default">
+          v{COMIMI_VERSION}
+        </span>
+      </div>
+
+      <div className="space-y-1">
+        <a
+          href={COMIMI_REPOSITORY_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-between rounded-lg px-3 py-2 text-sm text-kumo-default transition hover:bg-kumo-tint"
+        >
+          <span>
+            GitHub 仓库
+            <span className="ml-2 hidden text-xs text-kumo-subtle sm:inline">
+              {COMIMI_REPOSITORY_URL.replace(/^https?:\/\//, "")}
+            </span>
+          </span>
+          <ArrowSquareOut className="size-4 text-kumo-subtle" weight="bold" />
+        </a>
+        <a
+          href={COMIMI_SITE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-between rounded-lg px-3 py-2 text-sm text-kumo-default transition hover:bg-kumo-tint"
+        >
+          <span>
+            官方网站
+            <span className="ml-2 hidden text-xs text-kumo-subtle sm:inline">
+              {COMIMI_SITE_URL.replace(/^https?:\/\//, "")}
+            </span>
+          </span>
+          <ArrowSquareOut className="size-4 text-kumo-subtle" weight="bold" />
+        </a>
+      </div>
+    </div>
+  );
+}
