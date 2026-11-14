@@ -32,6 +32,7 @@ import { Chip, Section, useToast } from "../components/ui";
 import { CategoryChip } from "../components/gallery/CategoryChip";
 import { GalleryTorrentsDialog } from "../components/gallery/GalleryTorrentsDialog";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { requestReaderFullscreenIfEnabled } from "../lib/readerPrefs";
 
 function DetailSkeleton() {
   return (
@@ -330,6 +331,9 @@ export function GalleryDetailPage() {
               <Button
                 variant="primary"
                 onClick={() => {
+                  // Still inside the click, so the browser accepts the native
+                  // fullscreen request when the preference is on.
+                  requestReaderFullscreenIfEnabled();
                   navigate(
                     progress?.completed
                       ? `/reader/${id}/${token}?restart=1`

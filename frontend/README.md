@@ -58,9 +58,7 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
 
 ## comimi / comimi-react 补丁
 
-本仓库对 `@yui540/comimi` 维护三处补丁，均由同一个 `patches/@yui540%2Fcomimi@0.26.0.patch` 承载：**预加载页白屏**、**触屏进度条缩略图**与**阅读器返回/全屏入口迁入 comimi（并移除宽屏选项）**；同一补丁还顺带移除自动播放与单/双页的快捷键（`A` / `P`）。另有 `patches/@yui540%2Fcomimi-react@0.3.0.patch`，把新增事件加入运行时事件白名单，使 `onBack` / `onFullscreenRequest` 能作为 props 透传。
-
-阅读器把自动播放、单/双页与「开始阅读时自动全屏」三组入口移除：前两者通过 comimi 的 `hiddenSettings`（`autoplay` / `pageMode` / `interval`）隐藏 dock 按钮，应用侧「阅读设置」面板不再提供对应选项；「开始阅读时自动全屏」偏好（`readerPrefs`）整体删除，全屏仍由上方工具栏的显式切换按钮控制。
+本仓库对 `@yui540/comimi` 维护三处补丁，均由同一个 `patches/@yui540%2Fcomimi@0.26.0.patch` 承载：**预加载页白屏**、**触屏进度条缩略图**与**阅读器返回/全屏入口迁入 comimi（并移除宽屏选项）**。另有 `patches/@yui540%2Fcomimi-react@0.3.0.patch`，把新增事件加入运行时事件白名单，使 `onBack` / `onFullscreenRequest` 能作为 props 透传。
 
 ### 补丁一：预加载页白屏
 
@@ -143,8 +141,6 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
   }
 }
 ```
-
-进度条浮窗只显示一行页码：缩略图通过 `src/index.css` 里的 `.reader-shell .comimi-seek-preview-thumbs { display: none; }` 隐藏，浮窗只保留 `.comimi-seek-preview-label`。
 
 ### 补丁三：阅读器返回/全屏入口迁入 comimi（移除宽屏）
 

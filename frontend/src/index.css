@@ -500,14 +500,6 @@ body {
 }
 
 /*
- * Keep the seek preview a single line: drop the page thumbnail so the floating
- * window above the progress bar shows only the page-number label.
- */
-.reader-shell .comimi-seek-preview-thumbs {
-  display: none;
-}
-
-/*
  * Kumo's toast viewport ships at z-1, below the app chrome (z-50 header and
  * back-to-top, z-60 drawer) and dialog overlays. Lift it so stacked toasts —
  * newest in front, older ones receding behind — stay visible on every page.
