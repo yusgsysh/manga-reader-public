@@ -3966,6 +3966,10 @@ type PrefillJobMutation struct {
 	addfailed_count *int
 	errors          *[]model.PrefillItemError
 	appenderrors    []model.PrefillItemError
+	archive_key     *string
+	archive_size    *int64
+	addarchive_size *int64
+	archive_etag    *string
 	created_at      *time.Time
 	updated_at      *time.Time
 	finished_at     *time.Time
@@ -4521,6 +4525,174 @@ func (m *PrefillJobMutation) ResetErrors() {
 	delete(m.clearedFields, prefilljob.FieldErrors)
 }
 
+// SetArchiveKey sets the "archive_key" field.
+func (m *PrefillJobMutation) SetArchiveKey(s string) {
+	m.archive_key = &s
+}
+
+// ArchiveKey returns the value of the "archive_key" field in the mutation.
+func (m *PrefillJobMutation) ArchiveKey() (r string, exists bool) {
+	v := m.archive_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldArchiveKey returns the old "archive_key" field's value of the PrefillJob entity.
+// If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrefillJobMutation) OldArchiveKey(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldArchiveKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldArchiveKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldArchiveKey: %w", err)
+	}
+	return oldValue.ArchiveKey, nil
+}
+
+// ClearArchiveKey clears the value of the "archive_key" field.
+func (m *PrefillJobMutation) ClearArchiveKey() {
+	m.archive_key = nil
+	m.clearedFields[prefilljob.FieldArchiveKey] = struct{}{}
+}
+
+// ArchiveKeyCleared returns if the "archive_key" field was cleared in this mutation.
+func (m *PrefillJobMutation) ArchiveKeyCleared() bool {
+	_, ok := m.clearedFields[prefilljob.FieldArchiveKey]
+	return ok
+}
+
+// ResetArchiveKey resets all changes to the "archive_key" field.
+func (m *PrefillJobMutation) ResetArchiveKey() {
+	m.archive_key = nil
+	delete(m.clearedFields, prefilljob.FieldArchiveKey)
+}
+
+// SetArchiveSize sets the "archive_size" field.
+func (m *PrefillJobMutation) SetArchiveSize(i int64) {
+	m.archive_size = &i
+	m.addarchive_size = nil
+}
+
+// ArchiveSize returns the value of the "archive_size" field in the mutation.
+func (m *PrefillJobMutation) ArchiveSize() (r int64, exists bool) {
+	v := m.archive_size
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldArchiveSize returns the old "archive_size" field's value of the PrefillJob entity.
+// If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrefillJobMutation) OldArchiveSize(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldArchiveSize is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldArchiveSize requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldArchiveSize: %w", err)
+	}
+	return oldValue.ArchiveSize, nil
+}
+
+// AddArchiveSize adds i to the "archive_size" field.
+func (m *PrefillJobMutation) AddArchiveSize(i int64) {
+	if m.addarchive_size != nil {
+		*m.addarchive_size += i
+	} else {
+		m.addarchive_size = &i
+	}
+}
+
+// AddedArchiveSize returns the value that was added to the "archive_size" field in this mutation.
+func (m *PrefillJobMutation) AddedArchiveSize() (r int64, exists bool) {
+	v := m.addarchive_size
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearArchiveSize clears the value of the "archive_size" field.
+func (m *PrefillJobMutation) ClearArchiveSize() {
+	m.archive_size = nil
+	m.addarchive_size = nil
+	m.clearedFields[prefilljob.FieldArchiveSize] = struct{}{}
+}
+
+// ArchiveSizeCleared returns if the "archive_size" field was cleared in this mutation.
+func (m *PrefillJobMutation) ArchiveSizeCleared() bool {
+	_, ok := m.clearedFields[prefilljob.FieldArchiveSize]
+	return ok
+}
+
+// ResetArchiveSize resets all changes to the "archive_size" field.
+func (m *PrefillJobMutation) ResetArchiveSize() {
+	m.archive_size = nil
+	m.addarchive_size = nil
+	delete(m.clearedFields, prefilljob.FieldArchiveSize)
+}
+
+// SetArchiveEtag sets the "archive_etag" field.
+func (m *PrefillJobMutation) SetArchiveEtag(s string) {
+	m.archive_etag = &s
+}
+
+// ArchiveEtag returns the value of the "archive_etag" field in the mutation.
+func (m *PrefillJobMutation) ArchiveEtag() (r string, exists bool) {
+	v := m.archive_etag
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldArchiveEtag returns the old "archive_etag" field's value of the PrefillJob entity.
+// If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrefillJobMutation) OldArchiveEtag(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldArchiveEtag is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldArchiveEtag requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldArchiveEtag: %w", err)
+	}
+	return oldValue.ArchiveEtag, nil
+}
+
+// ClearArchiveEtag clears the value of the "archive_etag" field.
+func (m *PrefillJobMutation) ClearArchiveEtag() {
+	m.archive_etag = nil
+	m.clearedFields[prefilljob.FieldArchiveEtag] = struct{}{}
+}
+
+// ArchiveEtagCleared returns if the "archive_etag" field was cleared in this mutation.
+func (m *PrefillJobMutation) ArchiveEtagCleared() bool {
+	_, ok := m.clearedFields[prefilljob.FieldArchiveEtag]
+	return ok
+}
+
+// ResetArchiveEtag resets all changes to the "archive_etag" field.
+func (m *PrefillJobMutation) ResetArchiveEtag() {
+	m.archive_etag = nil
+	delete(m.clearedFields, prefilljob.FieldArchiveEtag)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *PrefillJobMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -4676,7 +4848,7 @@ func (m *PrefillJobMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PrefillJobMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 15)
 	if m.user_id != nil {
 		fields = append(fields, prefilljob.FieldUserID)
 	}
@@ -4703,6 +4875,15 @@ func (m *PrefillJobMutation) Fields() []string {
 	}
 	if m.errors != nil {
 		fields = append(fields, prefilljob.FieldErrors)
+	}
+	if m.archive_key != nil {
+		fields = append(fields, prefilljob.FieldArchiveKey)
+	}
+	if m.archive_size != nil {
+		fields = append(fields, prefilljob.FieldArchiveSize)
+	}
+	if m.archive_etag != nil {
+		fields = append(fields, prefilljob.FieldArchiveEtag)
 	}
 	if m.created_at != nil {
 		fields = append(fields, prefilljob.FieldCreatedAt)
@@ -4739,6 +4920,12 @@ func (m *PrefillJobMutation) Field(name string) (ent.Value, bool) {
 		return m.FailedCount()
 	case prefilljob.FieldErrors:
 		return m.Errors()
+	case prefilljob.FieldArchiveKey:
+		return m.ArchiveKey()
+	case prefilljob.FieldArchiveSize:
+		return m.ArchiveSize()
+	case prefilljob.FieldArchiveEtag:
+		return m.ArchiveEtag()
 	case prefilljob.FieldCreatedAt:
 		return m.CreatedAt()
 	case prefilljob.FieldUpdatedAt:
@@ -4772,6 +4959,12 @@ func (m *PrefillJobMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldFailedCount(ctx)
 	case prefilljob.FieldErrors:
 		return m.OldErrors(ctx)
+	case prefilljob.FieldArchiveKey:
+		return m.OldArchiveKey(ctx)
+	case prefilljob.FieldArchiveSize:
+		return m.OldArchiveSize(ctx)
+	case prefilljob.FieldArchiveEtag:
+		return m.OldArchiveEtag(ctx)
 	case prefilljob.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case prefilljob.FieldUpdatedAt:
@@ -4850,6 +5043,27 @@ func (m *PrefillJobMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetErrors(v)
 		return nil
+	case prefilljob.FieldArchiveKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetArchiveKey(v)
+		return nil
+	case prefilljob.FieldArchiveSize:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetArchiveSize(v)
+		return nil
+	case prefilljob.FieldArchiveEtag:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetArchiveEtag(v)
+		return nil
 	case prefilljob.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -4888,6 +5102,9 @@ func (m *PrefillJobMutation) AddedFields() []string {
 	if m.addfailed_count != nil {
 		fields = append(fields, prefilljob.FieldFailedCount)
 	}
+	if m.addarchive_size != nil {
+		fields = append(fields, prefilljob.FieldArchiveSize)
+	}
 	return fields
 }
 
@@ -4902,6 +5119,8 @@ func (m *PrefillJobMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedTotal()
 	case prefilljob.FieldFailedCount:
 		return m.AddedFailedCount()
+	case prefilljob.FieldArchiveSize:
+		return m.AddedArchiveSize()
 	}
 	return nil, false
 }
@@ -4932,6 +5151,13 @@ func (m *PrefillJobMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddFailedCount(v)
 		return nil
+	case prefilljob.FieldArchiveSize:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddArchiveSize(v)
+		return nil
 	}
 	return fmt.Errorf("unknown PrefillJob numeric field %s", name)
 }
@@ -4945,6 +5171,15 @@ func (m *PrefillJobMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(prefilljob.FieldErrors) {
 		fields = append(fields, prefilljob.FieldErrors)
+	}
+	if m.FieldCleared(prefilljob.FieldArchiveKey) {
+		fields = append(fields, prefilljob.FieldArchiveKey)
+	}
+	if m.FieldCleared(prefilljob.FieldArchiveSize) {
+		fields = append(fields, prefilljob.FieldArchiveSize)
+	}
+	if m.FieldCleared(prefilljob.FieldArchiveEtag) {
+		fields = append(fields, prefilljob.FieldArchiveEtag)
 	}
 	if m.FieldCleared(prefilljob.FieldFinishedAt) {
 		fields = append(fields, prefilljob.FieldFinishedAt)
@@ -4968,6 +5203,15 @@ func (m *PrefillJobMutation) ClearField(name string) error {
 		return nil
 	case prefilljob.FieldErrors:
 		m.ClearErrors()
+		return nil
+	case prefilljob.FieldArchiveKey:
+		m.ClearArchiveKey()
+		return nil
+	case prefilljob.FieldArchiveSize:
+		m.ClearArchiveSize()
+		return nil
+	case prefilljob.FieldArchiveEtag:
+		m.ClearArchiveEtag()
 		return nil
 	case prefilljob.FieldFinishedAt:
 		m.ClearFinishedAt()
@@ -5006,6 +5250,15 @@ func (m *PrefillJobMutation) ResetField(name string) error {
 		return nil
 	case prefilljob.FieldErrors:
 		m.ResetErrors()
+		return nil
+	case prefilljob.FieldArchiveKey:
+		m.ResetArchiveKey()
+		return nil
+	case prefilljob.FieldArchiveSize:
+		m.ResetArchiveSize()
+		return nil
+	case prefilljob.FieldArchiveEtag:
+		m.ResetArchiveEtag()
 		return nil
 	case prefilljob.FieldCreatedAt:
 		m.ResetCreatedAt()

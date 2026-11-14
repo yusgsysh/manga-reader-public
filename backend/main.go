@@ -22,6 +22,7 @@ import (
 	"manga-reader/internal/metrics"
 	"manga-reader/internal/node"
 	"manga-reader/internal/requestid"
+	"manga-reader/internal/storage"
 	synclib "manga-reader/internal/sync"
 	"manga-reader/internal/usercookie"
 	"manga-reader/internal/web"
@@ -257,32 +258,54 @@ func run() error {
 	// purge) still runs and propagates deletions.
 
 	handlerCfg := handler.Config{
-		DB:          db,
-		DevTools:    cfg.DevTools,
-		Sync:        syncSvc,
-		UserCookies: userCookies,
+		DB:                   db,
+		DevTools:             cfg.DevTools,
+		Sync:                 syncSvc,
+		UserCookies:          userCookies,
+		ArchiveConcurrency:   cfg.ZipArchive.Concurrency,
+		ArchivePresign:       cfg.ZipArchive.PresignDownload,
+		ArchivePresignExpiry: cfg.ZipArchive.PresignExpiry,
 	}
 
-	if cfg.MinIO.IsValid() {
+	if cfg.ImageCache.Enabled {
 		minioCache, err := cache.NewMinIOCache(&cache.MinIOConfig{
-			Endpoint:  cfg.MinIO.Endpoint,
-			AccessKey: cfg.MinIO.AccessKey,
-			SecretKey: cfg.MinIO.SecretKey,
-			Bucket:    cfg.MinIO.Bucket,
-			UseSSL:    cfg.MinIO.UseSSL,
-			Region:    cfg.MinIO.Region,
+			Endpoint:  cfg.ImageCache.Endpoint,
+			AccessKey: cfg.ImageCache.AccessKey,
+			SecretKey: cfg.ImageCache.SecretKey,
+			Bucket:    cfg.ImageCache.Bucket,
+			UseSSL:    cfg.ImageCache.UseSSL,
+			Region:    cfg.ImageCache.Region,
 		})
 		if err != nil {
 			logger.Error("minio cache init failed", "error", err)
 			return err
 		}
 		handlerCfg.Cache = minioCache
-		logger.Info("minio cache enabled", "bucket", cfg.MinIO.Bucket)
+		logger.Info("image cache enabled", "bucket", cfg.ImageCache.Bucket, "provider", cfg.ImageCache.Provider)
 	} else {
 		// The /api/image-cache/* handlers delegate to their live /api/image/*
 		// counterparts when Cache is nil (see handler/image.go), so a MinIO-less
 		// deployment still serves images; only the object-store caching is off.
-		logger.Warn("minio config not set, image-cache endpoints will fall back to live upstream proxies")
+		logger.Warn("image cache not configured, image-cache endpoints will fall back to live upstream proxies")
+	}
+
+	if cfg.ZipArchive.Enabled {
+		archiveStore, err := storage.New(context.Background(), storage.Config{
+			Endpoint:  cfg.ZipArchive.Endpoint,
+			Region:    cfg.ZipArchive.Region,
+			Bucket:    cfg.ZipArchive.Bucket,
+			AccessKey: cfg.ZipArchive.AccessKey,
+			SecretKey: cfg.ZipArchive.SecretKey,
+			UseSSL:    cfg.ZipArchive.UseSSL,
+			Prefix:    cfg.ZipArchive.Prefix,
+			PartSize:  cfg.ZipArchive.PartSize,
+		})
+		if err != nil {
+			logger.Error("archive storage init failed", "error", err)
+			return err
+		}
+		handlerCfg.Archive = archiveStore
+		logger.Info("zip archive enabled", "bucket", cfg.ZipArchive.Bucket, "prefix", cfg.ZipArchive.Prefix, "provider", cfg.ZipArchive.Provider, "presign", cfg.ZipArchive.PresignDownload)
 	}
 
 	srv := handler.New(handlerCfg)

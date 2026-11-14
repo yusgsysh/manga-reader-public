@@ -50,6 +50,13 @@ func (PrefillJob) Fields() []ent.Field {
 		field.Int("total").Default(0),
 		field.Int("failed_count").Default(0),
 		field.JSON("errors", []model.PrefillItemError{}).Optional(),
+		// Archive metadata is written only after a ZIP has been fully built and
+		// uploaded to the archive object store. Until then these stay NULL, so a
+		// job with no archive is indistinguishable from one whose upload failed
+		// and can be rebuilt on demand.
+		field.String("archive_key").Optional().Nillable(),
+		field.Int64("archive_size").Optional().Nillable(),
+		field.String("archive_etag").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 		field.Time("finished_at").Optional().Nillable(),

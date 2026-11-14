@@ -21,6 +21,26 @@ func setTestEnv(t *testing.T) {
 		"MANGA_READER_SYNC_ENABLED",
 		"MANGA_READER_SYNC_REQUEST_TIMEOUT",
 		"MANGA_READER_SYNC_API_KEY_MIN_LENGTH",
+		"IMAGE_CACHE_ENDPOINT",
+		"IMAGE_CACHE_ACCESS_KEY",
+		"IMAGE_CACHE_SECRET_KEY",
+		"IMAGE_CACHE_BUCKET",
+		"IMAGE_CACHE_USE_SSL",
+		"IMAGE_CACHE_REGION",
+		"IMAGE_CACHE_PROVIDER",
+		"ZIP_ENABLED",
+		"ZIP_PROVIDER",
+		"ZIP_ENDPOINT",
+		"ZIP_ACCESS_KEY",
+		"ZIP_SECRET_KEY",
+		"ZIP_BUCKET",
+		"ZIP_USE_SSL",
+		"ZIP_REGION",
+		"ZIP_PREFIX",
+		"ZIP_CONCURRENCY",
+		"ZIP_PART_SIZE",
+		"ZIP_PRESIGN_DOWNLOAD",
+		"ZIP_PRESIGN_EXPIRY",
 	} {
 		t.Setenv(key, "")
 	}
@@ -192,5 +212,154 @@ func TestLoad_RejectsWeakMetricsToken(t *testing.T) {
 	t.Setenv("MANGA_READER_METRICS_TOKEN", "short")
 	if _, err := Load(); err == nil {
 		t.Fatal("expected error for short metrics token")
+	}
+}
+
+func TestLoad_ImageCacheEnabledFromConfig(t *testing.T) {
+	setTestEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.ImageCache.Enabled {
+		t.Fatalf("image cache enabled with no IMAGE_CACHE_* set: %+v", cfg.ImageCache)
+	}
+
+	t.Setenv("IMAGE_CACHE_ENDPOINT", "localhost:9000")
+	t.Setenv("IMAGE_CACHE_ACCESS_KEY", "key")
+	t.Setenv("IMAGE_CACHE_SECRET_KEY", "secret")
+	t.Setenv("IMAGE_CACHE_BUCKET", "manga-cache")
+	t.Setenv("IMAGE_CACHE_USE_SSL", "false")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.ImageCache.Enabled || !cfg.ImageCache.IsConfigured() {
+		t.Fatalf("image cache not enabled: %+v", cfg.ImageCache)
+	}
+	if cfg.ImageCache.Bucket != "manga-cache" {
+		t.Fatalf("image cache = %+v", cfg.ImageCache)
+	}
+}
+
+func TestLoad_ZipArchiveDisabledByDefault(t *testing.T) {
+	setTestEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.ZipArchive.Enabled {
+		t.Fatalf("zip archive enabled by default: %+v", cfg.ZipArchive)
+	}
+	if cfg.ZipArchive.Prefix != "archives/" {
+		t.Fatalf("default prefix = %q, want archives/", cfg.ZipArchive.Prefix)
+	}
+}
+
+func TestLoad_ZipArchiveEnabled(t *testing.T) {
+	setTestEnv(t)
+	t.Setenv("ZIP_ENABLED", "true")
+	t.Setenv("ZIP_ENDPOINT", "localhost:9000")
+	t.Setenv("ZIP_ACCESS_KEY", "zip-key")
+	t.Setenv("ZIP_SECRET_KEY", "zip-secret")
+	t.Setenv("ZIP_BUCKET", "manga-archives")
+	t.Setenv("ZIP_CONCURRENCY", "6")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.ZipArchive.Enabled {
+		t.Fatal("zip archive not enabled")
+	}
+	if cfg.ZipArchive.Bucket != "manga-archives" {
+		t.Fatalf("bucket = %q", cfg.ZipArchive.Bucket)
+	}
+	if cfg.ZipArchive.Concurrency != 6 {
+		t.Fatalf("concurrency = %d, want 6", cfg.ZipArchive.Concurrency)
+	}
+}
+
+func TestLoad_ZipArchiveEnabledRequiresConfig(t *testing.T) {
+	setTestEnv(t)
+	t.Setenv("ZIP_ENABLED", "true")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for ZIP_ENABLED without connection fields")
+	}
+}
+
+func TestLoad_ZipArchiveRejectsInvalidConcurrency(t *testing.T) {
+	setTestEnv(t)
+	t.Setenv("ZIP_ENABLED", "true")
+	t.Setenv("ZIP_ENDPOINT", "localhost:9000")
+	t.Setenv("ZIP_ACCESS_KEY", "k")
+	t.Setenv("ZIP_SECRET_KEY", "s")
+	t.Setenv("ZIP_BUCKET", "b")
+	t.Setenv("ZIP_CONCURRENCY", "0")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for ZIP_CONCURRENCY=0")
+	}
+}
+
+func TestLoad_ZipArchiveRejectsSmallPartSize(t *testing.T) {
+	setTestEnv(t)
+	t.Setenv("ZIP_ENABLED", "true")
+	t.Setenv("ZIP_ENDPOINT", "localhost:9000")
+	t.Setenv("ZIP_ACCESS_KEY", "k")
+	t.Setenv("ZIP_SECRET_KEY", "s")
+	t.Setenv("ZIP_BUCKET", "b")
+	t.Setenv("ZIP_PART_SIZE", "1024")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for a part size below 5 MiB")
+	}
+}
+
+func TestLoad_ZipArchivePresign(t *testing.T) {
+	setTestEnv(t)
+	t.Setenv("ZIP_ENABLED", "true")
+	t.Setenv("ZIP_ENDPOINT", "localhost:9000")
+	t.Setenv("ZIP_ACCESS_KEY", "k")
+	t.Setenv("ZIP_SECRET_KEY", "s")
+	t.Setenv("ZIP_BUCKET", "b")
+	t.Setenv("ZIP_PRESIGN_DOWNLOAD", "true")
+	t.Setenv("ZIP_PRESIGN_EXPIRY", "1h")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.ZipArchive.PresignDownload {
+		t.Fatal("presign not enabled")
+	}
+	if cfg.ZipArchive.PresignExpiry != time.Hour {
+		t.Fatalf("expiry = %v, want 1h", cfg.ZipArchive.PresignExpiry)
+	}
+
+	// Defaults: presign off, 15m expiry.
+	setTestEnv(t)
+	t.Setenv("ZIP_ENABLED", "true")
+	t.Setenv("ZIP_ENDPOINT", "localhost:9000")
+	t.Setenv("ZIP_ACCESS_KEY", "k")
+	t.Setenv("ZIP_SECRET_KEY", "s")
+	t.Setenv("ZIP_BUCKET", "b")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.ZipArchive.PresignDownload || cfg.ZipArchive.PresignExpiry != 15*time.Minute {
+		t.Fatalf("defaults = %+v", cfg.ZipArchive)
+	}
+}
+
+func TestLoad_ZipArchiveRejectsInvalidPresignExpiry(t *testing.T) {
+	setTestEnv(t)
+	t.Setenv("ZIP_ENABLED", "true")
+	t.Setenv("ZIP_ENDPOINT", "localhost:9000")
+	t.Setenv("ZIP_ACCESS_KEY", "k")
+	t.Setenv("ZIP_SECRET_KEY", "s")
+	t.Setenv("ZIP_BUCKET", "b")
+	t.Setenv("ZIP_PRESIGN_EXPIRY", "0s")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for ZIP_PRESIGN_EXPIRY=0s")
 	}
 }

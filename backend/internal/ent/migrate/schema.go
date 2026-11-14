@@ -148,6 +148,9 @@ var (
 		{Name: "total", Type: field.TypeInt, Default: 0},
 		{Name: "failed_count", Type: field.TypeInt, Default: 0},
 		{Name: "errors", Type: field.TypeJSON, Nullable: true},
+		{Name: "archive_key", Type: field.TypeString, Nullable: true},
+		{Name: "archive_size", Type: field.TypeInt64, Nullable: true},
+		{Name: "archive_etag", Type: field.TypeString, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "finished_at", Type: field.TypeTime, Nullable: true},
@@ -161,7 +164,7 @@ var (
 			{
 				Name:    "prefilljob_user_id_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{PrefillJobColumns[1], PrefillJobColumns[6], PrefillJobColumns[10]},
+				Columns: []*schema.Column{PrefillJobColumns[1], PrefillJobColumns[6], PrefillJobColumns[13]},
 			},
 			{
 				Name:    "prefilljob_user_id_gallery_id_token",

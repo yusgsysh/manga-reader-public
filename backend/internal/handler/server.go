@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/minio/minio-go/v7"
 
 	"manga-reader/internal/database"
+	"manga-reader/internal/storage"
 	synclib "manga-reader/internal/sync"
 	"manga-reader/internal/usercookie"
 )
@@ -30,6 +32,17 @@ type Server struct {
 	Client *http.Client
 	DB     *database.DB
 	Cache  ImageCache
+	// Archive is the optional ZIP archive object store. It is fully independent
+	// from Cache: either, both, or neither may be configured.
+	Archive storage.ObjectStorage
+	// ArchiveConcurrency bounds how many pages are fetched in parallel while a
+	// ZIP archive is built (order is still preserved). <=1 means serial.
+	ArchiveConcurrency int
+	// ArchivePresign redirects archive downloads to a signed object-store URL
+	// instead of proxying the bytes through the backend.
+	ArchivePresign bool
+	// ArchivePresignExpiry is the lifetime of a signed download URL.
+	ArchivePresignExpiry time.Duration
 
 	// requireAuth is set by New for every production server. Handler unit tests
 	// that build Server directly leave it false and may supply a principal in
@@ -60,23 +73,31 @@ type Server struct {
 }
 
 type Config struct {
-	Client      *http.Client
-	DB          *database.DB
-	Cache       ImageCache
-	DevTools    bool
-	Sync        *synclib.Service
-	UserCookies *usercookie.Service
+	Client               *http.Client
+	DB                   *database.DB
+	Cache                ImageCache
+	Archive              storage.ObjectStorage
+	ArchiveConcurrency   int
+	ArchivePresign       bool
+	ArchivePresignExpiry time.Duration
+	DevTools             bool
+	Sync                 *synclib.Service
+	UserCookies          *usercookie.Service
 }
 
 func New(cfg Config) *Server {
 	return &Server{
-		Client:      cfg.Client,
-		DB:          cfg.DB,
-		Cache:       cfg.Cache,
-		syncSvc:     cfg.Sync,
-		devTools:    cfg.DevTools,
-		requireAuth: true,
-		UserCookies: cfg.UserCookies,
+		Client:               cfg.Client,
+		DB:                   cfg.DB,
+		Cache:                cfg.Cache,
+		Archive:              cfg.Archive,
+		ArchiveConcurrency:   cfg.ArchiveConcurrency,
+		ArchivePresign:       cfg.ArchivePresign,
+		ArchivePresignExpiry: cfg.ArchivePresignExpiry,
+		syncSvc:              cfg.Sync,
+		devTools:             cfg.DevTools,
+		requireAuth:          true,
+		UserCookies:          cfg.UserCookies,
 	}
 }
 

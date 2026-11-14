@@ -38,6 +38,12 @@ type PrefillJob struct {
 	FailedCount int `json:"failed_count,omitempty"`
 	// Errors holds the value of the "errors" field.
 	Errors []model.PrefillItemError `json:"errors,omitempty"`
+	// ArchiveKey holds the value of the "archive_key" field.
+	ArchiveKey *string `json:"archive_key,omitempty"`
+	// ArchiveSize holds the value of the "archive_size" field.
+	ArchiveSize *int64 `json:"archive_size,omitempty"`
+	// ArchiveEtag holds the value of the "archive_etag" field.
+	ArchiveEtag *string `json:"archive_etag,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -56,9 +62,9 @@ func (*PrefillJob) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case prefilljob.FieldID, prefilljob.FieldUserID:
 			values[i] = new(ident.UUID)
-		case prefilljob.FieldGalleryID, prefilljob.FieldTotal, prefilljob.FieldFailedCount:
+		case prefilljob.FieldGalleryID, prefilljob.FieldTotal, prefilljob.FieldFailedCount, prefilljob.FieldArchiveSize:
 			values[i] = new(sql.NullInt64)
-		case prefilljob.FieldToken, prefilljob.FieldTitle, prefilljob.FieldStatus:
+		case prefilljob.FieldToken, prefilljob.FieldTitle, prefilljob.FieldStatus, prefilljob.FieldArchiveKey, prefilljob.FieldArchiveEtag:
 			values[i] = new(sql.NullString)
 		case prefilljob.FieldCreatedAt, prefilljob.FieldUpdatedAt, prefilljob.FieldFinishedAt:
 			values[i] = new(sql.NullTime)
@@ -141,6 +147,27 @@ func (_m *PrefillJob) assignValues(columns []string, values []any) error {
 				if err := json.Unmarshal(*value, &_m.Errors); err != nil {
 					return fmt.Errorf("unmarshal field errors: %w", err)
 				}
+			}
+		case prefilljob.FieldArchiveKey:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field archive_key", values[i])
+			} else if value.Valid {
+				_m.ArchiveKey = new(string)
+				*_m.ArchiveKey = value.String
+			}
+		case prefilljob.FieldArchiveSize:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field archive_size", values[i])
+			} else if value.Valid {
+				_m.ArchiveSize = new(int64)
+				*_m.ArchiveSize = value.Int64
+			}
+		case prefilljob.FieldArchiveEtag:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field archive_etag", values[i])
+			} else if value.Valid {
+				_m.ArchiveEtag = new(string)
+				*_m.ArchiveEtag = value.String
 			}
 		case prefilljob.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -225,6 +252,21 @@ func (_m *PrefillJob) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("errors=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Errors))
+	builder.WriteString(", ")
+	if v := _m.ArchiveKey; v != nil {
+		builder.WriteString("archive_key=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.ArchiveSize; v != nil {
+		builder.WriteString("archive_size=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.ArchiveEtag; v != nil {
+		builder.WriteString("archive_etag=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

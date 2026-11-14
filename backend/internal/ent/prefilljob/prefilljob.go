@@ -32,6 +32,12 @@ const (
 	FieldFailedCount = "failed_count"
 	// FieldErrors holds the string denoting the errors field in the database.
 	FieldErrors = "errors"
+	// FieldArchiveKey holds the string denoting the archive_key field in the database.
+	FieldArchiveKey = "archive_key"
+	// FieldArchiveSize holds the string denoting the archive_size field in the database.
+	FieldArchiveSize = "archive_size"
+	// FieldArchiveEtag holds the string denoting the archive_etag field in the database.
+	FieldArchiveEtag = "archive_etag"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -54,6 +60,9 @@ var Columns = []string{
 	FieldTotal,
 	FieldFailedCount,
 	FieldErrors,
+	FieldArchiveKey,
+	FieldArchiveSize,
+	FieldArchiveEtag,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldFinishedAt,
@@ -133,6 +142,21 @@ func ByTotal(opts ...sql.OrderTermOption) OrderOption {
 // ByFailedCount orders the results by the failed_count field.
 func ByFailedCount(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFailedCount, opts...).ToFunc()
+}
+
+// ByArchiveKey orders the results by the archive_key field.
+func ByArchiveKey(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldArchiveKey, opts...).ToFunc()
+}
+
+// ByArchiveSize orders the results by the archive_size field.
+func ByArchiveSize(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldArchiveSize, opts...).ToFunc()
+}
+
+// ByArchiveEtag orders the results by the archive_etag field.
+func ByArchiveEtag(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldArchiveEtag, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

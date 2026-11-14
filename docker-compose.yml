@@ -63,6 +63,21 @@ services:
       HTTPS_PROXY: ${HTTPS_PROXY:-}
       NO_PROXY: ${NO_PROXY:-}
 
+      # ZIP 归档存储（可选，独立于图片缓存，见 .env.example）
+      ZIP_ENABLED: ${ZIP_ENABLED:-false}
+      ZIP_PROVIDER: ${ZIP_PROVIDER:-minio}
+      ZIP_ENDPOINT: ${ZIP_ENDPOINT:-}
+      ZIP_REGION: ${ZIP_REGION:-}
+      ZIP_BUCKET: ${ZIP_BUCKET:-}
+      ZIP_ACCESS_KEY: ${ZIP_ACCESS_KEY:-}
+      ZIP_SECRET_KEY: ${ZIP_SECRET_KEY:-}
+      ZIP_USE_SSL: ${ZIP_USE_SSL:-true}
+      ZIP_PREFIX: ${ZIP_PREFIX:-archives/}
+      ZIP_CONCURRENCY: ${ZIP_CONCURRENCY:-4}
+      ZIP_PART_SIZE: ${ZIP_PART_SIZE:-}
+      ZIP_PRESIGN_DOWNLOAD: ${ZIP_PRESIGN_DOWNLOAD:-false}
+      ZIP_PRESIGN_EXPIRY: ${ZIP_PRESIGN_EXPIRY:-15m}
+
     volumes:
       - backend_data:/app/data
 

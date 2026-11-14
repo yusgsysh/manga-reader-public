@@ -276,12 +276,26 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `MANGA_READER_DB_PATH` | 否 | `data/manga-reader.db` | SQLite 路径（Docker 内 `/app/data/manga-reader.db`） |
 | `MANGA_READER_DB_DSN` | 否 | - | PostgreSQL 连接串（`postgres` 驱动时必填） |
 | `DATABASE_URL` | 否 | - | 同 `MANGA_READER_DB_DSN`，作为回退 |
-| `MINIO_ENDPOINT` | 否 | - | 配置后启用图片缓存 API |
-| `MINIO_ACCESS_KEY` | 否 | - | MinIO 访问密钥 |
-| `MINIO_SECRET_KEY` | 否 | - | MinIO 密钥 |
-| `MINIO_BUCKET` | 否 | - | MinIO Bucket |
-| `MINIO_USE_SSL` | 否 | `false` | 是否启用 SSL |
-| `MINIO_REGION` | 否 | - | MinIO Region |
+| `IMAGE_CACHE_ENDPOINT` | 否 | - | 图片缓存 Endpoint（AccessKey/SecretKey/Bucket 齐全即启用缓存） |
+| `IMAGE_CACHE_ACCESS_KEY` | 否 | - | 图片缓存访问密钥 |
+| `IMAGE_CACHE_SECRET_KEY` | 否 | - | 图片缓存密钥 |
+| `IMAGE_CACHE_BUCKET` | 否 | - | 图片缓存 Bucket |
+| `IMAGE_CACHE_USE_SSL` | 否 | `false` | 图片缓存是否启用 SSL |
+| `IMAGE_CACHE_REGION` | 否 | - | 图片缓存 Region |
+| `IMAGE_CACHE_PROVIDER` | 否 | `minio` | 图片缓存提供商（minio / s3 / 兼容 S3） |
+| `ZIP_ENABLED` | 否 | `false` | 启用 ZIP 归档存储（独立于图片缓存） |
+| `ZIP_PROVIDER` | 否 | `minio` | 归档存储提供商（minio / s3 / 兼容 S3，含 OSS 的 S3 兼容端点） |
+| `ZIP_ENDPOINT` | 否 | - | 归档存储 Endpoint（`ZIP_ENABLED=true` 时必填） |
+| `ZIP_REGION` | 否 | - | 归档存储 Region |
+| `ZIP_BUCKET` | 否 | - | 归档存储 Bucket（`ZIP_ENABLED=true` 时必填） |
+| `ZIP_ACCESS_KEY` | 否 | - | 归档存储访问密钥（`ZIP_ENABLED=true` 时必填） |
+| `ZIP_SECRET_KEY` | 否 | - | 归档存储密钥（`ZIP_ENABLED=true` 时必填） |
+| `ZIP_USE_SSL` | 否 | `false` | 归档存储是否启用 SSL |
+| `ZIP_PREFIX` | 否 | `archives/` | 归档对象 Key 前缀 |
+| `ZIP_CONCURRENCY` | 否 | `4` | 生成 ZIP 时并发抓取页数（1–64，顺序仍保持） |
+| `ZIP_PART_SIZE` | 否 | `0` | 分片上传分片大小（字节，≥5 MiB；`0` 用 SDK 默认 16 MiB） |
+| `ZIP_PRESIGN_DOWNLOAD` | 否 | `false` | 归档下载改为 302 跳转到对象存储的签名 URL（不经过后端中转；需存储端点对浏览器可达） |
+| `ZIP_PRESIGN_EXPIRY` | 否 | `15m` | 签名下载 URL 有效期（1s–168h） |
 | `JWT_SECRET` | 否 | - | JWT 签名与用户 Cookie 加密密钥的派生来源；留空时后端首次启动自动生成随机密钥并存入数据库（`app_setting`），重启后复用。显式设置时至少 32 字节随机值（`openssl rand -hex 32`），且优先于数据库 |
 | `JWT_ISSUER` | 否 | `manga-reader` | JWT 的 `iss`，校验时必须一致 |
 | `JWT_EXPIRES_IN` | 否 | `1h` | Token 有效期（Go duration，范围 1m–720h） |
@@ -500,7 +514,9 @@ curl http://localhost:8080/api/sync/status
 
 ### 离线下载（Prefill）
 
-画廊详情页的「添加下载任务」把页面 URL 列表交给后端，由后台 worker 逐页串行抓取并写入 MinIO 缓存（约 30 天过期），不生成 ZIP、不返回图片数据。前端「下载管理」页（`/downloads`）轮询进度，支持取消、删除、批量清理，并可随时按任务流式下载 ZIP。
+画廊详情页的「添加下载任务」把页面 URL 列表交给后端，由后台 worker 逐页串行抓取并写入 MinIO 缓存（约 30 天过期）。前端「下载管理」页（`/downloads`）轮询进度，支持取消、删除、批量清理，并可随时按任务流式下载 ZIP。
+
+启用 ZIP 归档存储（`ZIP_ENABLED=true`）后，任务在抓取完图片后还会**流式生成 ZIP 并直接上传到对象存储**：图片逐页写入 `archive/zip` 的 `zip.Writer`，通过 `io.Pipe` 直连分片上传，全程不落本地磁盘、不把完整 ZIP 载入内存。上传成功后把归档对象 Key / 大小 / ETag 记录在任务上（`archive_ready=true`），后续下载直接流式回源，重复下载不再重新打包。ZIP 归档存储与图片缓存完全独立：可分别关闭、使用不同 Bucket / Endpoint / 凭据，也可同时启用。默认下载走「后端流式代理」；设 `ZIP_PRESIGN_DOWNLOAD=true` 后改为 302 跳转到对象存储的**签名 URL 直下**（浏览器直接向存储拉取，节省后端带宽，但要求存储端点对浏览器可达，且仍需登录才能拿到该 URL）。
 
 ```bash
 # 创建任务（同画廊已有排队/运行中的任务时返回该任务）
@@ -508,7 +524,7 @@ curl -X POST http://localhost:8080/api/prefill \
   -H 'Content-Type: application/json' \
   -d '{"gallery_id":123,"token":"abc","title":"My Gallery","urls":["https://exhentai.org/s/x/123-1"]}'
 
-# 任务列表 / 单个任务（轮询进度）
+# 任务列表 / 单个任务（轮询进度；archive_ready 表示 ZIP 已入库）
 curl http://localhost:8080/api/prefill
 curl http://localhost:8080/api/prefill/1
 
@@ -517,11 +533,11 @@ curl -X POST http://localhost:8080/api/prefill/1/cancel
 curl -X DELETE http://localhost:8080/api/prefill/1
 curl -X POST 'http://localhost:8080/api/prefill/cleanup?days=30'
 
-# 流式下载 ZIP（缓存缺失的页会即时补抓）
+# 流式下载 ZIP（有归档则直接回源；否则即时打包，缓存缺失的页会即时补抓）
 curl -OJ http://localhost:8080/api/prefill/1/zip
 ```
 
-进度（`progress.done/cached/fetched`）只在任务于本进程内运行时存在，不落库；数据库仅存任务元信息与终态。进程重启后 `queued`/`running` 的任务自动重新排队。详见 `backend/API.md`。
+进度（`progress.done/cached/fetched`）只在任务于本进程内运行时存在，不落库；数据库仅存任务元信息、归档信息与终态。进程重启后 `queued`/`running` 的任务自动重新排队。详见 `backend/API.md`。
 
 ## 前端开发
 

@@ -90,6 +90,21 @@ func FailedCount(v int) predicate.PrefillJob {
 	return predicate.PrefillJob(sql.FieldEQ(FieldFailedCount, v))
 }
 
+// ArchiveKey applies equality check predicate on the "archive_key" field. It's identical to ArchiveKeyEQ.
+func ArchiveKey(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldEQ(FieldArchiveKey, v))
+}
+
+// ArchiveSize applies equality check predicate on the "archive_size" field. It's identical to ArchiveSizeEQ.
+func ArchiveSize(v int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldEQ(FieldArchiveSize, v))
+}
+
+// ArchiveEtag applies equality check predicate on the "archive_etag" field. It's identical to ArchiveEtagEQ.
+func ArchiveEtag(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldEQ(FieldArchiveEtag, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.PrefillJob {
 	return predicate.PrefillJob(sql.FieldEQ(FieldCreatedAt, v))
@@ -478,6 +493,206 @@ func ErrorsIsNil() predicate.PrefillJob {
 // ErrorsNotNil applies the NotNil predicate on the "errors" field.
 func ErrorsNotNil() predicate.PrefillJob {
 	return predicate.PrefillJob(sql.FieldNotNull(FieldErrors))
+}
+
+// ArchiveKeyEQ applies the EQ predicate on the "archive_key" field.
+func ArchiveKeyEQ(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldEQ(FieldArchiveKey, v))
+}
+
+// ArchiveKeyNEQ applies the NEQ predicate on the "archive_key" field.
+func ArchiveKeyNEQ(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldNEQ(FieldArchiveKey, v))
+}
+
+// ArchiveKeyIn applies the In predicate on the "archive_key" field.
+func ArchiveKeyIn(vs ...string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldIn(FieldArchiveKey, vs...))
+}
+
+// ArchiveKeyNotIn applies the NotIn predicate on the "archive_key" field.
+func ArchiveKeyNotIn(vs ...string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldNotIn(FieldArchiveKey, vs...))
+}
+
+// ArchiveKeyGT applies the GT predicate on the "archive_key" field.
+func ArchiveKeyGT(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldGT(FieldArchiveKey, v))
+}
+
+// ArchiveKeyGTE applies the GTE predicate on the "archive_key" field.
+func ArchiveKeyGTE(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldGTE(FieldArchiveKey, v))
+}
+
+// ArchiveKeyLT applies the LT predicate on the "archive_key" field.
+func ArchiveKeyLT(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldLT(FieldArchiveKey, v))
+}
+
+// ArchiveKeyLTE applies the LTE predicate on the "archive_key" field.
+func ArchiveKeyLTE(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldLTE(FieldArchiveKey, v))
+}
+
+// ArchiveKeyContains applies the Contains predicate on the "archive_key" field.
+func ArchiveKeyContains(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldContains(FieldArchiveKey, v))
+}
+
+// ArchiveKeyHasPrefix applies the HasPrefix predicate on the "archive_key" field.
+func ArchiveKeyHasPrefix(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldHasPrefix(FieldArchiveKey, v))
+}
+
+// ArchiveKeyHasSuffix applies the HasSuffix predicate on the "archive_key" field.
+func ArchiveKeyHasSuffix(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldHasSuffix(FieldArchiveKey, v))
+}
+
+// ArchiveKeyIsNil applies the IsNil predicate on the "archive_key" field.
+func ArchiveKeyIsNil() predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldIsNull(FieldArchiveKey))
+}
+
+// ArchiveKeyNotNil applies the NotNil predicate on the "archive_key" field.
+func ArchiveKeyNotNil() predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldNotNull(FieldArchiveKey))
+}
+
+// ArchiveKeyEqualFold applies the EqualFold predicate on the "archive_key" field.
+func ArchiveKeyEqualFold(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldEqualFold(FieldArchiveKey, v))
+}
+
+// ArchiveKeyContainsFold applies the ContainsFold predicate on the "archive_key" field.
+func ArchiveKeyContainsFold(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldContainsFold(FieldArchiveKey, v))
+}
+
+// ArchiveSizeEQ applies the EQ predicate on the "archive_size" field.
+func ArchiveSizeEQ(v int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldEQ(FieldArchiveSize, v))
+}
+
+// ArchiveSizeNEQ applies the NEQ predicate on the "archive_size" field.
+func ArchiveSizeNEQ(v int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldNEQ(FieldArchiveSize, v))
+}
+
+// ArchiveSizeIn applies the In predicate on the "archive_size" field.
+func ArchiveSizeIn(vs ...int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldIn(FieldArchiveSize, vs...))
+}
+
+// ArchiveSizeNotIn applies the NotIn predicate on the "archive_size" field.
+func ArchiveSizeNotIn(vs ...int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldNotIn(FieldArchiveSize, vs...))
+}
+
+// ArchiveSizeGT applies the GT predicate on the "archive_size" field.
+func ArchiveSizeGT(v int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldGT(FieldArchiveSize, v))
+}
+
+// ArchiveSizeGTE applies the GTE predicate on the "archive_size" field.
+func ArchiveSizeGTE(v int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldGTE(FieldArchiveSize, v))
+}
+
+// ArchiveSizeLT applies the LT predicate on the "archive_size" field.
+func ArchiveSizeLT(v int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldLT(FieldArchiveSize, v))
+}
+
+// ArchiveSizeLTE applies the LTE predicate on the "archive_size" field.
+func ArchiveSizeLTE(v int64) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldLTE(FieldArchiveSize, v))
+}
+
+// ArchiveSizeIsNil applies the IsNil predicate on the "archive_size" field.
+func ArchiveSizeIsNil() predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldIsNull(FieldArchiveSize))
+}
+
+// ArchiveSizeNotNil applies the NotNil predicate on the "archive_size" field.
+func ArchiveSizeNotNil() predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldNotNull(FieldArchiveSize))
+}
+
+// ArchiveEtagEQ applies the EQ predicate on the "archive_etag" field.
+func ArchiveEtagEQ(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldEQ(FieldArchiveEtag, v))
+}
+
+// ArchiveEtagNEQ applies the NEQ predicate on the "archive_etag" field.
+func ArchiveEtagNEQ(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldNEQ(FieldArchiveEtag, v))
+}
+
+// ArchiveEtagIn applies the In predicate on the "archive_etag" field.
+func ArchiveEtagIn(vs ...string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldIn(FieldArchiveEtag, vs...))
+}
+
+// ArchiveEtagNotIn applies the NotIn predicate on the "archive_etag" field.
+func ArchiveEtagNotIn(vs ...string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldNotIn(FieldArchiveEtag, vs...))
+}
+
+// ArchiveEtagGT applies the GT predicate on the "archive_etag" field.
+func ArchiveEtagGT(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldGT(FieldArchiveEtag, v))
+}
+
+// ArchiveEtagGTE applies the GTE predicate on the "archive_etag" field.
+func ArchiveEtagGTE(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldGTE(FieldArchiveEtag, v))
+}
+
+// ArchiveEtagLT applies the LT predicate on the "archive_etag" field.
+func ArchiveEtagLT(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldLT(FieldArchiveEtag, v))
+}
+
+// ArchiveEtagLTE applies the LTE predicate on the "archive_etag" field.
+func ArchiveEtagLTE(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldLTE(FieldArchiveEtag, v))
+}
+
+// ArchiveEtagContains applies the Contains predicate on the "archive_etag" field.
+func ArchiveEtagContains(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldContains(FieldArchiveEtag, v))
+}
+
+// ArchiveEtagHasPrefix applies the HasPrefix predicate on the "archive_etag" field.
+func ArchiveEtagHasPrefix(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldHasPrefix(FieldArchiveEtag, v))
+}
+
+// ArchiveEtagHasSuffix applies the HasSuffix predicate on the "archive_etag" field.
+func ArchiveEtagHasSuffix(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldHasSuffix(FieldArchiveEtag, v))
+}
+
+// ArchiveEtagIsNil applies the IsNil predicate on the "archive_etag" field.
+func ArchiveEtagIsNil() predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldIsNull(FieldArchiveEtag))
+}
+
+// ArchiveEtagNotNil applies the NotNil predicate on the "archive_etag" field.
+func ArchiveEtagNotNil() predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldNotNull(FieldArchiveEtag))
+}
+
+// ArchiveEtagEqualFold applies the EqualFold predicate on the "archive_etag" field.
+func ArchiveEtagEqualFold(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldEqualFold(FieldArchiveEtag, v))
+}
+
+// ArchiveEtagContainsFold applies the ContainsFold predicate on the "archive_etag" field.
+func ArchiveEtagContainsFold(v string) predicate.PrefillJob {
+	return predicate.PrefillJob(sql.FieldContainsFold(FieldArchiveEtag, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

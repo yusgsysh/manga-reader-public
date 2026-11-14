@@ -1276,7 +1276,7 @@ POST /api/reading-progress/cleanup?days=0
 
 `POST /api/prefill`
 
-创建后台预填充任务：服务端按 `urls` 顺序**逐页串行**抓取页面图片并写入 MinIO 缓存，不生成 ZIP，响应中不包含任何图片数据。任务由全局单 worker 严格排队执行（同一时刻只有一个任务、一次只抓一页）。进度通过轮询 `GET /api/prefill/:id` 获取。
+创建后台预填充任务：服务端按 `urls` 顺序**逐页串行**抓取页面图片并写入 MinIO 缓存（仅当图片缓存启用），响应中不包含任何图片数据。启用 ZIP 归档存储时，任务在抓取完成后还会**流式生成 ZIP 并上传到归档对象存储**（详见「26. Prefill ZIP」），成功后 `archive_ready=true`。任务由全局单 worker 严格排队执行（同一时刻只有一个任务、一次只抓一页）。进度通过轮询 `GET /api/prefill/:id` 获取。
 
 **Request Body (JSON):**
 
@@ -1340,6 +1340,7 @@ Content-Type: application/json
 | progress | object \| null | 仅本进程内 `running` 时存在：`{done, cached, fetched}`。纯内存计数、不落库（图片缓存约 30 天过期，落库的进度会失真）；其余状态为 `null` |
 | failed_count | int | 抓取失败的页数 |
 | errors | array | 至多 20 条 `{index, url, error}` |
+| archive_ready | bool | ZIP 是否已生成并上传到归档对象存储（`ZIP_ENABLED=true` 且上传成功时为 `true`） |
 | created_at | string | 创建时间（RFC3339） |
 | updated_at | string | 更新时间（RFC3339） |
 | finished_at | string \| null | 结束时间（RFC3339），未结束为 `null` |
@@ -1351,7 +1352,7 @@ Content-Type: application/json
 | Status Code | Description |
 |-------------|-------------|
 | 400 | body 无效 / `urls` 为空 / 超过 2000 个 / URL 非法（域名或 scheme 不允许） |
-| 503 | 数据库或缓存未配置 |
+| 503 | 数据库未配置，或图片缓存与 ZIP 归档存储均未配置 |
 
 ---
 
@@ -1441,13 +1442,18 @@ Content-Type: application/json
 
 `GET /api/prefill/:id/zip`
 
-以 chunked 流式方式返回 `application/zip`，边读缓存边写出，不在内存中组装完整压缩包。条目按页面顺序命名为 `001.jpg` / `002.png` / …（扩展名由图片 Content-Type 决定）。
+返回 `application/zip`。存在已入库归档（`archive_ready=true`）时：
+
+- `ZIP_PRESIGN_DOWNLOAD=false`（默认）：从归档对象存储流式回源（`Content-Length` 已知）；
+- `ZIP_PRESIGN_DOWNLOAD=true`：`302` 跳转到对象存储的签名 URL（`Location`），浏览器直接向存储拉取，后端不中转字节。
+
+归档未就绪时即时打包，边读边写出，不在内存中组装完整压缩包。条目按页面顺序命名为 `001.jpg` / `002.png` / …（扩展名由图片 Content-Type 决定）。
 
 - 缓存命中：直接从 MinIO 读出写入 ZIP；
 - 缓存缺失：即时抓取补全（经 singleflight 去重，不排队在 worker 后面）；
-- 缺失且抓取失败的页会被跳过（ZIP 中少一个条目）。
+- 缺失且抓取失败的页会被跳过（ZIP 中少一个条目，并追加 `_missing.txt`）。
 
-**Headers:**
+**Headers（流式回源 / 即时打包）:**
 
 ```http
 Content-Type: application/zip
@@ -1455,9 +1461,11 @@ Content-Disposition: attachment; filename="..."; filename*=UTF-8''...
 Cache-Control: no-store
 ```
 
+**签名 URL 直下：** 响应为 `302 Found`，`Location` 指向带 `X-Amz-*` 签名与 `response-content-disposition` 覆盖的存储 URL（有效期 `ZIP_PRESIGN_EXPIRY`）。
+
 **HEAD `/api/prefill/:id/zip`:** 探测 ZIP 是否就绪，不返回正文（前端在下载前调用）。状态码与 GET 相同。
 
-**Error Responses:** `404` 不存在、`400` 非法 id、`503` 数据库或缓存未配置。
+**Error Responses:** `404` 不存在、`400` 非法 id、`503` 数据库未配置，或图片缓存与 ZIP 归档存储均未配置。
 
 ---
 

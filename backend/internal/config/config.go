@@ -11,8 +11,14 @@ import (
 type Config struct {
 	Port     string
 	Database DatabaseConfig
-	MinIO    MinIOConfig
-	LogLevel string
+	// ImageCache configures the optional image cache object store (read-through
+	// page-image/thumbnail cache). Enabled is derived from the presence of the
+	// IMAGE_CACHE_* variables.
+	ImageCache StorageConfig
+	// ZipArchive configures the optional ZIP archive object store, fully
+	// independent from ImageCache. Enabled is opt-in via ZIP_ENABLED.
+	ZipArchive StorageConfig
+	LogLevel   string
 	// Sync configures the peer-facing sync host. Node API keys are stored in
 	// the database, never in the environment.
 	Sync SyncConfig
@@ -120,16 +126,40 @@ func (c CookieConfig) MergedWith(other CookieConfig) CookieConfig {
 	return c
 }
 
-type MinIOConfig struct {
+// StorageConfig configures one object-storage backend. Both the image cache and
+// the ZIP archive use it, but the two instances are fully independent: they can
+// target different providers, endpoints, buckets and credentials, or share any
+// subset of them.
+type StorageConfig struct {
+	// Enabled gates whether this backend is initialized at all. The image cache
+	// derives it from IsConfigured(); the archive reads ZIP_ENABLED explicitly.
+	Enabled   bool
+	Provider  string
 	Endpoint  string
+	Region    string
+	Bucket    string
 	AccessKey string
 	SecretKey string
-	Bucket    string
 	UseSSL    bool
-	Region    string
+	Prefix    string
+
+	// Concurrency bounds how many pages the archive fetches in parallel while
+	// building a ZIP (order is still preserved). 0 or 1 means serial.
+	Concurrency int
+	// PartSize is the multipart upload part size in bytes. 0 selects the SDK
+	// default (16 MiB); a positive value must be at least 5 MiB.
+	PartSize int64
+
+	// PresignDownload redirects ZIP archive downloads to a signed object-store
+	// URL instead of proxying the bytes through the backend. Archive only.
+	PresignDownload bool
+	// PresignExpiry is the lifetime of a signed download URL.
+	PresignExpiry time.Duration
 }
 
-func (c MinIOConfig) IsValid() bool {
+// IsConfigured reports whether the required connection fields are all present.
+// A disabled backend is not required to be configured.
+func (c StorageConfig) IsConfigured() bool {
 	return c.Endpoint != "" && c.AccessKey != "" && c.SecretKey != "" && c.Bucket != ""
 }
 
@@ -155,14 +185,7 @@ func Load() (*Config, error) {
 			RequestTimeout:  30 * time.Second,
 			APIKeyMinLength: 32,
 		},
-		MinIO: MinIOConfig{
-			Endpoint:  getEnv("MINIO_ENDPOINT", ""),
-			AccessKey: getEnv("MINIO_ACCESS_KEY", ""),
-			SecretKey: getEnv("MINIO_SECRET_KEY", ""),
-			Bucket:    getEnv("MINIO_BUCKET", ""),
-			UseSSL:    parseBoolEnv("MINIO_USE_SSL", false),
-			Region:    getEnv("MINIO_REGION", ""),
-		},
+		ImageCache: loadImageCache(),
 	}
 
 	metricsCfg, err := loadMetrics()
@@ -192,6 +215,12 @@ func Load() (*Config, error) {
 	}
 	cfg.Auth = authCfg
 
+	zipArchive, err := loadZipArchive()
+	if err != nil {
+		return nil, err
+	}
+	cfg.ZipArchive = zipArchive
+
 	switch {
 	case cfg.Database.IsPostgres():
 		if cfg.Database.DSN == "" {
@@ -216,6 +245,82 @@ func loadMetrics() (MetricsConfig, error) {
 	}
 	cfg.Token = token
 	return cfg, nil
+}
+
+// loadImageCache maps the IMAGE_CACHE_* environment variables onto the image
+// cache storage backend. It stays implicit: the cache is enabled exactly when
+// the required connection fields are present, so no explicit enable flag is
+// needed. The image cache keeps its own content-addressed sub-prefixes
+// (images/, thumbnail/, …), so it has no operator-configurable Prefix.
+func loadImageCache() StorageConfig {
+	c := StorageConfig{
+		Provider:  strings.ToLower(strings.TrimSpace(getEnv("IMAGE_CACHE_PROVIDER", "minio"))),
+		Endpoint:  getEnv("IMAGE_CACHE_ENDPOINT", ""),
+		AccessKey: getEnv("IMAGE_CACHE_ACCESS_KEY", ""),
+		SecretKey: getEnv("IMAGE_CACHE_SECRET_KEY", ""),
+		Bucket:    getEnv("IMAGE_CACHE_BUCKET", ""),
+		UseSSL:    parseBoolEnv("IMAGE_CACHE_USE_SSL", false),
+		Region:    getEnv("IMAGE_CACHE_REGION", ""),
+	}
+	c.Enabled = c.IsConfigured()
+	return c
+}
+
+// loadZipArchive reads the independent ZIP_* archive backend. Unlike the image
+// cache it is opt-in (ZIP_ENABLED), and validation only applies when enabled:
+// a disabled archive never requires credentials.
+func loadZipArchive() (StorageConfig, error) {
+	c := StorageConfig{
+		Provider:  strings.ToLower(strings.TrimSpace(getEnv("ZIP_PROVIDER", "minio"))),
+		Endpoint:  getEnv("ZIP_ENDPOINT", ""),
+		AccessKey: getEnv("ZIP_ACCESS_KEY", ""),
+		SecretKey: getEnv("ZIP_SECRET_KEY", ""),
+		Bucket:    getEnv("ZIP_BUCKET", ""),
+		UseSSL:    parseBoolEnv("ZIP_USE_SSL", false),
+		Region:    getEnv("ZIP_REGION", ""),
+		Prefix:    getEnv("ZIP_PREFIX", "archives/"),
+	}
+	c.Enabled = parseBoolEnv("ZIP_ENABLED", false)
+
+	concurrency := 4
+	if raw := strings.TrimSpace(getEnv("ZIP_CONCURRENCY", "")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 64 {
+			return StorageConfig{}, fmt.Errorf("ZIP_CONCURRENCY must be an integer between 1 and 64")
+		}
+		concurrency = n
+	}
+	c.Concurrency = concurrency
+
+	if raw := strings.TrimSpace(getEnv("ZIP_PART_SIZE", "")); raw != "" {
+		n, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || n < 0 {
+			return StorageConfig{}, fmt.Errorf("ZIP_PART_SIZE must be a non-negative integer byte count")
+		}
+		// S3 multipart requires parts >= 5 MiB (except the final part).
+		if n > 0 && n < 5<<20 {
+			return StorageConfig{}, fmt.Errorf("ZIP_PART_SIZE must be at least 5 MiB (5242880)")
+		}
+		c.PartSize = n
+	}
+
+	if !c.Enabled {
+		return c, nil
+	}
+	if !c.IsConfigured() {
+		return StorageConfig{}, fmt.Errorf("ZIP_ENABLED requires ZIP_ENDPOINT, ZIP_ACCESS_KEY, ZIP_SECRET_KEY and ZIP_BUCKET")
+	}
+
+	c.PresignDownload = parseBoolEnv("ZIP_PRESIGN_DOWNLOAD", false)
+	c.PresignExpiry = 15 * time.Minute
+	if raw := strings.TrimSpace(getEnv("ZIP_PRESIGN_EXPIRY", "")); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil || d < time.Second || d > 7*24*time.Hour {
+			return StorageConfig{}, fmt.Errorf("ZIP_PRESIGN_EXPIRY must be a duration between 1s and 168h")
+		}
+		c.PresignExpiry = d
+	}
+	return c, nil
 }
 
 // loadAuth reads the JWT/admin settings. Authentication is mandatory: every

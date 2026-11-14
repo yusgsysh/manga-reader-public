@@ -132,6 +132,48 @@ func (_c *PrefillJobCreate) SetErrors(v []model.PrefillItemError) *PrefillJobCre
 	return _c
 }
 
+// SetArchiveKey sets the "archive_key" field.
+func (_c *PrefillJobCreate) SetArchiveKey(v string) *PrefillJobCreate {
+	_c.mutation.SetArchiveKey(v)
+	return _c
+}
+
+// SetNillableArchiveKey sets the "archive_key" field if the given value is not nil.
+func (_c *PrefillJobCreate) SetNillableArchiveKey(v *string) *PrefillJobCreate {
+	if v != nil {
+		_c.SetArchiveKey(*v)
+	}
+	return _c
+}
+
+// SetArchiveSize sets the "archive_size" field.
+func (_c *PrefillJobCreate) SetArchiveSize(v int64) *PrefillJobCreate {
+	_c.mutation.SetArchiveSize(v)
+	return _c
+}
+
+// SetNillableArchiveSize sets the "archive_size" field if the given value is not nil.
+func (_c *PrefillJobCreate) SetNillableArchiveSize(v *int64) *PrefillJobCreate {
+	if v != nil {
+		_c.SetArchiveSize(*v)
+	}
+	return _c
+}
+
+// SetArchiveEtag sets the "archive_etag" field.
+func (_c *PrefillJobCreate) SetArchiveEtag(v string) *PrefillJobCreate {
+	_c.mutation.SetArchiveEtag(v)
+	return _c
+}
+
+// SetNillableArchiveEtag sets the "archive_etag" field if the given value is not nil.
+func (_c *PrefillJobCreate) SetNillableArchiveEtag(v *string) *PrefillJobCreate {
+	if v != nil {
+		_c.SetArchiveEtag(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *PrefillJobCreate) SetCreatedAt(v time.Time) *PrefillJobCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -360,6 +402,18 @@ func (_c *PrefillJobCreate) createSpec() (*PrefillJob, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Errors(); ok {
 		_spec.SetField(prefilljob.FieldErrors, field.TypeJSON, value)
 		_node.Errors = value
+	}
+	if value, ok := _c.mutation.ArchiveKey(); ok {
+		_spec.SetField(prefilljob.FieldArchiveKey, field.TypeString, value)
+		_node.ArchiveKey = &value
+	}
+	if value, ok := _c.mutation.ArchiveSize(); ok {
+		_spec.SetField(prefilljob.FieldArchiveSize, field.TypeInt64, value)
+		_node.ArchiveSize = &value
+	}
+	if value, ok := _c.mutation.ArchiveEtag(); ok {
+		_spec.SetField(prefilljob.FieldArchiveEtag, field.TypeString, value)
+		_node.ArchiveEtag = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(prefilljob.FieldCreatedAt, field.TypeTime, value)

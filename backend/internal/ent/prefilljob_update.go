@@ -186,6 +186,73 @@ func (_u *PrefillJobUpdate) ClearErrors() *PrefillJobUpdate {
 	return _u
 }
 
+// SetArchiveKey sets the "archive_key" field.
+func (_u *PrefillJobUpdate) SetArchiveKey(v string) *PrefillJobUpdate {
+	_u.mutation.SetArchiveKey(v)
+	return _u
+}
+
+// SetNillableArchiveKey sets the "archive_key" field if the given value is not nil.
+func (_u *PrefillJobUpdate) SetNillableArchiveKey(v *string) *PrefillJobUpdate {
+	if v != nil {
+		_u.SetArchiveKey(*v)
+	}
+	return _u
+}
+
+// ClearArchiveKey clears the value of the "archive_key" field.
+func (_u *PrefillJobUpdate) ClearArchiveKey() *PrefillJobUpdate {
+	_u.mutation.ClearArchiveKey()
+	return _u
+}
+
+// SetArchiveSize sets the "archive_size" field.
+func (_u *PrefillJobUpdate) SetArchiveSize(v int64) *PrefillJobUpdate {
+	_u.mutation.ResetArchiveSize()
+	_u.mutation.SetArchiveSize(v)
+	return _u
+}
+
+// SetNillableArchiveSize sets the "archive_size" field if the given value is not nil.
+func (_u *PrefillJobUpdate) SetNillableArchiveSize(v *int64) *PrefillJobUpdate {
+	if v != nil {
+		_u.SetArchiveSize(*v)
+	}
+	return _u
+}
+
+// AddArchiveSize adds value to the "archive_size" field.
+func (_u *PrefillJobUpdate) AddArchiveSize(v int64) *PrefillJobUpdate {
+	_u.mutation.AddArchiveSize(v)
+	return _u
+}
+
+// ClearArchiveSize clears the value of the "archive_size" field.
+func (_u *PrefillJobUpdate) ClearArchiveSize() *PrefillJobUpdate {
+	_u.mutation.ClearArchiveSize()
+	return _u
+}
+
+// SetArchiveEtag sets the "archive_etag" field.
+func (_u *PrefillJobUpdate) SetArchiveEtag(v string) *PrefillJobUpdate {
+	_u.mutation.SetArchiveEtag(v)
+	return _u
+}
+
+// SetNillableArchiveEtag sets the "archive_etag" field if the given value is not nil.
+func (_u *PrefillJobUpdate) SetNillableArchiveEtag(v *string) *PrefillJobUpdate {
+	if v != nil {
+		_u.SetArchiveEtag(*v)
+	}
+	return _u
+}
+
+// ClearArchiveEtag clears the value of the "archive_etag" field.
+func (_u *PrefillJobUpdate) ClearArchiveEtag() *PrefillJobUpdate {
+	_u.mutation.ClearArchiveEtag()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *PrefillJobUpdate) SetUpdatedAt(v time.Time) *PrefillJobUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -313,6 +380,27 @@ func (_u *PrefillJobUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	}
 	if _u.mutation.ErrorsCleared() {
 		_spec.ClearField(prefilljob.FieldErrors, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.ArchiveKey(); ok {
+		_spec.SetField(prefilljob.FieldArchiveKey, field.TypeString, value)
+	}
+	if _u.mutation.ArchiveKeyCleared() {
+		_spec.ClearField(prefilljob.FieldArchiveKey, field.TypeString)
+	}
+	if value, ok := _u.mutation.ArchiveSize(); ok {
+		_spec.SetField(prefilljob.FieldArchiveSize, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedArchiveSize(); ok {
+		_spec.AddField(prefilljob.FieldArchiveSize, field.TypeInt64, value)
+	}
+	if _u.mutation.ArchiveSizeCleared() {
+		_spec.ClearField(prefilljob.FieldArchiveSize, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.ArchiveEtag(); ok {
+		_spec.SetField(prefilljob.FieldArchiveEtag, field.TypeString, value)
+	}
+	if _u.mutation.ArchiveEtagCleared() {
+		_spec.ClearField(prefilljob.FieldArchiveEtag, field.TypeString)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(prefilljob.FieldUpdatedAt, field.TypeTime, value)
@@ -498,6 +586,73 @@ func (_u *PrefillJobUpdateOne) ClearErrors() *PrefillJobUpdateOne {
 	return _u
 }
 
+// SetArchiveKey sets the "archive_key" field.
+func (_u *PrefillJobUpdateOne) SetArchiveKey(v string) *PrefillJobUpdateOne {
+	_u.mutation.SetArchiveKey(v)
+	return _u
+}
+
+// SetNillableArchiveKey sets the "archive_key" field if the given value is not nil.
+func (_u *PrefillJobUpdateOne) SetNillableArchiveKey(v *string) *PrefillJobUpdateOne {
+	if v != nil {
+		_u.SetArchiveKey(*v)
+	}
+	return _u
+}
+
+// ClearArchiveKey clears the value of the "archive_key" field.
+func (_u *PrefillJobUpdateOne) ClearArchiveKey() *PrefillJobUpdateOne {
+	_u.mutation.ClearArchiveKey()
+	return _u
+}
+
+// SetArchiveSize sets the "archive_size" field.
+func (_u *PrefillJobUpdateOne) SetArchiveSize(v int64) *PrefillJobUpdateOne {
+	_u.mutation.ResetArchiveSize()
+	_u.mutation.SetArchiveSize(v)
+	return _u
+}
+
+// SetNillableArchiveSize sets the "archive_size" field if the given value is not nil.
+func (_u *PrefillJobUpdateOne) SetNillableArchiveSize(v *int64) *PrefillJobUpdateOne {
+	if v != nil {
+		_u.SetArchiveSize(*v)
+	}
+	return _u
+}
+
+// AddArchiveSize adds value to the "archive_size" field.
+func (_u *PrefillJobUpdateOne) AddArchiveSize(v int64) *PrefillJobUpdateOne {
+	_u.mutation.AddArchiveSize(v)
+	return _u
+}
+
+// ClearArchiveSize clears the value of the "archive_size" field.
+func (_u *PrefillJobUpdateOne) ClearArchiveSize() *PrefillJobUpdateOne {
+	_u.mutation.ClearArchiveSize()
+	return _u
+}
+
+// SetArchiveEtag sets the "archive_etag" field.
+func (_u *PrefillJobUpdateOne) SetArchiveEtag(v string) *PrefillJobUpdateOne {
+	_u.mutation.SetArchiveEtag(v)
+	return _u
+}
+
+// SetNillableArchiveEtag sets the "archive_etag" field if the given value is not nil.
+func (_u *PrefillJobUpdateOne) SetNillableArchiveEtag(v *string) *PrefillJobUpdateOne {
+	if v != nil {
+		_u.SetArchiveEtag(*v)
+	}
+	return _u
+}
+
+// ClearArchiveEtag clears the value of the "archive_etag" field.
+func (_u *PrefillJobUpdateOne) ClearArchiveEtag() *PrefillJobUpdateOne {
+	_u.mutation.ClearArchiveEtag()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *PrefillJobUpdateOne) SetUpdatedAt(v time.Time) *PrefillJobUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
@@ -655,6 +810,27 @@ func (_u *PrefillJobUpdateOne) sqlSave(ctx context.Context) (_node *PrefillJob, 
 	}
 	if _u.mutation.ErrorsCleared() {
 		_spec.ClearField(prefilljob.FieldErrors, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.ArchiveKey(); ok {
+		_spec.SetField(prefilljob.FieldArchiveKey, field.TypeString, value)
+	}
+	if _u.mutation.ArchiveKeyCleared() {
+		_spec.ClearField(prefilljob.FieldArchiveKey, field.TypeString)
+	}
+	if value, ok := _u.mutation.ArchiveSize(); ok {
+		_spec.SetField(prefilljob.FieldArchiveSize, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedArchiveSize(); ok {
+		_spec.AddField(prefilljob.FieldArchiveSize, field.TypeInt64, value)
+	}
+	if _u.mutation.ArchiveSizeCleared() {
+		_spec.ClearField(prefilljob.FieldArchiveSize, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.ArchiveEtag(); ok {
+		_spec.SetField(prefilljob.FieldArchiveEtag, field.TypeString, value)
+	}
+	if _u.mutation.ArchiveEtagCleared() {
+		_spec.ClearField(prefilljob.FieldArchiveEtag, field.TypeString)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(prefilljob.FieldUpdatedAt, field.TypeTime, value)
