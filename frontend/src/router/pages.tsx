@@ -1,6 +1,5 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { useParams } from "react-router";
-import { Loader } from "@cloudflare/kumo";
 import { LoadingScreen } from "../components/common/LoadingScreen";
 
 export const HomePage = lazy(() =>
@@ -48,27 +47,8 @@ export const SetupPage = lazy(() =>
   import("../pages/SetupPage").then((m) => ({ default: m.SetupPage })),
 );
 
-function PageLoading() {
-  return (
-    <div className="flex justify-center py-20">
-      <Loader size={28} />
-    </div>
-  );
-}
-
-export function LazyPage({
-  children,
-  fullscreen = false,
-}: {
-  children: ReactNode;
-  /** Use the viewport-centered loader for standalone routes (login, setup). */
-  fullscreen?: boolean;
-}) {
-  return (
-    <Suspense fallback={fullscreen ? <LoadingScreen /> : <PageLoading />}>
-      {children}
-    </Suspense>
-  );
+export function LazyPage({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<LoadingScreen />}>{children}</Suspense>;
 }
 
 export function ReaderLoading() {

@@ -23,7 +23,7 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     element: (
-      <LazyPage fullscreen>
+      <LazyPage>
         <LoginPage />
       </LazyPage>
     ),
@@ -31,7 +31,7 @@ export const router = createBrowserRouter([
   {
     path: "/setup",
     element: (
-      <LazyPage fullscreen>
+      <LazyPage>
         <SetupPage />
       </LazyPage>
     ),
@@ -43,79 +43,18 @@ export const router = createBrowserRouter([
         <AppLayout />
       </RequireAuth>
     ),
+    // Pages are lazy; AppLayout's Suspense boundary handles their fallback so
+    // the spinner stays viewport-centered instead of moving with the content.
     children: [
-      {
-        index: true,
-        element: (
-          <LazyPage>
-            <HomePage />
-          </LazyPage>
-        ),
-      },
-      {
-        path: "watched",
-        element: (
-          <LazyPage>
-            <SubscriptionsPage />
-          </LazyPage>
-        ),
-      },
-      {
-        path: "popular",
-        element: (
-          <LazyPage>
-            <PopularPage />
-          </LazyPage>
-        ),
-      },
-      {
-        path: "search",
-        element: (
-          <LazyPage>
-            <SearchPage />
-          </LazyPage>
-        ),
-      },
-      {
-        path: "bookshelf",
-        element: (
-          <LazyPage>
-            <BookshelfPage />
-          </LazyPage>
-        ),
-      },
-      {
-        path: "recently-read",
-        element: (
-          <LazyPage>
-            <RecentlyReadPage />
-          </LazyPage>
-        ),
-      },
-      {
-        path: "downloads",
-        element: (
-          <LazyPage>
-            <DownloadManagerPage />
-          </LazyPage>
-        ),
-      },
-      {
-        path: "settings",
-        element: (
-          <LazyPage>
-            <SettingsPage />
-          </LazyPage>
-        ),
-      },
-      {
-        path: "gallery/:id/:token",
-        element: (
-          <LazyPage>
-            <GalleryDetailPage />
-          </LazyPage>
-        ),
-      },
+      { index: true, element: <HomePage /> },
+      { path: "watched", element: <SubscriptionsPage /> },
+      { path: "popular", element: <PopularPage /> },
+      { path: "search", element: <SearchPage /> },
+      { path: "bookshelf", element: <BookshelfPage /> },
+      { path: "recently-read", element: <RecentlyReadPage /> },
+      { path: "downloads", element: <DownloadManagerPage /> },
+      { path: "settings", element: <SettingsPage /> },
+      { path: "gallery/:id/:token", element: <GalleryDetailPage /> },
     ],
   },
   {
