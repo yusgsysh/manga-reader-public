@@ -78,7 +78,7 @@ export function HomePage() {
         <EmptyState message="暂无 Gallery" />
       ) : (
         <>
-          <GalleryGrid galleries={galleries} />
+          <GalleryGrid loadingMore={isFetchingNextPage} galleries={galleries} />
           <InfiniteScrollTrigger
             hasNextPage={!!hasNextPage}
             isFetchingNextPage={isFetchingNextPage}

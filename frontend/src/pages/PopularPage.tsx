@@ -57,7 +57,7 @@ export function PopularPage() {
       <PageHeader
         title="热门"
       />
-      <GalleryGrid galleries={galleries} />
+      <GalleryGrid loadingMore={isFetchingNextPage} galleries={galleries} />
       <InfiniteScrollTrigger
         hasNextPage={!!hasNextPage}
         isFetchingNextPage={isFetchingNextPage}
