@@ -43,8 +43,9 @@ const SHORTCUT_SECTIONS: ShortcutSection[] = [
     title: "显示模式",
     wrap: true,
     items: [
-      { keys: ["N", "Esc"], label: "标准" },
+      { keys: ["N"], label: "标准" },
       { keys: ["F"], label: "全屏" },
+      { keys: ["Esc"], label: "关闭面板 / 退出全屏" },
     ],
   },
   {
