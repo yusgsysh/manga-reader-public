@@ -313,7 +313,6 @@ func (s *Server) handleAdminNodeKeyCreate(c *gin.Context) {
 	limitRequestBody(c, 64<<10)
 	var body struct {
 		Scopes        []string `json:"scopes"`
-		ExpiresAt     *string  `json:"expires_at"`
 		ExpiresInDays *int     `json:"expires_in_days"`
 	}
 	if err := web.BindJSON(c, &body); err != nil {
@@ -325,7 +324,7 @@ func (s *Server) handleAdminNodeKeyCreate(c *gin.Context) {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid scopes"})
 		return
 	}
-	expires, ok := parseKeyExpiry(body.ExpiresAt, body.ExpiresInDays)
+	expires, ok := parseKeyExpiry(body.ExpiresInDays)
 	if !ok {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid expiry"})
 		return
@@ -403,15 +402,14 @@ func (s *Server) handleAdminNodeKeyRotate(c *gin.Context) {
 	}
 	limitRequestBody(c, 64<<10)
 	var body struct {
-		RevokeOld     bool    `json:"revoke_old"`
-		ExpiresAt     *string `json:"expires_at"`
-		ExpiresInDays *int    `json:"expires_in_days"`
+		RevokeOld     bool `json:"revoke_old"`
+		ExpiresInDays *int `json:"expires_in_days"`
 	}
 	if err := web.BindJSON(c, &body); err != nil {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
-	expires, ok := parseKeyExpiry(body.ExpiresAt, body.ExpiresInDays)
+	expires, ok := parseKeyExpiry(body.ExpiresInDays)
 	if !ok {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid expiry"})
 		return
@@ -472,27 +470,15 @@ func nodeIDParam(c *gin.Context) (ident.UUID, bool) {
 // key that outlives every sane rotation policy.
 const maxKeyExpiryDays = 3650
 
-// parseKeyExpiry resolves the two accepted expiry forms. expires_in_days is
-// the UI-facing form (choose a lifetime, not a calendar date); expires_at stays
-// for API clients and is only consulted when no day count was supplied.
-func parseKeyExpiry(expiresAt *string, expiresInDays *int) (*time.Time, bool) {
-	if expiresInDays != nil {
-		if *expiresInDays < 1 || *expiresInDays > maxKeyExpiryDays {
-			return nil, false
-		}
-		t := time.Now().UTC().AddDate(0, 0, *expiresInDays)
-		return &t, true
-	}
-	return parseExpiry(expiresAt)
-}
-
-func parseExpiry(raw *string) (*time.Time, bool) {
-	if raw == nil || strings.TrimSpace(*raw) == "" {
+// parseKeyExpiry converts the day-based lifetime into an absolute expiry. A
+// missing count means the key never expires.
+func parseKeyExpiry(expiresInDays *int) (*time.Time, bool) {
+	if expiresInDays == nil {
 		return nil, true
 	}
-	t, err := time.Parse(time.RFC3339, strings.TrimSpace(*raw))
-	if err != nil || !t.After(time.Now().UTC()) {
+	if *expiresInDays < 1 || *expiresInDays > maxKeyExpiryDays {
 		return nil, false
 	}
+	t := time.Now().UTC().AddDate(0, 0, *expiresInDays)
 	return &t, true
 }

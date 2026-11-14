@@ -253,12 +253,12 @@ All routes require an administrator JWT. A node is a trusted sync peer of the in
 | PUT | `/api/admin/nodes/:id` | `{ "name"?, "status"? }` |
 | DELETE | `/api/admin/nodes/:id` | - |
 | GET | `/api/admin/nodes/:id/keys` | - |
-| POST | `/api/admin/nodes/:id/keys` | `{ "scopes"?, "expires_in_days"? }`（`expires_at` 仍兼容） |
+| POST | `/api/admin/nodes/:id/keys` | `{ "scopes"?, "expires_in_days"? }` |
 | DELETE | `/api/admin/nodes/:id/keys/:keyId` | - |
-| POST | `/api/admin/nodes/:id/keys/:keyId/rotate` | `{ "revoke_old"?, "expires_in_days"? }`（`expires_at` 仍兼容） |
+| POST | `/api/admin/nodes/:id/keys/:keyId/rotate` | `{ "revoke_old"?, "expires_in_days"? }` |
 
 - Scopes: `sync:read`, `sync:write`, `sync:events`（默认）与 `metrics:read`（可选，用于 `/metrics`）。
-- `expires_in_days` 为 1–3650 的整数，服务端按当前时间加天数计算过期时间；省略即永不过期。`expires_at` 仅在没有 `expires_in_days` 时使用。
+- `expires_in_days` 为 1–3650 的整数，服务端按当前时间加天数计算过期时间；省略即永不过期。
 - `POST .../keys` and `.../rotate` return the full plaintext key **once** as `{"key":"mrk_...", "api_key":{...}}`; list/get only expose `key_prefix`.
 - Revocation is immediate. Rotation creates a new key and leaves the old one active unless `revoke_old` is true or the old key is explicitly deleted.
 - Sync changes carry `user_id`; a trusted node replicates all users' data without merging ownership.
