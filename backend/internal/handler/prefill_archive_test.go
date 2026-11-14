@@ -197,6 +197,46 @@ func TestPrefillArchive_ArchiveOnlyMode(t *testing.T) {
 	}
 }
 
+func TestPrefillArchive_ArchiveOnlyProgress(t *testing.T) {
+	// Without an image cache the archive build is the only fetch path, so the
+	// in-memory progress counters (done/cached/fetched) must advance while the
+	// job is running instead of sitting at zero until it completes.
+	up := &prefillUpstream{delay: 60 * time.Millisecond}
+	arch := newMockArchiveStorage()
+	r, _ := newArchiveTestServer(t, up, nil, arch, false)
+
+	code, body := doJSON(t, r, http.MethodPost, "/api/prefill", map[string]any{
+		"title": "archive-only-progress",
+		"urls":  pageURLs("g1", "g2", "g3", "g4"),
+	})
+	if code != http.StatusAccepted {
+		t.Fatalf("status = %d, body: %s", code, body)
+	}
+	var created archiveJobResp
+	if err := json.Unmarshal(body, &created); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	sawProgress := false
+	for time.Now().Before(deadline) {
+		job := getPrefillJob(t, r, created.ID)
+		if job.Status == prefillStatusRunning && job.Progress != nil && job.Progress.Done > 0 {
+			sawProgress = true
+			break
+		}
+		if job.Status == prefillStatusCompleted || job.Status == prefillStatusFailed {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !sawProgress {
+		t.Fatal("archive-only job never reported non-zero progress while running")
+	}
+
+	waitArchiveStatus(t, r, created.ID, 15*time.Second, prefillStatusCompleted)
+}
+
 func TestPrefillZip_NoStorageConfigured(t *testing.T) {
 	client := newTestDB(t)
 	r := setupMockRouter(&Server{Client: &http.Client{}, DB: &database.DB{Client: client}})

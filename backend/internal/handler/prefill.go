@@ -1094,10 +1094,22 @@ func (s *Server) fetchPage(ctx context.Context, userID ident.UUID, pageURL strin
 // is not kept.
 func (m *prefillManager) buildArchive(s *Server, ctx context.Context, run *prefillRun, row *ent.PrefillJob) (storage.ObjectInfo, error) {
 	key := prefillArchiveKey(row.UserID, row.ID, row.Title)
+	// In archive-only mode (no image cache) the archive build is the only place
+	// pages are fetched, so it must also drive the job's progress counters.
+	// When the image cache is enabled, phase 1 (processPages) already accounts
+	// for every page, so counting again here would over-report the progress.
+	archiveOnly := s.Cache == nil
 	fetch := func(fctx context.Context, pageURL string) ([]byte, string, error) {
 		pageCtx, cancel := context.WithTimeout(fctx, prefillPageTimeout)
 		defer cancel()
-		return s.fetchPage(pageCtx, row.UserID, pageURL)
+		data, ct, err := s.fetchPage(pageCtx, row.UserID, pageURL)
+		if archiveOnly && err == nil {
+			m.mu.Lock()
+			run.done++
+			run.fetched++
+			m.mu.Unlock()
+		}
+		return data, ct, err
 	}
 	info, res, err := archive.BuildAndUpload(ctx, s.Archive, key, row.Urls, fetch, archive.Options{
 		Concurrency: s.ArchiveConcurrency,
@@ -1108,6 +1120,9 @@ func (m *prefillManager) buildArchive(s *Server, ctx context.Context, run *prefi
 		OnMissing: func(index int, pageURL string, err error) {
 			m.mu.Lock()
 			run.failed++
+			if archiveOnly {
+				run.done++
+			}
 			if len(run.errs) < prefillMaxErrors {
 				run.errs = append(run.errs, model.PrefillItemError{Index: index, URL: pageURL, Error: err.Error()})
 			}
