@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Input, Loader } from "@cloudflare/kumo";
+import { Button, Checkbox, DatePicker, Input, Loader, Popover, Select } from "@cloudflare/kumo";
 import {
   ArrowsClockwise,
+  CalendarBlank,
   CircleNotch,
   Key,
   Plus,
@@ -25,9 +26,46 @@ import {
 } from "../../api/nodes";
 import { ErrorState } from "../common/ErrorState";
 import { Section, useToast } from "../ui";
-import { formatDateTime } from "../../lib/time";
+import { formatDate, formatDateTime } from "../../lib/time";
 
 const NODES_KEY = ["admin", "nodes"] as const;
+
+/**
+ * GitHub-style lifetime presets. A key defaults to 30 days, the recommended
+ * rotation window, instead of quietly living forever.
+ */
+const EXPIRY_PRESETS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "7", label: "7 天" },
+  { value: "30", label: "30 天（推荐）" },
+  { value: "60", label: "60 天" },
+  { value: "90", label: "90 天" },
+  { value: "180", label: "180 天" },
+  { value: "365", label: "1 年" },
+  { value: "custom", label: "自定义…" },
+  { value: "never", label: "永不过期" },
+];
+
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function endOfDay(date: Date): Date {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    23,
+    59,
+    59,
+    999,
+  );
+}
 
 function KeyList({ node }: { node: SyncNode }) {
   const toast = useToast();
@@ -35,13 +73,25 @@ function KeyList({ node }: { node: SyncNode }) {
   const [plaintext, setPlaintext] = useState<string | null>(null);
   const [scopes, setScopes] = useState<NodeScope[]>([...NODE_SCOPES]);
   const [metricsAccess, setMetricsAccess] = useState(false);
-  const [expiresDays, setExpiresDays] = useState("");
+  const [expiry, setExpiry] = useState("30");
+  const [customDate, setCustomDate] = useState<Date>();
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  // Snapshot the day once so date bounds do not shift mid-render.
+  const [today] = useState(() => startOfDay(new Date()));
 
-  const days =
-    expiresDays.trim() === "" ? undefined : Number(expiresDays);
-  const validDays =
-    days === undefined ||
-    (Number.isInteger(days) && days >= 1 && days <= 3650);
+  const tomorrow = addDays(today, 1);
+  const maxExpiryDate = addDays(today, 3650);
+  // A custom calendar date expires at the end of that local day.
+  const customExpiry = customDate ? endOfDay(customDate) : undefined;
+  const customValid =
+    customDate !== undefined &&
+    startOfDay(customDate).getTime() >= tomorrow.getTime() &&
+    startOfDay(customDate).getTime() <= maxExpiryDate.getTime();
+
+  const presetDays =
+    expiry === "never" || expiry === "custom" ? undefined : Number(expiry);
+  const validExpiry =
+    expiry === "never" || (expiry === "custom" ? customValid : true);
   const selectedScopes: NodeScope[] = metricsAccess
     ? [...scopes, METRICS_SCOPE]
     : scopes;
@@ -60,14 +110,24 @@ function KeyList({ node }: { node: SyncNode }) {
   };
 
   const create = useMutation({
-    mutationFn: () =>
-      createNodeKey(node.id, {
-        scopes: selectedScopes,
-        expires_in_days: days,
-      }),
+    mutationFn: () => {
+      const input: {
+        scopes: NodeScope[];
+        expires_in_days?: number;
+        expires_at?: string;
+      } = { scopes: selectedScopes };
+      if (expiry === "custom") {
+        if (customExpiry) input.expires_at = customExpiry.toISOString();
+      } else if (presetDays !== undefined) {
+        input.expires_in_days = presetDays;
+      }
+      return createNodeKey(node.id, input);
+    },
     onSuccess: (result) => {
       setPlaintext(result.key);
-      setExpiresDays("");
+      setExpiry("30");
+      setCustomDate(undefined);
+      setCalendarOpen(false);
       refresh();
       toast.success("API Key 已创建", "完整密钥只显示这一次");
     },
@@ -103,7 +163,7 @@ function KeyList({ node }: { node: SyncNode }) {
   };
 
   return (
-    <div className="mt-4 space-y-3 border-t border-kumo-hairline pt-4">
+    <div className="mt-4 space-y-4 border-t border-kumo-hairline pt-4">
       {plaintext && (
         <div className="rounded-xl border border-kumo-success/30 bg-kumo-success/10 p-3">
           <div className="text-xs font-medium text-kumo-success">
@@ -126,90 +186,141 @@ function KeyList({ node }: { node: SyncNode }) {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
-        {NODE_SCOPES.map((scope) => (
-          <label key={scope} className="flex items-center gap-1.5 text-xs">
-            <input
-              type="checkbox"
-              checked={scopes.includes(scope)}
-              onChange={() => toggleScope(scope)}
+      <div className="card-surface space-y-4 p-4">
+        <h3 className="text-xs font-medium text-kumo-subtle">创建 API Key</h3>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-kumo-subtle">权限范围</div>
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              {NODE_SCOPES.map((scope) => (
+                <Checkbox
+                  key={scope}
+                  label={scope}
+                  checked={scopes.includes(scope)}
+                  onCheckedChange={() => toggleScope(scope)}
+                />
+              ))}
+            </div>
+            <Checkbox
+              label="允许读取 /metrics（监控）"
+              checked={metricsAccess}
+              onCheckedChange={(checked) => setMetricsAccess(Boolean(checked))}
             />
-            {scope}
-          </label>
-        ))}
-        <label className="flex items-center gap-1.5 text-xs">
-          <input
-            type="checkbox"
-            checked={metricsAccess}
-            onChange={(event) => setMetricsAccess(event.target.checked)}
-          />
-          允许读取 /metrics（监控）
-        </label>
-        <label className="flex items-center gap-1.5 text-xs">
-          有效期
-          <input
-            type="number"
-            min={1}
-            max={3650}
-            step={1}
-            aria-label="有效期（天）"
-            placeholder="永久"
-            value={expiresDays}
-            onChange={(event) => setExpiresDays(event.target.value)}
-            className="w-20 rounded-lg border border-kumo-hairline bg-kumo-base px-2 py-1.5 text-xs text-kumo-default"
-          />
-          天
-        </label>
-        <Button
-          size="sm"
-          onClick={() => create.mutate()}
-          disabled={
-            create.isPending || selectedScopes.length === 0 || !validDays
-          }
-        >
-          {create.isPending ? (
-            <CircleNotch className="mr-1 size-3.5 animate-spin" />
-          ) : (
-            <Plus className="mr-1 size-3.5" />
-          )}
-          创建 Key
-        </Button>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-kumo-subtle">有效期</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={expiry}
+                onValueChange={(next) => {
+                  const value = next ?? "30";
+                  setExpiry(value);
+                  if (value === "custom") setCalendarOpen(true);
+                }}
+                aria-label="有效期"
+                items={EXPIRY_PRESETS}
+                className="w-40"
+              />
+              {expiry === "custom" && (
+                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                  <Popover.Trigger
+                    render={
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="justify-start"
+                      />
+                    }
+                  >
+                    <CalendarBlank className="size-4 shrink-0" weight="bold" />
+                    <span className="min-w-0 truncate">
+                      {customDate ? formatDate(customDate) : "选择日期"}
+                    </span>
+                  </Popover.Trigger>
+                  <Popover.Content side="bottom" align="start" className="p-2">
+                    <DatePicker
+                      mode="single"
+                      selected={customDate}
+                      onChange={(date) => {
+                        if (!date) return;
+                        setCustomDate(date);
+                        setCalendarOpen(false);
+                      }}
+                      disabled={{ before: tomorrow, after: maxExpiryDate }}
+                      startMonth={today}
+                      endMonth={maxExpiryDate}
+                    />
+                  </Popover.Content>
+                </Popover>
+              )}
+            </div>
+            <p className="text-xs text-kumo-subtle">
+              {expiry === "never"
+                ? "Key 不会自动过期，建议定期轮换。"
+                : expiry === "custom"
+                  ? customValid && customExpiry
+                    ? `将于 ${formatDateTime(customExpiry)} 到期。`
+                    : "请选择到期日期（至少 1 天后，最长 10 年）。"
+                  : "到期后 Key 自动失效。"}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            onClick={() => create.mutate()}
+            disabled={
+              create.isPending || selectedScopes.length === 0 || !validExpiry
+            }
+          >
+            {create.isPending ? (
+              <CircleNotch className="mr-1 size-3.5 animate-spin" />
+            ) : (
+              <Plus className="mr-1 size-3.5" />
+            )}
+            创建 Key
+          </Button>
+        </div>
       </div>
 
-      {keysQuery.isLoading ? (
-        <div className="flex justify-center py-4">
-          <Loader size={20} />
-        </div>
-      ) : keysQuery.isError ? (
-        <ErrorState
-          message="加载 API Key 失败"
-          onRetry={() => void keysQuery.refetch()}
-        />
-      ) : (
-        <div className="space-y-2">
-          {keysQuery.data?.keys.map((key) => (
+      <div className="space-y-2">
+        <h3 className="text-xs font-medium text-kumo-subtle">已有 Key</h3>
+        {keysQuery.isLoading ? (
+          <div className="flex justify-center py-4">
+            <Loader size={20} />
+          </div>
+        ) : keysQuery.isError ? (
+          <ErrorState
+            message="加载 API Key 失败"
+            onRetry={() => void keysQuery.refetch()}
+          />
+        ) : keysQuery.data?.keys.length ? (
+          keysQuery.data.keys.map((key) => (
             <div
               key={key.id}
               className="flex flex-wrap items-center gap-2 rounded-lg bg-kumo-recessed p-2.5 text-xs"
             >
               <code className="font-mono">{key.key_prefix}…</code>
-              <span className="text-kumo-subtle">
+              <span className="rounded-full bg-kumo-tint px-2 py-0.5 text-[11px] text-kumo-subtle">
                 {key.scopes.join(", ")}
               </span>
               <span
                 className={
                   key.status === "active"
-                    ? "text-kumo-success"
-                    : "text-kumo-danger"
+                    ? "rounded-full bg-kumo-success/10 px-2 py-0.5 text-kumo-success"
+                    : "rounded-full bg-kumo-danger/10 px-2 py-0.5 text-kumo-danger"
                 }
               >
-                {key.status}
+                {key.status === "active" ? "有效" : "已撤销"}
               </span>
-              {key.expires_at && (
-                <span className="text-kumo-subtle">
-                  过期 {formatDateTime(key.expires_at)}
-                </span>
-              )}
+              <span className="text-kumo-subtle">
+                {key.expires_at
+                  ? `过期 ${formatDateTime(key.expires_at)}`
+                  : "永不过期"}
+              </span>
               {key.last_used_at && (
                 <span className="text-kumo-subtle">
                   最后使用 {formatDateTime(key.last_used_at)}
@@ -239,9 +350,13 @@ function KeyList({ node }: { node: SyncNode }) {
                 </>
               )}
             </div>
-          ))}
-        </div>
-      )}
+          ))
+        ) : (
+          <p className="rounded-lg bg-kumo-recessed p-3 text-xs text-kumo-subtle">
+            暂无 API Key。创建后完整密钥只显示一次。
+          </p>
+        )}
+      </div>
     </div>
   );
 }

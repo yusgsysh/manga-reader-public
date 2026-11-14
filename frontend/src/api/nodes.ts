@@ -65,7 +65,7 @@ export function fetchNodeKeys(
 
 export function createNodeKey(
   id: string,
-  input?: { scopes?: NodeScope[]; expires_in_days?: number },
+  input?: { scopes?: NodeScope[]; expires_in_days?: number; expires_at?: string },
 ): Promise<CreatedNodeKey> {
   return apiPostJson<CreatedNodeKey>(`/api/admin/nodes/${id}/keys`, input ?? {});
 }
@@ -80,7 +80,11 @@ export function revokeNodeKey(
 export function rotateNodeKey(
   nodeId: string,
   keyId: string,
-  input?: { revoke_old?: boolean; expires_in_days?: number },
+  input?: {
+    revoke_old?: boolean;
+    expires_in_days?: number;
+    expires_at?: string;
+  },
 ): Promise<CreatedNodeKey> {
   return apiPostJson<CreatedNodeKey>(
     `/api/admin/nodes/${nodeId}/keys/${keyId}/rotate`,
