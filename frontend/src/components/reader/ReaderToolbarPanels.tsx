@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowSquareOut } from "@phosphor-icons/react";
 import { pageThumbnailUrl } from "../../lib/image";
-import { ComimiMascot } from "./ComimiMascot";
 
 /*
  * App-owned reader panels, rendered from the reader top bar.
@@ -12,12 +10,6 @@ import { ComimiMascot } from "./ComimiMascot";
  * they appear anchored to the top-right buttons instead of comimi's top-left
  * menu, and are fully under app control.
  */
-
-// comimi metadata. The library keeps these internal (`dist/index.js`) and does
-// not export them, so mirror the installed version here.
-const COMIMI_VERSION = "0.26.0";
-const COMIMI_REPOSITORY_URL = "https://github.com/yui540/comimi";
-const COMIMI_SITE_URL = "https://yui540.com/comimi";
 
 /* ------------------------------------------------------------------ */
 /* Keyboard shortcuts                                                  */
@@ -51,8 +43,9 @@ const SHORTCUT_SECTIONS: ShortcutSection[] = [
     title: "显示模式",
     wrap: true,
     items: [
-      { keys: ["N", "Esc"], label: "标准" },
+      { keys: ["N"], label: "标准" },
       { keys: ["F"], label: "全屏" },
+      { keys: ["Esc"], label: "关闭面板 / 退出全屏" },
     ],
   },
   {
@@ -230,62 +223,6 @@ export function ReaderPageList({
           onSelect={onGoToPage}
         />
       ))}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* About comimi                                                        */
-/* ------------------------------------------------------------------ */
-
-export function ReaderAbout() {
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 rounded-xl bg-kumo-recessed px-4 py-3">
-        <ComimiMascot className="size-9 text-kumo-default" />
-        <div>
-          <div className="text-sm font-semibold text-kumo-default">comimi</div>
-          <div className="text-xs text-kumo-subtle">开源漫画阅读器</div>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between px-1 text-sm">
-        <span className="font-medium text-kumo-subtle">版本</span>
-        <span className="font-mono text-xs font-semibold text-kumo-default">
-          v{COMIMI_VERSION}
-        </span>
-      </div>
-
-      <div className="space-y-1">
-        <a
-          href={COMIMI_REPOSITORY_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-between rounded-lg px-3 py-2 text-sm text-kumo-default transition hover:bg-kumo-tint"
-        >
-          <span>
-            GitHub 仓库
-            <span className="ml-2 hidden text-xs text-kumo-subtle sm:inline">
-              {COMIMI_REPOSITORY_URL.replace(/^https?:\/\//, "")}
-            </span>
-          </span>
-          <ArrowSquareOut className="size-4 text-kumo-subtle" weight="bold" />
-        </a>
-        <a
-          href={COMIMI_SITE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-between rounded-lg px-3 py-2 text-sm text-kumo-default transition hover:bg-kumo-tint"
-        >
-          <span>
-            官方网站
-            <span className="ml-2 hidden text-xs text-kumo-subtle sm:inline">
-              {COMIMI_SITE_URL.replace(/^https?:\/\//, "")}
-            </span>
-          </span>
-          <ArrowSquareOut className="size-4 text-kumo-subtle" weight="bold" />
-        </a>
-      </div>
     </div>
   );
 }

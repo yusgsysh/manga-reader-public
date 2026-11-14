@@ -4,21 +4,21 @@ import {
   CornersIn,
   CornersOut,
   GearSix,
+  Pause,
+  Play,
   Question,
   SquaresFour,
   X,
 } from "@phosphor-icons/react";
 import { cn } from "@cloudflare/kumo";
 import type { ViewerSettings } from "@yui540/comimi-react";
+import { useReaderPreferences } from "../../hooks/useReaderPreferences";
 import { IconButton } from "../ui";
-import { ComimiMascot } from "./ComimiMascot";
-import {
-  ReaderAbout,
-  ReaderPageList,
-  ReaderShortcuts,
-} from "./ReaderToolbarPanels";
+import { ReaderPageList, ReaderShortcuts } from "./ReaderToolbarPanels";
 
-type ToolbarPanel = "settings" | "shortcuts" | "pages" | "about";
+const AUTO_TURN_SECONDS = [3, 5, 8, 10, 15, 20, 30];
+
+type ToolbarPanel = "settings" | "shortcuts" | "pages";
 
 interface ReaderToolbarProps {
   title: string;
@@ -28,8 +28,10 @@ interface ReaderToolbarProps {
   token: string;
   total: number;
   getCurrentPage: () => number;
+  autoPageTurnEnabled: boolean;
   onBack: () => void;
   onToggleFullscreen: () => void;
+  onToggleAutoPageTurn: () => void;
   onGoToPage: (pageIndex: number) => void;
   onClosePanel: () => void;
   onUpdateSettings: (patch: Partial<ViewerSettings>) => void;
@@ -108,13 +110,17 @@ export function ReaderToolbar({
   token,
   total,
   getCurrentPage,
+  autoPageTurnEnabled,
   onBack,
   onToggleFullscreen,
+  onToggleAutoPageTurn,
   onGoToPage,
   onClosePanel,
   onUpdateSettings,
 }: ReaderToolbarProps) {
   const [openPanel, setOpenPanel] = useState<ToolbarPanel | null>(null);
+  const { autoFullscreenOnStart, setAutoFullscreenOnStart } =
+    useReaderPreferences();
 
   const closePanel = useCallback(() => setOpenPanel(null), []);
 
@@ -140,6 +146,10 @@ export function ReaderToolbar({
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [openPanel]);
+
+  const intervalSeconds = viewerSettings
+    ? Math.round(viewerSettings.autoPageTurnIntervalMs / 1000)
+    : 5;
 
   return (
     <>
@@ -167,6 +177,18 @@ export function ReaderToolbar({
         </h1>
 
         <div className="flex items-center gap-0.5">
+          <IconButton
+            label={autoPageTurnEnabled ? "停止自动播放" : "自动播放"}
+            aria-pressed={autoPageTurnEnabled}
+            onClick={onToggleAutoPageTurn}
+          >
+            {autoPageTurnEnabled ? (
+              <Pause className="size-5" weight="bold" />
+            ) : (
+              <Play className="size-5" weight="bold" />
+            )}
+          </IconButton>
+
           <IconButton
             label={fullscreen ? "退出全屏" : "全屏"}
             aria-pressed={fullscreen}
@@ -206,19 +228,41 @@ export function ReaderToolbar({
           >
             <GearSix className="size-5" weight="bold" />
           </IconButton>
-
-          <IconButton
-            label="关于 comimi"
-            aria-haspopup="dialog"
-            aria-expanded={openPanel === "about"}
-            onClick={() => togglePanel("about")}
-          >
-            <ComimiMascot className="size-5 text-kumo-subtle" />
-          </IconButton>
         </div>
 
         {openPanel === "settings" && (
           <Panel label="阅读设置" onClose={closePanel}>
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-kumo-default">
+                  开始阅读时自动全屏
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={autoFullscreenOnStart}
+                  aria-label="开始阅读时自动全屏"
+                  onClick={() => setAutoFullscreenOnStart(!autoFullscreenOnStart)}
+                  className={cn(
+                    "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+                    autoFullscreenOnStart
+                      ? "bg-[var(--app-accent)]"
+                      : "bg-kumo-recessed",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform",
+                      autoFullscreenOnStart && "translate-x-5",
+                    )}
+                  />
+                </button>
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-kumo-subtle">
+                从画廊点「开始阅读」时直接进入全屏；浏览器不允许时至少占满窗口。
+              </p>
+            </div>
+
             <div>
               <div className="mb-1.5 text-xs font-medium text-kumo-subtle">
                 阅读方向
@@ -259,6 +303,26 @@ export function ReaderToolbar({
               </div>
             </div>
 
+            <div>
+              <div className="mb-1.5 text-xs font-medium text-kumo-subtle">
+                翻页模式
+              </div>
+              <div className="grid grid-cols-2 gap-1 rounded-lg bg-kumo-recessed p-1">
+                <Segment
+                  active={viewerSettings?.pageTurnMode === "single"}
+                  onClick={() => onUpdateSettings({ pageTurnMode: "single" })}
+                >
+                  单页
+                </Segment>
+                <Segment
+                  active={viewerSettings?.pageTurnMode === "spread"}
+                  onClick={() => onUpdateSettings({ pageTurnMode: "spread" })}
+                >
+                  双页
+                </Segment>
+              </div>
+            </div>
+
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm font-medium text-kumo-default">
                 显示封面页
@@ -288,6 +352,28 @@ export function ReaderToolbar({
               </button>
             </div>
 
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-kumo-default">
+                自动翻页间隔
+              </span>
+              <select
+                aria-label="自动翻页间隔"
+                value={intervalSeconds}
+                onChange={(event) =>
+                  onUpdateSettings({
+                    autoPageTurnIntervalMs: Number(event.target.value) * 1000,
+                  })
+                }
+                disabled={!viewerSettings}
+                className="rounded-lg border border-kumo-hairline bg-kumo-base px-2 py-1 text-sm text-kumo-default disabled:opacity-50"
+              >
+                {AUTO_TURN_SECONDS.map((seconds) => (
+                  <option key={seconds} value={seconds}>
+                    {seconds} 秒
+                  </option>
+                ))}
+              </select>
+            </div>
           </Panel>
         )}
 
@@ -309,12 +395,6 @@ export function ReaderToolbar({
                 closePanel();
               }}
             />
-          </Panel>
-        )}
-
-        {openPanel === "about" && (
-          <Panel label="关于 comimi" onClose={closePanel}>
-            <ReaderAbout />
           </Panel>
         )}
       </header>

@@ -442,9 +442,25 @@ body {
   display: none;
 }
 
-/* The top bar owns the settings entry now; the dock keeps its other buttons. */
+/*
+ * The top bar owns settings and the reader chrome now only needs the seek bar:
+ * hide the dock's autoplay, page-mode (single/spread) and view-mode
+ * (fullscreen) buttons that sit below the progress bar, then collapse the
+ * now-empty controls row so the dock is a single progress-bar row.
+ */
+.reader-shell .comimi-controls-dock .comimi-autoplay,
+.reader-shell .comimi-controls-dock .comimi-page-mode,
+.reader-shell .comimi-controls-dock .comimi-view-switcher,
 .reader-shell .comimi-controls-dock .comimi-settings {
   display: none;
+}
+
+.reader-shell .comimi-controls-dock .comimi-controls-row {
+  display: none;
+}
+
+.reader-shell .comimi-controls-dock .comimi-seek {
+  margin-bottom: 0;
 }
 
 /* comimi's keyboard-opened menu panel unfolds below the app's top bar. */
@@ -470,23 +486,6 @@ body {
   top: calc(64px + env(safe-area-inset-top, 0px));
 }
 
-/* comimi's rabbit mascot, recoloured for the app's top bar. */
-.reader-mascot > svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.reader-mascot .comimi-rabbit-body {
-  fill: currentColor;
-  opacity: 0.16;
-}
-
-.reader-mascot .comimi-rabbit-shade {
-  fill: currentColor;
-}
-
-
 /*
  * comimi hides the seek preview on hover-less (touch) devices because it only
  * wires `mousemove` to it. The library is patched to also drive the preview
@@ -497,14 +496,6 @@ body {
   .reader-shell .comimi-seek-preview {
     display: flex;
   }
-}
-
-/*
- * Keep the seek preview a single line: drop the page thumbnail so the floating
- * window above the progress bar shows only the page-number label.
- */
-.reader-shell .comimi-seek-preview-thumbs {
-  display: none;
 }
 
 /*

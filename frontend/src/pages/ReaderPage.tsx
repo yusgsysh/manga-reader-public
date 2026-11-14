@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useSearchParams } from "react-router";
 import { Button } from "@cloudflare/kumo";
 import { ArrowLeft } from "@phosphor-icons/react";
@@ -27,7 +28,9 @@ import {
 import { ErrorState } from "../components/common/ErrorState";
 import { LoadingScreen } from "../components/common/LoadingScreen";
 import { ReaderToolbar } from "../components/reader/ReaderToolbar";
+import { ReaderSettingsPreference } from "../components/reader/ReaderSettingsPreference";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { getReaderPreferences } from "../lib/readerPrefs";
 
 // 菜单底部返回入口的文案：补丁只引用 key，库内没有内置。
 const READER_TRANSLATIONS = { "menu.backToGallery": "返回画廊" };
@@ -71,6 +74,14 @@ export function ReaderPage() {
   const [viewerReady, setViewerReady] = useState(false);
   const [viewerSettingsState, setViewerSettingsState] =
     useState<ViewerSettings | null>(null);
+  const [autoPageTurnEnabled, setAutoPageTurnEnabled] = useState(false);
+  // The app-level preference is appended to comimi's own settings sheet.
+  const [settingsHost, setSettingsHost] = useState<HTMLElement | null>(null);
+  // Read once: changing the preference later must not yank the current book
+  // into fullscreen, only the next one that is opened.
+  const autoFullscreenOnOpenRef = useRef(
+    getReaderPreferences().autoFullscreenOnStart,
+  );
 
   const isDark = resolvedMode === "dark";
 
@@ -126,6 +137,31 @@ export function ReaderPage() {
     return () =>
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
+
+  // The app preference appends a row to comimi's settings sheet. The sheet is
+  // created by the library after the viewer mounts, so wait for it instead of
+  // assuming it exists.
+  useEffect(() => {
+    if (!shellEl) return;
+    const findHost = () =>
+      shellEl.querySelector<HTMLElement>(".comimi-settings-panel-inner");
+    const attach = () => {
+      const found = findHost();
+      if (!found) return;
+      observer.disconnect();
+      setSettingsHost(found);
+    };
+    // The sheet is built after the viewer's first update, and on a cached
+    // mount it may already be there before this effect runs. Check on the next
+    // frame and listen for the rest instead of setting state synchronously.
+    const observer = new MutationObserver(attach);
+    observer.observe(shellEl, { childList: true, subtree: true });
+    const frame = requestAnimationFrame(attach);
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [shellEl]);
 
   // 离开路由时主动退出全屏，不依赖「节点移除浏览器自动退出」的时机
   useEffect(
@@ -233,11 +269,17 @@ export function ReaderPage() {
     [],
   );
 
+  const handleToggleAutoPageTurn = useCallback(() => {
+    viewerRef.current?.toggleAutoPageTurn();
+  }, []);
+
   const handleReady = useCallback(() => {
     setViewerReady(true);
   }, []);
 
-  // Once the viewer is ready, seed the chrome from its state.
+  // Once the viewer is ready, seed the chrome from its state and apply the
+  // "start in fullscreen" preference. The comimi-react instance is only
+  // available after its mount effect, so this cannot run on the first commit.
   useEffect(() => {
     if (!viewerReady) return;
     const viewer = viewerRef.current;
@@ -245,6 +287,22 @@ export function ReaderPage() {
     const state = viewer.getState();
     setViewerSettingsState(state.settings);
     setLayoutMode(state.layout.mode);
+    setAutoPageTurnEnabled(state.autoPageTurnEnabled);
+    if (autoFullscreenOnOpenRef.current && state.layout.mode === "inline") {
+      // The gallery's start-reading click already asked for native fullscreen
+      // (`requestReaderFullscreenIfEnabled`). comimi's
+      // `setLayoutMode("browserFullscreen")` exits any active native fullscreen,
+      // which would undo that request — the "enter then immediately exit"
+      // flicker. When native fullscreen is already on, apply the fullscreen
+      // layout via `updateSettings` (it only changes `layout.mode`, with no
+      // fullscreen side effects). Otherwise fall back to the library layout so
+      // the reader still fills the window when the browser refused.
+      if (document.fullscreenElement) {
+        void viewer.updateSettings({ layoutMode: "browserFullscreen" });
+      } else {
+        void viewer.setLayoutMode("browserFullscreen");
+      }
+    }
   }, [viewerReady]);
 
   const handleLayoutChange = useCallback(
@@ -257,6 +315,13 @@ export function ReaderPage() {
   const handleSettingsChange = useCallback(
     ({ settings }: { settings: ViewerSettings }) => {
       setViewerSettingsState(settings);
+    },
+    [],
+  );
+
+  const handleAutoPageTurnChange = useCallback(
+    ({ enabled }: { enabled: boolean }) => {
+      setAutoPageTurnEnabled(enabled);
     },
     [],
   );
@@ -355,8 +420,10 @@ export function ReaderPage() {
         token={token ?? ""}
         total={total}
         getCurrentPage={getCurrentPage}
+        autoPageTurnEnabled={autoPageTurnEnabled}
         onBack={handleBack}
         onToggleFullscreen={toggleFullscreen}
+        onToggleAutoPageTurn={handleToggleAutoPageTurn}
         onGoToPage={handleGoToPage}
         onClosePanel={handleClosePanel}
         onUpdateSettings={handleUpdateSettings}
@@ -375,7 +442,6 @@ export function ReaderPage() {
           translations={READER_TRANSLATIONS}
           storage={{ enabled: false }}
           settings={viewerSettings}
-          hiddenSettings={["autoplay", "pageMode", "interval"]}
           resolvePageSrc={resolvePageSrc}
           onReady={handleReady}
           onPageChange={handlePageChange}
@@ -383,9 +449,14 @@ export function ReaderPage() {
           onFullscreenRequest={toggleFullscreen}
           onLayoutChange={handleLayoutChange}
           onSettingsChange={handleSettingsChange}
+          onAutoPageTurnChange={handleAutoPageTurnChange}
           className="h-full w-full"
         />
       </div>
+
+      {/* App-level reader preference, appended to comimi's settings sheet. */}
+      {settingsHost &&
+        createPortal(<ReaderSettingsPreference />, settingsHost)}
     </div>
   );
 }
