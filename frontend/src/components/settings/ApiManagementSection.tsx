@@ -501,7 +501,7 @@ export function ApiManagementSection() {
   return (
     <Section
       title="API Key"
-      description="管理节点 API Key（每个节点可有多把 Key）。sync:* 用于 /api/sync/*；勾选 metrics:read 后同一把 Key 也可读取 /metrics。与用户 JWT 完全独立。"
+      description="管理节点 API Key（每个节点可有多把 Key）。sync:write 用于同步推送、sync:events 用于事件流；metrics:read 可读取 /metrics。与用户 JWT 独立。"
     >
       <div className="space-y-4">
         <div className="card-surface space-y-3 p-4">
