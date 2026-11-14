@@ -101,6 +101,25 @@ func (c CookieConfig) IsValid() bool {
 	return c.IpbMemberID != "" && c.IpbPassHash != ""
 }
 
+// MergedWith returns c with every non-empty field of other applied on top. It
+// lets the settings API update individual cookies (e.g. a freshly rotated
+// igneous) without resubmitting the credentials that are still valid.
+func (c CookieConfig) MergedWith(other CookieConfig) CookieConfig {
+	if other.IpbMemberID != "" {
+		c.IpbMemberID = other.IpbMemberID
+	}
+	if other.IpbPassHash != "" {
+		c.IpbPassHash = other.IpbPassHash
+	}
+	if other.Igneous != "" {
+		c.Igneous = other.Igneous
+	}
+	if other.SK != "" {
+		c.SK = other.SK
+	}
+	return c
+}
+
 type MinIOConfig struct {
 	Endpoint  string
 	AccessKey string

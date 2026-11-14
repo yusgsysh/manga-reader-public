@@ -61,6 +61,15 @@ const COOKIE_STATUS_LABELS: Record<CookieSummary["status"], string> = {
   invalid: "无效或已过期",
 };
 
+interface CookieField {
+  id: "ipb_member_id" | "ipb_pass_hash" | "igneous" | "sk";
+  label: string;
+  required: boolean;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}
+
 function CookieSection() {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -70,7 +79,10 @@ function CookieSection() {
     retry: false,
     staleTime: 0,
   });
-  const [cookie, setCookie] = useState("");
+  const [ipbMemberId, setIpbMemberId] = useState("");
+  const [ipbPassHash, setIpbPassHash] = useState("");
+  const [igneous, setIgneous] = useState("");
+  const [sk, setSk] = useState("");
   const [site, setSite] = useState<ExhentaiSite>("exhentai");
   const [applied, setApplied] = useState<CookieSummary | null>(null);
   const current = query.data;
@@ -79,12 +91,29 @@ function CookieSection() {
     setSite(current.site);
   }
 
+  const configured = current?.configured ?? false;
+  const hasMemberId = ipbMemberId.trim() !== "";
+  const hasPassHash = ipbPassHash.trim() !== "";
+  const credentialsComplete = hasMemberId && hasPassHash;
+  const credentialsPartial = hasMemberId !== hasPassHash;
+  const hasOptional = igneous.trim() !== "" || sk.trim() !== "";
+  const siteChanged = site !== (current?.site ?? "exhentai");
+
   const save = useMutation({
     mutationFn: () =>
-      saveCookie({ cookie: cookie.trim(), site }),
+      saveCookie({
+        ipb_member_id: ipbMemberId.trim(),
+        ipb_pass_hash: ipbPassHash.trim(),
+        igneous: igneous.trim(),
+        sk: sk.trim(),
+        site,
+      }),
     onSuccess: (data) => {
       queryClient.setQueryData(["settings", "cookie"], data);
-      setCookie("");
+      setIpbMemberId("");
+      setIpbPassHash("");
+      setIgneous("");
+      setSk("");
       toast.success("ExHentai Cookie 已保存");
     },
     onError: (error) => toast.error("保存 Cookie 失败", error),
@@ -109,14 +138,56 @@ function CookieSection() {
     mutationFn: clearCookie,
     onSuccess: (data) => {
       queryClient.setQueryData(["settings", "cookie"], data);
-      setCookie("");
+      setIpbMemberId("");
+      setIpbPassHash("");
+      setIgneous("");
+      setSk("");
       toast.success("已清除 ExHentai Cookie");
     },
     onError: (error) => toast.error("清除 Cookie 失败", error),
   });
 
   const summary = current;
-  const configured = summary?.configured ?? false;
+  const canSave =
+    !save.isPending &&
+    !credentialsPartial &&
+    (siteChanged || credentialsComplete || hasOptional) &&
+    (configured || credentialsComplete);
+
+  const fields: CookieField[] = [
+    {
+      id: "ipb_member_id",
+      label: "ipb_member_id",
+      required: true,
+      value: ipbMemberId,
+      onChange: setIpbMemberId,
+      placeholder: "例如 12345678",
+    },
+    {
+      id: "ipb_pass_hash",
+      label: "ipb_pass_hash",
+      required: true,
+      value: ipbPassHash,
+      onChange: setIpbPassHash,
+      placeholder: "32 位哈希",
+    },
+    {
+      id: "igneous",
+      label: "igneous",
+      required: false,
+      value: igneous,
+      onChange: setIgneous,
+      placeholder: "可选，例如 a1b2c3d4e5",
+    },
+    {
+      id: "sk",
+      label: "sk",
+      required: false,
+      value: sk,
+      onChange: setSk,
+      placeholder: "可选，部分账号需要",
+    },
+  ];
 
   return (
     <Section title="ExHentai 账号">
@@ -147,47 +218,60 @@ function CookieSection() {
             </p>
 
             <div>
-              <div className="mb-2 font-medium">ExHentai 站点</div>
+              <div className="mb-1.5 text-sm font-medium">ExHentai 站点</div>
               <select
                 aria-label="ExHentai 站点"
                 value={site}
                 onChange={(event) => setSite(event.target.value as ExhentaiSite)}
-                className="rounded-lg border border-kumo-hairline bg-kumo-base px-3 py-2 text-sm text-kumo-default"
+                className="h-9 w-full rounded-lg border border-kumo-hairline bg-kumo-base px-3 text-sm text-kumo-default"
               >
                 <option value="exhentai">ExHentai (exhentai.org)</option>
                 <option value="e-hentai">E-Hentai (e-hentai.org)</option>
               </select>
             </div>
 
-            <div>
-              <div className="mb-2 font-medium">
-                Cookie
-                {configured && (
-                  <span className="ml-2 text-xs font-normal text-kumo-subtle">
-                    已保存；输入新值可替换
-                  </span>
-                )}
-              </div>
-              <textarea
-                aria-label="ExHentai Cookie"
-                rows={3}
-                spellCheck={false}
-                placeholder="ipb_member_id=...; ipb_pass_hash=...; igneous=...; sk=..."
-                value={cookie}
-                onChange={(event) => setCookie(event.target.value)}
-                className="w-full rounded-lg border border-kumo-hairline bg-kumo-base px-3 py-2 font-mono text-xs text-kumo-default"
-              />
+            <div className="space-y-3">
+              {fields.map((field) => (
+                <div key={field.id}>
+                  <div className="mb-1.5 flex items-baseline gap-2">
+                    <label
+                      htmlFor={`cookie-${field.id}`}
+                      className="font-mono text-xs font-medium text-kumo-default"
+                    >
+                      {field.label}
+                    </label>
+                    <span className="text-xs text-kumo-subtle">
+                      {field.required ? "必填" : "可选"}
+                    </span>
+                  </div>
+                  <Input
+                    id={`cookie-${field.id}`}
+                    aria-label={field.label}
+                    type="text"
+                    spellCheck={false}
+                    autoComplete="off"
+                    placeholder={field.placeholder}
+                    value={field.value}
+                    onChange={(event) => field.onChange(event.target.value)}
+                    disabled={save.isPending}
+                    className="font-mono text-xs"
+                  />
+                </div>
+              ))}
+              {configured && (
+                <p className="text-xs text-kumo-subtle">
+                  已保存；留空保持不变，输入新值可替换对应字段。
+                </p>
+              )}
+              {credentialsPartial && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  ipb_member_id 与 ipb_pass_hash 需要同时填写。
+                </p>
+              )}
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                onClick={() => save.mutate()}
-                disabled={
-                  (!cookie.trim() && site === (current?.site ?? "exhentai")) ||
-                  save.isPending
-                }
-              >
+              <Button size="sm" onClick={() => save.mutate()} disabled={!canSave}>
                 {save.isPending && (
                   <CircleNotch className="mr-1 size-4 animate-spin" />
                 )}

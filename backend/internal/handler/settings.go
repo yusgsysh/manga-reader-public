@@ -44,6 +44,16 @@ func (b cookieBody) config() config.CookieConfig {
 	return config.ParseCookieString(cfg.Encode())
 }
 
+// hasCookieInput reports whether any credential field was supplied, so a body
+// with only a site change can take the site-only path.
+func (b cookieBody) hasCookieInput() bool {
+	return strings.TrimSpace(b.Cookie) != "" ||
+		strings.TrimSpace(b.IpbMemberID) != "" ||
+		strings.TrimSpace(b.IpbPassHash) != "" ||
+		strings.TrimSpace(b.Igneous) != "" ||
+		strings.TrimSpace(b.SK) != ""
+}
+
 func (s *Server) requireCookieService(c *gin.Context) *usercookie.Service {
 	if s.UserCookies == nil {
 		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "user settings are not configured"})
@@ -86,28 +96,47 @@ func (s *Server) handleCookiePut(c *gin.Context) {
 	}
 	cfg := body.config()
 	if !cfg.IsValid() {
-		// A site-only update is allowed once a cookie exists; it must not
-		// require re-pasting the secret.
-		current, err := svc.Summary(c.Request.Context(), uid)
-		if err != nil {
-			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
-			return
-		}
-		if current.Configured && strings.TrimSpace(body.Site) != "" {
-			if _, err := svc.SaveSite(c.Request.Context(), uid, body.Site); err != nil {
-				web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			updated, err := svc.Summary(c.Request.Context(), uid)
+		// A partial update is allowed once a cookie exists: merge whatever
+		// fields were supplied into the stored credentials (e.g. a freshly
+		// rotated igneous) instead of forcing a full re-paste.
+		if body.hasCookieInput() {
+			current, err := svc.Config(c.Request.Context(), uid)
 			if err != nil {
 				web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
 				return
 			}
-			web.JSON(c, http.StatusOK, updated)
+			cfg = current.MergedWith(cfg)
+			if cfg.IsValid() && strings.TrimSpace(body.Site) == "" {
+				// Credentials-only update: keep the existing site preference.
+				if site, err := svc.Site(c.Request.Context(), uid); err == nil {
+					body.Site = site
+				}
+			}
+		}
+		if !cfg.IsValid() {
+			// A site-only update is allowed once a cookie exists; it must not
+			// require re-pasting the secret.
+			current, err := svc.Summary(c.Request.Context(), uid)
+			if err != nil {
+				web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
+				return
+			}
+			if current.Configured && strings.TrimSpace(body.Site) != "" {
+				if _, err := svc.SaveSite(c.Request.Context(), uid, body.Site); err != nil {
+					web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
+				updated, err := svc.Summary(c.Request.Context(), uid)
+				if err != nil {
+					web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
+					return
+				}
+				web.JSON(c, http.StatusOK, updated)
+				return
+			}
+			web.JSON(c, http.StatusBadRequest, gin.H{"error": "ipb_member_id and ipb_pass_hash are required"})
 			return
 		}
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "ipb_member_id and ipb_pass_hash are required"})
-		return
 	}
 	summary, err := svc.SaveCookie(c.Request.Context(), uid, cfg, body.Site)
 	if err != nil {

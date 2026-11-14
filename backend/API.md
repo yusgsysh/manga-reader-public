@@ -197,6 +197,12 @@ All routes are scoped to the JWT user.
 | PUT | `/api/settings` | `{ "preferences": {...}, "site"?: "exhentai" \| "e-hentai" }` |
 | GET | `/api/settings/cookie` | - |
 | PUT | `/api/settings/cookie` | `{ "cookie"?: "ipb_member_id=...; ...", "ipb_member_id"?, "ipb_pass_hash"?, "igneous"?, "sk"?, "site"? }` |
+
+Cookie settings accept either a browser-style `cookie` header or the four
+individual fields. When a cookie is already configured, supplying only some
+fields (for example a freshly rotated `igneous`) merges into the stored
+credentials; a body with no credential fields and only `site` changes just the
+site preference.
 | DELETE | `/api/settings/cookie` | - |
 | POST | `/api/settings/cookie/verify` | - |
 

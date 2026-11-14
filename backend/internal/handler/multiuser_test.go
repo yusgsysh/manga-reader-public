@@ -284,6 +284,32 @@ func TestMultiUserCookieAndSettingsIsolation(t *testing.T) {
 	}
 }
 
+func TestCookiePartialUpdateMergesStoredFields(t *testing.T) {
+	f := newMUFixture(t)
+	token := f.login(t, "user-a")
+
+	full := "ipb_member_id=111; ipb_pass_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; igneous=old"
+	if w := f.do(t, http.MethodPut, "/api/settings/cookie", map[string]string{"cookie": full}, token); w.Code != http.StatusOK {
+		t.Fatalf("put full cookie = %d %s", w.Code, w.Body.String())
+	}
+
+	// Rotating igneous alone must keep the stored credentials.
+	if w := f.do(t, http.MethodPut, "/api/settings/cookie", map[string]string{"igneous": "new"}, token); w.Code != http.StatusOK {
+		t.Fatalf("partial update = %d %s", w.Code, w.Body.String())
+	}
+
+	cfg, err := f.cookie.Config(t.Context(), f.userA.ID)
+	if err != nil {
+		t.Fatalf("read stored config: %v", err)
+	}
+	if cfg.IpbMemberID != "111" || cfg.IpbPassHash != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+		t.Fatalf("partial update clobbered credentials: %+v", cfg)
+	}
+	if cfg.Igneous != "new" {
+		t.Fatalf("igneous not updated: %+v", cfg)
+	}
+}
+
 func TestMultiUserAdminIsolation(t *testing.T) {
 	f := newMUFixture(t)
 	userToken, adminToken := f.login(t, "user-a"), f.login(t, "admin-a")

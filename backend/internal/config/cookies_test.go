@@ -32,3 +32,18 @@ func TestCookieConfig_IsValid(t *testing.T) {
 		t.Fatal("member id + pass hash must be valid")
 	}
 }
+
+// MergedWith only overwrites fields the caller actually supplied; empty fields
+// in the overlay leave the stored value untouched.
+func TestCookieConfig_MergedWith(t *testing.T) {
+	base := CookieConfig{IpbMemberID: "111", IpbPassHash: "hash", Igneous: "old", SK: "sk"}
+	got := base.MergedWith(CookieConfig{Igneous: "new"})
+	want := CookieConfig{IpbMemberID: "111", IpbPassHash: "hash", Igneous: "new", SK: "sk"}
+	if got != want {
+		t.Fatalf("MergedWith(igneous) = %+v, want %+v", got, want)
+	}
+
+	if got := base.MergedWith(CookieConfig{}); got != base {
+		t.Fatalf("MergedWith(empty) = %+v, want unchanged %+v", got, base)
+	}
+}

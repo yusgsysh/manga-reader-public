@@ -129,6 +129,23 @@ func (s *Service) Client(ctx context.Context, userID ident.UUID) (*http.Client, 
 	return client, nil
 }
 
+// Config returns the user's stored cookie decrypted in memory. It is only used
+// to merge partial updates; callers must not log or echo the result.
+func (s *Service) Config(ctx context.Context, userID ident.UUID) (config.CookieConfig, error) {
+	row, err := s.setting(ctx, userID)
+	if err != nil {
+		return config.CookieConfig{}, err
+	}
+	if row == nil || row.CookieCiphertext == "" {
+		return config.CookieConfig{}, nil
+	}
+	plain, err := s.open(row.CookieCiphertext)
+	if err != nil {
+		return config.CookieConfig{}, fmt.Errorf("decrypt exhentai cookie: %w", err)
+	}
+	return config.ParseCookieString(plain), nil
+}
+
 // Invalidate drops a cached client, e.g. after the cookie was changed.
 func (s *Service) Invalidate(userID ident.UUID) {
 	s.mu.Lock()
