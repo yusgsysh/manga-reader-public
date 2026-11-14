@@ -27,7 +27,6 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/google/uuid"
 )
 
 const (
@@ -3952,7 +3951,7 @@ type PrefillJobMutation struct {
 	config
 	op              Op
 	typ             string
-	id              *uuid.UUID
+	id              *ident.UUID
 	user_id         *ident.UUID
 	gallery_id      *int64
 	addgallery_id   *int64
@@ -3996,7 +3995,7 @@ func newPrefillJobMutation(c config, op Op, opts ...prefilljobOption) *PrefillJo
 }
 
 // withPrefillJobID sets the ID field of the mutation.
-func withPrefillJobID(id uuid.UUID) prefilljobOption {
+func withPrefillJobID(id ident.UUID) prefilljobOption {
 	return func(m *PrefillJobMutation) {
 		var (
 			err   error
@@ -4048,13 +4047,13 @@ func (m PrefillJobMutation) Tx() (*Tx, error) {
 
 // SetID sets the value of the id field. Note that this
 // operation is only accepted on creation of PrefillJob entities.
-func (m *PrefillJobMutation) SetID(id uuid.UUID) {
+func (m *PrefillJobMutation) SetID(id ident.UUID) {
 	m.id = &id
 }
 
 // ID returns the ID value in the mutation. Note that the ID is only available
 // if it was provided to the builder or after it was returned from the database.
-func (m *PrefillJobMutation) ID() (id uuid.UUID, exists bool) {
+func (m *PrefillJobMutation) ID() (id ident.UUID, exists bool) {
 	if m.id == nil {
 		return
 	}
@@ -4065,12 +4064,12 @@ func (m *PrefillJobMutation) ID() (id uuid.UUID, exists bool) {
 // That means, if the mutation is applied within a transaction with an isolation level such
 // as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
 // or updated by the mutation.
-func (m *PrefillJobMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+func (m *PrefillJobMutation) IDs(ctx context.Context) ([]ident.UUID, error) {
 	switch {
 	case m.op.Is(OpUpdateOne | OpDeleteOne):
 		id, exists := m.ID()
 		if exists {
-			return []uuid.UUID{id}, nil
+			return []ident.UUID{id}, nil
 		}
 		fallthrough
 	case m.op.Is(OpUpdate | OpDelete):

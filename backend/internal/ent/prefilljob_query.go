@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"manga-reader/internal/ent/predicate"
 	"manga-reader/internal/ent/prefilljob"
+	"manga-reader/internal/ident"
 	"math"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/google/uuid"
 )
 
 // PrefillJobQuery is the builder for querying PrefillJob entities.
@@ -83,8 +83,8 @@ func (_q *PrefillJobQuery) FirstX(ctx context.Context) *PrefillJob {
 
 // FirstID returns the first PrefillJob ID from the query.
 // Returns a *NotFoundError when no PrefillJob ID was found.
-func (_q *PrefillJobQuery) FirstID(ctx context.Context) (id uuid.UUID, err error) {
-	var ids []uuid.UUID
+func (_q *PrefillJobQuery) FirstID(ctx context.Context) (id ident.UUID, err error) {
+	var ids []ident.UUID
 	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
@@ -96,7 +96,7 @@ func (_q *PrefillJobQuery) FirstID(ctx context.Context) (id uuid.UUID, err error
 }
 
 // FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *PrefillJobQuery) FirstIDX(ctx context.Context) uuid.UUID {
+func (_q *PrefillJobQuery) FirstIDX(ctx context.Context) ident.UUID {
 	id, err := _q.FirstID(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -134,8 +134,8 @@ func (_q *PrefillJobQuery) OnlyX(ctx context.Context) *PrefillJob {
 // OnlyID is like Only, but returns the only PrefillJob ID in the query.
 // Returns a *NotSingularError when more than one PrefillJob ID is found.
 // Returns a *NotFoundError when no entities are found.
-func (_q *PrefillJobQuery) OnlyID(ctx context.Context) (id uuid.UUID, err error) {
-	var ids []uuid.UUID
+func (_q *PrefillJobQuery) OnlyID(ctx context.Context) (id ident.UUID, err error) {
+	var ids []ident.UUID
 	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
@@ -151,7 +151,7 @@ func (_q *PrefillJobQuery) OnlyID(ctx context.Context) (id uuid.UUID, err error)
 }
 
 // OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *PrefillJobQuery) OnlyIDX(ctx context.Context) uuid.UUID {
+func (_q *PrefillJobQuery) OnlyIDX(ctx context.Context) ident.UUID {
 	id, err := _q.OnlyID(ctx)
 	if err != nil {
 		panic(err)
@@ -179,7 +179,7 @@ func (_q *PrefillJobQuery) AllX(ctx context.Context) []*PrefillJob {
 }
 
 // IDs executes the query and returns a list of PrefillJob IDs.
-func (_q *PrefillJobQuery) IDs(ctx context.Context) (ids []uuid.UUID, err error) {
+func (_q *PrefillJobQuery) IDs(ctx context.Context) (ids []ident.UUID, err error) {
 	if _q.ctx.Unique == nil && _q.path != nil {
 		_q.Unique(true)
 	}
@@ -191,7 +191,7 @@ func (_q *PrefillJobQuery) IDs(ctx context.Context) (ids []uuid.UUID, err error)
 }
 
 // IDsX is like IDs, but panics if an error occurs.
-func (_q *PrefillJobQuery) IDsX(ctx context.Context) []uuid.UUID {
+func (_q *PrefillJobQuery) IDsX(ctx context.Context) []ident.UUID {
 	ids, err := _q.IDs(ctx)
 	if err != nil {
 		panic(err)

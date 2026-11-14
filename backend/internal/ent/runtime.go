@@ -19,8 +19,6 @@ import (
 	"manga-reader/internal/ent/usersetting"
 	"manga-reader/internal/ident"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // The init function reads all schema descriptors with runtime code
@@ -216,7 +214,7 @@ func init() {
 	// prefilljobDescID is the schema descriptor for id field.
 	prefilljobDescID := prefilljobFields[1].Descriptor()
 	// prefilljob.DefaultID holds the default value on creation for the id field.
-	prefilljob.DefaultID = prefilljobDescID.Default.(func() uuid.UUID)
+	prefilljob.DefaultID = prefilljobDescID.Default.(func() ident.UUID)
 	readingprogressFields := schema.ReadingProgress{}.Fields()
 	_ = readingprogressFields
 	// readingprogressDescUserID is the schema descriptor for user_id field.

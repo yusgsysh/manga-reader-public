@@ -26,7 +26,6 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
-	"github.com/google/uuid"
 )
 
 // Client is the client that holds all ent builders.
@@ -999,7 +998,7 @@ func (c *PrefillJobClient) UpdateOne(_m *PrefillJob) *PrefillJobUpdateOne {
 }
 
 // UpdateOneID returns an update builder for the given id.
-func (c *PrefillJobClient) UpdateOneID(id uuid.UUID) *PrefillJobUpdateOne {
+func (c *PrefillJobClient) UpdateOneID(id ident.UUID) *PrefillJobUpdateOne {
 	mutation := newPrefillJobMutation(c.config, OpUpdateOne, withPrefillJobID(id))
 	return &PrefillJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
@@ -1016,7 +1015,7 @@ func (c *PrefillJobClient) DeleteOne(_m *PrefillJob) *PrefillJobDeleteOne {
 }
 
 // DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *PrefillJobClient) DeleteOneID(id uuid.UUID) *PrefillJobDeleteOne {
+func (c *PrefillJobClient) DeleteOneID(id ident.UUID) *PrefillJobDeleteOne {
 	builder := c.Delete().Where(prefilljob.ID(id))
 	builder.mutation.id = &id
 	builder.mutation.op = OpDeleteOne
@@ -1033,12 +1032,12 @@ func (c *PrefillJobClient) Query() *PrefillJobQuery {
 }
 
 // Get returns a PrefillJob entity by its id.
-func (c *PrefillJobClient) Get(ctx context.Context, id uuid.UUID) (*PrefillJob, error) {
+func (c *PrefillJobClient) Get(ctx context.Context, id ident.UUID) (*PrefillJob, error) {
 	return c.Query().Where(prefilljob.ID(id)).Only(ctx)
 }
 
 // GetX is like Get, but panics if an error occurs.
-func (c *PrefillJobClient) GetX(ctx context.Context, id uuid.UUID) *PrefillJob {
+func (c *PrefillJobClient) GetX(ctx context.Context, id ident.UUID) *PrefillJob {
 	obj, err := c.Get(ctx, id)
 	if err != nil {
 		panic(err)

@@ -13,14 +13,13 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/google/uuid"
 )
 
 // PrefillJob is the model entity for the PrefillJob schema.
 type PrefillJob struct {
 	config `json:"-"`
 	// ID of the ent.
-	ID uuid.UUID `json:"id,omitempty"`
+	ID ident.UUID `json:"id,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID ident.UUID `json:"user_id,omitempty"`
 	// GalleryID holds the value of the "gallery_id" field.
@@ -55,7 +54,7 @@ func (*PrefillJob) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case prefilljob.FieldUrls, prefilljob.FieldErrors:
 			values[i] = new([]byte)
-		case prefilljob.FieldUserID:
+		case prefilljob.FieldID, prefilljob.FieldUserID:
 			values[i] = new(ident.UUID)
 		case prefilljob.FieldGalleryID, prefilljob.FieldTotal, prefilljob.FieldFailedCount:
 			values[i] = new(sql.NullInt64)
@@ -63,8 +62,6 @@ func (*PrefillJob) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullString)
 		case prefilljob.FieldCreatedAt, prefilljob.FieldUpdatedAt, prefilljob.FieldFinishedAt:
 			values[i] = new(sql.NullTime)
-		case prefilljob.FieldID:
-			values[i] = new(uuid.UUID)
 		default:
 			values[i] = new(sql.UnknownType)
 		}
@@ -81,7 +78,7 @@ func (_m *PrefillJob) assignValues(columns []string, values []any) error {
 	for i := range columns {
 		switch columns[i] {
 		case prefilljob.FieldID:
-			if value, ok := values[i].(*uuid.UUID); !ok {
+			if value, ok := values[i].(*ident.UUID); !ok {
 				return fmt.Errorf("unexpected type %T for field id", values[i])
 			} else if value != nil {
 				_m.ID = *value

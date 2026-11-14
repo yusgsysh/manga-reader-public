@@ -13,7 +13,6 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/google/uuid"
 )
 
 // PrefillJobCreate is the builder for creating a PrefillJob entity.
@@ -176,13 +175,13 @@ func (_c *PrefillJobCreate) SetNillableFinishedAt(v *time.Time) *PrefillJobCreat
 }
 
 // SetID sets the "id" field.
-func (_c *PrefillJobCreate) SetID(v uuid.UUID) *PrefillJobCreate {
+func (_c *PrefillJobCreate) SetID(v ident.UUID) *PrefillJobCreate {
 	_c.mutation.SetID(v)
 	return _c
 }
 
 // SetNillableID sets the "id" field if the given value is not nil.
-func (_c *PrefillJobCreate) SetNillableID(v *uuid.UUID) *PrefillJobCreate {
+func (_c *PrefillJobCreate) SetNillableID(v *ident.UUID) *PrefillJobCreate {
 	if v != nil {
 		_c.SetID(*v)
 	}
@@ -306,7 +305,7 @@ func (_c *PrefillJobCreate) sqlSave(ctx context.Context) (*PrefillJob, error) {
 		return nil, err
 	}
 	if _spec.ID.Value != nil {
-		if id, ok := _spec.ID.Value.(*uuid.UUID); ok {
+		if id, ok := _spec.ID.Value.(*ident.UUID); ok {
 			_node.ID = *id
 		} else if err := _node.ID.Scan(_spec.ID.Value); err != nil {
 			return nil, err

@@ -138,7 +138,7 @@ var (
 	}
 	// PrefillJobColumns holds the columns for the "prefill_job" table.
 	PrefillJobColumns = []*schema.Column{
-		{Name: "job_id", Type: field.TypeUUID, Default: map[string]schema.Expr{"postgres": "gen_random_uuid()", "sqlite3": "lower(hex(randomblob(16)))"}, SchemaType: map[string]string{"sqlite3": "text"}},
+		{Name: "job_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
 		{Name: "user_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
 		{Name: "gallery_id", Type: field.TypeInt64, Nullable: true},
 		{Name: "token", Type: field.TypeString, Default: ""},
