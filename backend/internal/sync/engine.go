@@ -159,6 +159,9 @@ func (e *Engine) debounce(ctx context.Context, peerCh <-chan struct{}) bool {
 // pushCycle exchanges changes with the server: push everything the outbox
 // holds beyond last_pushed_id, then apply the server's response.
 func (e *Engine) pushCycle(ctx context.Context, cfg ClientConfig) {
+	e.svc.pushMu.Lock()
+	defer e.svc.pushMu.Unlock()
+
 	st, err := e.svc.LoadEngineState(ctx)
 	if err != nil {
 		syncSetError(ctx, e.svc, fmt.Sprintf("load state: %v", err))
@@ -213,24 +216,13 @@ func (e *Engine) pushCycle(ctx context.Context, cfg ClientConfig) {
 // buildPushChanges returns the changes to push and the outbox watermark they
 // were built from (the new last_pushed_id).
 //
-// On the first sync the whole local dataset is sent as a snapshot; entries
-// already sitting in the outbox are covered by it, so the watermark jumps to
-// the current outbox maximum.
+// On the first sync the whole local dataset is sent as a snapshot plus any
+// tombstones still in the outbox (see BootstrapChanges); entries already
+// covered by it keep an outbox id at or below the watermark and are pruned
+// once the exchange succeeds.
 func (e *Engine) buildPushChanges(ctx context.Context, st EngineState) ([]Change, int, error) {
 	if !st.Bootstrapped {
-		// Read the watermark before the export: a row written in between
-		// keeps an outbox id above the watermark, so the next cycle pushes it
-		// as a delta instead of losing it (the old order could mark such a
-		// row delivered without ever sending it).
-		maxID, err := maxOutboxID(ctx, e.svc.client)
-		if err != nil {
-			return nil, 0, err
-		}
-		changes, err := ExportSnapshot(ctx, e.svc.client)
-		if err != nil {
-			return nil, 0, err
-		}
-		return changes, maxID, nil
+		return BootstrapChanges(ctx, e.svc.client)
 	}
 	return ReadChangesSince(ctx, e.svc.client, st.LastPushedID)
 }

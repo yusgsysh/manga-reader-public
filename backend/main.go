@@ -120,6 +120,7 @@ func csrfGuard(extra map[string]struct{}) gin.HandlerFunc {
 var adminOnlyAPIs = map[string]struct{}{
 	"/api/sync/config":       {},
 	"/api/sync/status":       {},
+	"/api/sync/resync":       {},
 	"/api/dev/upstream-down": {},
 }
 

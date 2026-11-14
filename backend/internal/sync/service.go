@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	stdSync "sync"
 	"sync/atomic"
 	"time"
 
@@ -37,6 +38,10 @@ type Service struct {
 	// clientActive mirrors ClientConfig.Active(); the outbox is only written
 	// when this instance can actually exchange changes with a peer.
 	clientActive atomic.Bool
+	// pushMu serializes push cycles with a full-resync request. Without it a
+	// reset could land between a cycle's state load and its save, and the
+	// cycle's stale state would silently overwrite the reset.
+	pushMu stdSync.Mutex
 	// disableInactiveOutbox makes record() a no-op when no peer is
 	// configured. Production opts in; unit tests that exercise the outbox
 	// mechanism directly leave it off.
@@ -95,6 +100,7 @@ func (s *Service) RegisterRoutes(r gin.IRouter) {
 	r.GET("/api/sync/config", s.handleConfigGet)
 	r.PUT("/api/sync/config", s.handleConfigPut)
 	r.GET("/api/sync/status", s.handleStatus)
+	r.POST("/api/sync/resync", s.handleResync)
 	if s.hostEnabled && s.nodeAuth != nil {
 		r.POST("/api/sync/push", s.nodeAuth(nodeauth.ScopeSyncWrite), s.handlePush)
 		r.GET("/api/sync/events", s.nodeAuth(nodeauth.ScopeSyncEvent), s.handlePeerEvents)
@@ -136,15 +142,10 @@ func (s *Service) handlePush(c *gin.Context) {
 	var changes []Change
 	var cursor int
 	if req.Snapshot && req.Cursor == 0 {
-		// Read the watermark before the export so a row written in between
-		// keeps an outbox id above the returned cursor instead of landing in
-		// neither the snapshot nor the delta.
-		cursor, err = maxOutboxID(ctx, s.client)
-		if err != nil {
-			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "collect cursor failed"})
-			return
-		}
-		changes, err = ExportSnapshot(ctx, s.client)
+		// A bootstrap carries the full live snapshot plus outbox tombstones,
+		// so deletions made before this peer ever synced still propagate
+		// instead of being resurrected by the other side's snapshot.
+		changes, cursor, err = BootstrapChanges(ctx, s.client)
 	} else {
 		changes, cursor, err = ReadChangesSince(ctx, s.client, req.Cursor)
 	}
@@ -322,6 +323,31 @@ type statusResponse struct {
 	Cursor       int        `json:"cursor"`
 	LastPushedID int        `json:"last_pushed_id"`
 	Pending      int        `json:"pending"`
+}
+
+// handleResync forces a full bidirectional exchange: it clears the replication
+// cursor/watermark so the next push sends this instance's whole dataset as a
+// snapshot and asks the peer for its own, then wakes the engine. It is the
+// manual recovery path when a long outage (or a rebuilt peer database) left
+// the two sides out of step.
+func (s *Service) handleResync(c *gin.Context) {
+	ctx := c.Request.Context()
+	cfg, err := s.LoadClientConfig(ctx)
+	if err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync config failed"})
+		return
+	}
+	if !cfg.Active() {
+		web.JSON(c, http.StatusConflict, gin.H{"error": "sync is not configured"})
+		return
+	}
+	if err := s.RequestFullResync(ctx); err != nil {
+		slog.Error("sync: full resync failed", "error", err)
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "reset sync state failed"})
+		return
+	}
+	slog.Info("sync: full resync requested", "request_id", requestid.From(c))
+	web.JSON(c, http.StatusOK, gin.H{"ok": true})
 }
 
 func (s *Service) handleStatus(c *gin.Context) {

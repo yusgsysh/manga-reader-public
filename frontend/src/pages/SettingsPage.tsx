@@ -10,7 +10,7 @@ import {
   Palette,
   Sun,
 } from "@phosphor-icons/react";
-import { Button, Input, Switch, cn } from "@cloudflare/kumo";
+import { Button, Dialog, Input, Switch, cn } from "@cloudflare/kumo";
 import { HexColorPicker, HexColorInput } from "react-colorful";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchUpstreamDown, setUpstreamDown } from "../api/dev";
@@ -19,6 +19,7 @@ import {
   fetchSyncConfig,
   fetchSyncStatus,
   saveSyncConfig,
+  startFullSync,
   type SyncConfig,
   type SyncConfigUpdate,
 } from "../api/sync";
@@ -624,6 +625,28 @@ function SyncSection() {
     saveMutation.mutate({ token: "" });
   };
 
+  const [resyncOpen, setResyncOpen] = useState(false);
+  const resyncMutation = useMutation({
+    mutationFn: startFullSync,
+    onSuccess: () => {
+      setResyncOpen(false);
+      void statusQuery.refetch();
+      // A resync can change any synced row, so drop every cached list.
+      for (const queryKey of [
+        ["reading-progress"],
+        ["bookshelf"],
+        ["recently-read"],
+        ["gallery-cache"],
+      ]) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+      toast.success("已开始重新同步");
+    },
+    onError: (error) => {
+      toast.error("全量同步失败", error);
+    },
+  });
+
   const status = statusQuery.data;
 
   return (
@@ -735,8 +758,52 @@ function SyncSection() {
               </div>
             )}
           </dl>
+          <div className="mt-3 flex items-start justify-between gap-3 border-t border-kumo-hairline pt-3">
+            <div>
+              <div className="font-medium">全量同步</div>
+              <p className="mt-0.5 text-xs text-kumo-subtle">
+                重新交换两端全量数据，修复不一致。
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setResyncOpen(true)}
+              disabled={!status?.configured || resyncMutation.isPending}
+            >
+              {resyncMutation.isPending ? (
+                <CircleNotch className="mr-1 size-4 animate-spin" />
+              ) : (
+                <ArrowsClockwise className="mr-1 size-4" weight="bold" />
+              )}
+              重新全量同步
+            </Button>
+          </div>
         </div>
       </div>
+
+      <Dialog.Root open={resyncOpen} onOpenChange={setResyncOpen}>
+        <Dialog className="w-[min(92vw,26rem)] p-6">
+          <Dialog.Title className="text-base font-semibold">
+            重新全量同步？
+          </Dialog.Title>
+          <Dialog.Description className="mt-1 text-sm text-kumo-subtle">
+            将重新交换两端完整数据，按更新时间合并。
+          </Dialog.Description>
+          <div className="mt-4 flex justify-end gap-2">
+            <Dialog.Close render={<Button variant="secondary">取消</Button>} />
+            <Button
+              onClick={() => resyncMutation.mutate()}
+              disabled={resyncMutation.isPending}
+            >
+              {resyncMutation.isPending && (
+                <CircleNotch className="mr-1 size-4 animate-spin" />
+              )}
+              重新同步
+            </Button>
+          </div>
+        </Dialog>
+      </Dialog.Root>
     </Section>
   );
 }

@@ -1,4 +1,4 @@
-import { apiGet, apiPut } from "./client";
+import { apiGet, apiPost, apiPut } from "./client";
 
 /** Returned in place of a stored node API key; sending it back keeps the secret. */
 export const SYNC_KEY_MASK = "********";
@@ -39,4 +39,17 @@ export function saveSyncConfig(update: SyncConfigUpdate): Promise<SyncConfig> {
 
 export function fetchSyncStatus(): Promise<SyncStatus> {
   return apiGet<SyncStatus>("/api/sync/status");
+}
+
+export interface SyncResyncResult {
+  ok: boolean;
+}
+
+/**
+ * Clears the replication cursor and wakes the engine, so the next exchange
+ * sends this instance's whole dataset and pulls the peer's full snapshot.
+ * Used by the settings page to repair two sides that drifted apart.
+ */
+export function startFullSync(): Promise<SyncResyncResult> {
+  return apiPost<SyncResyncResult>("/api/sync/resync");
 }

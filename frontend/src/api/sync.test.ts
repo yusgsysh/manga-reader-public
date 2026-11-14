@@ -4,6 +4,7 @@ import {
   fetchSyncConfig,
   fetchSyncStatus,
   saveSyncConfig,
+  startFullSync,
 } from "./sync";
 import type { SyncConfig, SyncStatus } from "./sync";
 
@@ -67,5 +68,13 @@ describe("sync api", () => {
     fetchMock.mockResolvedValue(jsonResponse(sampleStatus));
     await expect(fetchSyncStatus()).resolves.toEqual(sampleStatus);
     expect(fetchMock).toHaveBeenCalledWith(`${BASE}/api/sync/status`, undefined);
+  });
+
+  it("startFullSync POSTs /api/sync/resync", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ ok: true }));
+    await expect(startFullSync()).resolves.toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledWith(`${BASE}/api/sync/resync`, {
+      method: "POST",
+    });
   });
 });

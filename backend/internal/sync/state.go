@@ -182,6 +182,22 @@ func (s *Service) resetEngineState(ctx context.Context) error {
 	return nil
 }
 
+// RequestFullResync clears the replication bookkeeping so the next exchange
+// transfers a full bidirectional snapshot, then wakes the engine to run it.
+//
+// It takes the same lock as Engine.pushCycle: an in-flight cycle would
+// otherwise save its stale watermark/bootstrapped state after the reset and
+// silently cancel the resync.
+func (s *Service) RequestFullResync(ctx context.Context) error {
+	s.pushMu.Lock()
+	defer s.pushMu.Unlock()
+	if err := s.resetEngineState(ctx); err != nil {
+		return err
+	}
+	s.engine.Reload()
+	return nil
+}
+
 // LoadEngineState reads the replication bookkeeping.
 func (s *Service) LoadEngineState(ctx context.Context) (EngineState, error) {
 	var st EngineState

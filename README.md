@@ -505,7 +505,8 @@ curl -X POST http://localhost:8080/api/reading-progress/cleanup?days=0
 - **服务端**：`MANGA_READER_SYNC_ENABLED=true` 时挂载节点同步端点；节点和 API Key 由管理员在 `/admin/nodes` 创建，API Key 只保存 SHA-256 哈希。
 - **桌面端 / 客户端**：设置页「数据同步」填服务端地址 + 该节点的一次性 API Key 并启用（配置存 `sync_state` 表）。请求使用 `Authorization: Bearer <Node API Key>`，不再使用 Basic Auth 或全局同步令牌。
 - 双方通过 `POST /api/sync/push` 推送 + 拉取，`GET /api/sync/events` SSE 监听对端新变更（写后 2s 去抖推送，心跳 25s，断线退避 1s→60s，60s 轮询兜底）。节点 API Key 需要 `sync:write`（push）或 `sync:events`（SSE）。
-- 合并规则：按行 LWW（`updated_at` 新者胜），删除用 tombstone；首次连接返回全量快照；更换 `server_url` 会自动重置同步游标与引导标记，对新对端重新全量（`gallery_cache` 行在 LWW 胜出时按字段合并，空值不覆盖，镜像本地 upsert 语义）。
+- 合并规则：按行 LWW（`updated_at` 新者胜），删除用 tombstone；首次连接返回全量快照（同时带上 outbox 中未送达的删除 tombstone，避免首次同步把已删除的行重新复活）；更换 `server_url` 会自动重置同步游标与引导标记，对新对端重新全量（`gallery_cache` 行在 LWW 胜出时按字段合并，空值不覆盖，镜像本地 upsert 语义）。
+- 设置页「数据同步」提供「重新全量同步」按钮（`POST /api/sync/resync`）：清空同步游标并唤醒引擎，下一次交换重新上传本端全量数据并拉取对端全量数据。用于长时间断连、对端重建或两端数据已经不一致时的手动修复。
 - 节点是受信任的同步对端，交换全实例 outbox/snapshot；每条变更携带 `user_id`，对端按用户写入并保持隔离。请求里的 `node_id`/`user_id` 不会扩大范围，同步请求带 `request_id` 写入审计日志。
 - 桌面端本地通过 `GET /api/events/changes` SSE 通知前端刷新（该端点使用用户 JWT）。
 

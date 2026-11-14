@@ -1548,6 +1548,14 @@ Cache-Control: no-store
 }
 ```
 
+`POST /api/sync/resync` — 手动全量同步：清空客户端同步游标 / outbox 水位 / 引导标记并立即唤醒引擎，下一次 push 重新执行一次双向全量快照（本端全量上传 + 对端全量拉取）。用于长时间断连、对端数据库重建或两端已经不一致时的修复；与普通同步一样按行 LWW 合并，不会清空任一端的数据。
+
+```json
+{ "ok": true }
+```
+
+未配置同步（`enabled` 为 false、缺少 `server_url` 或 token）时返回 `409`。
+
 **本地事件流（供前端刷新，用户 JWT）：**
 
 `GET /api/events/changes` — SSE，连接后立即推送 `data: {}`；本地任意同步数据变更（含远端应用）再推 `data: {}`。该路径由 Gin 直接流式写出（无反代缓冲，`WriteTimeout` 未设置）。
@@ -1573,7 +1581,7 @@ Cache-Control: no-store
 }
 ```
 
-- `cursor == 0 && snapshot == true`：返回全量快照（首次引导）。
+- `cursor == 0 && snapshot == true`：返回全量快照（首次引导），并附带 outbox 中尚未送达的删除 tombstone，避免首次同步把对端已删除的行重新复活。
 - `cursor`：调用方已持有的 outbox 游标，响应会裁剪 `id <= cursor` 的 outbox。
 
 响应：

@@ -28,6 +28,10 @@ import (
 // Applying the same change twice is a no-op (equal timestamps are skipped),
 // which makes retries and echoes harmless.
 func ApplyChanges(ctx context.Context, client *ent.Client, changes []Change) (applied, skipped int, err error) {
+	tombstones, err := pendingTombstones(ctx, client)
+	if err != nil {
+		return 0, 0, err
+	}
 	for _, ch := range changes {
 		// A private row without an owner cannot be attributed safely. Skip it
 		// instead of guessing a user, and let the operator see the warning.
@@ -36,6 +40,17 @@ func ApplyChanges(ctx context.Context, client *ent.Client, changes []Change) (ap
 				"entity", ch.Entity, "gallery_id", ch.GalleryID, "token", ch.Token)
 			skipped++
 			continue
+		}
+		// A pending local deletion outranks an older incoming row. Rows have
+		// no stored tombstone, so without this check a peer snapshot/delta
+		// could resurrect a row this instance deleted but has not told the
+		// peer about yet.
+		if ch.Op == OpUpsert && ch.Row != nil {
+			if deletedAt, ok := tombstones[changeKeyOf(ch)]; ok &&
+				deletedAt.After(clampFutureTimestamp(ch.Row.UpdatedAt)) {
+				skipped++
+				continue
+			}
 		}
 		ok, applyErr := applyChange(ctx, client, ch)
 		if applyErr != nil {
@@ -452,6 +467,85 @@ func ExportSnapshot(ctx context.Context, client *ent.Client) ([]Change, error) {
 	return changes, nil
 }
 
+// changeKey identifies one replicated row: per-user, per-entity, keyed by the
+// gallery/token pair (gallery_cache rows carry the nil owner).
+type changeKey struct {
+	userID    ident.UUID
+	entity    string
+	galleryID int64
+	token     string
+}
+
+func changeKeyOf(ch Change) changeKey {
+	return changeKey{userID: ch.UserID, entity: ch.Entity, galleryID: ch.GalleryID, token: ch.Token}
+}
+
+// pendingTombstones returns the deletion time of every row whose newest outbox
+// entry is a delete, i.e. a removal the peer has not acknowledged yet. An
+// upsert entry after the delete clears the tombstone (the row exists again).
+func pendingTombstones(ctx context.Context, client *ent.Client) (map[changeKey]time.Time, error) {
+	entries, err := client.SyncChange.Query().
+		Order(ent.Asc(syncchange.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read pending tombstones: %w", err)
+	}
+	tombstones := make(map[changeKey]time.Time, len(entries))
+	for _, e := range entries {
+		k := changeKey{userID: e.UserID, entity: e.Entity, galleryID: e.GalleryID, token: e.Token}
+		if e.Op == OpDelete {
+			tombstones[k] = e.ChangedAt
+		} else {
+			delete(tombstones, k)
+		}
+	}
+	return tombstones, nil
+}
+
+// BootstrapChanges returns everything a peer needs on the first exchange of a
+// sync epoch: the full live snapshot plus the delete tombstones still held by
+// the outbox.
+//
+// A snapshot only carries rows that still exist, so it cannot express a
+// deletion made before the first sync. Without the tombstones the peer would
+// keep its own copy of the deleted row — and its snapshot would then resurrect
+// the row on this side. Tombstones are LWW-guarded on the receiving end, so a
+// genuinely newer peer row still wins.
+//
+// The watermark is read before the export: a row written while the snapshot is
+// collected keeps an outbox id above it and is pushed as a delta next cycle.
+func BootstrapChanges(ctx context.Context, client *ent.Client) ([]Change, int, error) {
+	watermark, err := maxOutboxID(ctx, client)
+	if err != nil {
+		return nil, 0, err
+	}
+	changes, err := ExportSnapshot(ctx, client)
+	if err != nil {
+		return nil, 0, err
+	}
+	deltas, _, err := ReadChangesSince(ctx, client, 0)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	live := make(map[changeKey]struct{}, len(changes))
+	for _, ch := range changes {
+		live[changeKeyOf(ch)] = struct{}{}
+	}
+	for _, ch := range deltas {
+		if ch.Op != OpDelete {
+			continue
+		}
+		if _, exists := live[changeKeyOf(ch)]; exists {
+			// The row was re-created after the delete, so the snapshot is the
+			// current state; replaying the older tombstone would erase it.
+			continue
+		}
+		changes = append(changes, ch)
+	}
+	return changes, watermark, nil
+}
+
 // ReadChangesSince converts outbox entries with id > cursor into wire
 // changes. Upserts are resolved against the current row (so rapid updates are
 // coalesced into one payload); an entry whose row has vanished is downgraded
@@ -478,16 +572,10 @@ func ReadChangesSince(ctx context.Context, client *ent.Client, cursor int) ([]Ch
 
 	// Coalesce per record: the last entry wins (an upsert after a delete
 	// resurrects the row, a delete after an upsert removes it).
-	type dedupeKey struct {
-		userID    ident.UUID
-		entity    string
-		galleryID int64
-		token     string
-	}
-	latest := make(map[dedupeKey]*ent.SyncChange, len(entries))
-	order := make([]dedupeKey, 0, len(entries))
+	latest := make(map[changeKey]*ent.SyncChange, len(entries))
+	order := make([]changeKey, 0, len(entries))
 	for _, e := range entries {
-		k := dedupeKey{userID: e.UserID, entity: e.Entity, galleryID: e.GalleryID, token: e.Token}
+		k := changeKey{userID: e.UserID, entity: e.Entity, galleryID: e.GalleryID, token: e.Token}
 		if _, seen := latest[k]; !seen {
 			order = append(order, k)
 		}
