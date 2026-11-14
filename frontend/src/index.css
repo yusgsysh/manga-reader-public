@@ -247,29 +247,6 @@ body {
   }
 }
 
-/*
- * Grid cards enter one by one: the grids reveal items on a paced timer
- * (`useProgressiveReveal`), so an infinite-scroll append reads as a stream
- * rather than a 25-card block. Removing a card never animates it away — the
- * reveal count only clamps. Opacity/transform only, so this stays on the
- * compositor while the user is scrolling.
- */
-@keyframes gallery-card-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-
-.gallery-grid > * {
-  animation: gallery-card-in 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-/* Space reservations for queued cards paint nothing, so they never animate. */
-.gallery-grid > .gallery-slot {
-  animation: none;
-}
-
 /* Gallery detail: page thumbnail grid (mirrors ExHentai's #gdt layout). */
 .page-thumb-grid {
   display: grid;

@@ -1,33 +1,34 @@
 import { memo, useMemo } from "react";
 import { GalleryCard } from "./GalleryCard";
-import { GalleryCardSlot } from "./GallerySkeleton";
+import { GallerySkeleton } from "./GallerySkeleton";
+import { useGridColumns } from "../../hooks/useGridColumns";
 import { readingToCard, type ReadingCardSource } from "./mappers";
-import { useProgressiveReveal } from "../../hooks/useProgressiveReveal";
 
 interface BookshelfGridProps {
   items: ReadingCardSource[];
+  /** The next page is in flight: hold its row with skeleton cards. */
+  loadingMore?: boolean;
 }
 
 export const BookshelfGrid = memo(function BookshelfGrid({
   items,
+  loadingMore = false,
 }: BookshelfGridProps) {
   const cards = useMemo(() => items.map(readingToCard), [items]);
-  // Same paced reveal as the listing grids: an appended page of history or
-  // shelf entries flows in instead of appearing all at once.
-  const revealed = useProgressiveReveal(cards.length);
+  const columns = useGridColumns();
 
   return (
     <div className="gallery-grid">
-      {cards.map((card, index) =>
-        index < revealed ? (
-          <GalleryCard key={`${card.id}-${card.token}`} gallery={card} />
-        ) : (
-          <GalleryCardSlot
-            key={`slot-${card.id}-${card.token}`}
-            withPosted={false}
-          />
-        ),
-      )}
+      {cards.map((card) => (
+        <GalleryCard key={`${card.id}-${card.token}`} gallery={card} />
+      ))}
+      {/* Shelf/history cards have no posted line, so their skeletons skip it
+          too and the row height stays identical when the cards land. */}
+      {loadingMore
+        ? Array.from({ length: columns }).map((_, index) => (
+            <GallerySkeleton key={`pending-${index}`} withPosted={false} />
+          ))
+        : null}
     </div>
   );
 });

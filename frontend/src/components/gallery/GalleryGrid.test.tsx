@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { act, render } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { GalleryGrid } from "./GalleryGrid";
 import type { GalleryListItem } from "../../types/gallery";
 
@@ -21,37 +21,30 @@ function gallery(id: number): GalleryListItem {
   };
 }
 
-beforeEach(() => {
-  vi.useFakeTimers();
-});
-
-afterEach(() => {
-  vi.useRealTimers();
-});
+function renderGrid(
+  galleries: GalleryListItem[],
+  loadingMore?: boolean,
+) {
+  return render(
+    <MemoryRouter>
+      <GalleryGrid galleries={galleries} loadingMore={loadingMore} />
+    </MemoryRouter>,
+  );
+}
 
 describe("GalleryGrid", () => {
-  it("streams cards in one at a time, reserving their space up front", () => {
-    const { container } = render(
-      <MemoryRouter>
-        <GalleryGrid galleries={[gallery(1), gallery(2), gallery(3)]} />
-      </MemoryRouter>,
-    );
+  it("renders loaded cards without any entrance animation", () => {
+    const { container } = renderGrid([gallery(1), gallery(2), gallery(3)]);
 
-    // Only the first card is mounted; the rest hold their footprint so the
-    // page does not jump (and the scroll sentinel stays at the real bottom).
-    expect(container.querySelectorAll(".gallery-card")).toHaveLength(1);
-    expect(container.querySelectorAll(".gallery-slot")).toHaveLength(2);
-
-    act(() => {
-      vi.advanceTimersByTime(30);
-    });
-    expect(container.querySelectorAll(".gallery-card")).toHaveLength(2);
-    expect(container.querySelectorAll(".gallery-slot")).toHaveLength(1);
-
-    act(() => {
-      vi.advanceTimersByTime(5_000);
-    });
     expect(container.querySelectorAll(".gallery-card")).toHaveLength(3);
-    expect(container.querySelectorAll(".gallery-slot")).toHaveLength(0);
+    expect(container.querySelectorAll(".gallery-skeleton")).toHaveLength(0);
+  });
+
+  it("holds the next page's row with skeleton cards while it loads", () => {
+    // jsdom's 1024px viewport maps to 5 grid columns.
+    const { container } = renderGrid([gallery(1)], true);
+
+    expect(container.querySelectorAll(".gallery-card")).toHaveLength(1);
+    expect(container.querySelectorAll(".gallery-skeleton")).toHaveLength(5);
   });
 });
