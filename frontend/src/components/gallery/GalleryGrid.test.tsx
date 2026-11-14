@@ -40,11 +40,13 @@ describe("GalleryGrid", () => {
     expect(container.querySelectorAll(".gallery-skeleton")).toHaveLength(0);
   });
 
-  it("holds the next page's row with skeleton cards while it loads", () => {
+  it("holds the next page's row with static skeleton cards while it loads", () => {
     // jsdom's 1024px viewport maps to 5 grid columns.
     const { container } = renderGrid([gallery(1)], true);
 
     expect(container.querySelectorAll(".gallery-card")).toHaveLength(1);
     expect(container.querySelectorAll(".gallery-skeleton")).toHaveLength(5);
+    // Placeholders must not keep a shimmer running while the request is slow.
+    expect(container.querySelectorAll(".skeleton-shimmer")).toHaveLength(0);
   });
 });

@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useRef } from "react";
 import { GalleryCard } from "./GalleryCard";
 import { GallerySkeleton } from "./GallerySkeleton";
 import { useGridColumns } from "../../hooks/useGridColumns";
@@ -15,10 +15,11 @@ export const BookshelfGrid = memo(function BookshelfGrid({
   loadingMore = false,
 }: BookshelfGridProps) {
   const cards = useMemo(() => items.map(readingToCard), [items]);
-  const columns = useGridColumns();
+  const gridRef = useRef<HTMLDivElement>(null);
+  const columns = useGridColumns(gridRef);
 
   return (
-    <div className="gallery-grid">
+    <div ref={gridRef} className="gallery-grid">
       {cards.map((card) => (
         <GalleryCard key={`${card.id}-${card.token}`} gallery={card} />
       ))}

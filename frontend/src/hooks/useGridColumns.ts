@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type RefObject } from "react";
 
-// Must match the `.gallery-grid` breakpoints in `index.css`: skeleton rows are
-// rendered as grid children, so a wrong count would leave the row ragged.
+// Used before the first layout measurement (and in environments without
+// ResizeObserver, e.g. tests): must match the `.gallery-grid` breakpoints in
+// `index.css`.
 function columnsForWidth(width: number): number {
   if (width < 480) return 2;
   if (width < 768) return 3;
@@ -11,17 +12,48 @@ function columnsForWidth(width: number): number {
   return 7;
 }
 
-/** Live column count of `.gallery-grid`, for sizing placeholder rows. */
-export function useGridColumns(): number {
+function measureColumns(element: HTMLElement): number {
+  // The computed value is one track size per column ("240px 240px …"), even
+  // while the grid is empty. Reading it avoids guessing from the window width,
+  // which can disagree with the real layout (scrollbars, zoom), leaving a
+  // placeholder row with the wrong number of cells.
+  const template = window.getComputedStyle(element).gridTemplateColumns;
+  if (!template || template === "none") return 0;
+  return template.split(" ").filter(Boolean).length;
+}
+
+/**
+ * Live column count of the `.gallery-grid` behind `ref`, measured from the
+ * layout itself so placeholder rows always fill exactly one row. Without a
+ * ref (static skeleton containers) it falls back to the window width.
+ */
+export function useGridColumns(
+  ref?: RefObject<HTMLElement | null>,
+): number {
   const [columns, setColumns] = useState(() =>
     columnsForWidth(window.innerWidth),
   );
 
   useEffect(() => {
-    const onResize = () => setColumns(columnsForWidth(window.innerWidth));
-    window.addEventListener("resize", onResize, { passive: true });
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
+    const element = ref?.current ?? null;
+
+    const update = () => {
+      const measured = element ? measureColumns(element) : 0;
+      setColumns(measured > 0 ? measured : columnsForWidth(window.innerWidth));
+    };
+
+    update();
+
+    if (element && typeof ResizeObserver !== "undefined") {
+      // The grid is fluid, so a breakpoint change also resizes the element.
+      const observer = new ResizeObserver(update);
+      observer.observe(element);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener("resize", update, { passive: true });
+    return () => window.removeEventListener("resize", update);
+  }, [ref]);
 
   return columns;
 }

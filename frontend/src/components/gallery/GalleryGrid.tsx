@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useRef } from "react";
 import type { GalleryListItem } from "../../types/gallery";
 import { GalleryCard } from "./GalleryCard";
 import { GallerySkeleton } from "./GallerySkeleton";
@@ -26,10 +26,11 @@ export const GalleryGrid = memo(function GalleryGrid({
   loadingMore = false,
 }: GalleryGridProps) {
   const cards = useMemo(() => galleries.map(galleryToCard), [galleries]);
-  const columns = useGridColumns();
+  const gridRef = useRef<HTMLDivElement>(null);
+  const columns = useGridColumns(gridRef);
 
   return (
-    <div className="gallery-grid">
+    <div ref={gridRef} className="gallery-grid">
       {cards.map((card) => (
         <GalleryCard key={`${card.id}-${card.token}`} gallery={card} />
       ))}
