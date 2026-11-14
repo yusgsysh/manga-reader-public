@@ -91,11 +91,13 @@ type Row struct {
 
 // Change is a single replicated mutation: an upsert carries the row state at
 // send time, a delete carries the tombstone timestamp used for LWW. UserID is
-// the owner of the private row and is preserved across peers, so replication
-// never merges two users' data even though a trusted node sees the whole
-// instance outbox.
+// the owner of the private row as seen by the sender; Username lets a peer
+// whose account UUIDs differ (accounts are created per instance) map the row
+// onto its own account with the same name. When the UUID exists locally it
+// wins, so instances sharing a database keep their exact identity.
 type Change struct {
 	UserID    ident.UUID `json:"user_id"`
+	Username  string     `json:"username,omitempty"`
 	Entity    string     `json:"entity"`
 	GalleryID int64      `json:"gallery_id"`
 	Token     string     `json:"token"`

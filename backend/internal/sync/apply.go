@@ -14,6 +14,7 @@ import (
 	"manga-reader/internal/ent/gallerycache"
 	"manga-reader/internal/ent/readingprogress"
 	"manga-reader/internal/ent/syncchange"
+	"manga-reader/internal/ent/user"
 )
 
 // ApplyChanges merges peer changes into the local database with per-row
@@ -32,14 +33,31 @@ func ApplyChanges(ctx context.Context, client *ent.Client, changes []Change) (ap
 	if err != nil {
 		return 0, 0, err
 	}
+	users, err := loadUserDirectory(ctx, client)
+	if err != nil {
+		return 0, 0, err
+	}
 	for _, ch := range changes {
-		// A private row without an owner cannot be attributed safely. Skip it
-		// instead of guessing a user, and let the operator see the warning.
-		if ch.UserID == ident.Nil() && ch.Entity != EntityGalleryCache {
-			slog.Warn("skipping unowned sync change",
-				"entity", ch.Entity, "gallery_id", ch.GalleryID, "token", ch.Token)
-			skipped++
-			continue
+		// Accounts are created per instance, so the sender's user UUID may not
+		// exist here. Map it to the local account with the same username; a
+		// private row that cannot be attributed is skipped instead of being
+		// written under a ghost owner nobody can read.
+		if ch.Entity != EntityGalleryCache {
+			if ch.UserID == ident.Nil() {
+				slog.Warn("skipping unowned sync change",
+					"entity", ch.Entity, "gallery_id", ch.GalleryID, "token", ch.Token)
+				skipped++
+				continue
+			}
+			localID, ok := users.resolve(ch.UserID, ch.Username)
+			if !ok {
+				slog.Warn("skipping sync change for unknown user",
+					"username", ch.Username, "user_id", ch.UserID.String(),
+					"entity", ch.Entity, "gallery_id", ch.GalleryID, "token", ch.Token)
+				skipped++
+				continue
+			}
+			ch.UserID = localID
 		}
 		// A pending local deletion outranks an older incoming row. Rows have
 		// no stored tombstone, so without this check a peer snapshot/delta
@@ -425,10 +443,23 @@ func ExportSnapshot(ctx context.Context, client *ent.Client) ([]Change, error) {
 		return nil, fmt.Errorf("export gallery cache: %w", err)
 	}
 
+	owners := make([]ident.UUID, 0, len(progressRows)+len(bookshelfRows))
+	for _, p := range progressRows {
+		owners = append(owners, p.UserID)
+	}
+	for _, b := range bookshelfRows {
+		owners = append(owners, b.UserID)
+	}
+	usernames, err := loadUsernames(ctx, client, owners)
+	if err != nil {
+		return nil, err
+	}
+
 	changes := make([]Change, 0, len(progressRows)+len(bookshelfRows)+len(cacheRows))
 	for _, p := range progressRows {
 		changes = append(changes, Change{
 			UserID:    p.UserID,
+			Username:  usernames[p.UserID],
 			Entity:    EntityReadingProgress,
 			GalleryID: p.GalleryID,
 			Token:     p.Token,
@@ -445,6 +476,7 @@ func ExportSnapshot(ctx context.Context, client *ent.Client) ([]Change, error) {
 	for _, b := range bookshelfRows {
 		changes = append(changes, Change{
 			UserID:    b.UserID,
+			Username:  usernames[b.UserID],
 			Entity:    EntityBookshelf,
 			GalleryID: b.GalleryID,
 			Token:     b.Token,
@@ -478,6 +510,78 @@ type changeKey struct {
 
 func changeKeyOf(ch Change) changeKey {
 	return changeKey{userID: ch.UserID, entity: ch.Entity, galleryID: ch.GalleryID, token: ch.Token}
+}
+
+// userDirectory resolves a peer-side owner onto a local account. Accounts are
+// created independently on each instance (random UUIDv7), so the same person
+// has a different user_id on the other side; the username is the stable link
+// between them.
+type userDirectory struct {
+	byID   map[ident.UUID]ident.UUID
+	byName map[string]ident.UUID
+}
+
+func loadUserDirectory(ctx context.Context, client *ent.Client) (*userDirectory, error) {
+	users, err := client.User.Query().All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read sync users: %w", err)
+	}
+	d := &userDirectory{
+		byID:   make(map[ident.UUID]ident.UUID, len(users)),
+		byName: make(map[string]ident.UUID, len(users)),
+	}
+	for _, u := range users {
+		d.byID[u.ID] = u.ID
+		d.byName[u.Username] = u.ID
+	}
+	return d, nil
+}
+
+// resolve returns the local owner for a remote change. The sender's UUID wins
+// when it names an account here (same database or an earlier mapping);
+// otherwise the username identifies the same person. Changes from peers that
+// predate username propagation keep their original UUID, matching the old
+// behaviour.
+func (d *userDirectory) resolve(id ident.UUID, username string) (ident.UUID, bool) {
+	if local, ok := d.byID[id]; ok {
+		return local, true
+	}
+	if username == "" {
+		return id, true
+	}
+	if local, ok := d.byName[username]; ok {
+		return local, true
+	}
+	return ident.Nil(), false
+}
+
+// loadUsernames maps owners to usernames for the wire payload so the receiver
+// can match accounts whose UUIDs differ.
+func loadUsernames(ctx context.Context, client *ent.Client, ids []ident.UUID) (map[ident.UUID]string, error) {
+	names := make(map[ident.UUID]string, len(ids))
+	unique := make([]ident.UUID, 0, len(ids))
+	seen := make(map[ident.UUID]struct{}, len(ids))
+	for _, id := range ids {
+		if id == ident.Nil() {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		unique = append(unique, id)
+	}
+	if len(unique) == 0 {
+		return names, nil
+	}
+	users, err := client.User.Query().Where(user.IDIn(unique...)).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read sync usernames: %w", err)
+	}
+	for _, u := range users {
+		names[u.ID] = u.Username
+	}
+	return names, nil
 }
 
 // pendingTombstones returns the deletion time of every row whose newest outbox
@@ -583,12 +687,21 @@ func ReadChangesSince(ctx context.Context, client *ent.Client, cursor int) ([]Ch
 	}
 
 	changes := make([]Change, 0, len(order))
+	owners := make([]ident.UUID, 0, len(order))
+	for _, k := range order {
+		owners = append(owners, k.userID)
+	}
+	usernames, err := loadUsernames(ctx, client, owners)
+	if err != nil {
+		return nil, 0, err
+	}
 	for _, k := range order {
 		e := latest[k]
 		if e.Op == OpDelete {
 			deletedAt := e.ChangedAt
 			changes = append(changes, Change{
 				UserID:    e.UserID,
+				Username:  usernames[e.UserID],
 				Entity:    e.Entity,
 				GalleryID: e.GalleryID,
 				Token:     e.Token,
@@ -605,6 +718,7 @@ func ReadChangesSince(ctx context.Context, client *ent.Client, cursor int) ([]Ch
 			deletedAt := e.ChangedAt
 			changes = append(changes, Change{
 				UserID:    e.UserID,
+				Username:  usernames[e.UserID],
 				Entity:    e.Entity,
 				GalleryID: e.GalleryID,
 				Token:     e.Token,
@@ -615,6 +729,7 @@ func ReadChangesSince(ctx context.Context, client *ent.Client, cursor int) ([]Ch
 		}
 		changes = append(changes, Change{
 			UserID:    e.UserID,
+			Username:  usernames[e.UserID],
 			Entity:    e.Entity,
 			GalleryID: e.GalleryID,
 			Token:     e.Token,

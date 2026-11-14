@@ -720,7 +720,7 @@ function SyncSection() {
                   保存
                 </Button>
                 <p className="text-xs text-kumo-subtle">
-                  双向同步阅读进度与书架；密钥在下方「API Key」创建。
+                  双向同步阅读进度与书架；两端需使用相同用户名，密钥见下方「API Key」。
                 </p>
               </div>
             </>

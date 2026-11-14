@@ -1572,10 +1572,12 @@ Cache-Control: no-store
   "cursor": 12,
   "snapshot": false,
   "changes": [
-    { "entity": "reading_progress", "gallery_id": 100, "token": "abc", "op": "upsert",
+    { "user_id": "7a6c…", "username": "admin",
+      "entity": "reading_progress", "gallery_id": 100, "token": "abc", "op": "upsert",
       "row": { "gallery_id": 100, "token": "abc", "current_page": 5, "progress": 0.5,
                "completed": false, "created_at": "...", "updated_at": "..." } },
-    { "entity": "bookshelf", "gallery_id": 200, "token": "def", "op": "delete",
+    { "user_id": "7a6c…", "username": "admin",
+      "entity": "bookshelf", "gallery_id": 200, "token": "def", "op": "delete",
       "deleted_at": "..." }
   ]
 }
@@ -1590,8 +1592,9 @@ Cache-Control: no-store
 { "cursor": 15, "changes": [ ... ], "applied": 3, "skipped": 1 }
 ```
 
-- `applied`：LWW 胜出并落库的远端行数；`skipped`：过期或回声跳过。
+- `applied`：LWW 胜出并落库的远端行数；`skipped`：过期、回声或无法归属用户而跳过。
 - `cursor`：当前 outbox 最大 id，调用方**无条件采纳**（服务端重置时可回退）。
+- 账号归属：各实例的账号 UUID 独立生成，`user_id` 在两端通常不同。接收方先按 `user_id` 匹配本地账号，找不到再按 `username` 匹配；两者都找不到时该变更被跳过（不会写入无主数据）。因此两端应使用相同的用户名。
 
 `GET /api/sync/events` — 宿主 SSE。连接后推送 `data: {"cursor": N}`；此后每次 outbox 新增推送 `data: {"cursor": M}`（`M > N`）。客户端收到后延迟去抖（2s）执行 push 循环，心跳间隔 25s，断线指数退避（1s→60s），并有 60s 轮询兜底。
 
