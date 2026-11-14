@@ -281,7 +281,19 @@ export function ReaderPage() {
     setViewerSettingsState(state.settings);
     setLayoutMode(state.layout.mode);
     if (autoFullscreenOnOpenRef.current && state.layout.mode === "inline") {
-      void viewer.setLayoutMode("browserFullscreen");
+      // The gallery's start-reading click already asked for native fullscreen
+      // (`requestReaderFullscreenIfEnabled`). comimi's
+      // `setLayoutMode("browserFullscreen")` exits any active native fullscreen,
+      // which would undo that request — the "enter then immediately exit"
+      // flicker. When native fullscreen is already on, apply the fullscreen
+      // layout via `updateSettings` (it only changes `layout.mode`, with no
+      // fullscreen side effects). Otherwise fall back to the library layout so
+      // the reader still fills the window when the browser refused.
+      if (document.fullscreenElement) {
+        void viewer.updateSettings({ layoutMode: "browserFullscreen" });
+      } else {
+        void viewer.setLayoutMode("browserFullscreen");
+      }
     }
   }, [viewerReady]);
 
