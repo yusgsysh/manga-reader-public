@@ -315,6 +315,65 @@ try {
     await page.close();
   }
 
+  console.log("reader: page turn animation (slide / book)");
+  {
+    const page = await browser.newPage();
+    await page.goto(`${BASE}/reader/1001/tok`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".reader-shell", { timeout: 30000 });
+    await page.waitForSelector(".comimi-stage .comimi-page-group[data-placement='current']", {
+      timeout: 30000,
+    });
+
+    const box = await page.locator(".comimi-root").boundingBox();
+    const leftX = box.x + box.width * 0.15;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    const seek = () => page.locator(".comimi-seek").innerText();
+
+    check(
+      "defaults to the slide page-turn animation",
+      (await page.evaluate(
+        () => document.querySelector(".comimi-root")?.dataset.pageTurnAnimation,
+      )) === "slide",
+    );
+
+    // The bootstrap guide shows the overlay ~1s after load; dismiss it so the
+    // left-third click below turns a page instead of toggling the overlay.
+    await sleep(1200);
+    await page.mouse.click(cx, cy);
+    await sleep(200);
+
+    // rtl reading: the left third is the next page.
+    const before = await seek();
+    await page.mouse.click(leftX, cy);
+    await sleep(400);
+    check("clicking turns the page", (await seek()) !== before, `${before} -> ${await seek()}`);
+
+    await page.locator("header").getByRole("button", { name: "阅读设置" }).click();
+    await page.waitForSelector("text=翻页动画", { timeout: 10000 });
+    await page.getByRole("button", { name: "书本翻页" }).click();
+    await sleep(200);
+    check(
+      "switching to book mode updates the reader",
+      (await page.evaluate(
+        () => document.querySelector(".comimi-root")?.dataset.pageTurnAnimation,
+      )) === "book",
+    );
+    await page.keyboard.press("Escape");
+    await sleep(200);
+
+    const beforeBook = await seek();
+    await page.mouse.click(leftX, cy);
+    await sleep(400);
+    check(
+      "book-mode click still turns the page",
+      (await seek()) !== beforeBook,
+      `${beforeBook} -> ${await seek()}`,
+    );
+
+    await page.close();
+  }
+
   console.log("bookshelf: reading round trip keeps the source nav highlighted");
   {
     const page = await browser.newPage();

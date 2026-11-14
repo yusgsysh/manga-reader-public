@@ -80,6 +80,8 @@ export function ReaderPage() {
       theme: isDark ? "dark" : "light",
       backgroundColor: isDark ? "black" : "white",
       pageTurnMode: "single",
+      // 翻页动画：默认「平移」，可在「阅读设置」切换为「书本翻页」。
+      pageTurnAnimation: "slide",
       // 打开时默认「标准」，可点 dock 的全屏按钮进入全屏。
       layoutMode: "inline",
     }),

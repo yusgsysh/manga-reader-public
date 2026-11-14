@@ -239,6 +239,26 @@ export function ReaderToolbar({
               </div>
             </div>
 
+            <div>
+              <div className="mb-1.5 text-xs font-medium text-kumo-subtle">
+                翻页动画
+              </div>
+              <div className="grid grid-cols-2 gap-1 rounded-lg bg-kumo-recessed p-1">
+                <Segment
+                  active={viewerSettings?.pageTurnAnimation !== "book"}
+                  onClick={() => onUpdateSettings({ pageTurnAnimation: "slide" })}
+                >
+                  平移
+                </Segment>
+                <Segment
+                  active={viewerSettings?.pageTurnAnimation === "book"}
+                  onClick={() => onUpdateSettings({ pageTurnAnimation: "book" })}
+                >
+                  书本翻页
+                </Segment>
+              </div>
+            </div>
+
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm font-medium text-kumo-default">
                 显示封面页

@@ -58,7 +58,7 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
 
 ## comimi / comimi-react 补丁
 
-本仓库对 `@yui540/comimi` 维护三处补丁，均由同一个 `patches/@yui540%2Fcomimi@0.26.0.patch` 承载：**预加载页白屏**、**触屏进度条缩略图**与**阅读器返回/全屏入口迁入 comimi（并移除宽屏选项）**；同一补丁还顺带移除自动播放与单/双页的快捷键（`A` / `P`）。另有 `patches/@yui540%2Fcomimi-react@0.3.0.patch`，把新增事件加入运行时事件白名单，使 `onBack` / `onFullscreenRequest` 能作为 props 透传。
+本仓库对 `@yui540/comimi` 维护四处补丁，均由同一个 `patches/@yui540%2Fcomimi@0.26.0.patch` 承载：**预加载页白屏**、**触屏进度条缩略图**、**阅读器返回/全屏入口迁入 comimi（并移除宽屏选项）**与**翻页动画（平移/书本翻页）**；同一补丁还顺带移除自动播放与单/双页的快捷键（`A` / `P`）。另有 `patches/@yui540%2Fcomimi-react@0.3.0.patch`，把新增事件加入运行时事件白名单，使 `onBack` / `onFullscreenRequest` 能作为 props 透传。
 
 阅读器把自动播放、单/双页与「开始阅读时自动全屏」三组入口移除：前两者通过 comimi 的 `hiddenSettings`（`autoplay` / `pageMode` / `interval`）隐藏 dock 按钮，应用侧「阅读设置」面板不再提供对应选项；「开始阅读时自动全屏」偏好（`readerPrefs`）整体删除，全屏仍由上方工具栏的显式切换按钮控制。
 
@@ -191,6 +191,26 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
 #### 应用侧
 
 `ReaderPage` 删除 `.reader-topbar`，改用 `<MangaViewer onBack={...} onFullscreenRequest={...} />`：`onBack` 执行 `flushProgress()` + `goBack()`（沿用 `useBackNavigation` 的浏览器历史 / 深链回退规则）；`settings.layoutMode` 默认 `inline`（标准），用户可点 dock 的全屏按钮进入全屏。
+
+### 补丁四：翻页动画（平移 / 书本翻页）
+
+#### 背景
+
+comimi 原生的翻页只有一种整块舞台的横向平移，而且只在触摸滑动结束时的「惯性翻页」路径触发；点击屏幕左右两侧、左右箭头按钮和键盘翻页都是即时跳转、没有任何过渡。要让阅读器支持「平移」和「书本翻页」两种可切换的翻页动画，需要在 comimi 里新增一个设置项，并把所有单步翻页路径统一收口到动画入口。
+
+#### comimi 侧补丁
+
+- **设置项**：`dist/types.d.ts` 新增 `PageTurnAnimation = "slide" | "book"`，`ViewerSettings` 增加 `pageTurnAnimation` 字段；`dist/index.js` 的默认值对象补 `pageTurnAnimation: "slide"`。
+- **渲染器状态**：`ViewerRenderer.update` 把 `pageTurnAnimation` 写到根节点的 `data-page-turn-animation` 属性，供 CSS 切换 `perspective` / 过渡。
+- **动画入口统一**：核心 `nextPage` / `previousPage` 原来直接 `commitNextPage` / `commitPreviousPage`（点击、箭头、键盘都走这里），改为先走 `renderer.requestPageTurn(state, direction)`（即 `animatePageTurn`），仅在无法动画（已是边界、正在动画中）时回退到直接提交；动画期间 `isPageTurnAnimating` 挡住重复触发。
+- **书本翻页实现**：`PageStage` 新增 `beginBookFlip(direction, settings)` / `endBookFlip()`。`animatePageTurn` 在 `pageTurnAnimation === "book"` 且未放大（`zoomScale <= 1`，放大时页面组带内联 transform，不能叠加旋转）时走书本翻页，否则沿用原来的整块平移。
+  - `beginBookFlip` 先把舞台复位（`snapTransform`），给「当前页」组打上 `data-spine`（根据阅读方向与翻页方向算出书脊在左还是右），把「目标页」组的 transform 改为 `translateX(0%)`（靠 CSS 过渡滑入），并在舞台上标记 `data-flipping`。
+  - 180ms 后 `endBookFlip` 清除标记，再由回调提交页面（提交是同步的，会立刻重建舞台，因此不会闪一帧「翻回来的过渡」）。
+- **CSS**：在 `.comimi-stage` 的样式串尾部追加书本翻页样式——舞台 `perspective`、翻页时「当前页」绕书脊 `rotateY(±90°)` 的 `comimi-book-fold-left/right` 关键帧、书脊侧阴影 `comimi-book-shadow`，以及 `prefers-reduced-motion` 下关闭动画。
+
+#### 应用侧
+
+`ReaderPage` 的 `settings` 增加 `pageTurnAnimation: "slide"` 默认值；`ReaderToolbar` 的「阅读设置」面板新增「翻页动画」分段控件（平移 / 书本翻页），点击调用 `updateSettings({ pageTurnAnimation })`。该偏好与其他阅读设置一样随会话有效、不持久化（comimi 的 `storage` 已关闭）。
 
 ### 回归测试
 
