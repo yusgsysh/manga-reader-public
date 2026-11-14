@@ -299,54 +299,56 @@ export function ApiKeySection() {
               keysQuery.data.keys.map((key) => (
                 <div
                   key={key.id}
-                  className="flex flex-wrap items-center gap-2 rounded-lg bg-kumo-recessed p-2.5 text-xs"
+                  className="rounded-lg bg-kumo-recessed p-2.5 text-xs"
                 >
-                  <span className="font-medium">
-                    {key.name || "未命名"}
-                  </span>
-                  <code className="font-mono text-kumo-subtle">
-                    {key.key_prefix}…
-                  </code>
-                  <span
-                    className={
-                      key.status === "active"
-                        ? "rounded-full bg-kumo-success/10 px-2 py-0.5 text-kumo-success"
-                        : "rounded-full bg-kumo-danger/10 px-2 py-0.5 text-kumo-danger"
-                    }
-                  >
-                    {key.status === "active" ? "有效" : "已撤销"}
-                  </span>
-                  <span className="text-kumo-subtle">
-                    {key.expires_at
-                      ? `过期 ${formatDateTime(key.expires_at)}`
-                      : "永不过期"}
-                  </span>
-                  {key.last_used_at && (
-                    <span className="text-kumo-subtle">
-                      最后使用 {formatDateTime(key.last_used_at)}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">
+                      {key.name || "未命名"}
                     </span>
-                  )}
-                  <span className="flex-1" />
-                  {key.status === "active" && (
+                    <code className="font-mono text-kumo-subtle">
+                      {key.key_prefix}…
+                    </code>
+                    <span
+                      className={
+                        key.status === "active"
+                          ? "rounded-full bg-kumo-success/10 px-2 py-0.5 text-kumo-success"
+                          : "rounded-full bg-kumo-danger/10 px-2 py-0.5 text-kumo-danger"
+                      }
+                    >
+                      {key.status === "active" ? "有效" : "已撤销"}
+                    </span>
+                    <span className="flex-1" />
+                    {key.status === "active" && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => rotate.mutate(key)}
+                        disabled={rotate.isPending}
+                      >
+                        <ArrowsClockwise className="mr-1 size-3.5" />
+                        轮换
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => rotate.mutate(key)}
-                      disabled={rotate.isPending}
+                      onClick={() => remove.mutate(key)}
+                      disabled={remove.isPending}
                     >
-                      <ArrowsClockwise className="mr-1 size-3.5" />
-                      轮换
+                      <Trash className="mr-1 size-3.5" />
+                      删除
                     </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => remove.mutate(key)}
-                    disabled={remove.isPending}
-                  >
-                    <Trash className="mr-1 size-3.5" />
-                    删除
-                  </Button>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-kumo-subtle">
+                    <span>
+                      {key.expires_at
+                        ? `过期 ${formatDateTime(key.expires_at)}`
+                        : "永不过期"}
+                    </span>
+                    {key.last_used_at && (
+                      <span>最后使用 {formatDateTime(key.last_used_at)}</span>
+                    )}
+                  </div>
                 </div>
               ))
             ) : (
