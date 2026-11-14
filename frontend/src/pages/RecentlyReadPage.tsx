@@ -68,7 +68,7 @@ export function RecentlyReadPage() {
         />
       ) : (
         <>
-          <BookshelfGrid items={items} />
+          <BookshelfGrid items={items} loadingMore={isFetchingNextPage} />
           <InfiniteScrollTrigger
             hasNextPage={!!hasNextPage}
             isFetchingNextPage={isFetchingNextPage}
