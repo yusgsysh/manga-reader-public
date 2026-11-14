@@ -119,6 +119,7 @@ export const GalleryCard = memo(function GalleryCard({
   gallery,
 }: GalleryCardProps) {
   const [showTags, setShowTags] = useState(false);
+  const [loadedImage, setLoadedImage] = useState<string | null>(null);
   const [popoverPos, setPopoverPos] = useState<{
     left: number;
     bottom: number;
@@ -151,6 +152,7 @@ export const GalleryCard = memo(function GalleryCard({
 
   const { displayTags, hasTags, language, hasPages, image, posted, progress } =
     derived;
+  const imageLoaded = image !== "" && loadedImage === image;
   const galleryHref = `/gallery/${gallery.id}/${gallery.token}`;
 
   const openTags = () => {
@@ -216,7 +218,9 @@ export const GalleryCard = memo(function GalleryCard({
                 loading="lazy"
                 decoding="async"
                 className="app-image h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                onLoad={() => setLoadedImage(image)}
                 onError={(e) => {
+                  setLoadedImage(image);
                   e.currentTarget.style.display = "none";
                   e.currentTarget.nextElementSibling?.classList.remove("hidden");
                 }}
@@ -230,9 +234,12 @@ export const GalleryCard = memo(function GalleryCard({
               图片不可用
             </div>
 
-            {/* While the cover loads, the tile's own `bg-kumo-recessed` shows
-                through. No shimmer: an <img> can stay pending for a long time
-                and a looping placeholder reads as stuck. */}
+            {/* image loading placeholder */}
+            {image && !imageLoaded && (
+              <div className="absolute inset-0 overflow-hidden">
+                <div className="skeleton-shimmer h-full w-full bg-kumo-recessed" />
+              </div>
+            )}
 
             {/* progress bar: read portion solid, unread portion translucent */}
             {gallery.reading && (

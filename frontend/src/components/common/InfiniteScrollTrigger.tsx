@@ -40,7 +40,7 @@ export function InfiniteScrollTrigger({
     );
   }
 
-  // While the next page is prefetched the grid above holds its row with
-  // skeleton cards, so the sentinel itself stays invisible.
+  // While the next page is prefetched, render only an invisible sentinel so no
+  // loading animation is shown before the user reaches the bottom.
   return <div ref={sentinelRef} aria-hidden className="h-px" />;
 }

@@ -3,6 +3,7 @@ import { render } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 import { GalleryGrid } from "./GalleryGrid";
+import { GalleryGridSkeleton } from "./GallerySkeleton";
 import type { GalleryListItem } from "../../types/gallery";
 
 function gallery(id: number): GalleryListItem {
@@ -21,32 +22,43 @@ function gallery(id: number): GalleryListItem {
   };
 }
 
-function renderGrid(
-  galleries: GalleryListItem[],
-  loadingMore?: boolean,
-) {
+function renderGrid(galleries: GalleryListItem[]) {
   return render(
     <MemoryRouter>
-      <GalleryGrid galleries={galleries} loadingMore={loadingMore} />
+      <GalleryGrid galleries={galleries} />
     </MemoryRouter>,
   );
 }
 
 describe("GalleryGrid", () => {
-  it("renders loaded cards without any entrance animation", () => {
-    const { container } = renderGrid([gallery(1), gallery(2), gallery(3)]);
+  it("renders an appended page immediately, without placeholder cells", () => {
+    const { container, rerender } = renderGrid([gallery(1), gallery(2)]);
 
-    expect(container.querySelectorAll(".gallery-card")).toHaveLength(3);
-    expect(container.querySelectorAll(".gallery-skeleton")).toHaveLength(0);
+    expect(container.querySelectorAll(".gallery-card")).toHaveLength(2);
+
+    rerender(
+      <MemoryRouter>
+        <GalleryGrid
+          galleries={[gallery(1), gallery(2), gallery(3), gallery(4)]}
+        />
+      </MemoryRouter>,
+    );
+
+    // Cards land at once and the grid holds exactly the real cards: no extra
+    // placeholder can extend a partial row and collapse again.
+    expect(container.querySelectorAll(".gallery-card")).toHaveLength(4);
+    expect(container.querySelector(".gallery-grid")?.children).toHaveLength(4);
   });
+});
 
-  it("holds the next page's row with static skeleton cards while it loads", () => {
-    // jsdom's 1024px viewport maps to 5 grid columns.
-    const { container } = renderGrid([gallery(1)], true);
+describe("GalleryGridSkeleton", () => {
+  it("keeps the shimmering loading frames", () => {
+    const { container } = render(<GalleryGridSkeleton count={3} />);
 
-    expect(container.querySelectorAll(".gallery-card")).toHaveLength(1);
-    expect(container.querySelectorAll(".gallery-skeleton")).toHaveLength(5);
-    // Placeholders must not keep a shimmer running while the request is slow.
-    expect(container.querySelectorAll(".skeleton-shimmer")).toHaveLength(0);
+    expect(container.querySelector(".gallery-grid")?.children).toHaveLength(3);
+    // Every skeleton block animates while the page is loading.
+    expect(
+      container.querySelectorAll(".skeleton-shimmer").length,
+    ).toBeGreaterThanOrEqual(3);
   });
 });
