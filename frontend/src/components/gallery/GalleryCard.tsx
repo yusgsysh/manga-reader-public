@@ -298,11 +298,16 @@ export const GalleryCard = memo(function GalleryCard({
 
       <Link to={galleryHref} className="block">
         <div className="mt-2 space-y-1.5">
-          <h3 className="line-clamp-2 min-h-10 text-sm font-medium leading-5">
+          {/* Two lines are always reserved (and clamped) so every card's
+              category row starts at the same height. */}
+          <h3 className="line-clamp-2 min-h-10 break-words text-sm font-medium leading-5">
             {gallery.title}
           </h3>
 
-          <div className="flex items-center gap-2 text-xs text-kumo-subtle">
+          {/* Fixed height: the category chip is 20px tall while the plain
+              language/pages text is 16px — without this the date row below
+              shifts by a few pixels from card to card. */}
+          <div className="flex h-5 items-center gap-2 text-xs text-kumo-subtle">
             {gallery.category && (
               <CategoryChip category={gallery.category} className="min-w-0 shrink" />
             )}
@@ -314,11 +319,11 @@ export const GalleryCard = memo(function GalleryCard({
             )}
           </div>
 
-          {gallery.posted && (
-            <p className="truncate text-right text-xs text-kumo-inactive">
-              {posted}
-            </p>
-          )}
+          {/* Always rendered at a fixed height so cards without a date keep
+              the same baseline as their neighbours. */}
+          <p className="h-4 truncate text-right text-xs leading-4 text-kumo-inactive">
+            {posted}
+          </p>
         </div>
       </Link>
     </div>
