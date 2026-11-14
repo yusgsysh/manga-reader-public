@@ -40,7 +40,7 @@ func (_d *NodeAPIKeyDelete) ExecX(ctx context.Context) int {
 }
 
 func (_d *NodeAPIKeyDelete) sqlExec(ctx context.Context) (int, error) {
-	_spec := sqlgraph.NewDeleteSpec(nodeapikey.Table, sqlgraph.NewFieldSpec(nodeapikey.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewDeleteSpec(nodeapikey.Table, sqlgraph.NewFieldSpec(nodeapikey.FieldID, field.TypeUUID))
 	if ps := _d.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {

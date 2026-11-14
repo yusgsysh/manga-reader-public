@@ -3,6 +3,8 @@ package schema
 import (
 	"time"
 
+	"manga-reader/internal/ident"
+
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
@@ -28,7 +30,13 @@ func (UserSetting) Annotations() []schema.Annotation {
 // Fields of the UserSetting.
 func (UserSetting) Fields() []ent.Field {
 	return []ent.Field{
-		field.Int("user_id").Unique().Immutable(),
+		// The owning user is the identity: exactly one settings row per user,
+		// so the user id doubles as the primary key (stored in "user_id").
+		// ent exposes it as "id" in Go, mirroring app_setting/sync_state.
+		field.UUID("id", ident.UUID{}).
+			StorageKey("user_id").
+			Immutable().
+			SchemaType(uuidSchemaType),
 		// cookie_ciphertext is AES-256-GCM sealed; the plaintext cookie never
 		// touches the database or an API response.
 		field.String("cookie_ciphertext").

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"manga-reader/internal/ident"
 
 	"manga-reader/internal/auth"
 	"manga-reader/internal/config"
@@ -17,18 +18,18 @@ import (
 // requireUser returns the trusted user ID for the request. It is always taken
 // from the verified JWT principal; query/header/body user identifiers are
 // never accepted. Every private query, update and delete must include it.
-func (s *Server) requireUser(c *gin.Context) (int64, bool) {
-	if principal, ok := auth.PrincipalFrom(c); ok && principal.ID > 0 {
-		return int64(principal.ID), true
+func (s *Server) requireUser(c *gin.Context) (ident.UUID, bool) {
+	if principal, ok := auth.PrincipalFrom(c); ok && principal.ID != ident.Nil() {
+		return principal.ID, true
 	}
 	if !s.requireAuth {
 		// Handler unit tests and standalone embedding may bypass the auth
 		// middleware. The production constructor always sets requireAuth, so
 		// a real request without a principal is rejected.
-		return 0, true
+		return ident.Nil(), true
 	}
 	web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "authentication required"})
-	return 0, false
+	return ident.Nil(), false
 }
 
 // requireAdmin guards instance-wide management endpoints.
@@ -44,7 +45,7 @@ func (s *Server) requireAdmin(c *gin.Context) bool {
 // upstreamClient returns the HTTP client for one user's ExHentai session. In
 // production UserCookies builds a separate cookie jar per account; the plain
 // Client fallback exists only for tests that construct Server directly.
-func (s *Server) upstreamClient(ctx context.Context, userID int64) (*http.Client, error) {
+func (s *Server) upstreamClient(ctx context.Context, userID ident.UUID) (*http.Client, error) {
 	if s.UserCookies != nil {
 		return s.UserCookies.Client(ctx, userID)
 	}
@@ -56,19 +57,19 @@ func (s *Server) upstreamClient(ctx context.Context, userID int64) (*http.Client
 
 // upstreamClientForRequest resolves the current user's client or writes the
 // appropriate error response.
-func (s *Server) upstreamClientForRequest(c *gin.Context) (*http.Client, int64, bool) {
+func (s *Server) upstreamClientForRequest(c *gin.Context) (*http.Client, ident.UUID, bool) {
 	uid, ok := s.requireUser(c)
 	if !ok {
-		return nil, 0, false
+		return nil, ident.Nil(), false
 	}
 	client, err := s.upstreamClient(c.Request.Context(), uid)
 	if err != nil {
 		if errors.Is(err, usercookie.ErrNotConfigured) {
 			web.JSON(c, http.StatusPreconditionFailed, gin.H{"error": "exhentai cookie is not configured; add it in settings"})
-			return nil, 0, false
+			return nil, ident.Nil(), false
 		}
 		web.JSON(c, http.StatusBadGateway, gin.H{"error": "exhentai session unavailable"})
-		return nil, 0, false
+		return nil, ident.Nil(), false
 	}
 	return client, uid, true
 }
@@ -76,7 +77,7 @@ func (s *Server) upstreamClientForRequest(c *gin.Context) (*http.Client, int64, 
 // upstreamBase returns the base URL of the user's preferred upstream site.
 // The cookie jar authenticates both hosts, so the preference only switches
 // which one is browsed; the default stays exhentai.org.
-func (s *Server) upstreamBase(ctx context.Context, userID int64) string {
+func (s *Server) upstreamBase(ctx context.Context, userID ident.UUID) string {
 	if s.UserCookies != nil {
 		if site, err := s.UserCookies.Site(ctx, userID); err == nil {
 			return exhentai.SiteBaseURL(site)

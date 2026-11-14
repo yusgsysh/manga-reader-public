@@ -3,6 +3,8 @@ package schema
 import (
 	"time"
 
+	"manga-reader/internal/ident"
+
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
@@ -27,6 +29,9 @@ func (Node) Annotations() []schema.Annotation {
 // Fields of the Node.
 func (Node) Fields() []ent.Field {
 	return []ent.Field{
+		field.UUID("id", ident.UUID{}).
+			Default(uuidV7).
+			SchemaType(uuidSchemaType),
 		field.String("name").NotEmpty(),
 		field.String("status").Default("active"),
 		field.Time("last_seen_at").Optional().Nillable(),

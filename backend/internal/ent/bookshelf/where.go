@@ -4,58 +4,59 @@ package bookshelf
 
 import (
 	"manga-reader/internal/ent/predicate"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
 )
 
 // ID filters vertices based on their ID field.
-func ID(id int) predicate.Bookshelf {
+func ID(id ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldEQ(FieldID, id))
 }
 
 // IDEQ applies the EQ predicate on the ID field.
-func IDEQ(id int) predicate.Bookshelf {
+func IDEQ(id ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldEQ(FieldID, id))
 }
 
 // IDNEQ applies the NEQ predicate on the ID field.
-func IDNEQ(id int) predicate.Bookshelf {
+func IDNEQ(id ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldNEQ(FieldID, id))
 }
 
 // IDIn applies the In predicate on the ID field.
-func IDIn(ids ...int) predicate.Bookshelf {
+func IDIn(ids ...ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldIn(FieldID, ids...))
 }
 
 // IDNotIn applies the NotIn predicate on the ID field.
-func IDNotIn(ids ...int) predicate.Bookshelf {
+func IDNotIn(ids ...ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldNotIn(FieldID, ids...))
 }
 
 // IDGT applies the GT predicate on the ID field.
-func IDGT(id int) predicate.Bookshelf {
+func IDGT(id ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldGT(FieldID, id))
 }
 
 // IDGTE applies the GTE predicate on the ID field.
-func IDGTE(id int) predicate.Bookshelf {
+func IDGTE(id ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldGTE(FieldID, id))
 }
 
 // IDLT applies the LT predicate on the ID field.
-func IDLT(id int) predicate.Bookshelf {
+func IDLT(id ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldLT(FieldID, id))
 }
 
 // IDLTE applies the LTE predicate on the ID field.
-func IDLTE(id int) predicate.Bookshelf {
+func IDLTE(id ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldLTE(FieldID, id))
 }
 
 // UserID applies equality check predicate on the "user_id" field. It's identical to UserIDEQ.
-func UserID(v int64) predicate.Bookshelf {
+func UserID(v ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldEQ(FieldUserID, v))
 }
 
@@ -80,42 +81,42 @@ func UpdatedAt(v time.Time) predicate.Bookshelf {
 }
 
 // UserIDEQ applies the EQ predicate on the "user_id" field.
-func UserIDEQ(v int64) predicate.Bookshelf {
+func UserIDEQ(v ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldEQ(FieldUserID, v))
 }
 
 // UserIDNEQ applies the NEQ predicate on the "user_id" field.
-func UserIDNEQ(v int64) predicate.Bookshelf {
+func UserIDNEQ(v ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldNEQ(FieldUserID, v))
 }
 
 // UserIDIn applies the In predicate on the "user_id" field.
-func UserIDIn(vs ...int64) predicate.Bookshelf {
+func UserIDIn(vs ...ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldIn(FieldUserID, vs...))
 }
 
 // UserIDNotIn applies the NotIn predicate on the "user_id" field.
-func UserIDNotIn(vs ...int64) predicate.Bookshelf {
+func UserIDNotIn(vs ...ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldNotIn(FieldUserID, vs...))
 }
 
 // UserIDGT applies the GT predicate on the "user_id" field.
-func UserIDGT(v int64) predicate.Bookshelf {
+func UserIDGT(v ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldGT(FieldUserID, v))
 }
 
 // UserIDGTE applies the GTE predicate on the "user_id" field.
-func UserIDGTE(v int64) predicate.Bookshelf {
+func UserIDGTE(v ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldGTE(FieldUserID, v))
 }
 
 // UserIDLT applies the LT predicate on the "user_id" field.
-func UserIDLT(v int64) predicate.Bookshelf {
+func UserIDLT(v ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldLT(FieldUserID, v))
 }
 
 // UserIDLTE applies the LTE predicate on the "user_id" field.
-func UserIDLTE(v int64) predicate.Bookshelf {
+func UserIDLTE(v ident.UUID) predicate.Bookshelf {
 	return predicate.Bookshelf(sql.FieldLTE(FieldUserID, v))
 }
 

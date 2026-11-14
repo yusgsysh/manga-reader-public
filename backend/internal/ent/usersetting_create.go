@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"manga-reader/internal/ent/usersetting"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -18,12 +19,6 @@ type UserSettingCreate struct {
 	config
 	mutation *UserSettingMutation
 	hooks    []Hook
-}
-
-// SetUserID sets the "user_id" field.
-func (_c *UserSettingCreate) SetUserID(v int) *UserSettingCreate {
-	_c.mutation.SetUserID(v)
-	return _c
 }
 
 // SetCookieCiphertext sets the "cookie_ciphertext" field.
@@ -116,6 +111,12 @@ func (_c *UserSettingCreate) SetNillableUpdatedAt(v *time.Time) *UserSettingCrea
 	return _c
 }
 
+// SetID sets the "id" field.
+func (_c *UserSettingCreate) SetID(v ident.UUID) *UserSettingCreate {
+	_c.mutation.SetID(v)
+	return _c
+}
+
 // Mutation returns the UserSettingMutation object of the builder.
 func (_c *UserSettingCreate) Mutation() *UserSettingMutation {
 	return _c.mutation
@@ -175,9 +176,6 @@ func (_c *UserSettingCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *UserSettingCreate) check() error {
-	if _, ok := _c.mutation.UserID(); !ok {
-		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "UserSetting.user_id"`)}
-	}
 	if _, ok := _c.mutation.CookieCiphertext(); !ok {
 		return &ValidationError{Name: "cookie_ciphertext", err: errors.New(`ent: missing required field "UserSetting.cookie_ciphertext"`)}
 	}
@@ -207,8 +205,13 @@ func (_c *UserSettingCreate) sqlSave(ctx context.Context) (*UserSetting, error) 
 		}
 		return nil, err
 	}
-	id := _spec.ID.Value.(int64)
-	_node.ID = int(id)
+	if _spec.ID.Value != nil {
+		if id, ok := _spec.ID.Value.(*ident.UUID); ok {
+			_node.ID = *id
+		} else if err := _node.ID.Scan(_spec.ID.Value); err != nil {
+			return nil, err
+		}
+	}
 	_c.mutation.id = &_node.ID
 	_c.mutation.done = true
 	return _node, nil
@@ -217,11 +220,11 @@ func (_c *UserSettingCreate) sqlSave(ctx context.Context) (*UserSetting, error) 
 func (_c *UserSettingCreate) createSpec() (*UserSetting, *sqlgraph.CreateSpec) {
 	var (
 		_node = &UserSetting{config: _c.config}
-		_spec = sqlgraph.NewCreateSpec(usersetting.Table, sqlgraph.NewFieldSpec(usersetting.FieldID, field.TypeInt))
+		_spec = sqlgraph.NewCreateSpec(usersetting.Table, sqlgraph.NewFieldSpec(usersetting.FieldID, field.TypeUUID))
 	)
-	if value, ok := _c.mutation.UserID(); ok {
-		_spec.SetField(usersetting.FieldUserID, field.TypeInt, value)
-		_node.UserID = value
+	if id, ok := _c.mutation.ID(); ok {
+		_node.ID = id
+		_spec.ID.Value = &id
 	}
 	if value, ok := _c.mutation.CookieCiphertext(); ok {
 		_spec.SetField(usersetting.FieldCookieCiphertext, field.TypeString, value)
@@ -299,10 +302,6 @@ func (_c *UserSettingCreateBulk) Save(ctx context.Context) ([]*UserSetting, erro
 					return nil, err
 				}
 				mutation.id = &nodes[i].ID
-				if specs[i].ID.Value != nil {
-					id := specs[i].ID.Value.(int64)
-					nodes[i].ID = int(id)
-				}
 				mutation.done = true
 				return nodes[i], nil
 			})

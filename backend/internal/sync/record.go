@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"manga-reader/internal/ident"
+
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/syncchange"
 )
@@ -11,17 +13,17 @@ import (
 // RecordUpsert appends an outbox entry for a local mutation owned by userID.
 // The sync engine replicates every user's rows; user_id travels with each
 // change so peers keep the same isolation.
-func (s *Service) RecordUpsert(ctx context.Context, userID int64, entity string, galleryID int64, token string) error {
+func (s *Service) RecordUpsert(ctx context.Context, userID ident.UUID, entity string, galleryID int64, token string) error {
 	return s.record(ctx, userID, entity, OpUpsert, galleryID, token)
 }
 
 // RecordDelete appends a user-scoped delete tombstone.
-func (s *Service) RecordDelete(ctx context.Context, userID int64, entity string, galleryID int64, token string) error {
+func (s *Service) RecordDelete(ctx context.Context, userID ident.UUID, entity string, galleryID int64, token string) error {
 	return s.record(ctx, userID, entity, OpDelete, galleryID, token)
 }
 
 // RecordDeletes appends tombstones for a batch of removed records.
-func (s *Service) RecordDeletes(ctx context.Context, userID int64, entity string, keys []Key) error {
+func (s *Service) RecordDeletes(ctx context.Context, userID ident.UUID, entity string, keys []Key) error {
 	if len(keys) == 0 || !s.recordEnabled() {
 		return nil
 	}
@@ -42,7 +44,7 @@ func (s *Service) RecordDeletes(ctx context.Context, userID int64, entity string
 	return nil
 }
 
-func (s *Service) record(ctx context.Context, userID int64, entity, op string, galleryID int64, token string) error {
+func (s *Service) record(ctx context.Context, userID ident.UUID, entity, op string, galleryID int64, token string) error {
 	if !s.recordEnabled() {
 		return nil
 	}

@@ -22,6 +22,7 @@ import (
 	"manga-reader/internal/ent/predicate"
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/exhentai"
+	"manga-reader/internal/ident"
 	"manga-reader/internal/metrics"
 	"manga-reader/internal/model"
 	"manga-reader/internal/web"
@@ -174,7 +175,7 @@ func (m *prefillManager) drain(s *Server) {
 
 // nextQueued claims the oldest queued job by atomically flipping it to
 // running. Returns false when the queue is empty.
-func (m *prefillManager) nextQueued(s *Server) (uuid.UUID, int64, bool) {
+func (m *prefillManager) nextQueued(s *Server) (uuid.UUID, ident.UUID, bool) {
 	ctx := context.Background()
 	for {
 		row, err := s.DB.Client.PrefillJob.Query().
@@ -185,7 +186,7 @@ func (m *prefillManager) nextQueued(s *Server) (uuid.UUID, int64, bool) {
 			if !ent.IsNotFound(err) {
 				slog.Error("prefill queue query failed", "error", err)
 			}
-			return uuid.UUID{}, 0, false
+			return uuid.UUID{}, ident.Nil(), false
 		}
 		var lastErr error
 		for attempt := range 3 {
@@ -215,12 +216,12 @@ func (m *prefillManager) nextQueued(s *Server) (uuid.UUID, int64, bool) {
 	}
 }
 
-func (m *prefillManager) runJob(s *Server, id uuid.UUID, userID int64) {
+func (m *prefillManager) runJob(s *Server, id uuid.UUID, userID ident.UUID) {
 	ctx := context.Background()
 
 	// Guard against missing cache configuration.
 	if s.Cache == nil {
-		s.finishPrefillJob(id, 0, prefillStatusFailed, 0, []model.PrefillItemError{
+		s.finishPrefillJob(id, ident.Nil(), prefillStatusFailed, 0, []model.PrefillItemError{
 			{Index: 0, URL: "", Error: "cache not configured"},
 		})
 		return
@@ -277,7 +278,7 @@ func (m *prefillManager) runJob(s *Server, id uuid.UUID, userID int64) {
 
 // processPages fetches every page URL serially, in order, updating the
 // in-memory counters after each page. It returns the terminal status.
-func (m *prefillManager) processPages(s *Server, ctx context.Context, run *prefillRun, userID int64, urls []string) string {
+func (m *prefillManager) processPages(s *Server, ctx context.Context, run *prefillRun, userID ident.UUID, urls []string) string {
 	status := prefillStatusCompleted
 	consecutiveFails := 0
 	for i, pageURL := range urls {
@@ -352,7 +353,7 @@ func (m *prefillManager) processPages(s *Server, ctx context.Context, run *prefi
 
 // finishPrefillJob writes the terminal state. The status predicate guarantees
 // it never overwrites a row that was already cancelled or deleted.
-func (s *Server) finishPrefillJob(id uuid.UUID, userID int64, status string, failed int, errs []model.PrefillItemError) {
+func (s *Server) finishPrefillJob(id uuid.UUID, userID ident.UUID, status string, failed int, errs []model.PrefillItemError) {
 	if errs == nil {
 		errs = []model.PrefillItemError{}
 	}
@@ -363,7 +364,7 @@ func (s *Server) finishPrefillJob(id uuid.UUID, userID int64, status string, fai
 			prefilljob.ID(id),
 			prefilljob.StatusIn(prefillStatusQueued, prefillStatusRunning),
 		}
-		if userID > 0 {
+		if userID != ident.Nil() {
 			preds = append(preds, prefilljob.UserIDEQ(userID))
 		}
 		n, err := s.DB.Client.PrefillJob.Update().
@@ -946,7 +947,7 @@ func (s *Server) handlePrefillZipHead(c *gin.Context) {
 
 // getPrefillJob is the only handler-side job lookup: ID alone is never enough,
 // because job IDs from another user must look indistinguishable from 404.
-func (s *Server) getPrefillJob(ctx context.Context, userID int64, id uuid.UUID) (*ent.PrefillJob, error) {
+func (s *Server) getPrefillJob(ctx context.Context, userID ident.UUID, id uuid.UUID) (*ent.PrefillJob, error) {
 	return s.DB.Client.PrefillJob.Query().
 		Where(prefilljob.ID(id), prefilljob.UserIDEQ(userID)).
 		Only(ctx)

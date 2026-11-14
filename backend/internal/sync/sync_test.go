@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"manga-reader/internal/ident"
 
 	entsql "entgo.io/ent/dialect/sql"
 	_ "modernc.org/sqlite"
@@ -23,6 +24,13 @@ import (
 	"manga-reader/internal/ent/readingprogress"
 	nodeauth "manga-reader/internal/node"
 )
+
+// testID returns a deterministic UUID whose last byte is n.
+func testID(n byte) ident.UUID {
+	var id ident.UUID
+	id[15] = n
+	return id
+}
 
 func newTestClient(t *testing.T) *ent.Client {
 	t.Helper()
@@ -68,7 +76,7 @@ func testNodeAuth(validToken string) func(...string) gin.HandlerFunc {
 				return
 			}
 			allowed := append([]string{nodeauth.ScopeSyncRead, nodeauth.ScopeSyncWrite, nodeauth.ScopeSyncEvent}, scopes...)
-			nodeauth.WithGin(c, nodeauth.Identity{NodeID: 1, Scopes: allowed})
+			nodeauth.WithGin(c, nodeauth.Identity{NodeID: testID(1), Scopes: allowed})
 			c.Next()
 		}
 	}
@@ -81,7 +89,7 @@ func newHostService(client *ent.Client, token string) *Service {
 func seedProgress(t *testing.T, client *ent.Client, galleryID int64, token string, page int, updatedAt time.Time) {
 	t.Helper()
 	_, err := client.ReadingProgress.Create().
-		SetUserID(1).
+		SetUserID(testID(1)).
 		SetGalleryID(galleryID).
 		SetToken(token).
 		SetCurrentPage(page).
@@ -138,7 +146,7 @@ func TestApplyChangesLastWriteWins(t *testing.T) {
 	seedProgress(t, client, 1, "tok", 1, base)
 
 	older := Change{
-		UserID: 1, Entity: EntityReadingProgress, GalleryID: 1, Token: "tok", Op: OpUpsert,
+		UserID: testID(1), Entity: EntityReadingProgress, GalleryID: 1, Token: "tok", Op: OpUpsert,
 		Row: &Row{CurrentPage: 3, Progress: 0.3, CreatedAt: base, UpdatedAt: base.Add(-time.Minute)},
 	}
 	applied, skipped, err := ApplyChanges(t.Context(), client, []Change{older})
@@ -153,7 +161,7 @@ func TestApplyChangesLastWriteWins(t *testing.T) {
 	}
 
 	newer := Change{
-		UserID: 1, Entity: EntityReadingProgress, GalleryID: 1, Token: "tok", Op: OpUpsert,
+		UserID: testID(1), Entity: EntityReadingProgress, GalleryID: 1, Token: "tok", Op: OpUpsert,
 		Row: &Row{CurrentPage: 7, Progress: 0.7, CreatedAt: base, UpdatedAt: base.Add(time.Minute)},
 	}
 	applied, skipped, err = ApplyChanges(t.Context(), client, []Change{newer})
@@ -172,7 +180,7 @@ func TestApplyChangesIdempotent(t *testing.T) {
 	client := newTestClient(t)
 	now := time.Now().UTC()
 	ch := Change{
-		UserID: 1, Entity: EntityReadingProgress, GalleryID: 5, Token: "abc", Op: OpUpsert,
+		UserID: testID(1), Entity: EntityReadingProgress, GalleryID: 5, Token: "abc", Op: OpUpsert,
 		Row: &Row{CurrentPage: 2, Progress: 0.2, CreatedAt: now, UpdatedAt: now},
 	}
 	applied, _, err := ApplyChanges(t.Context(), client, []Change{ch})
@@ -197,7 +205,7 @@ func TestApplyDeleteTombstoneLWW(t *testing.T) {
 	// Tombstone older than the row: keep the row.
 	old := base.Add(-time.Minute)
 	delOld := Change{
-		UserID: 1, Entity: EntityReadingProgress, GalleryID: 9, Token: "tok",
+		UserID: testID(1), Entity: EntityReadingProgress, GalleryID: 9, Token: "tok",
 		Op: OpDelete, DeletedAt: &old,
 	}
 	applied, _, err := ApplyChanges(t.Context(), client, []Change{delOld})
@@ -214,7 +222,7 @@ func TestApplyDeleteTombstoneLWW(t *testing.T) {
 	// Tombstone newer than the row: delete.
 	fresh := base.Add(time.Hour)
 	delNew := Change{
-		UserID: 1, Entity: EntityReadingProgress, GalleryID: 9, Token: "tok",
+		UserID: testID(1), Entity: EntityReadingProgress, GalleryID: 9, Token: "tok",
 		Op: OpDelete, DeletedAt: &fresh,
 	}
 	applied, _, err = ApplyChanges(t.Context(), client, []Change{delNew})
@@ -238,7 +246,7 @@ func TestRecordNotifiesHub(t *testing.T) {
 	localCh, unsubLocal := svc.hub.SubscribeLocal()
 	defer unsubLocal()
 
-	if err := svc.RecordUpsert(t.Context(), 1, EntityBookshelf, 1, "tok"); err != nil {
+	if err := svc.RecordUpsert(t.Context(), testID(1), EntityBookshelf, 1, "tok"); err != nil {
 		t.Fatalf("record: %v", err)
 	}
 	assertSignaled(t, peerCh, "peer subscriber")
@@ -269,13 +277,13 @@ func TestReadChangesSinceCoalescesPerRecord(t *testing.T) {
 
 	base := time.Now().UTC()
 	seedProgress(t, client, 1, "tok", 1, base)
-	if err := svc.RecordUpsert(t.Context(), 1, EntityReadingProgress, 1, "tok"); err != nil {
+	if err := svc.RecordUpsert(t.Context(), testID(1), EntityReadingProgress, 1, "tok"); err != nil {
 		t.Fatalf("record upsert: %v", err)
 	}
-	if err := svc.RecordUpsert(t.Context(), 1, EntityReadingProgress, 1, "tok"); err != nil {
+	if err := svc.RecordUpsert(t.Context(), testID(1), EntityReadingProgress, 1, "tok"); err != nil {
 		t.Fatalf("record upsert 2: %v", err)
 	}
-	if err := svc.RecordDelete(t.Context(), 1, EntityReadingProgress, 1, "tok"); err != nil {
+	if err := svc.RecordDelete(t.Context(), testID(1), EntityReadingProgress, 1, "tok"); err != nil {
 		t.Fatalf("record delete: %v", err)
 	}
 	if _, err := client.ReadingProgress.Delete().
@@ -346,7 +354,7 @@ func TestPushBootstrapAndDelta(t *testing.T) {
 	}
 
 	// Delta: client records a local change and pushes with its cursor.
-	if err := NewService(clientClient, Options{}).RecordUpsert(t.Context(), 1, EntityReadingProgress, 200, "cli"); err != nil {
+	if err := NewService(clientClient, Options{}).RecordUpsert(t.Context(), testID(1), EntityReadingProgress, 200, "cli"); err != nil {
 		t.Fatalf("record delta: %v", err)
 	}
 	if err := clientClient.ReadingProgress.Update().
@@ -635,7 +643,7 @@ func TestEngineSnapshotWatermark(t *testing.T) {
 
 	now := time.Now().UTC()
 	seedProgress(t, client, 1, "a", 1, now)
-	if err := svc.RecordUpsert(t.Context(), 1, EntityReadingProgress, 1, "a"); err != nil {
+	if err := svc.RecordUpsert(t.Context(), testID(1), EntityReadingProgress, 1, "a"); err != nil {
 		t.Fatalf("record: %v", err)
 	}
 
@@ -862,7 +870,7 @@ func TestReadChangesSinceFetchesGalleryCacheRow(t *testing.T) {
 
 	// Seed a cache row and record its upsert so it appears in the outbox.
 	seedGalleryCacheRow(t, client, 55, "tok", now)
-	if err := svc.RecordUpsert(t.Context(), 1, EntityGalleryCache, 55, "tok"); err != nil {
+	if err := svc.RecordUpsert(t.Context(), testID(1), EntityGalleryCache, 55, "tok"); err != nil {
 		t.Fatalf("record upsert: %v", err)
 	}
 
@@ -903,7 +911,7 @@ func TestPushPruneSkipsRewoundCursor(t *testing.T) {
 	now := time.Now().UTC()
 	seedProgress(t, serverClient, 1, "a", 1, now)
 	for range 3 {
-		if err := svc.RecordUpsert(t.Context(), 1, EntityReadingProgress, 1, "a"); err != nil {
+		if err := svc.RecordUpsert(t.Context(), testID(1), EntityReadingProgress, 1, "a"); err != nil {
 			t.Fatalf("record: %v", err)
 		}
 	}
@@ -945,11 +953,11 @@ func TestApplyChangesSkipsInvalidRow(t *testing.T) {
 	base := time.Now().UTC()
 
 	valid := Change{
-		UserID: 1, Entity: EntityReadingProgress, GalleryID: 1, Token: "tok", Op: OpUpsert,
+		UserID: testID(1), Entity: EntityReadingProgress, GalleryID: 1, Token: "tok", Op: OpUpsert,
 		Row: &Row{CurrentPage: 2, Progress: 0.2, CreatedAt: base, UpdatedAt: base},
 	}
 	invalid := Change{
-		UserID: 1, Entity: EntityReadingProgress, GalleryID: 2, Token: "tok", Op: OpUpsert,
+		UserID: testID(1), Entity: EntityReadingProgress, GalleryID: 2, Token: "tok", Op: OpUpsert,
 		Row: &Row{CurrentPage: 1, Progress: 1.5, CreatedAt: base, UpdatedAt: base},
 	}
 
@@ -992,12 +1000,12 @@ func TestPushPreservesUserOwnership(t *testing.T) {
 	key := seedNodeKey(t, serverClient, nodeauth.DefaultScopes)
 	now := time.Now().UTC()
 	for _, tc := range []struct {
-		userID  int64
+		userID  ident.UUID
 		gallery int64
 		token   string
 	}{
-		{1, 1, "user-1"},
-		{2, 2, "user-2"},
+		{testID(1), 1, "user-1"},
+		{testID(2), 2, "user-2"},
 	} {
 		if _, err := serverClient.ReadingProgress.Create().
 			SetUserID(tc.userID).SetGalleryID(tc.gallery).SetToken(tc.token).
@@ -1015,11 +1023,11 @@ func TestPushPreservesUserOwnership(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("push = %d %s", w.Code, w.Body.String())
 	}
-	owners := map[int64]bool{}
+	owners := map[ident.UUID]bool{}
 	for _, ch := range resp.Changes {
 		owners[ch.UserID] = true
 	}
-	if len(resp.Changes) != 2 || !owners[1] || !owners[2] {
+	if len(resp.Changes) != 2 || !owners[testID(1)] || !owners[testID(2)] {
 		t.Fatalf("snapshot = %+v, want both users' rows with their user_id", resp.Changes)
 	}
 }
@@ -1060,7 +1068,7 @@ func TestPushCycleRetriesAfterFailure(t *testing.T) {
 	now := time.Now().UTC()
 	seedProgress(t, client, 77, "retry", 3, now)
 	svc := NewService(client, Options{})
-	if err := svc.RecordUpsert(t.Context(), 1, EntityReadingProgress, 77, "retry"); err != nil {
+	if err := svc.RecordUpsert(t.Context(), testID(1), EntityReadingProgress, 77, "retry"); err != nil {
 		t.Fatalf("record upsert: %v", err)
 	}
 

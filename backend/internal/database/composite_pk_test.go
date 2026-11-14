@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"manga-reader/internal/ident"
 	_ "modernc.org/sqlite"
 
 	"manga-reader/internal/ent"
@@ -51,6 +52,14 @@ func hasIndex(t *testing.T, conn *sql.DB, table, index string) bool {
 	return n > 0
 }
 
+// ddlHasPK reports whether a table's DDL declares the given primary key,
+// ignoring identifier quoting (ent/Atlas emits backticks, the id->uuid
+// migration emits double quotes; SQLite accepts both).
+func ddlHasPK(ddl, pk string) bool {
+	repl := strings.NewReplacer("`", "", `"`, "")
+	return strings.Contains(repl.Replace(ddl), pk)
+}
+
 // A fresh database must create the composite primary keys directly, without
 // an auto-increment "id" column and without a redundant unique index backing
 // the key.
@@ -71,16 +80,20 @@ func TestCompositePK_FreshSchema(t *testing.T) {
 		t.Error("gallery_cache still has the unique index that the primary key replaces")
 	}
 
-	// Bookshelf / ReadingProgress are user-owned: an auto id avoids Ent's
-	// two-column composite update limitation, while the unique index still
-	// enforces one row per (user, gallery, token).
+	// Bookshelf / ReadingProgress are user-owned: they keep a UUID single-column
+	// primary key (ent 0.14.6 cannot update a three-column composite key) and a
+	// unique (user_id, gallery_id, token) index. The id is a UUID, not an
+	// auto-increment counter, so it survives cross-instance migration.
 	for table, index := range map[string]string{
 		"bookshelf":        "bookshelf_user_id_gallery_id_token",
 		"reading_progress": "readingprogress_user_id_gallery_id_token",
 	} {
 		ddl := tableDDL(t, db.Conn, table)
-		if !strings.Contains(ddl, "PRIMARY KEY AUTOINCREMENT") {
+		if !strings.Contains(ddl, "PRIMARY KEY (`id`)") {
 			t.Errorf("%s DDL missing id primary key:\n%s", table, ddl)
+		}
+		if strings.Contains(ddl, "AUTOINCREMENT") {
+			t.Errorf("%s still has an auto-increment id:\n%s", table, ddl)
 		}
 		if !hasColumn(t, db.Conn, table, "user_id") {
 			t.Errorf("%s is missing user_id", table)
@@ -229,21 +242,24 @@ INSERT INTO sync_state ("key", value, updated_at)
 	ctx := context.Background()
 
 	for table, wantPK := range map[string]string{
-		"gallery_cache":     "PRIMARY KEY (`gallery_id`, `token`)",
-		"bookshelf":         "PRIMARY KEY AUTOINCREMENT",
-		"reading_progress":  "PRIMARY KEY AUTOINCREMENT",
-		"tag_preference":    "PRIMARY KEY (`user_id`, `tag`)",
-		"tag_sync_baseline": "PRIMARY KEY (`user_id`, `tag`)",
-		"sync_state":        "PRIMARY KEY (`key`)",
+		"gallery_cache":     "PRIMARY KEY (gallery_id, token)",
+		"bookshelf":         "PRIMARY KEY (id)",
+		"reading_progress":  "PRIMARY KEY (id)",
+		"tag_preference":    "PRIMARY KEY (user_id, tag)",
+		"tag_sync_baseline": "PRIMARY KEY (user_id, tag)",
+		"sync_state":        "PRIMARY KEY (key)",
 	} {
 		ddl := tableDDL(t, db.Conn, table)
-		if !strings.Contains(ddl, wantPK) {
+		if !ddlHasPK(ddl, wantPK) {
 			t.Errorf("%s was not rebuilt with %s:\n%s", table, wantPK, ddl)
 		}
 	}
 	for _, table := range []string{"bookshelf", "reading_progress"} {
 		if !hasColumn(t, db.Conn, table, "user_id") {
 			t.Errorf("%s migration did not add user_id", table)
+		}
+		if strings.Contains(tableDDL(t, db.Conn, table), "AUTOINCREMENT") {
+			t.Errorf("%s migration left an auto-increment id column", table)
 		}
 	}
 
@@ -277,14 +293,14 @@ INSERT INTO sync_state ("key", value, updated_at)
 		t.Errorf("reading_progress = (%d, %v), want (3, 0.3)", prog.CurrentPage, prog.Progress)
 	}
 
-	rule, err := db.Client.TagPreference.Query().Where(tagpreference.UserIDEQ(0), tagpreference.IDEQ("female:yuri")).Only(ctx)
+	rule, err := db.Client.TagPreference.Query().Where(tagpreference.UserIDEQ(ident.Nil()), tagpreference.IDEQ("female:yuri")).Only(ctx)
 	if err != nil {
 		t.Fatalf("read tag_preference row: %v", err)
 	}
 	if rule.Action != "like" || rule.Weight != 10 {
 		t.Errorf("tag_preference = (%q, %d), want (like, 10)", rule.Action, rule.Weight)
 	}
-	baseline, err := db.Client.TagSyncBaseline.Query().Where(tagsyncbaseline.UserIDEQ(0), tagsyncbaseline.IDEQ("female:yuri")).Only(ctx)
+	baseline, err := db.Client.TagSyncBaseline.Query().Where(tagsyncbaseline.UserIDEQ(ident.Nil()), tagsyncbaseline.IDEQ("female:yuri")).Only(ctx)
 	if err != nil {
 		t.Fatalf("read tag_sync_baseline row: %v", err)
 	}

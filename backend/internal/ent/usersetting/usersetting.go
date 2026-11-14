@@ -12,9 +12,7 @@ const (
 	// Label holds the string label denoting the usersetting type in the database.
 	Label = "user_setting"
 	// FieldID holds the string denoting the id field in the database.
-	FieldID = "id"
-	// FieldUserID holds the string denoting the user_id field in the database.
-	FieldUserID = "user_id"
+	FieldID = "user_id"
 	// FieldCookieCiphertext holds the string denoting the cookie_ciphertext field in the database.
 	FieldCookieCiphertext = "cookie_ciphertext"
 	// FieldCookieStatus holds the string denoting the cookie_status field in the database.
@@ -36,7 +34,6 @@ const (
 // Columns holds all SQL columns for usersetting fields.
 var Columns = []string{
 	FieldID,
-	FieldUserID,
 	FieldCookieCiphertext,
 	FieldCookieStatus,
 	FieldCookieVerifiedAt,
@@ -77,11 +74,6 @@ type OrderOption func(*sql.Selector)
 // ByID orders the results by the id field.
 func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
-}
-
-// ByUserID orders the results by the user_id field.
-func ByUserID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldUserID, opts...).ToFunc()
 }
 
 // ByCookieCiphertext orders the results by the cookie_ciphertext field.

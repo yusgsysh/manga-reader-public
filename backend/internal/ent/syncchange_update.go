@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"manga-reader/internal/ent/predicate"
 	"manga-reader/internal/ent/syncchange"
+	"manga-reader/internal/ident"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -28,23 +29,16 @@ func (_u *SyncChangeUpdate) Where(ps ...predicate.SyncChange) *SyncChangeUpdate 
 }
 
 // SetUserID sets the "user_id" field.
-func (_u *SyncChangeUpdate) SetUserID(v int64) *SyncChangeUpdate {
-	_u.mutation.ResetUserID()
+func (_u *SyncChangeUpdate) SetUserID(v ident.UUID) *SyncChangeUpdate {
 	_u.mutation.SetUserID(v)
 	return _u
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_u *SyncChangeUpdate) SetNillableUserID(v *int64) *SyncChangeUpdate {
+func (_u *SyncChangeUpdate) SetNillableUserID(v *ident.UUID) *SyncChangeUpdate {
 	if v != nil {
 		_u.SetUserID(*v)
 	}
-	return _u
-}
-
-// AddUserID adds value to the "user_id" field.
-func (_u *SyncChangeUpdate) AddUserID(v int64) *SyncChangeUpdate {
-	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -153,10 +147,7 @@ func (_u *SyncChangeUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 		}
 	}
 	if value, ok := _u.mutation.UserID(); ok {
-		_spec.SetField(syncchange.FieldUserID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUserID(); ok {
-		_spec.AddField(syncchange.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(syncchange.FieldUserID, field.TypeUUID, value)
 	}
 	if value, ok := _u.mutation.Entity(); ok {
 		_spec.SetField(syncchange.FieldEntity, field.TypeString, value)
@@ -194,23 +185,16 @@ type SyncChangeUpdateOne struct {
 }
 
 // SetUserID sets the "user_id" field.
-func (_u *SyncChangeUpdateOne) SetUserID(v int64) *SyncChangeUpdateOne {
-	_u.mutation.ResetUserID()
+func (_u *SyncChangeUpdateOne) SetUserID(v ident.UUID) *SyncChangeUpdateOne {
 	_u.mutation.SetUserID(v)
 	return _u
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_u *SyncChangeUpdateOne) SetNillableUserID(v *int64) *SyncChangeUpdateOne {
+func (_u *SyncChangeUpdateOne) SetNillableUserID(v *ident.UUID) *SyncChangeUpdateOne {
 	if v != nil {
 		_u.SetUserID(*v)
 	}
-	return _u
-}
-
-// AddUserID adds value to the "user_id" field.
-func (_u *SyncChangeUpdateOne) AddUserID(v int64) *SyncChangeUpdateOne {
-	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -349,10 +333,7 @@ func (_u *SyncChangeUpdateOne) sqlSave(ctx context.Context) (_node *SyncChange, 
 		}
 	}
 	if value, ok := _u.mutation.UserID(); ok {
-		_spec.SetField(syncchange.FieldUserID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUserID(); ok {
-		_spec.AddField(syncchange.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(syncchange.FieldUserID, field.TypeUUID, value)
 	}
 	if value, ok := _u.mutation.Entity(); ok {
 		_spec.SetField(syncchange.FieldEntity, field.TypeString, value)

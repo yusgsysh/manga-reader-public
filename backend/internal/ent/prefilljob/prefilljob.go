@@ -3,6 +3,7 @@
 package prefilljob
 
 import (
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -71,7 +72,7 @@ func ValidColumn(column string) bool {
 
 var (
 	// DefaultUserID holds the default value on creation for the "user_id" field.
-	DefaultUserID int64
+	DefaultUserID func() ident.UUID
 	// DefaultToken holds the default value on creation for the "token" field.
 	DefaultToken string
 	// DefaultTitle holds the default value on creation for the "title" field.

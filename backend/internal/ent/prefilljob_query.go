@@ -263,7 +263,7 @@ func (_q *PrefillJobQuery) Clone() *PrefillJobQuery {
 // Example:
 //
 //	var v []struct {
-//		UserID int64 `json:"user_id,omitempty"`
+//		UserID ident.UUID `json:"user_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
@@ -286,7 +286,7 @@ func (_q *PrefillJobQuery) GroupBy(field string, fields ...string) *PrefillJobGr
 // Example:
 //
 //	var v []struct {
-//		UserID int64 `json:"user_id,omitempty"`
+//		UserID ident.UUID `json:"user_id,omitempty"`
 //	}
 //
 //	client.PrefillJob.Query().

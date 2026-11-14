@@ -6,6 +6,7 @@ import (
 	json "encoding/json/v2"
 	"fmt"
 	"manga-reader/internal/ent/prefilljob"
+	"manga-reader/internal/ident"
 	"manga-reader/internal/model"
 	"strings"
 	"time"
@@ -21,7 +22,7 @@ type PrefillJob struct {
 	// ID of the ent.
 	ID uuid.UUID `json:"id,omitempty"`
 	// UserID holds the value of the "user_id" field.
-	UserID int64 `json:"user_id,omitempty"`
+	UserID ident.UUID `json:"user_id,omitempty"`
 	// GalleryID holds the value of the "gallery_id" field.
 	GalleryID *int64 `json:"gallery_id,omitempty"`
 	// Token holds the value of the "token" field.
@@ -54,7 +55,9 @@ func (*PrefillJob) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case prefilljob.FieldUrls, prefilljob.FieldErrors:
 			values[i] = new([]byte)
-		case prefilljob.FieldUserID, prefilljob.FieldGalleryID, prefilljob.FieldTotal, prefilljob.FieldFailedCount:
+		case prefilljob.FieldUserID:
+			values[i] = new(ident.UUID)
+		case prefilljob.FieldGalleryID, prefilljob.FieldTotal, prefilljob.FieldFailedCount:
 			values[i] = new(sql.NullInt64)
 		case prefilljob.FieldToken, prefilljob.FieldTitle, prefilljob.FieldStatus:
 			values[i] = new(sql.NullString)
@@ -84,10 +87,10 @@ func (_m *PrefillJob) assignValues(columns []string, values []any) error {
 				_m.ID = *value
 			}
 		case prefilljob.FieldUserID:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
+			if value, ok := values[i].(*ident.UUID); !ok {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
-			} else if value.Valid {
-				_m.UserID = value.Int64
+			} else if value != nil {
+				_m.UserID = *value
 			}
 		case prefilljob.FieldGalleryID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {

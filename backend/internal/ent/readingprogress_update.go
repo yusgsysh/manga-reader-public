@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"manga-reader/internal/ent/predicate"
 	"manga-reader/internal/ent/readingprogress"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -29,23 +30,16 @@ func (_u *ReadingProgressUpdate) Where(ps ...predicate.ReadingProgress) *Reading
 }
 
 // SetUserID sets the "user_id" field.
-func (_u *ReadingProgressUpdate) SetUserID(v int64) *ReadingProgressUpdate {
-	_u.mutation.ResetUserID()
+func (_u *ReadingProgressUpdate) SetUserID(v ident.UUID) *ReadingProgressUpdate {
 	_u.mutation.SetUserID(v)
 	return _u
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_u *ReadingProgressUpdate) SetNillableUserID(v *int64) *ReadingProgressUpdate {
+func (_u *ReadingProgressUpdate) SetNillableUserID(v *ident.UUID) *ReadingProgressUpdate {
 	if v != nil {
 		_u.SetUserID(*v)
 	}
-	return _u
-}
-
-// AddUserID adds value to the "user_id" field.
-func (_u *ReadingProgressUpdate) AddUserID(v int64) *ReadingProgressUpdate {
-	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -206,7 +200,7 @@ func (_u *ReadingProgressUpdate) sqlSave(ctx context.Context) (_node int, err er
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(readingprogress.Table, readingprogress.Columns, sqlgraph.NewFieldSpec(readingprogress.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(readingprogress.Table, readingprogress.Columns, sqlgraph.NewFieldSpec(readingprogress.FieldID, field.TypeUUID))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -215,10 +209,7 @@ func (_u *ReadingProgressUpdate) sqlSave(ctx context.Context) (_node int, err er
 		}
 	}
 	if value, ok := _u.mutation.UserID(); ok {
-		_spec.SetField(readingprogress.FieldUserID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUserID(); ok {
-		_spec.AddField(readingprogress.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(readingprogress.FieldUserID, field.TypeUUID, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(readingprogress.FieldGalleryID, field.TypeInt64, value)
@@ -268,23 +259,16 @@ type ReadingProgressUpdateOne struct {
 }
 
 // SetUserID sets the "user_id" field.
-func (_u *ReadingProgressUpdateOne) SetUserID(v int64) *ReadingProgressUpdateOne {
-	_u.mutation.ResetUserID()
+func (_u *ReadingProgressUpdateOne) SetUserID(v ident.UUID) *ReadingProgressUpdateOne {
 	_u.mutation.SetUserID(v)
 	return _u
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_u *ReadingProgressUpdateOne) SetNillableUserID(v *int64) *ReadingProgressUpdateOne {
+func (_u *ReadingProgressUpdateOne) SetNillableUserID(v *ident.UUID) *ReadingProgressUpdateOne {
 	if v != nil {
 		_u.SetUserID(*v)
 	}
-	return _u
-}
-
-// AddUserID adds value to the "user_id" field.
-func (_u *ReadingProgressUpdateOne) AddUserID(v int64) *ReadingProgressUpdateOne {
-	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -458,7 +442,7 @@ func (_u *ReadingProgressUpdateOne) sqlSave(ctx context.Context) (_node *Reading
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(readingprogress.Table, readingprogress.Columns, sqlgraph.NewFieldSpec(readingprogress.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(readingprogress.Table, readingprogress.Columns, sqlgraph.NewFieldSpec(readingprogress.FieldID, field.TypeUUID))
 	id, ok := _u.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "ReadingProgress.id" for update`)}
@@ -484,10 +468,7 @@ func (_u *ReadingProgressUpdateOne) sqlSave(ctx context.Context) (_node *Reading
 		}
 	}
 	if value, ok := _u.mutation.UserID(); ok {
-		_spec.SetField(readingprogress.FieldUserID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUserID(); ok {
-		_spec.AddField(readingprogress.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(readingprogress.FieldUserID, field.TypeUUID, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(readingprogress.FieldGalleryID, field.TypeInt64, value)

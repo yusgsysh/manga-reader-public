@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"manga-reader/internal/ent/predicate"
 	"manga-reader/internal/ent/prefilljob"
+	"manga-reader/internal/ident"
 	"manga-reader/internal/model"
 	"time"
 
@@ -31,23 +32,16 @@ func (_u *PrefillJobUpdate) Where(ps ...predicate.PrefillJob) *PrefillJobUpdate 
 }
 
 // SetUserID sets the "user_id" field.
-func (_u *PrefillJobUpdate) SetUserID(v int64) *PrefillJobUpdate {
-	_u.mutation.ResetUserID()
+func (_u *PrefillJobUpdate) SetUserID(v ident.UUID) *PrefillJobUpdate {
 	_u.mutation.SetUserID(v)
 	return _u
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_u *PrefillJobUpdate) SetNillableUserID(v *int64) *PrefillJobUpdate {
+func (_u *PrefillJobUpdate) SetNillableUserID(v *ident.UUID) *PrefillJobUpdate {
 	if v != nil {
 		_u.SetUserID(*v)
 	}
-	return _u
-}
-
-// AddUserID adds value to the "user_id" field.
-func (_u *PrefillJobUpdate) AddUserID(v int64) *PrefillJobUpdate {
-	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -269,10 +263,7 @@ func (_u *PrefillJobUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 		}
 	}
 	if value, ok := _u.mutation.UserID(); ok {
-		_spec.SetField(prefilljob.FieldUserID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUserID(); ok {
-		_spec.AddField(prefilljob.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(prefilljob.FieldUserID, field.TypeUUID, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(prefilljob.FieldGalleryID, field.TypeInt64, value)
@@ -353,23 +344,16 @@ type PrefillJobUpdateOne struct {
 }
 
 // SetUserID sets the "user_id" field.
-func (_u *PrefillJobUpdateOne) SetUserID(v int64) *PrefillJobUpdateOne {
-	_u.mutation.ResetUserID()
+func (_u *PrefillJobUpdateOne) SetUserID(v ident.UUID) *PrefillJobUpdateOne {
 	_u.mutation.SetUserID(v)
 	return _u
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_u *PrefillJobUpdateOne) SetNillableUserID(v *int64) *PrefillJobUpdateOne {
+func (_u *PrefillJobUpdateOne) SetNillableUserID(v *ident.UUID) *PrefillJobUpdateOne {
 	if v != nil {
 		_u.SetUserID(*v)
 	}
-	return _u
-}
-
-// AddUserID adds value to the "user_id" field.
-func (_u *PrefillJobUpdateOne) AddUserID(v int64) *PrefillJobUpdateOne {
-	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -621,10 +605,7 @@ func (_u *PrefillJobUpdateOne) sqlSave(ctx context.Context) (_node *PrefillJob, 
 		}
 	}
 	if value, ok := _u.mutation.UserID(); ok {
-		_spec.SetField(prefilljob.FieldUserID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUserID(); ok {
-		_spec.AddField(prefilljob.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(prefilljob.FieldUserID, field.TypeUUID, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(prefilljob.FieldGalleryID, field.TypeInt64, value)

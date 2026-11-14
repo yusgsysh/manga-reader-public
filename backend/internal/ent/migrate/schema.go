@@ -23,8 +23,8 @@ var (
 	}
 	// BookshelfColumns holds the columns for the "bookshelf" table.
 	BookshelfColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "user_id", Type: field.TypeInt64, Default: 0},
+		{Name: "id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
+		{Name: "user_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
 		{Name: "gallery_id", Type: field.TypeInt64},
 		{Name: "token", Type: field.TypeString},
 		{Name: "created_at", Type: field.TypeTime},
@@ -80,7 +80,7 @@ var (
 	}
 	// NodeColumns holds the columns for the "node" table.
 	NodeColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
 		{Name: "name", Type: field.TypeString},
 		{Name: "status", Type: field.TypeString, Default: "active"},
 		{Name: "last_seen_at", Type: field.TypeTime, Nullable: true},
@@ -107,8 +107,8 @@ var (
 	}
 	// NodeAPIKeyColumns holds the columns for the "node_api_key" table.
 	NodeAPIKeyColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "node_id", Type: field.TypeInt},
+		{Name: "id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
+		{Name: "node_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
 		{Name: "key_hash", Type: field.TypeString, Unique: true},
 		{Name: "key_prefix", Type: field.TypeString},
 		{Name: "scopes", Type: field.TypeJSON, Nullable: true},
@@ -139,7 +139,7 @@ var (
 	// PrefillJobColumns holds the columns for the "prefill_job" table.
 	PrefillJobColumns = []*schema.Column{
 		{Name: "job_id", Type: field.TypeUUID, Default: map[string]schema.Expr{"postgres": "gen_random_uuid()", "sqlite3": "lower(hex(randomblob(16)))"}, SchemaType: map[string]string{"sqlite3": "text"}},
-		{Name: "user_id", Type: field.TypeInt64, Default: 0},
+		{Name: "user_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
 		{Name: "gallery_id", Type: field.TypeInt64, Nullable: true},
 		{Name: "token", Type: field.TypeString, Default: ""},
 		{Name: "title", Type: field.TypeString, Default: ""},
@@ -172,8 +172,8 @@ var (
 	}
 	// ReadingProgressColumns holds the columns for the "reading_progress" table.
 	ReadingProgressColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "user_id", Type: field.TypeInt64, Default: 0},
+		{Name: "id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
+		{Name: "user_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
 		{Name: "gallery_id", Type: field.TypeInt64},
 		{Name: "token", Type: field.TypeString},
 		{Name: "current_page", Type: field.TypeInt, Default: 0},
@@ -198,7 +198,7 @@ var (
 	// SyncChangeColumns holds the columns for the "sync_change" table.
 	SyncChangeColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "user_id", Type: field.TypeInt64, Default: 0},
+		{Name: "user_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
 		{Name: "entity", Type: field.TypeString},
 		{Name: "gallery_id", Type: field.TypeInt64},
 		{Name: "token", Type: field.TypeString},
@@ -232,7 +232,7 @@ var (
 	}
 	// TagPreferenceColumns holds the columns for the "tag_preference" table.
 	TagPreferenceColumns = []*schema.Column{
-		{Name: "user_id", Type: field.TypeInt64, Default: 0},
+		{Name: "user_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
 		{Name: "action", Type: field.TypeString},
 		{Name: "weight", Type: field.TypeInt, Default: 10},
 		{Name: "created_at", Type: field.TypeTime},
@@ -247,7 +247,7 @@ var (
 	}
 	// TagSyncBaselineColumns holds the columns for the "tag_sync_baseline" table.
 	TagSyncBaselineColumns = []*schema.Column{
-		{Name: "user_id", Type: field.TypeInt64, Default: 0},
+		{Name: "user_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
 		{Name: "action", Type: field.TypeString},
 		{Name: "weight", Type: field.TypeInt, Default: 10},
 		{Name: "created_at", Type: field.TypeTime},
@@ -262,7 +262,7 @@ var (
 	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
 		{Name: "username", Type: field.TypeString, Unique: true},
 		{Name: "password_hash", Type: field.TypeString},
 		{Name: "role", Type: field.TypeString, Default: "user"},
@@ -291,8 +291,7 @@ var (
 	}
 	// UserSettingColumns holds the columns for the "user_setting" table.
 	UserSettingColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "user_id", Type: field.TypeInt, Unique: true},
+		{Name: "user_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
 		{Name: "cookie_ciphertext", Type: field.TypeString, Default: ""},
 		{Name: "cookie_status", Type: field.TypeString, Default: "unset"},
 		{Name: "cookie_verified_at", Type: field.TypeTime, Nullable: true},

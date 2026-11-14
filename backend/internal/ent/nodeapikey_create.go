@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"manga-reader/internal/ent/nodeapikey"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -21,7 +22,7 @@ type NodeAPIKeyCreate struct {
 }
 
 // SetNodeID sets the "node_id" field.
-func (_c *NodeAPIKeyCreate) SetNodeID(v int) *NodeAPIKeyCreate {
+func (_c *NodeAPIKeyCreate) SetNodeID(v ident.UUID) *NodeAPIKeyCreate {
 	_c.mutation.SetNodeID(v)
 	return _c
 }
@@ -114,6 +115,20 @@ func (_c *NodeAPIKeyCreate) SetNillableRevokedAt(v *time.Time) *NodeAPIKeyCreate
 	return _c
 }
 
+// SetID sets the "id" field.
+func (_c *NodeAPIKeyCreate) SetID(v ident.UUID) *NodeAPIKeyCreate {
+	_c.mutation.SetID(v)
+	return _c
+}
+
+// SetNillableID sets the "id" field if the given value is not nil.
+func (_c *NodeAPIKeyCreate) SetNillableID(v *ident.UUID) *NodeAPIKeyCreate {
+	if v != nil {
+		_c.SetID(*v)
+	}
+	return _c
+}
+
 // Mutation returns the NodeAPIKeyMutation object of the builder.
 func (_c *NodeAPIKeyCreate) Mutation() *NodeAPIKeyMutation {
 	return _c.mutation
@@ -156,6 +171,10 @@ func (_c *NodeAPIKeyCreate) defaults() {
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := nodeapikey.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
+	}
+	if _, ok := _c.mutation.ID(); !ok {
+		v := nodeapikey.DefaultID()
+		_c.mutation.SetID(v)
 	}
 }
 
@@ -200,8 +219,13 @@ func (_c *NodeAPIKeyCreate) sqlSave(ctx context.Context) (*NodeAPIKey, error) {
 		}
 		return nil, err
 	}
-	id := _spec.ID.Value.(int64)
-	_node.ID = int(id)
+	if _spec.ID.Value != nil {
+		if id, ok := _spec.ID.Value.(*ident.UUID); ok {
+			_node.ID = *id
+		} else if err := _node.ID.Scan(_spec.ID.Value); err != nil {
+			return nil, err
+		}
+	}
 	_c.mutation.id = &_node.ID
 	_c.mutation.done = true
 	return _node, nil
@@ -210,10 +234,14 @@ func (_c *NodeAPIKeyCreate) sqlSave(ctx context.Context) (*NodeAPIKey, error) {
 func (_c *NodeAPIKeyCreate) createSpec() (*NodeAPIKey, *sqlgraph.CreateSpec) {
 	var (
 		_node = &NodeAPIKey{config: _c.config}
-		_spec = sqlgraph.NewCreateSpec(nodeapikey.Table, sqlgraph.NewFieldSpec(nodeapikey.FieldID, field.TypeInt))
+		_spec = sqlgraph.NewCreateSpec(nodeapikey.Table, sqlgraph.NewFieldSpec(nodeapikey.FieldID, field.TypeUUID))
 	)
+	if id, ok := _c.mutation.ID(); ok {
+		_node.ID = id
+		_spec.ID.Value = &id
+	}
 	if value, ok := _c.mutation.NodeID(); ok {
-		_spec.SetField(nodeapikey.FieldNodeID, field.TypeInt, value)
+		_spec.SetField(nodeapikey.FieldNodeID, field.TypeUUID, value)
 		_node.NodeID = value
 	}
 	if value, ok := _c.mutation.KeyHash(); ok {
@@ -296,10 +324,6 @@ func (_c *NodeAPIKeyCreateBulk) Save(ctx context.Context) ([]*NodeAPIKey, error)
 					return nil, err
 				}
 				mutation.id = &nodes[i].ID
-				if specs[i].ID.Value != nil {
-					id := specs[i].ID.Value.(int64)
-					nodes[i].ID = int(id)
-				}
 				mutation.done = true
 				return nodes[i], nil
 			})

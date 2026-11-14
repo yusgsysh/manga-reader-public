@@ -20,6 +20,7 @@ import (
 	"manga-reader/internal/ent/tagsyncbaseline"
 	"manga-reader/internal/ent/user"
 	"manga-reader/internal/ent/usersetting"
+	"manga-reader/internal/ident"
 	"manga-reader/internal/model"
 	"sync"
 	"time"
@@ -444,9 +445,8 @@ type BookshelfMutation struct {
 	config
 	op            Op
 	typ           string
-	id            *int
-	user_id       *int64
-	adduser_id    *int64
+	id            *ident.UUID
+	user_id       *ident.UUID
 	gallery_id    *int64
 	addgallery_id *int64
 	token         *string
@@ -478,7 +478,7 @@ func newBookshelfMutation(c config, op Op, opts ...bookshelfOption) *BookshelfMu
 }
 
 // withBookshelfID sets the ID field of the mutation.
-func withBookshelfID(id int) bookshelfOption {
+func withBookshelfID(id ident.UUID) bookshelfOption {
 	return func(m *BookshelfMutation) {
 		var (
 			err   error
@@ -528,9 +528,15 @@ func (m BookshelfMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of Bookshelf entities.
+func (m *BookshelfMutation) SetID(id ident.UUID) {
+	m.id = &id
+}
+
 // ID returns the ID value in the mutation. Note that the ID is only available
 // if it was provided to the builder or after it was returned from the database.
-func (m *BookshelfMutation) ID() (id int, exists bool) {
+func (m *BookshelfMutation) ID() (id ident.UUID, exists bool) {
 	if m.id == nil {
 		return
 	}
@@ -541,12 +547,12 @@ func (m *BookshelfMutation) ID() (id int, exists bool) {
 // That means, if the mutation is applied within a transaction with an isolation level such
 // as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
 // or updated by the mutation.
-func (m *BookshelfMutation) IDs(ctx context.Context) ([]int, error) {
+func (m *BookshelfMutation) IDs(ctx context.Context) ([]ident.UUID, error) {
 	switch {
 	case m.op.Is(OpUpdateOne | OpDeleteOne):
 		id, exists := m.ID()
 		if exists {
-			return []int{id}, nil
+			return []ident.UUID{id}, nil
 		}
 		fallthrough
 	case m.op.Is(OpUpdate | OpDelete):
@@ -557,13 +563,12 @@ func (m *BookshelfMutation) IDs(ctx context.Context) ([]int, error) {
 }
 
 // SetUserID sets the "user_id" field.
-func (m *BookshelfMutation) SetUserID(i int64) {
+func (m *BookshelfMutation) SetUserID(i ident.UUID) {
 	m.user_id = &i
-	m.adduser_id = nil
 }
 
 // UserID returns the value of the "user_id" field in the mutation.
-func (m *BookshelfMutation) UserID() (r int64, exists bool) {
+func (m *BookshelfMutation) UserID() (r ident.UUID, exists bool) {
 	v := m.user_id
 	if v == nil {
 		return
@@ -574,7 +579,7 @@ func (m *BookshelfMutation) UserID() (r int64, exists bool) {
 // OldUserID returns the old "user_id" field's value of the Bookshelf entity.
 // If the Bookshelf object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *BookshelfMutation) OldUserID(ctx context.Context) (v int64, err error) {
+func (m *BookshelfMutation) OldUserID(ctx context.Context) (v ident.UUID, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
 	}
@@ -588,28 +593,9 @@ func (m *BookshelfMutation) OldUserID(ctx context.Context) (v int64, err error) 
 	return oldValue.UserID, nil
 }
 
-// AddUserID adds i to the "user_id" field.
-func (m *BookshelfMutation) AddUserID(i int64) {
-	if m.adduser_id != nil {
-		*m.adduser_id += i
-	} else {
-		m.adduser_id = &i
-	}
-}
-
-// AddedUserID returns the value that was added to the "user_id" field in this mutation.
-func (m *BookshelfMutation) AddedUserID() (r int64, exists bool) {
-	v := m.adduser_id
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
 // ResetUserID resets all changes to the "user_id" field.
 func (m *BookshelfMutation) ResetUserID() {
 	m.user_id = nil
-	m.adduser_id = nil
 }
 
 // SetGalleryID sets the "gallery_id" field.
@@ -873,7 +859,7 @@ func (m *BookshelfMutation) OldField(ctx context.Context, name string) (ent.Valu
 func (m *BookshelfMutation) SetField(name string, value ent.Value) error {
 	switch name {
 	case bookshelf.FieldUserID:
-		v, ok := value.(int64)
+		v, ok := value.(ident.UUID)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -915,9 +901,6 @@ func (m *BookshelfMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *BookshelfMutation) AddedFields() []string {
 	var fields []string
-	if m.adduser_id != nil {
-		fields = append(fields, bookshelf.FieldUserID)
-	}
 	if m.addgallery_id != nil {
 		fields = append(fields, bookshelf.FieldGalleryID)
 	}
@@ -929,8 +912,6 @@ func (m *BookshelfMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *BookshelfMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
-	case bookshelf.FieldUserID:
-		return m.AddedUserID()
 	case bookshelf.FieldGalleryID:
 		return m.AddedGalleryID()
 	}
@@ -942,13 +923,6 @@ func (m *BookshelfMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *BookshelfMutation) AddField(name string, value ent.Value) error {
 	switch name {
-	case bookshelf.FieldUserID:
-		v, ok := value.(int64)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddUserID(v)
-		return nil
 	case bookshelf.FieldGalleryID:
 		v, ok := value.(int64)
 		if !ok {
@@ -2548,7 +2522,7 @@ type NodeMutation struct {
 	config
 	op            Op
 	typ           string
-	id            *int
+	id            *ident.UUID
 	name          *string
 	status        *string
 	last_seen_at  *time.Time
@@ -2580,7 +2554,7 @@ func newNodeMutation(c config, op Op, opts ...nodeOption) *NodeMutation {
 }
 
 // withNodeID sets the ID field of the mutation.
-func withNodeID(id int) nodeOption {
+func withNodeID(id ident.UUID) nodeOption {
 	return func(m *NodeMutation) {
 		var (
 			err   error
@@ -2630,9 +2604,15 @@ func (m NodeMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of Node entities.
+func (m *NodeMutation) SetID(id ident.UUID) {
+	m.id = &id
+}
+
 // ID returns the ID value in the mutation. Note that the ID is only available
 // if it was provided to the builder or after it was returned from the database.
-func (m *NodeMutation) ID() (id int, exists bool) {
+func (m *NodeMutation) ID() (id ident.UUID, exists bool) {
 	if m.id == nil {
 		return
 	}
@@ -2643,12 +2623,12 @@ func (m *NodeMutation) ID() (id int, exists bool) {
 // That means, if the mutation is applied within a transaction with an isolation level such
 // as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
 // or updated by the mutation.
-func (m *NodeMutation) IDs(ctx context.Context) ([]int, error) {
+func (m *NodeMutation) IDs(ctx context.Context) ([]ident.UUID, error) {
 	switch {
 	case m.op.Is(OpUpdateOne | OpDeleteOne):
 		id, exists := m.ID()
 		if exists {
-			return []int{id}, nil
+			return []ident.UUID{id}, nil
 		}
 		fallthrough
 	case m.op.Is(OpUpdate | OpDelete):
@@ -3112,9 +3092,8 @@ type NodeAPIKeyMutation struct {
 	config
 	op            Op
 	typ           string
-	id            *int
-	node_id       *int
-	addnode_id    *int
+	id            *ident.UUID
+	node_id       *ident.UUID
 	key_hash      *string
 	key_prefix    *string
 	scopes        *[]string
@@ -3150,7 +3129,7 @@ func newNodeAPIKeyMutation(c config, op Op, opts ...nodeapikeyOption) *NodeAPIKe
 }
 
 // withNodeAPIKeyID sets the ID field of the mutation.
-func withNodeAPIKeyID(id int) nodeapikeyOption {
+func withNodeAPIKeyID(id ident.UUID) nodeapikeyOption {
 	return func(m *NodeAPIKeyMutation) {
 		var (
 			err   error
@@ -3200,9 +3179,15 @@ func (m NodeAPIKeyMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of NodeAPIKey entities.
+func (m *NodeAPIKeyMutation) SetID(id ident.UUID) {
+	m.id = &id
+}
+
 // ID returns the ID value in the mutation. Note that the ID is only available
 // if it was provided to the builder or after it was returned from the database.
-func (m *NodeAPIKeyMutation) ID() (id int, exists bool) {
+func (m *NodeAPIKeyMutation) ID() (id ident.UUID, exists bool) {
 	if m.id == nil {
 		return
 	}
@@ -3213,12 +3198,12 @@ func (m *NodeAPIKeyMutation) ID() (id int, exists bool) {
 // That means, if the mutation is applied within a transaction with an isolation level such
 // as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
 // or updated by the mutation.
-func (m *NodeAPIKeyMutation) IDs(ctx context.Context) ([]int, error) {
+func (m *NodeAPIKeyMutation) IDs(ctx context.Context) ([]ident.UUID, error) {
 	switch {
 	case m.op.Is(OpUpdateOne | OpDeleteOne):
 		id, exists := m.ID()
 		if exists {
-			return []int{id}, nil
+			return []ident.UUID{id}, nil
 		}
 		fallthrough
 	case m.op.Is(OpUpdate | OpDelete):
@@ -3229,13 +3214,12 @@ func (m *NodeAPIKeyMutation) IDs(ctx context.Context) ([]int, error) {
 }
 
 // SetNodeID sets the "node_id" field.
-func (m *NodeAPIKeyMutation) SetNodeID(i int) {
+func (m *NodeAPIKeyMutation) SetNodeID(i ident.UUID) {
 	m.node_id = &i
-	m.addnode_id = nil
 }
 
 // NodeID returns the value of the "node_id" field in the mutation.
-func (m *NodeAPIKeyMutation) NodeID() (r int, exists bool) {
+func (m *NodeAPIKeyMutation) NodeID() (r ident.UUID, exists bool) {
 	v := m.node_id
 	if v == nil {
 		return
@@ -3246,7 +3230,7 @@ func (m *NodeAPIKeyMutation) NodeID() (r int, exists bool) {
 // OldNodeID returns the old "node_id" field's value of the NodeAPIKey entity.
 // If the NodeAPIKey object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *NodeAPIKeyMutation) OldNodeID(ctx context.Context) (v int, err error) {
+func (m *NodeAPIKeyMutation) OldNodeID(ctx context.Context) (v ident.UUID, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldNodeID is only allowed on UpdateOne operations")
 	}
@@ -3260,28 +3244,9 @@ func (m *NodeAPIKeyMutation) OldNodeID(ctx context.Context) (v int, err error) {
 	return oldValue.NodeID, nil
 }
 
-// AddNodeID adds i to the "node_id" field.
-func (m *NodeAPIKeyMutation) AddNodeID(i int) {
-	if m.addnode_id != nil {
-		*m.addnode_id += i
-	} else {
-		m.addnode_id = &i
-	}
-}
-
-// AddedNodeID returns the value that was added to the "node_id" field in this mutation.
-func (m *NodeAPIKeyMutation) AddedNodeID() (r int, exists bool) {
-	v := m.addnode_id
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
 // ResetNodeID resets all changes to the "node_id" field.
 func (m *NodeAPIKeyMutation) ResetNodeID() {
 	m.node_id = nil
-	m.addnode_id = nil
 }
 
 // SetKeyHash sets the "key_hash" field.
@@ -3765,7 +3730,7 @@ func (m *NodeAPIKeyMutation) OldField(ctx context.Context, name string) (ent.Val
 func (m *NodeAPIKeyMutation) SetField(name string, value ent.Value) error {
 	switch name {
 	case nodeapikey.FieldNodeID:
-		v, ok := value.(int)
+		v, ok := value.(ident.UUID)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -3834,21 +3799,13 @@ func (m *NodeAPIKeyMutation) SetField(name string, value ent.Value) error {
 // AddedFields returns all numeric fields that were incremented/decremented during
 // this mutation.
 func (m *NodeAPIKeyMutation) AddedFields() []string {
-	var fields []string
-	if m.addnode_id != nil {
-		fields = append(fields, nodeapikey.FieldNodeID)
-	}
-	return fields
+	return nil
 }
 
 // AddedField returns the numeric value that was incremented/decremented on a field
 // with the given name. The second boolean return value indicates that this field
 // was not set, or was not defined in the schema.
 func (m *NodeAPIKeyMutation) AddedField(name string) (ent.Value, bool) {
-	switch name {
-	case nodeapikey.FieldNodeID:
-		return m.AddedNodeID()
-	}
 	return nil, false
 }
 
@@ -3857,13 +3814,6 @@ func (m *NodeAPIKeyMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *NodeAPIKeyMutation) AddField(name string, value ent.Value) error {
 	switch name {
-	case nodeapikey.FieldNodeID:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddNodeID(v)
-		return nil
 	}
 	return fmt.Errorf("unknown NodeAPIKey numeric field %s", name)
 }
@@ -4003,8 +3953,7 @@ type PrefillJobMutation struct {
 	op              Op
 	typ             string
 	id              *uuid.UUID
-	user_id         *int64
-	adduser_id      *int64
+	user_id         *ident.UUID
 	gallery_id      *int64
 	addgallery_id   *int64
 	token           *string
@@ -4132,13 +4081,12 @@ func (m *PrefillJobMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
 }
 
 // SetUserID sets the "user_id" field.
-func (m *PrefillJobMutation) SetUserID(i int64) {
+func (m *PrefillJobMutation) SetUserID(i ident.UUID) {
 	m.user_id = &i
-	m.adduser_id = nil
 }
 
 // UserID returns the value of the "user_id" field in the mutation.
-func (m *PrefillJobMutation) UserID() (r int64, exists bool) {
+func (m *PrefillJobMutation) UserID() (r ident.UUID, exists bool) {
 	v := m.user_id
 	if v == nil {
 		return
@@ -4149,7 +4097,7 @@ func (m *PrefillJobMutation) UserID() (r int64, exists bool) {
 // OldUserID returns the old "user_id" field's value of the PrefillJob entity.
 // If the PrefillJob object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PrefillJobMutation) OldUserID(ctx context.Context) (v int64, err error) {
+func (m *PrefillJobMutation) OldUserID(ctx context.Context) (v ident.UUID, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
 	}
@@ -4163,28 +4111,9 @@ func (m *PrefillJobMutation) OldUserID(ctx context.Context) (v int64, err error)
 	return oldValue.UserID, nil
 }
 
-// AddUserID adds i to the "user_id" field.
-func (m *PrefillJobMutation) AddUserID(i int64) {
-	if m.adduser_id != nil {
-		*m.adduser_id += i
-	} else {
-		m.adduser_id = &i
-	}
-}
-
-// AddedUserID returns the value that was added to the "user_id" field in this mutation.
-func (m *PrefillJobMutation) AddedUserID() (r int64, exists bool) {
-	v := m.adduser_id
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
 // ResetUserID resets all changes to the "user_id" field.
 func (m *PrefillJobMutation) ResetUserID() {
 	m.user_id = nil
-	m.adduser_id = nil
 }
 
 // SetGalleryID sets the "gallery_id" field.
@@ -4860,7 +4789,7 @@ func (m *PrefillJobMutation) OldField(ctx context.Context, name string) (ent.Val
 func (m *PrefillJobMutation) SetField(name string, value ent.Value) error {
 	switch name {
 	case prefilljob.FieldUserID:
-		v, ok := value.(int64)
+		v, ok := value.(ident.UUID)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -4951,9 +4880,6 @@ func (m *PrefillJobMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *PrefillJobMutation) AddedFields() []string {
 	var fields []string
-	if m.adduser_id != nil {
-		fields = append(fields, prefilljob.FieldUserID)
-	}
 	if m.addgallery_id != nil {
 		fields = append(fields, prefilljob.FieldGalleryID)
 	}
@@ -4971,8 +4897,6 @@ func (m *PrefillJobMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *PrefillJobMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
-	case prefilljob.FieldUserID:
-		return m.AddedUserID()
 	case prefilljob.FieldGalleryID:
 		return m.AddedGalleryID()
 	case prefilljob.FieldTotal:
@@ -4988,13 +4912,6 @@ func (m *PrefillJobMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *PrefillJobMutation) AddField(name string, value ent.Value) error {
 	switch name {
-	case prefilljob.FieldUserID:
-		v, ok := value.(int64)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddUserID(v)
-		return nil
 	case prefilljob.FieldGalleryID:
 		v, ok := value.(int64)
 		if !ok {
@@ -5157,9 +5074,8 @@ type ReadingProgressMutation struct {
 	config
 	op              Op
 	typ             string
-	id              *int
-	user_id         *int64
-	adduser_id      *int64
+	id              *ident.UUID
+	user_id         *ident.UUID
 	gallery_id      *int64
 	addgallery_id   *int64
 	token           *string
@@ -5196,7 +5112,7 @@ func newReadingProgressMutation(c config, op Op, opts ...readingprogressOption) 
 }
 
 // withReadingProgressID sets the ID field of the mutation.
-func withReadingProgressID(id int) readingprogressOption {
+func withReadingProgressID(id ident.UUID) readingprogressOption {
 	return func(m *ReadingProgressMutation) {
 		var (
 			err   error
@@ -5246,9 +5162,15 @@ func (m ReadingProgressMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of ReadingProgress entities.
+func (m *ReadingProgressMutation) SetID(id ident.UUID) {
+	m.id = &id
+}
+
 // ID returns the ID value in the mutation. Note that the ID is only available
 // if it was provided to the builder or after it was returned from the database.
-func (m *ReadingProgressMutation) ID() (id int, exists bool) {
+func (m *ReadingProgressMutation) ID() (id ident.UUID, exists bool) {
 	if m.id == nil {
 		return
 	}
@@ -5259,12 +5181,12 @@ func (m *ReadingProgressMutation) ID() (id int, exists bool) {
 // That means, if the mutation is applied within a transaction with an isolation level such
 // as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
 // or updated by the mutation.
-func (m *ReadingProgressMutation) IDs(ctx context.Context) ([]int, error) {
+func (m *ReadingProgressMutation) IDs(ctx context.Context) ([]ident.UUID, error) {
 	switch {
 	case m.op.Is(OpUpdateOne | OpDeleteOne):
 		id, exists := m.ID()
 		if exists {
-			return []int{id}, nil
+			return []ident.UUID{id}, nil
 		}
 		fallthrough
 	case m.op.Is(OpUpdate | OpDelete):
@@ -5275,13 +5197,12 @@ func (m *ReadingProgressMutation) IDs(ctx context.Context) ([]int, error) {
 }
 
 // SetUserID sets the "user_id" field.
-func (m *ReadingProgressMutation) SetUserID(i int64) {
+func (m *ReadingProgressMutation) SetUserID(i ident.UUID) {
 	m.user_id = &i
-	m.adduser_id = nil
 }
 
 // UserID returns the value of the "user_id" field in the mutation.
-func (m *ReadingProgressMutation) UserID() (r int64, exists bool) {
+func (m *ReadingProgressMutation) UserID() (r ident.UUID, exists bool) {
 	v := m.user_id
 	if v == nil {
 		return
@@ -5292,7 +5213,7 @@ func (m *ReadingProgressMutation) UserID() (r int64, exists bool) {
 // OldUserID returns the old "user_id" field's value of the ReadingProgress entity.
 // If the ReadingProgress object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ReadingProgressMutation) OldUserID(ctx context.Context) (v int64, err error) {
+func (m *ReadingProgressMutation) OldUserID(ctx context.Context) (v ident.UUID, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
 	}
@@ -5306,28 +5227,9 @@ func (m *ReadingProgressMutation) OldUserID(ctx context.Context) (v int64, err e
 	return oldValue.UserID, nil
 }
 
-// AddUserID adds i to the "user_id" field.
-func (m *ReadingProgressMutation) AddUserID(i int64) {
-	if m.adduser_id != nil {
-		*m.adduser_id += i
-	} else {
-		m.adduser_id = &i
-	}
-}
-
-// AddedUserID returns the value that was added to the "user_id" field in this mutation.
-func (m *ReadingProgressMutation) AddedUserID() (r int64, exists bool) {
-	v := m.adduser_id
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
 // ResetUserID resets all changes to the "user_id" field.
 func (m *ReadingProgressMutation) ResetUserID() {
 	m.user_id = nil
-	m.adduser_id = nil
 }
 
 // SetGalleryID sets the "gallery_id" field.
@@ -5760,7 +5662,7 @@ func (m *ReadingProgressMutation) OldField(ctx context.Context, name string) (en
 func (m *ReadingProgressMutation) SetField(name string, value ent.Value) error {
 	switch name {
 	case readingprogress.FieldUserID:
-		v, ok := value.(int64)
+		v, ok := value.(ident.UUID)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -5823,9 +5725,6 @@ func (m *ReadingProgressMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *ReadingProgressMutation) AddedFields() []string {
 	var fields []string
-	if m.adduser_id != nil {
-		fields = append(fields, readingprogress.FieldUserID)
-	}
 	if m.addgallery_id != nil {
 		fields = append(fields, readingprogress.FieldGalleryID)
 	}
@@ -5843,8 +5742,6 @@ func (m *ReadingProgressMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *ReadingProgressMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
-	case readingprogress.FieldUserID:
-		return m.AddedUserID()
 	case readingprogress.FieldGalleryID:
 		return m.AddedGalleryID()
 	case readingprogress.FieldCurrentPage:
@@ -5860,13 +5757,6 @@ func (m *ReadingProgressMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *ReadingProgressMutation) AddField(name string, value ent.Value) error {
 	switch name {
-	case readingprogress.FieldUserID:
-		v, ok := value.(int64)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddUserID(v)
-		return nil
 	case readingprogress.FieldGalleryID:
 		v, ok := value.(int64)
 		if !ok {
@@ -5997,8 +5887,7 @@ type SyncChangeMutation struct {
 	op            Op
 	typ           string
 	id            *int
-	user_id       *int64
-	adduser_id    *int64
+	user_id       *ident.UUID
 	entity        *string
 	gallery_id    *int64
 	addgallery_id *int64
@@ -6110,13 +5999,12 @@ func (m *SyncChangeMutation) IDs(ctx context.Context) ([]int, error) {
 }
 
 // SetUserID sets the "user_id" field.
-func (m *SyncChangeMutation) SetUserID(i int64) {
+func (m *SyncChangeMutation) SetUserID(i ident.UUID) {
 	m.user_id = &i
-	m.adduser_id = nil
 }
 
 // UserID returns the value of the "user_id" field in the mutation.
-func (m *SyncChangeMutation) UserID() (r int64, exists bool) {
+func (m *SyncChangeMutation) UserID() (r ident.UUID, exists bool) {
 	v := m.user_id
 	if v == nil {
 		return
@@ -6127,7 +6015,7 @@ func (m *SyncChangeMutation) UserID() (r int64, exists bool) {
 // OldUserID returns the old "user_id" field's value of the SyncChange entity.
 // If the SyncChange object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SyncChangeMutation) OldUserID(ctx context.Context) (v int64, err error) {
+func (m *SyncChangeMutation) OldUserID(ctx context.Context) (v ident.UUID, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
 	}
@@ -6141,28 +6029,9 @@ func (m *SyncChangeMutation) OldUserID(ctx context.Context) (v int64, err error)
 	return oldValue.UserID, nil
 }
 
-// AddUserID adds i to the "user_id" field.
-func (m *SyncChangeMutation) AddUserID(i int64) {
-	if m.adduser_id != nil {
-		*m.adduser_id += i
-	} else {
-		m.adduser_id = &i
-	}
-}
-
-// AddedUserID returns the value that was added to the "user_id" field in this mutation.
-func (m *SyncChangeMutation) AddedUserID() (r int64, exists bool) {
-	v := m.adduser_id
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
 // ResetUserID resets all changes to the "user_id" field.
 func (m *SyncChangeMutation) ResetUserID() {
 	m.user_id = nil
-	m.adduser_id = nil
 }
 
 // SetEntity sets the "entity" field.
@@ -6469,7 +6338,7 @@ func (m *SyncChangeMutation) OldField(ctx context.Context, name string) (ent.Val
 func (m *SyncChangeMutation) SetField(name string, value ent.Value) error {
 	switch name {
 	case syncchange.FieldUserID:
-		v, ok := value.(int64)
+		v, ok := value.(ident.UUID)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -6518,9 +6387,6 @@ func (m *SyncChangeMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *SyncChangeMutation) AddedFields() []string {
 	var fields []string
-	if m.adduser_id != nil {
-		fields = append(fields, syncchange.FieldUserID)
-	}
 	if m.addgallery_id != nil {
 		fields = append(fields, syncchange.FieldGalleryID)
 	}
@@ -6532,8 +6398,6 @@ func (m *SyncChangeMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *SyncChangeMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
-	case syncchange.FieldUserID:
-		return m.AddedUserID()
 	case syncchange.FieldGalleryID:
 		return m.AddedGalleryID()
 	}
@@ -6545,13 +6409,6 @@ func (m *SyncChangeMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *SyncChangeMutation) AddField(name string, value ent.Value) error {
 	switch name {
-	case syncchange.FieldUserID:
-		v, ok := value.(int64)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddUserID(v)
-		return nil
 	case syncchange.FieldGalleryID:
 		v, ok := value.(int64)
 		if !ok {
@@ -7047,8 +6904,7 @@ type TagPreferenceMutation struct {
 	config
 	op            Op
 	typ           string
-	user_id       *int64
-	adduser_id    *int64
+	user_id       *ident.UUID
 	action        *string
 	weight        *int
 	addweight     *int
@@ -7100,32 +6956,13 @@ func (m TagPreferenceMutation) Tx() (*Tx, error) {
 }
 
 // SetUserID sets the "user_id" field.
-func (m *TagPreferenceMutation) SetUserID(i int64) {
+func (m *TagPreferenceMutation) SetUserID(i ident.UUID) {
 	m.user_id = &i
-	m.adduser_id = nil
 }
 
 // UserID returns the value of the "user_id" field in the mutation.
-func (m *TagPreferenceMutation) UserID() (r int64, exists bool) {
+func (m *TagPreferenceMutation) UserID() (r ident.UUID, exists bool) {
 	v := m.user_id
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// AddUserID adds i to the "user_id" field.
-func (m *TagPreferenceMutation) AddUserID(i int64) {
-	if m.adduser_id != nil {
-		*m.adduser_id += i
-	} else {
-		m.adduser_id = &i
-	}
-}
-
-// AddedUserID returns the value that was added to the "user_id" field in this mutation.
-func (m *TagPreferenceMutation) AddedUserID() (r int64, exists bool) {
-	v := m.adduser_id
 	if v == nil {
 		return
 	}
@@ -7135,7 +6972,6 @@ func (m *TagPreferenceMutation) AddedUserID() (r int64, exists bool) {
 // ResetUserID resets all changes to the "user_id" field.
 func (m *TagPreferenceMutation) ResetUserID() {
 	m.user_id = nil
-	m.adduser_id = nil
 }
 
 // SetAction sets the "action" field.
@@ -7343,7 +7179,7 @@ func (m *TagPreferenceMutation) OldField(ctx context.Context, name string) (ent.
 func (m *TagPreferenceMutation) SetField(name string, value ent.Value) error {
 	switch name {
 	case tagpreference.FieldUserID:
-		v, ok := value.(int64)
+		v, ok := value.(ident.UUID)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -7392,9 +7228,6 @@ func (m *TagPreferenceMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *TagPreferenceMutation) AddedFields() []string {
 	var fields []string
-	if m.adduser_id != nil {
-		fields = append(fields, tagpreference.FieldUserID)
-	}
 	if m.addweight != nil {
 		fields = append(fields, tagpreference.FieldWeight)
 	}
@@ -7406,8 +7239,6 @@ func (m *TagPreferenceMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *TagPreferenceMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
-	case tagpreference.FieldUserID:
-		return m.AddedUserID()
 	case tagpreference.FieldWeight:
 		return m.AddedWeight()
 	}
@@ -7419,13 +7250,6 @@ func (m *TagPreferenceMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *TagPreferenceMutation) AddField(name string, value ent.Value) error {
 	switch name {
-	case tagpreference.FieldUserID:
-		v, ok := value.(int64)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddUserID(v)
-		return nil
 	case tagpreference.FieldWeight:
 		v, ok := value.(int)
 		if !ok {
@@ -7535,8 +7359,7 @@ type TagSyncBaselineMutation struct {
 	config
 	op            Op
 	typ           string
-	user_id       *int64
-	adduser_id    *int64
+	user_id       *ident.UUID
 	action        *string
 	weight        *int
 	addweight     *int
@@ -7588,32 +7411,13 @@ func (m TagSyncBaselineMutation) Tx() (*Tx, error) {
 }
 
 // SetUserID sets the "user_id" field.
-func (m *TagSyncBaselineMutation) SetUserID(i int64) {
+func (m *TagSyncBaselineMutation) SetUserID(i ident.UUID) {
 	m.user_id = &i
-	m.adduser_id = nil
 }
 
 // UserID returns the value of the "user_id" field in the mutation.
-func (m *TagSyncBaselineMutation) UserID() (r int64, exists bool) {
+func (m *TagSyncBaselineMutation) UserID() (r ident.UUID, exists bool) {
 	v := m.user_id
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// AddUserID adds i to the "user_id" field.
-func (m *TagSyncBaselineMutation) AddUserID(i int64) {
-	if m.adduser_id != nil {
-		*m.adduser_id += i
-	} else {
-		m.adduser_id = &i
-	}
-}
-
-// AddedUserID returns the value that was added to the "user_id" field in this mutation.
-func (m *TagSyncBaselineMutation) AddedUserID() (r int64, exists bool) {
-	v := m.adduser_id
 	if v == nil {
 		return
 	}
@@ -7623,7 +7427,6 @@ func (m *TagSyncBaselineMutation) AddedUserID() (r int64, exists bool) {
 // ResetUserID resets all changes to the "user_id" field.
 func (m *TagSyncBaselineMutation) ResetUserID() {
 	m.user_id = nil
-	m.adduser_id = nil
 }
 
 // SetAction sets the "action" field.
@@ -7831,7 +7634,7 @@ func (m *TagSyncBaselineMutation) OldField(ctx context.Context, name string) (en
 func (m *TagSyncBaselineMutation) SetField(name string, value ent.Value) error {
 	switch name {
 	case tagsyncbaseline.FieldUserID:
-		v, ok := value.(int64)
+		v, ok := value.(ident.UUID)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -7880,9 +7683,6 @@ func (m *TagSyncBaselineMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *TagSyncBaselineMutation) AddedFields() []string {
 	var fields []string
-	if m.adduser_id != nil {
-		fields = append(fields, tagsyncbaseline.FieldUserID)
-	}
 	if m.addweight != nil {
 		fields = append(fields, tagsyncbaseline.FieldWeight)
 	}
@@ -7894,8 +7694,6 @@ func (m *TagSyncBaselineMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *TagSyncBaselineMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
-	case tagsyncbaseline.FieldUserID:
-		return m.AddedUserID()
 	case tagsyncbaseline.FieldWeight:
 		return m.AddedWeight()
 	}
@@ -7907,13 +7705,6 @@ func (m *TagSyncBaselineMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *TagSyncBaselineMutation) AddField(name string, value ent.Value) error {
 	switch name {
-	case tagsyncbaseline.FieldUserID:
-		v, ok := value.(int64)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddUserID(v)
-		return nil
 	case tagsyncbaseline.FieldWeight:
 		v, ok := value.(int)
 		if !ok {
@@ -8023,7 +7814,7 @@ type UserMutation struct {
 	config
 	op               Op
 	typ              string
-	id               *int
+	id               *ident.UUID
 	username         *string
 	password_hash    *string
 	role             *string
@@ -8058,7 +7849,7 @@ func newUserMutation(c config, op Op, opts ...userOption) *UserMutation {
 }
 
 // withUserID sets the ID field of the mutation.
-func withUserID(id int) userOption {
+func withUserID(id ident.UUID) userOption {
 	return func(m *UserMutation) {
 		var (
 			err   error
@@ -8108,9 +7899,15 @@ func (m UserMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of User entities.
+func (m *UserMutation) SetID(id ident.UUID) {
+	m.id = &id
+}
+
 // ID returns the ID value in the mutation. Note that the ID is only available
 // if it was provided to the builder or after it was returned from the database.
-func (m *UserMutation) ID() (id int, exists bool) {
+func (m *UserMutation) ID() (id ident.UUID, exists bool) {
 	if m.id == nil {
 		return
 	}
@@ -8121,12 +7918,12 @@ func (m *UserMutation) ID() (id int, exists bool) {
 // That means, if the mutation is applied within a transaction with an isolation level such
 // as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
 // or updated by the mutation.
-func (m *UserMutation) IDs(ctx context.Context) ([]int, error) {
+func (m *UserMutation) IDs(ctx context.Context) ([]ident.UUID, error) {
 	switch {
 	case m.op.Is(OpUpdateOne | OpDeleteOne):
 		id, exists := m.ID()
 		if exists {
-			return []int{id}, nil
+			return []ident.UUID{id}, nil
 		}
 		fallthrough
 	case m.op.Is(OpUpdate | OpDelete):
@@ -8709,9 +8506,7 @@ type UserSettingMutation struct {
 	config
 	op                 Op
 	typ                string
-	id                 *int
-	user_id            *int
-	adduser_id         *int
+	id                 *ident.UUID
 	cookie_ciphertext  *string
 	cookie_status      *string
 	cookie_verified_at *time.Time
@@ -8745,7 +8540,7 @@ func newUserSettingMutation(c config, op Op, opts ...usersettingOption) *UserSet
 }
 
 // withUserSettingID sets the ID field of the mutation.
-func withUserSettingID(id int) usersettingOption {
+func withUserSettingID(id ident.UUID) usersettingOption {
 	return func(m *UserSettingMutation) {
 		var (
 			err   error
@@ -8795,9 +8590,15 @@ func (m UserSettingMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of UserSetting entities.
+func (m *UserSettingMutation) SetID(id ident.UUID) {
+	m.id = &id
+}
+
 // ID returns the ID value in the mutation. Note that the ID is only available
 // if it was provided to the builder or after it was returned from the database.
-func (m *UserSettingMutation) ID() (id int, exists bool) {
+func (m *UserSettingMutation) ID() (id ident.UUID, exists bool) {
 	if m.id == nil {
 		return
 	}
@@ -8808,12 +8609,12 @@ func (m *UserSettingMutation) ID() (id int, exists bool) {
 // That means, if the mutation is applied within a transaction with an isolation level such
 // as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
 // or updated by the mutation.
-func (m *UserSettingMutation) IDs(ctx context.Context) ([]int, error) {
+func (m *UserSettingMutation) IDs(ctx context.Context) ([]ident.UUID, error) {
 	switch {
 	case m.op.Is(OpUpdateOne | OpDeleteOne):
 		id, exists := m.ID()
 		if exists {
-			return []int{id}, nil
+			return []ident.UUID{id}, nil
 		}
 		fallthrough
 	case m.op.Is(OpUpdate | OpDelete):
@@ -8821,62 +8622,6 @@ func (m *UserSettingMutation) IDs(ctx context.Context) ([]int, error) {
 	default:
 		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
 	}
-}
-
-// SetUserID sets the "user_id" field.
-func (m *UserSettingMutation) SetUserID(i int) {
-	m.user_id = &i
-	m.adduser_id = nil
-}
-
-// UserID returns the value of the "user_id" field in the mutation.
-func (m *UserSettingMutation) UserID() (r int, exists bool) {
-	v := m.user_id
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldUserID returns the old "user_id" field's value of the UserSetting entity.
-// If the UserSetting object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *UserSettingMutation) OldUserID(ctx context.Context) (v int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldUserID requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
-	}
-	return oldValue.UserID, nil
-}
-
-// AddUserID adds i to the "user_id" field.
-func (m *UserSettingMutation) AddUserID(i int) {
-	if m.adduser_id != nil {
-		*m.adduser_id += i
-	} else {
-		m.adduser_id = &i
-	}
-}
-
-// AddedUserID returns the value that was added to the "user_id" field in this mutation.
-func (m *UserSettingMutation) AddedUserID() (r int, exists bool) {
-	v := m.adduser_id
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ResetUserID resets all changes to the "user_id" field.
-func (m *UserSettingMutation) ResetUserID() {
-	m.user_id = nil
-	m.adduser_id = nil
 }
 
 // SetCookieCiphertext sets the "cookie_ciphertext" field.
@@ -9191,10 +8936,7 @@ func (m *UserSettingMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserSettingMutation) Fields() []string {
-	fields := make([]string, 0, 8)
-	if m.user_id != nil {
-		fields = append(fields, usersetting.FieldUserID)
-	}
+	fields := make([]string, 0, 7)
 	if m.cookie_ciphertext != nil {
 		fields = append(fields, usersetting.FieldCookieCiphertext)
 	}
@@ -9224,8 +8966,6 @@ func (m *UserSettingMutation) Fields() []string {
 // schema.
 func (m *UserSettingMutation) Field(name string) (ent.Value, bool) {
 	switch name {
-	case usersetting.FieldUserID:
-		return m.UserID()
 	case usersetting.FieldCookieCiphertext:
 		return m.CookieCiphertext()
 	case usersetting.FieldCookieStatus:
@@ -9249,8 +8989,6 @@ func (m *UserSettingMutation) Field(name string) (ent.Value, bool) {
 // database failed.
 func (m *UserSettingMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
-	case usersetting.FieldUserID:
-		return m.OldUserID(ctx)
 	case usersetting.FieldCookieCiphertext:
 		return m.OldCookieCiphertext(ctx)
 	case usersetting.FieldCookieStatus:
@@ -9274,13 +9012,6 @@ func (m *UserSettingMutation) OldField(ctx context.Context, name string) (ent.Va
 // type.
 func (m *UserSettingMutation) SetField(name string, value ent.Value) error {
 	switch name {
-	case usersetting.FieldUserID:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetUserID(v)
-		return nil
 	case usersetting.FieldCookieCiphertext:
 		v, ok := value.(string)
 		if !ok {
@@ -9337,21 +9068,13 @@ func (m *UserSettingMutation) SetField(name string, value ent.Value) error {
 // AddedFields returns all numeric fields that were incremented/decremented during
 // this mutation.
 func (m *UserSettingMutation) AddedFields() []string {
-	var fields []string
-	if m.adduser_id != nil {
-		fields = append(fields, usersetting.FieldUserID)
-	}
-	return fields
+	return nil
 }
 
 // AddedField returns the numeric value that was incremented/decremented on a field
 // with the given name. The second boolean return value indicates that this field
 // was not set, or was not defined in the schema.
 func (m *UserSettingMutation) AddedField(name string) (ent.Value, bool) {
-	switch name {
-	case usersetting.FieldUserID:
-		return m.AddedUserID()
-	}
 	return nil, false
 }
 
@@ -9360,13 +9083,6 @@ func (m *UserSettingMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *UserSettingMutation) AddField(name string, value ent.Value) error {
 	switch name {
-	case usersetting.FieldUserID:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddUserID(v)
-		return nil
 	}
 	return fmt.Errorf("unknown UserSetting numeric field %s", name)
 }
@@ -9409,9 +9125,6 @@ func (m *UserSettingMutation) ClearField(name string) error {
 // It returns an error if the field is not defined in the schema.
 func (m *UserSettingMutation) ResetField(name string) error {
 	switch name {
-	case usersetting.FieldUserID:
-		m.ResetUserID()
-		return nil
 	case usersetting.FieldCookieCiphertext:
 		m.ResetCookieCiphertext()
 		return nil

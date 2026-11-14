@@ -6,7 +6,7 @@ export const NODE_SCOPES = ["sync:read", "sync:write", "sync:events"] as const;
 export type NodeScope = (typeof NODE_SCOPES)[number];
 
 export interface SyncNode {
-  id: number;
+  id: string;
   name: string;
   status: NodeStatus;
   last_seen_at: string | null;
@@ -15,8 +15,8 @@ export interface SyncNode {
 }
 
 export interface NodeAPIKey {
-  id: number;
-  node_id: number;
+  id: string;
+  node_id: string;
   key_prefix: string;
   scopes: NodeScope[];
   status: NodeKeyStatus;
@@ -45,39 +45,39 @@ export function createNode(input: {
 }
 
 export function updateNode(
-  id: number,
+  id: string,
   input: { name?: string; status?: NodeStatus },
 ): Promise<SyncNode> {
   return apiPut<SyncNode>(`/api/admin/nodes/${id}`, input);
 }
 
-export function deleteNode(id: number): Promise<{ deleted: boolean }> {
+export function deleteNode(id: string): Promise<{ deleted: boolean }> {
   return apiDelete<{ deleted: boolean }>(`/api/admin/nodes/${id}`);
 }
 
 export function fetchNodeKeys(
-  id: number,
+  id: string,
 ): Promise<{ keys: NodeAPIKey[] }> {
   return apiGet<{ keys: NodeAPIKey[] }>(`/api/admin/nodes/${id}/keys`);
 }
 
 export function createNodeKey(
-  id: number,
+  id: string,
   input?: { scopes?: NodeScope[]; expires_at?: string },
 ): Promise<CreatedNodeKey> {
   return apiPostJson<CreatedNodeKey>(`/api/admin/nodes/${id}/keys`, input ?? {});
 }
 
 export function revokeNodeKey(
-  nodeId: number,
-  keyId: number,
+  nodeId: string,
+  keyId: string,
 ): Promise<NodeAPIKey> {
   return apiDelete<NodeAPIKey>(`/api/admin/nodes/${nodeId}/keys/${keyId}`);
 }
 
 export function rotateNodeKey(
-  nodeId: number,
-  keyId: number,
+  nodeId: string,
+  keyId: string,
   input?: { revoke_old?: boolean; expires_at?: string },
 ): Promise<CreatedNodeKey> {
   return apiPostJson<CreatedNodeKey>(

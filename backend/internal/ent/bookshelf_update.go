@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/predicate"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -29,23 +30,16 @@ func (_u *BookshelfUpdate) Where(ps ...predicate.Bookshelf) *BookshelfUpdate {
 }
 
 // SetUserID sets the "user_id" field.
-func (_u *BookshelfUpdate) SetUserID(v int64) *BookshelfUpdate {
-	_u.mutation.ResetUserID()
+func (_u *BookshelfUpdate) SetUserID(v ident.UUID) *BookshelfUpdate {
 	_u.mutation.SetUserID(v)
 	return _u
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_u *BookshelfUpdate) SetNillableUserID(v *int64) *BookshelfUpdate {
+func (_u *BookshelfUpdate) SetNillableUserID(v *ident.UUID) *BookshelfUpdate {
 	if v != nil {
 		_u.SetUserID(*v)
 	}
-	return _u
-}
-
-// AddUserID adds value to the "user_id" field.
-func (_u *BookshelfUpdate) AddUserID(v int64) *BookshelfUpdate {
-	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -132,7 +126,7 @@ func (_u *BookshelfUpdate) defaults() {
 }
 
 func (_u *BookshelfUpdate) sqlSave(ctx context.Context) (_node int, err error) {
-	_spec := sqlgraph.NewUpdateSpec(bookshelf.Table, bookshelf.Columns, sqlgraph.NewFieldSpec(bookshelf.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(bookshelf.Table, bookshelf.Columns, sqlgraph.NewFieldSpec(bookshelf.FieldID, field.TypeUUID))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -141,10 +135,7 @@ func (_u *BookshelfUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 	}
 	if value, ok := _u.mutation.UserID(); ok {
-		_spec.SetField(bookshelf.FieldUserID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUserID(); ok {
-		_spec.AddField(bookshelf.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(bookshelf.FieldUserID, field.TypeUUID, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(bookshelf.FieldGalleryID, field.TypeInt64, value)
@@ -179,23 +170,16 @@ type BookshelfUpdateOne struct {
 }
 
 // SetUserID sets the "user_id" field.
-func (_u *BookshelfUpdateOne) SetUserID(v int64) *BookshelfUpdateOne {
-	_u.mutation.ResetUserID()
+func (_u *BookshelfUpdateOne) SetUserID(v ident.UUID) *BookshelfUpdateOne {
 	_u.mutation.SetUserID(v)
 	return _u
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_u *BookshelfUpdateOne) SetNillableUserID(v *int64) *BookshelfUpdateOne {
+func (_u *BookshelfUpdateOne) SetNillableUserID(v *ident.UUID) *BookshelfUpdateOne {
 	if v != nil {
 		_u.SetUserID(*v)
 	}
-	return _u
-}
-
-// AddUserID adds value to the "user_id" field.
-func (_u *BookshelfUpdateOne) AddUserID(v int64) *BookshelfUpdateOne {
-	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -295,7 +279,7 @@ func (_u *BookshelfUpdateOne) defaults() {
 }
 
 func (_u *BookshelfUpdateOne) sqlSave(ctx context.Context) (_node *Bookshelf, err error) {
-	_spec := sqlgraph.NewUpdateSpec(bookshelf.Table, bookshelf.Columns, sqlgraph.NewFieldSpec(bookshelf.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(bookshelf.Table, bookshelf.Columns, sqlgraph.NewFieldSpec(bookshelf.FieldID, field.TypeUUID))
 	id, ok := _u.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "Bookshelf.id" for update`)}
@@ -321,10 +305,7 @@ func (_u *BookshelfUpdateOne) sqlSave(ctx context.Context) (_node *Bookshelf, er
 		}
 	}
 	if value, ok := _u.mutation.UserID(); ok {
-		_spec.SetField(bookshelf.FieldUserID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUserID(); ok {
-		_spec.AddField(bookshelf.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(bookshelf.FieldUserID, field.TypeUUID, value)
 	}
 	if value, ok := _u.mutation.GalleryID(); ok {
 		_spec.SetField(bookshelf.FieldGalleryID, field.TypeInt64, value)

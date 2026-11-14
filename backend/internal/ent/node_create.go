@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"manga-reader/internal/ent/node"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -82,6 +83,20 @@ func (_c *NodeCreate) SetNillableUpdatedAt(v *time.Time) *NodeCreate {
 	return _c
 }
 
+// SetID sets the "id" field.
+func (_c *NodeCreate) SetID(v ident.UUID) *NodeCreate {
+	_c.mutation.SetID(v)
+	return _c
+}
+
+// SetNillableID sets the "id" field if the given value is not nil.
+func (_c *NodeCreate) SetNillableID(v *ident.UUID) *NodeCreate {
+	if v != nil {
+		_c.SetID(*v)
+	}
+	return _c
+}
+
 // Mutation returns the NodeMutation object of the builder.
 func (_c *NodeCreate) Mutation() *NodeMutation {
 	return _c.mutation
@@ -129,6 +144,10 @@ func (_c *NodeCreate) defaults() {
 		v := node.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.ID(); !ok {
+		v := node.DefaultID()
+		_c.mutation.SetID(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -164,8 +183,13 @@ func (_c *NodeCreate) sqlSave(ctx context.Context) (*Node, error) {
 		}
 		return nil, err
 	}
-	id := _spec.ID.Value.(int64)
-	_node.ID = int(id)
+	if _spec.ID.Value != nil {
+		if id, ok := _spec.ID.Value.(*ident.UUID); ok {
+			_node.ID = *id
+		} else if err := _node.ID.Scan(_spec.ID.Value); err != nil {
+			return nil, err
+		}
+	}
 	_c.mutation.id = &_node.ID
 	_c.mutation.done = true
 	return _node, nil
@@ -174,8 +198,12 @@ func (_c *NodeCreate) sqlSave(ctx context.Context) (*Node, error) {
 func (_c *NodeCreate) createSpec() (*Node, *sqlgraph.CreateSpec) {
 	var (
 		_node = &Node{config: _c.config}
-		_spec = sqlgraph.NewCreateSpec(node.Table, sqlgraph.NewFieldSpec(node.FieldID, field.TypeInt))
+		_spec = sqlgraph.NewCreateSpec(node.Table, sqlgraph.NewFieldSpec(node.FieldID, field.TypeUUID))
 	)
+	if id, ok := _c.mutation.ID(); ok {
+		_node.ID = id
+		_spec.ID.Value = &id
+	}
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(node.FieldName, field.TypeString, value)
 		_node.Name = value
@@ -244,10 +272,6 @@ func (_c *NodeCreateBulk) Save(ctx context.Context) ([]*Node, error) {
 					return nil, err
 				}
 				mutation.id = &nodes[i].ID
-				if specs[i].ID.Value != nil {
-					id := specs[i].ID.Value.(int64)
-					nodes[i].ID = int(id)
-				}
 				mutation.done = true
 				return nodes[i], nil
 			})

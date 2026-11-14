@@ -10,8 +10,8 @@ export type UserStatus = "active" | "disabled";
 export type UserRole = "admin" | "user";
 
 export interface AdminUser {
-  id: number;
-  user_id: number;
+  id: string;
+  user_id: string;
   username: string;
   role: UserRole;
   status: UserStatus;
@@ -42,19 +42,19 @@ export interface UpdateUserInput {
 }
 
 export function updateUser(
-  id: number,
+  id: string,
   input: UpdateUserInput,
 ): Promise<AdminUser> {
   return apiPut<AdminUser>(`/api/admin/users/${id}`, input);
 }
 
 export function setUserStatus(
-  id: number,
+  id: string,
   status: UserStatus,
 ): Promise<AdminUser> {
   return apiPatchJson<AdminUser>(`/api/admin/users/${id}/status`, { status });
 }
 
-export function deleteUser(id: number): Promise<{ deleted: boolean }> {
+export function deleteUser(id: string): Promise<{ deleted: boolean }> {
   return apiDelete<{ deleted: boolean }>(`/api/admin/users/${id}`);
 }

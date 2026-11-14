@@ -262,7 +262,7 @@ func (_q *SyncChangeQuery) Clone() *SyncChangeQuery {
 // Example:
 //
 //	var v []struct {
-//		UserID int64 `json:"user_id,omitempty"`
+//		UserID ident.UUID `json:"user_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
@@ -285,7 +285,7 @@ func (_q *SyncChangeQuery) GroupBy(field string, fields ...string) *SyncChangeGr
 // Example:
 //
 //	var v []struct {
-//		UserID int64 `json:"user_id,omitempty"`
+//		UserID ident.UUID `json:"user_id,omitempty"`
 //	}
 //
 //	client.SyncChange.Query().

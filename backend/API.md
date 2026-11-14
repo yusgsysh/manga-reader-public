@@ -174,7 +174,7 @@ Failure `409 {"error":"already initialized"}` once any account exists; `400` for
 `GET /api/auth/me` (requires JWT)
 
 ```json
-{ "id": 1, "user_id": 1, "username": "admin", "role": "admin" }
+{ "id": "7a6c…", "user_id": "7a6c…", "username": "admin", "role": "admin" }
 ```
 
 ### 0.5 Logout

@@ -9,12 +9,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"manga-reader/internal/ident"
 
 	"manga-reader/internal/config"
 	"manga-reader/internal/ent"
@@ -43,7 +43,7 @@ const (
 // Principal is the authenticated identity attached by Middleware. User IDs
 // from request bodies or queries are never used in its place.
 type Principal struct {
-	ID           int
+	ID           ident.UUID
 	Username     string
 	Role         string
 	TokenVersion int
@@ -196,8 +196,8 @@ func (s *Service) authenticate(c *gin.Context) (Principal, error) {
 	if err != nil {
 		return Principal{}, err
 	}
-	id, err := strconv.Atoi(claims.Subject)
-	if err != nil || id <= 0 {
+	id, err := ident.Parse(claims.Subject)
+	if err != nil || id == ident.Nil() {
 		return Principal{}, ErrInvalidToken
 	}
 
@@ -207,7 +207,7 @@ func (s *Service) authenticate(c *gin.Context) (Principal, error) {
 	}
 	// Logout increments token_version, which invalidates every token that was
 	// issued before it (not just the copy in this browser).
-	if u.Status != config.StatusActive || int64(u.ID) != claims.UserID || u.Role != claims.Role {
+	if u.Status != config.StatusActive || u.ID != claims.UserID || u.Role != claims.Role {
 		return Principal{}, ErrInvalidToken
 	}
 	if u.TokenVersion != claims.TokenVersion {

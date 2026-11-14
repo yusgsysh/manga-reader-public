@@ -4,58 +4,59 @@ package nodeapikey
 
 import (
 	"manga-reader/internal/ent/predicate"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
 )
 
 // ID filters vertices based on their ID field.
-func ID(id int) predicate.NodeAPIKey {
+func ID(id ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldEQ(FieldID, id))
 }
 
 // IDEQ applies the EQ predicate on the ID field.
-func IDEQ(id int) predicate.NodeAPIKey {
+func IDEQ(id ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldEQ(FieldID, id))
 }
 
 // IDNEQ applies the NEQ predicate on the ID field.
-func IDNEQ(id int) predicate.NodeAPIKey {
+func IDNEQ(id ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldNEQ(FieldID, id))
 }
 
 // IDIn applies the In predicate on the ID field.
-func IDIn(ids ...int) predicate.NodeAPIKey {
+func IDIn(ids ...ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldIn(FieldID, ids...))
 }
 
 // IDNotIn applies the NotIn predicate on the ID field.
-func IDNotIn(ids ...int) predicate.NodeAPIKey {
+func IDNotIn(ids ...ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldNotIn(FieldID, ids...))
 }
 
 // IDGT applies the GT predicate on the ID field.
-func IDGT(id int) predicate.NodeAPIKey {
+func IDGT(id ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldGT(FieldID, id))
 }
 
 // IDGTE applies the GTE predicate on the ID field.
-func IDGTE(id int) predicate.NodeAPIKey {
+func IDGTE(id ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldGTE(FieldID, id))
 }
 
 // IDLT applies the LT predicate on the ID field.
-func IDLT(id int) predicate.NodeAPIKey {
+func IDLT(id ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldLT(FieldID, id))
 }
 
 // IDLTE applies the LTE predicate on the ID field.
-func IDLTE(id int) predicate.NodeAPIKey {
+func IDLTE(id ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldLTE(FieldID, id))
 }
 
 // NodeID applies equality check predicate on the "node_id" field. It's identical to NodeIDEQ.
-func NodeID(v int) predicate.NodeAPIKey {
+func NodeID(v ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldEQ(FieldNodeID, v))
 }
 
@@ -95,42 +96,42 @@ func RevokedAt(v time.Time) predicate.NodeAPIKey {
 }
 
 // NodeIDEQ applies the EQ predicate on the "node_id" field.
-func NodeIDEQ(v int) predicate.NodeAPIKey {
+func NodeIDEQ(v ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldEQ(FieldNodeID, v))
 }
 
 // NodeIDNEQ applies the NEQ predicate on the "node_id" field.
-func NodeIDNEQ(v int) predicate.NodeAPIKey {
+func NodeIDNEQ(v ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldNEQ(FieldNodeID, v))
 }
 
 // NodeIDIn applies the In predicate on the "node_id" field.
-func NodeIDIn(vs ...int) predicate.NodeAPIKey {
+func NodeIDIn(vs ...ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldIn(FieldNodeID, vs...))
 }
 
 // NodeIDNotIn applies the NotIn predicate on the "node_id" field.
-func NodeIDNotIn(vs ...int) predicate.NodeAPIKey {
+func NodeIDNotIn(vs ...ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldNotIn(FieldNodeID, vs...))
 }
 
 // NodeIDGT applies the GT predicate on the "node_id" field.
-func NodeIDGT(v int) predicate.NodeAPIKey {
+func NodeIDGT(v ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldGT(FieldNodeID, v))
 }
 
 // NodeIDGTE applies the GTE predicate on the "node_id" field.
-func NodeIDGTE(v int) predicate.NodeAPIKey {
+func NodeIDGTE(v ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldGTE(FieldNodeID, v))
 }
 
 // NodeIDLT applies the LT predicate on the "node_id" field.
-func NodeIDLT(v int) predicate.NodeAPIKey {
+func NodeIDLT(v ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldLT(FieldNodeID, v))
 }
 
 // NodeIDLTE applies the LTE predicate on the "node_id" field.
-func NodeIDLTE(v int) predicate.NodeAPIKey {
+func NodeIDLTE(v ident.UUID) predicate.NodeAPIKey {
 	return predicate.NodeAPIKey(sql.FieldLTE(FieldNodeID, v))
 }
 

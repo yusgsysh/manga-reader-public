@@ -1,12 +1,11 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"manga-reader/internal/ident"
 
 	"manga-reader/internal/auth"
 	"manga-reader/internal/config"
@@ -25,13 +24,13 @@ import (
 const timeLayout = "2006-01-02T15:04:05Z07:00"
 
 type userJSON struct {
-	ID        int    `json:"id"`
-	UserID    int    `json:"user_id"`
-	Username  string `json:"username"`
-	Role      string `json:"role"`
-	Status    string `json:"status"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ID        ident.UUID `json:"id"`
+	UserID    ident.UUID `json:"user_id"`
+	Username  string     `json:"username"`
+	Role      string     `json:"role"`
+	Status    string     `json:"status"`
+	CreatedAt string     `json:"created_at"`
+	UpdatedAt string     `json:"updated_at"`
 }
 
 func userResponse(u *ent.User) userJSON {
@@ -310,7 +309,7 @@ func (s *Server) handleAdminUserDelete(c *gin.Context) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	userID := int64(uid)
+	userID := uid
 	if _, err := tx.Bookshelf.Delete().Where(bookshelf.UserIDEQ(userID)).Exec(ctx); err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
 		return
@@ -335,7 +334,7 @@ func (s *Server) handleAdminUserDelete(c *gin.Context) {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
 		return
 	}
-	if _, err := tx.UserSetting.Delete().Where(usersetting.UserIDEQ(uid)).Exec(ctx); err != nil {
+	if _, err := tx.UserSetting.Delete().Where(usersetting.IDEQ(uid)).Exec(ctx); err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user settings failed"})
 		return
 	}
@@ -352,7 +351,7 @@ func (s *Server) handleAdminUserDelete(c *gin.Context) {
 	web.JSON(c, http.StatusOK, gin.H{"deleted": true})
 }
 
-func (s *Server) otherAdminExists(c *gin.Context, exceptID int) bool {
+func (s *Server) otherAdminExists(c *gin.Context, exceptID ident.UUID) bool {
 	count, err := s.DB.Client.User.Query().
 		Where(
 			user.RoleEQ(config.RoleAdmin),
@@ -363,11 +362,11 @@ func (s *Server) otherAdminExists(c *gin.Context, exceptID int) bool {
 	return err == nil && count > 0
 }
 
-func adminID(c *gin.Context) (int, bool) {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil || id <= 0 {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid id %q", c.Param("id"))})
-		return 0, false
+func adminID(c *gin.Context) (ident.UUID, bool) {
+	id, err := ident.Parse(c.Param("id"))
+	if err != nil || id == ident.Nil() {
+		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return ident.Nil(), false
 	}
 	return id, true
 }

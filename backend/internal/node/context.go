@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
+	"manga-reader/internal/ident"
 )
 
 const (
@@ -17,10 +18,10 @@ type nodeContextKey string
 // in it comes from request parameters; NodeID/Scopes are resolved from the API
 // key row and its node.
 type Identity struct {
-	NodeID int
+	NodeID ident.UUID
 	Name   string
 	Scopes []string
-	KeyID  int
+	KeyID  ident.UUID
 }
 
 // WithGin attaches the identity to the request.

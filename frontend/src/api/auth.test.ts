@@ -53,8 +53,8 @@ describe("auth session", () => {
       }
       if (url.endsWith("/api/auth/me")) {
         return json({
-          id: 1,
-          user_id: 1,
+          id: "00000000-0000-0000-0000-000000000001",
+          user_id: "00000000-0000-0000-0000-000000000001",
           username: "admin",
           role: "admin",
         });
@@ -65,8 +65,8 @@ describe("auth session", () => {
     await expect(fetchAuthSession()).resolves.toEqual({
       initialized: true,
       user: {
-        id: 1,
-        user_id: 1,
+        id: "00000000-0000-0000-0000-000000000001",
+        user_id: "00000000-0000-0000-0000-000000000001",
         username: "admin",
         role: "admin",
       },
@@ -100,8 +100,8 @@ describe("authenticated requests", () => {
       }
       if (url.endsWith("/api/auth/me")) {
         return json({
-          id: 1,
-          user_id: 1,
+          id: "00000000-0000-0000-0000-000000000001",
+          user_id: "00000000-0000-0000-0000-000000000001",
           username: "admin",
           role: "admin",
         });
@@ -111,8 +111,8 @@ describe("authenticated requests", () => {
 
     await expect(login("admin", "password123")).resolves.toEqual({
       user: {
-        id: 1,
-        user_id: 1,
+        id: "00000000-0000-0000-0000-000000000001",
+        user_id: "00000000-0000-0000-0000-000000000001",
         username: "admin",
         role: "admin",
       },
@@ -140,8 +140,8 @@ describe("authenticated requests", () => {
       }
       if (url.endsWith("/api/auth/me")) {
         return json({
-          id: 1,
-          user_id: 1,
+          id: "00000000-0000-0000-0000-000000000001",
+          user_id: "00000000-0000-0000-0000-000000000001",
           username: "admin",
           role: "admin",
         });
@@ -151,8 +151,8 @@ describe("authenticated requests", () => {
 
     await expect(register("admin", "password123")).resolves.toEqual({
       user: {
-        id: 1,
-        user_id: 1,
+        id: "00000000-0000-0000-0000-000000000001",
+        user_id: "00000000-0000-0000-0000-000000000001",
         username: "admin",
         role: "admin",
       },
@@ -184,8 +184,8 @@ describe("authenticated requests", () => {
       }
       if (url.endsWith("/api/auth/me")) {
         return json({
-          id: 1,
-          user_id: 1,
+          id: "00000000-0000-0000-0000-000000000001",
+          user_id: "00000000-0000-0000-0000-000000000001",
           username: "admin",
           role: "admin",
         });

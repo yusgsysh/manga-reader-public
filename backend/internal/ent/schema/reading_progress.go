@@ -3,6 +3,8 @@ package schema
 import (
 	"time"
 
+	"manga-reader/internal/ident"
+
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
@@ -23,9 +25,19 @@ func (ReadingProgress) Annotations() []schema.Annotation {
 }
 
 // Fields of the ReadingProgress.
+//
+// The primary key is a UUID (not an auto-increment counter) so rows survive
+// cross-instance migration without id collisions. The (user_id, gallery_id,
+// token) triple is a UNIQUE index rather than the primary key because ent
+// 0.14.6 can only update composite keys of exactly two columns.
 func (ReadingProgress) Fields() []ent.Field {
 	return []ent.Field{
-		field.Int64("user_id").Default(0),
+		field.UUID("id", ident.UUID{}).
+			Default(uuidV7).
+			SchemaType(uuidSchemaType),
+		field.UUID("user_id", ident.UUID{}).
+			Default(uuidNil).
+			SchemaType(uuidSchemaType),
 		field.Int64("gallery_id"),
 		field.String("token"),
 		field.Int("current_page").Default(0).NonNegative(),

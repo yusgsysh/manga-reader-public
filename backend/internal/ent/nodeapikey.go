@@ -6,6 +6,7 @@ import (
 	json "encoding/json/v2"
 	"fmt"
 	"manga-reader/internal/ent/nodeapikey"
+	"manga-reader/internal/ident"
 	"strings"
 	"time"
 
@@ -17,9 +18,9 @@ import (
 type NodeAPIKey struct {
 	config `json:"-"`
 	// ID of the ent.
-	ID int `json:"id,omitempty"`
+	ID ident.UUID `json:"id,omitempty"`
 	// NodeID holds the value of the "node_id" field.
-	NodeID int `json:"node_id,omitempty"`
+	NodeID ident.UUID `json:"node_id,omitempty"`
 	// KeyHash holds the value of the "key_hash" field.
 	KeyHash string `json:"-"`
 	// KeyPrefix holds the value of the "key_prefix" field.
@@ -47,7 +48,7 @@ func (*NodeAPIKey) scanValues(columns []string) ([]any, error) {
 		case nodeapikey.FieldScopes:
 			values[i] = new([]byte)
 		case nodeapikey.FieldID, nodeapikey.FieldNodeID:
-			values[i] = new(sql.NullInt64)
+			values[i] = new(ident.UUID)
 		case nodeapikey.FieldKeyHash, nodeapikey.FieldKeyPrefix, nodeapikey.FieldStatus:
 			values[i] = new(sql.NullString)
 		case nodeapikey.FieldExpiresAt, nodeapikey.FieldLastUsedAt, nodeapikey.FieldCreatedAt, nodeapikey.FieldRevokedAt:
@@ -68,16 +69,16 @@ func (_m *NodeAPIKey) assignValues(columns []string, values []any) error {
 	for i := range columns {
 		switch columns[i] {
 		case nodeapikey.FieldID:
-			value, ok := values[i].(*sql.NullInt64)
-			if !ok {
-				return fmt.Errorf("unexpected type %T for field id", value)
+			if value, ok := values[i].(*ident.UUID); !ok {
+				return fmt.Errorf("unexpected type %T for field id", values[i])
+			} else if value != nil {
+				_m.ID = *value
 			}
-			_m.ID = int(value.Int64)
 		case nodeapikey.FieldNodeID:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
+			if value, ok := values[i].(*ident.UUID); !ok {
 				return fmt.Errorf("unexpected type %T for field node_id", values[i])
-			} else if value.Valid {
-				_m.NodeID = int(value.Int64)
+			} else if value != nil {
+				_m.NodeID = *value
 			}
 		case nodeapikey.FieldKeyHash:
 			if value, ok := values[i].(*sql.NullString); !ok {

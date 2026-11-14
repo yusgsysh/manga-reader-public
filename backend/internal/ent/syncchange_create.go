@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"manga-reader/internal/ent/syncchange"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -21,13 +22,13 @@ type SyncChangeCreate struct {
 }
 
 // SetUserID sets the "user_id" field.
-func (_c *SyncChangeCreate) SetUserID(v int64) *SyncChangeCreate {
+func (_c *SyncChangeCreate) SetUserID(v ident.UUID) *SyncChangeCreate {
 	_c.mutation.SetUserID(v)
 	return _c
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_c *SyncChangeCreate) SetNillableUserID(v *int64) *SyncChangeCreate {
+func (_c *SyncChangeCreate) SetNillableUserID(v *ident.UUID) *SyncChangeCreate {
 	if v != nil {
 		_c.SetUserID(*v)
 	}
@@ -116,7 +117,7 @@ func (_c *SyncChangeCreate) ExecX(ctx context.Context) {
 // defaults sets the default values of the builder before save.
 func (_c *SyncChangeCreate) defaults() {
 	if _, ok := _c.mutation.UserID(); !ok {
-		v := syncchange.DefaultUserID
+		v := syncchange.DefaultUserID()
 		_c.mutation.SetUserID(v)
 	}
 	if _, ok := _c.mutation.GetOp(); !ok {
@@ -176,7 +177,7 @@ func (_c *SyncChangeCreate) createSpec() (*SyncChange, *sqlgraph.CreateSpec) {
 		_spec = sqlgraph.NewCreateSpec(syncchange.Table, sqlgraph.NewFieldSpec(syncchange.FieldID, field.TypeInt))
 	)
 	if value, ok := _c.mutation.UserID(); ok {
-		_spec.SetField(syncchange.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(syncchange.FieldUserID, field.TypeUUID, value)
 		_node.UserID = value
 	}
 	if value, ok := _c.mutation.Entity(); ok {

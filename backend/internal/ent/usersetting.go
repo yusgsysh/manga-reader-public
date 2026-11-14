@@ -6,6 +6,7 @@ import (
 	json "encoding/json/v2"
 	"fmt"
 	"manga-reader/internal/ent/usersetting"
+	"manga-reader/internal/ident"
 	"strings"
 	"time"
 
@@ -17,9 +18,7 @@ import (
 type UserSetting struct {
 	config `json:"-"`
 	// ID of the ent.
-	ID int `json:"id,omitempty"`
-	// UserID holds the value of the "user_id" field.
-	UserID int `json:"user_id,omitempty"`
+	ID ident.UUID `json:"id,omitempty"`
 	// CookieCiphertext holds the value of the "cookie_ciphertext" field.
 	CookieCiphertext string `json:"-"`
 	// CookieStatus holds the value of the "cookie_status" field.
@@ -44,8 +43,8 @@ func (*UserSetting) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case usersetting.FieldPreferences:
 			values[i] = new([]byte)
-		case usersetting.FieldID, usersetting.FieldUserID:
-			values[i] = new(sql.NullInt64)
+		case usersetting.FieldID:
+			values[i] = new(ident.UUID)
 		case usersetting.FieldCookieCiphertext, usersetting.FieldCookieStatus, usersetting.FieldSite:
 			values[i] = new(sql.NullString)
 		case usersetting.FieldCookieVerifiedAt, usersetting.FieldCreatedAt, usersetting.FieldUpdatedAt:
@@ -66,16 +65,10 @@ func (_m *UserSetting) assignValues(columns []string, values []any) error {
 	for i := range columns {
 		switch columns[i] {
 		case usersetting.FieldID:
-			value, ok := values[i].(*sql.NullInt64)
-			if !ok {
-				return fmt.Errorf("unexpected type %T for field id", value)
-			}
-			_m.ID = int(value.Int64)
-		case usersetting.FieldUserID:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field user_id", values[i])
-			} else if value.Valid {
-				_m.UserID = int(value.Int64)
+			if value, ok := values[i].(*ident.UUID); !ok {
+				return fmt.Errorf("unexpected type %T for field id", values[i])
+			} else if value != nil {
+				_m.ID = *value
 			}
 		case usersetting.FieldCookieCiphertext:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -158,9 +151,6 @@ func (_m *UserSetting) String() string {
 	var builder strings.Builder
 	builder.WriteString("UserSetting(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
-	builder.WriteString("user_id=")
-	builder.WriteString(fmt.Sprintf("%v", _m.UserID))
-	builder.WriteString(", ")
 	builder.WriteString("cookie_ciphertext=<sensitive>")
 	builder.WriteString(", ")
 	builder.WriteString("cookie_status=")

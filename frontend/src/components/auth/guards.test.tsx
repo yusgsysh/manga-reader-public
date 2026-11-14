@@ -87,7 +87,7 @@ describe("RequireAuth", () => {
     renderGuard(
       authValue({
         isAuthenticated: true,
-        user: { id: 1, user_id: 1, username: "alice", role: "user" },
+        user: { id: "00000000-0000-0000-0000-000000000001", user_id: "00000000-0000-0000-0000-000000000001", username: "alice", role: "user" },
       }),
       "/private",
     );
@@ -213,7 +213,7 @@ describe("LoginPage", () => {
     renderLogin(
       authValue({
         isAuthenticated: true,
-        user: { id: 1, user_id: 1, username: "alice", role: "user" },
+        user: { id: "00000000-0000-0000-0000-000000000001", user_id: "00000000-0000-0000-0000-000000000001", username: "alice", role: "user" },
       }),
     );
     expect(screen.getByText("home-marker")).toBeTruthy();

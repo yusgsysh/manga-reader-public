@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"manga-reader/internal/ident"
 
 	"manga-reader/internal/auth"
 	"manga-reader/internal/config"
@@ -113,28 +114,28 @@ func (f *muFixture) login(t *testing.T, username string) string {
 func TestMultiUserBusinessDataIsolation(t *testing.T) {
 	f := newMUFixture(t)
 	ctx := t.Context()
-	for _, u := range []int64{int64(f.userA.ID), int64(f.userB.ID)} {
+	for _, u := range []ident.UUID{f.userA.ID, f.userB.ID} {
 		if _, err := f.db.Bookshelf.Create().SetUserID(u).SetGalleryID(111).SetToken("same").Save(ctx); err != nil {
 			t.Fatalf("seed bookshelf user %d: %v", u, err)
 		}
 	}
-	if _, err := f.db.Bookshelf.Create().SetUserID(int64(f.userA.ID)).SetGalleryID(222).SetToken("a-only").Save(ctx); err != nil {
+	if _, err := f.db.Bookshelf.Create().SetUserID(f.userA.ID).SetGalleryID(222).SetToken("a-only").Save(ctx); err != nil {
 		t.Fatalf("seed A-only bookshelf: %v", err)
 	}
 	if _, err := f.db.ReadingProgress.Create().
-		SetUserID(int64(f.userA.ID)).SetGalleryID(111).SetToken("same").
+		SetUserID(f.userA.ID).SetGalleryID(111).SetToken("same").
 		SetCurrentPage(5).SetProgress(0.5).Save(ctx); err != nil {
 		t.Fatalf("seed progress: %v", err)
 	}
 	job, err := f.db.PrefillJob.Create().
-		SetUserID(int64(f.userA.ID)).SetGalleryID(111).SetToken("same").
+		SetUserID(f.userA.ID).SetGalleryID(111).SetToken("same").
 		SetTitle("A job").SetUrls([]string{"https://exhentai.org/s/a/111-1"}).
 		SetStatus("completed").SetTotal(1).Save(ctx)
 	if err != nil {
 		t.Fatalf("seed prefill: %v", err)
 	}
 	if _, err := f.db.TagPreference.Create().
-		SetUserID(int64(f.userA.ID)).SetID("female:yuri").
+		SetUserID(f.userA.ID).SetID("female:yuri").
 		SetAction("like").SetWeight(10).Save(ctx); err != nil {
 		t.Fatalf("seed tag: %v", err)
 	}
@@ -236,18 +237,18 @@ func TestMultiUserCookieAndSettingsIsolation(t *testing.T) {
 	}
 
 	// Stored rows are encrypted, not the plaintext cookie.
-	rowA, err := f.db.UserSetting.Query().Where(usersetting.UserIDEQ(f.userA.ID)).Only(t.Context())
+	rowA, err := f.db.UserSetting.Query().Where(usersetting.IDEQ(f.userA.ID)).Only(t.Context())
 	if err != nil {
 		t.Fatalf("read A settings: %v", err)
 	}
 	if rowA.CookieCiphertext == "" || strings.Contains(rowA.CookieCiphertext, "ipb_pass_hash") {
 		t.Fatalf("cookie not encrypted at rest: %q", rowA.CookieCiphertext)
 	}
-	clientA, err := f.cookie.Client(t.Context(), int64(f.userA.ID))
+	clientA, err := f.cookie.Client(t.Context(), f.userA.ID)
 	if err != nil {
 		t.Fatalf("A client: %v", err)
 	}
-	clientB, err := f.cookie.Client(t.Context(), int64(f.userB.ID))
+	clientB, err := f.cookie.Client(t.Context(), f.userB.ID)
 	if err != nil {
 		t.Fatalf("B client: %v", err)
 	}
@@ -296,8 +297,8 @@ func TestMultiUserAdminIsolation(t *testing.T) {
 	}
 	var body struct {
 		Users []struct {
-			ID       int    `json:"id"`
-			Username string `json:"username"`
+			ID       ident.UUID `json:"id"`
+			Username string     `json:"username"`
 		} `json:"users"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {

@@ -5,6 +5,7 @@ package ent
 import (
 	"fmt"
 	"manga-reader/internal/ent/node"
+	"manga-reader/internal/ident"
 	"strings"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 type Node struct {
 	config `json:"-"`
 	// ID of the ent.
-	ID int `json:"id,omitempty"`
+	ID ident.UUID `json:"id,omitempty"`
 	// Name holds the value of the "name" field.
 	Name string `json:"name,omitempty"`
 	// Status holds the value of the "status" field.
@@ -36,7 +37,7 @@ func (*Node) scanValues(columns []string) ([]any, error) {
 	for i := range columns {
 		switch columns[i] {
 		case node.FieldID:
-			values[i] = new(sql.NullInt64)
+			values[i] = new(ident.UUID)
 		case node.FieldName, node.FieldStatus:
 			values[i] = new(sql.NullString)
 		case node.FieldLastSeenAt, node.FieldCreatedAt, node.FieldUpdatedAt:
@@ -57,11 +58,11 @@ func (_m *Node) assignValues(columns []string, values []any) error {
 	for i := range columns {
 		switch columns[i] {
 		case node.FieldID:
-			value, ok := values[i].(*sql.NullInt64)
-			if !ok {
-				return fmt.Errorf("unexpected type %T for field id", value)
+			if value, ok := values[i].(*ident.UUID); !ok {
+				return fmt.Errorf("unexpected type %T for field id", values[i])
+			} else if value != nil {
+				_m.ID = *value
 			}
-			_m.ID = int(value.Int64)
 		case node.FieldName:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field name", values[i])

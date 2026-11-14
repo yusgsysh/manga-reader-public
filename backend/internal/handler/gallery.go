@@ -18,6 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sync/singleflight"
+	"manga-reader/internal/ident"
 
 	"manga-reader/internal/ent"
 	"manga-reader/internal/exhentai"
@@ -412,7 +413,7 @@ func (h *pagesHub) release(key string, s *galleryPagesStream) {
 // returns the number of pages streamed and the terminal error.
 func (s *Server) scrapeGalleryPages(
 	ctx context.Context,
-	userID, galleryID int64,
+	userID ident.UUID, galleryID int64,
 	token string,
 	emit func(total int, pageURLs []string, thumbnails []model.GalleryPageThumb) error,
 ) (int, error) {
@@ -420,7 +421,7 @@ func (s *Server) scrapeGalleryPages(
 	if err != nil {
 		return 0, err
 	}
-	key := fmt.Sprintf("%d/%d:%s", userID, galleryID, token)
+	key := fmt.Sprintf("%s/%d:%s", userID, galleryID, token)
 	stream, leader := galleryPagesHub.acquire(key)
 	if leader {
 		s.runGalleryPagesScrape(ctx, key, stream, userID, galleryID, token, client)
@@ -436,7 +437,7 @@ func (s *Server) runGalleryPagesScrape(
 	ctx context.Context,
 	key string,
 	stream *galleryPagesStream,
-	userID, galleryID int64,
+	userID ident.UUID, galleryID int64,
 	token string,
 	client *http.Client,
 ) {
@@ -477,7 +478,7 @@ func (s *Server) runGalleryPagesScrape(
 // so a failed or partial walk never touches the cache.
 func (s *Server) scrapeAndCache(
 	ctx context.Context,
-	userID, galleryID int64,
+	userID ident.UUID, galleryID int64,
 	token string,
 	emit func(total int, pageURLs []string, thumbnails []model.GalleryPageThumb) error,
 ) (int, error) {
@@ -514,14 +515,14 @@ func (s *Server) scrapeAndCache(
 // background. Concurrent triggers for the same gallery collapse into one walk
 // and one write via galleryPagesFillGroup. It is used by the page-count check,
 // image-failure recovery and thumbnail-resolve cache fill.
-func (s *Server) refreshPages(ctx context.Context, userID, galleryID int64, token string) {
+func (s *Server) refreshPages(ctx context.Context, userID ident.UUID, galleryID int64, token string) {
 	if s.cacheDB() == nil {
 		return
 	}
 	if _, err := s.upstreamClient(ctx, userID); err != nil {
 		return
 	}
-	key := fmt.Sprintf("%d/%d:%s", userID, galleryID, token)
+	key := fmt.Sprintf("%s/%d:%s", userID, galleryID, token)
 	galleryPagesFillGroup.Do(key, func() (any, error) {
 		// The refresh runs on the full background budget regardless of the
 		// caller's lifetime; inherit values only, never cancellation.
@@ -539,14 +540,14 @@ func (s *Server) refreshPages(ctx context.Context, userID, galleryID int64, toke
 // cache write has completed. The caller's context bounds the walk (capped by
 // galleryPagesHardCap), so a request-path recovery can time-box it instead of
 // waiting on the full background budget.
-func (s *Server) refreshPagesSync(ctx context.Context, userID, galleryID int64, token string) error {
+func (s *Server) refreshPagesSync(ctx context.Context, userID ident.UUID, galleryID int64, token string) error {
 	if s.cacheDB() == nil {
 		return nil
 	}
 	if _, err := s.upstreamClient(ctx, userID); err != nil {
 		return err
 	}
-	key := fmt.Sprintf("%d/%d:%s", userID, galleryID, token)
+	key := fmt.Sprintf("%s/%d:%s", userID, galleryID, token)
 	// DoChan instead of Do: group.Do blocks duplicate callers with a bare
 	// wg.Wait() that ignores their context, so a request could hang for the
 	// leader's full budget after its client is gone. DoChan lets us honour
@@ -966,7 +967,7 @@ func (s *Server) handleCachedGalleryPages(c *gin.Context) {
 // fetches only the gallery's ".gpc" total and, when it no longer matches the
 // cached page count, runs a full cache-fill walk. Concurrent probes for the
 // same gallery collapse via galleryPagesFillGroup.
-func (s *Server) verifyCachedPageCount(userID, galleryID int64, token string, cached int) {
+func (s *Server) verifyCachedPageCount(userID ident.UUID, galleryID int64, token string, cached int) {
 	if s.cacheDB() == nil {
 		return
 	}
@@ -974,7 +975,7 @@ func (s *Server) verifyCachedPageCount(userID, galleryID int64, token string, ca
 	if err != nil {
 		return
 	}
-	key := fmt.Sprintf("%d/%d:%s", userID, galleryID, token)
+	key := fmt.Sprintf("%s/%d:%s", userID, galleryID, token)
 	galleryPagesFillGroup.Do(key, func() (any, error) {
 		// The probe and the refresh walk get separate budgets: the walk can
 		// take up to galleryPagesHardCap and must not consume the probe's

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"manga-reader/internal/ent/predicate"
 	"manga-reader/internal/ent/usersetting"
+	"manga-reader/internal/ident"
 	"math"
 
 	"entgo.io/ent"
@@ -82,8 +83,8 @@ func (_q *UserSettingQuery) FirstX(ctx context.Context) *UserSetting {
 
 // FirstID returns the first UserSetting ID from the query.
 // Returns a *NotFoundError when no UserSetting ID was found.
-func (_q *UserSettingQuery) FirstID(ctx context.Context) (id int, err error) {
-	var ids []int
+func (_q *UserSettingQuery) FirstID(ctx context.Context) (id ident.UUID, err error) {
+	var ids []ident.UUID
 	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
@@ -95,7 +96,7 @@ func (_q *UserSettingQuery) FirstID(ctx context.Context) (id int, err error) {
 }
 
 // FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *UserSettingQuery) FirstIDX(ctx context.Context) int {
+func (_q *UserSettingQuery) FirstIDX(ctx context.Context) ident.UUID {
 	id, err := _q.FirstID(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -133,8 +134,8 @@ func (_q *UserSettingQuery) OnlyX(ctx context.Context) *UserSetting {
 // OnlyID is like Only, but returns the only UserSetting ID in the query.
 // Returns a *NotSingularError when more than one UserSetting ID is found.
 // Returns a *NotFoundError when no entities are found.
-func (_q *UserSettingQuery) OnlyID(ctx context.Context) (id int, err error) {
-	var ids []int
+func (_q *UserSettingQuery) OnlyID(ctx context.Context) (id ident.UUID, err error) {
+	var ids []ident.UUID
 	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
@@ -150,7 +151,7 @@ func (_q *UserSettingQuery) OnlyID(ctx context.Context) (id int, err error) {
 }
 
 // OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *UserSettingQuery) OnlyIDX(ctx context.Context) int {
+func (_q *UserSettingQuery) OnlyIDX(ctx context.Context) ident.UUID {
 	id, err := _q.OnlyID(ctx)
 	if err != nil {
 		panic(err)
@@ -178,7 +179,7 @@ func (_q *UserSettingQuery) AllX(ctx context.Context) []*UserSetting {
 }
 
 // IDs executes the query and returns a list of UserSetting IDs.
-func (_q *UserSettingQuery) IDs(ctx context.Context) (ids []int, err error) {
+func (_q *UserSettingQuery) IDs(ctx context.Context) (ids []ident.UUID, err error) {
 	if _q.ctx.Unique == nil && _q.path != nil {
 		_q.Unique(true)
 	}
@@ -190,7 +191,7 @@ func (_q *UserSettingQuery) IDs(ctx context.Context) (ids []int, err error) {
 }
 
 // IDsX is like IDs, but panics if an error occurs.
-func (_q *UserSettingQuery) IDsX(ctx context.Context) []int {
+func (_q *UserSettingQuery) IDsX(ctx context.Context) []ident.UUID {
 	ids, err := _q.IDs(ctx)
 	if err != nil {
 		panic(err)
@@ -262,12 +263,12 @@ func (_q *UserSettingQuery) Clone() *UserSettingQuery {
 // Example:
 //
 //	var v []struct {
-//		UserID int `json:"user_id,omitempty"`
+//		CookieCiphertext string `json:"cookie_ciphertext,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.UserSetting.Query().
-//		GroupBy(usersetting.FieldUserID).
+//		GroupBy(usersetting.FieldCookieCiphertext).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *UserSettingQuery) GroupBy(field string, fields ...string) *UserSettingGroupBy {
@@ -285,11 +286,11 @@ func (_q *UserSettingQuery) GroupBy(field string, fields ...string) *UserSetting
 // Example:
 //
 //	var v []struct {
-//		UserID int `json:"user_id,omitempty"`
+//		CookieCiphertext string `json:"cookie_ciphertext,omitempty"`
 //	}
 //
 //	client.UserSetting.Query().
-//		Select(usersetting.FieldUserID).
+//		Select(usersetting.FieldCookieCiphertext).
 //		Scan(ctx, &v)
 func (_q *UserSettingQuery) Select(fields ...string) *UserSettingSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
@@ -365,7 +366,7 @@ func (_q *UserSettingQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (_q *UserSettingQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(usersetting.Table, usersetting.Columns, sqlgraph.NewFieldSpec(usersetting.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewQuerySpec(usersetting.Table, usersetting.Columns, sqlgraph.NewFieldSpec(usersetting.FieldID, field.TypeUUID))
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique

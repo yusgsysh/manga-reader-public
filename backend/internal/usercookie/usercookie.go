@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"manga-reader/internal/ident"
+
 	"manga-reader/internal/config"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/usersetting"
@@ -64,7 +66,7 @@ type Service struct {
 	key []byte
 
 	mu      sync.Mutex
-	clients map[int64]cachedClient
+	clients map[ident.UUID]cachedClient
 }
 
 type cachedClient struct {
@@ -81,13 +83,13 @@ func New(db *ent.Client, jwtSecret string) *Service {
 	return &Service{
 		db:      db,
 		key:     sum[:],
-		clients: make(map[int64]cachedClient),
+		clients: make(map[ident.UUID]cachedClient),
 	}
 }
 
 // Client returns the user's dedicated ExHentai HTTP client. Credentials are
 // loaded from the encrypted row and never shared with another user.
-func (s *Service) Client(ctx context.Context, userID int64) (*http.Client, error) {
+func (s *Service) Client(ctx context.Context, userID ident.UUID) (*http.Client, error) {
 	row, err := s.setting(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -128,7 +130,7 @@ func (s *Service) Client(ctx context.Context, userID int64) (*http.Client, error
 }
 
 // Invalidate drops a cached client, e.g. after the cookie was changed.
-func (s *Service) Invalidate(userID int64) {
+func (s *Service) Invalidate(userID ident.UUID) {
 	s.mu.Lock()
 	delete(s.clients, userID)
 	s.mu.Unlock()
@@ -136,7 +138,7 @@ func (s *Service) Invalidate(userID int64) {
 
 // Site returns the user's preferred upstream site ("exhentai" or "e-hentai").
 // Users without a stored preference default to exhentai.
-func (s *Service) Site(ctx context.Context, userID int64) (string, error) {
+func (s *Service) Site(ctx context.Context, userID ident.UUID) (string, error) {
 	row, err := s.setting(ctx, userID)
 	if err != nil {
 		return "", err
@@ -148,7 +150,7 @@ func (s *Service) Site(ctx context.Context, userID int64) (string, error) {
 }
 
 // Summary reads the non-secret cookie state.
-func (s *Service) Summary(ctx context.Context, userID int64) (Summary, error) {
+func (s *Service) Summary(ctx context.Context, userID ident.UUID) (Summary, error) {
 	row, err := s.setting(ctx, userID)
 	if err != nil {
 		return Summary{}, err
@@ -175,7 +177,7 @@ func (s *Service) Summary(ctx context.Context, userID int64) (Summary, error) {
 
 // SaveCookie validates, encrypts and stores the cookie for one user. Only the
 // given user's row changes; other users keep their sessions.
-func (s *Service) SaveCookie(ctx context.Context, userID int64, cookie config.CookieConfig, site string) (Summary, error) {
+func (s *Service) SaveCookie(ctx context.Context, userID ident.UUID, cookie config.CookieConfig, site string) (Summary, error) {
 	if !cookie.IsValid() {
 		return Summary{}, errors.New("ipb_member_id and ipb_pass_hash are required")
 	}
@@ -194,7 +196,7 @@ func (s *Service) SaveCookie(ctx context.Context, userID int64, cookie config.Co
 	now := time.Now().UTC()
 	if row == nil {
 		_, err = s.db.UserSetting.Create().
-			SetUserID(int(userID)).
+			SetID(userID).
 			SetCookieCiphertext(sealed).
 			SetCookieStatus(StatusUnverified).
 			SetSite(site).
@@ -217,9 +219,9 @@ func (s *Service) SaveCookie(ctx context.Context, userID int64, cookie config.Co
 }
 
 // ClearCookie removes the user's credentials and cached client.
-func (s *Service) ClearCookie(ctx context.Context, userID int64) error {
+func (s *Service) ClearCookie(ctx context.Context, userID ident.UUID) error {
 	if err := s.db.UserSetting.Update().
-		Where(usersetting.UserIDEQ(int(userID))).
+		Where(usersetting.IDEQ(userID)).
 		SetCookieCiphertext("").
 		SetCookieStatus(StatusUnset).
 		ClearCookieVerifiedAt().
@@ -231,9 +233,9 @@ func (s *Service) ClearCookie(ctx context.Context, userID int64) error {
 }
 
 // SetStatus records the outcome of a verification attempt.
-func (s *Service) SetStatus(ctx context.Context, userID int64, status string) error {
+func (s *Service) SetStatus(ctx context.Context, userID ident.UUID, status string) error {
 	if err := s.db.UserSetting.Update().
-		Where(usersetting.UserIDEQ(int(userID))).
+		Where(usersetting.IDEQ(userID)).
 		SetCookieStatus(status).
 		SetCookieVerifiedAt(time.Now().UTC()).
 		Exec(ctx); err != nil {
@@ -243,7 +245,7 @@ func (s *Service) SetStatus(ctx context.Context, userID int64, status string) er
 }
 
 // Preferences returns the stored personal preference document.
-func (s *Service) Preferences(ctx context.Context, userID int64) (map[string]any, error) {
+func (s *Service) Preferences(ctx context.Context, userID ident.UUID) (map[string]any, error) {
 	row, err := s.setting(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -255,7 +257,7 @@ func (s *Service) Preferences(ctx context.Context, userID int64) (map[string]any
 }
 
 // SavePreferences replaces the preference document for one user.
-func (s *Service) SavePreferences(ctx context.Context, userID int64, prefs map[string]any) error {
+func (s *Service) SavePreferences(ctx context.Context, userID ident.UUID, prefs map[string]any) error {
 	row, err := s.setting(ctx, userID)
 	if err != nil {
 		return err
@@ -265,7 +267,7 @@ func (s *Service) SavePreferences(ctx context.Context, userID int64, prefs map[s
 	}
 	if row == nil {
 		_, err = s.db.UserSetting.Create().
-			SetUserID(int(userID)).
+			SetID(userID).
 			SetPreferences(prefs).
 			Save(ctx)
 		return err
@@ -286,9 +288,9 @@ func NormalizeSite(site string) (string, error) {
 	}
 }
 
-func (s *Service) setting(ctx context.Context, userID int64) (*ent.UserSetting, error) {
+func (s *Service) setting(ctx context.Context, userID ident.UUID) (*ent.UserSetting, error) {
 	row, err := s.db.UserSetting.Query().
-		Where(usersetting.UserIDEQ(int(userID))).
+		Where(usersetting.IDEQ(userID)).
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -341,7 +343,7 @@ func (s *Service) open(encoded string) (string, error) {
 }
 
 // SaveSite updates the preferred upstream site without changing credentials.
-func (s *Service) SaveSite(ctx context.Context, userID int64, site string) (string, error) {
+func (s *Service) SaveSite(ctx context.Context, userID ident.UUID, site string) (string, error) {
 	normalized, err := NormalizeSite(site)
 	if err != nil {
 		return "", err
@@ -352,7 +354,7 @@ func (s *Service) SaveSite(ctx context.Context, userID int64, site string) (stri
 	}
 	if row == nil {
 		if _, err := s.db.UserSetting.Create().
-			SetUserID(int(userID)).
+			SetID(userID).
 			SetSite(normalized).
 			Save(ctx); err != nil {
 			return "", err

@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sync/singleflight"
+	"manga-reader/internal/ident"
 
 	"manga-reader/internal/cache"
 	"manga-reader/internal/exhentai"
@@ -147,7 +148,7 @@ func queryDimension(c *gin.Context, key string) (int, error) {
 
 // resolveLiveRect resolves a request to a sprite + rectangle, scraping upstream
 // for the gallery-index form. Live resolution never reads local caches.
-func (s *Server) resolveLiveRect(ctx context.Context, client *http.Client, userID int64, req pageThumbRequest) (string, image.Rectangle, bool, error) {
+func (s *Server) resolveLiveRect(ctx context.Context, client *http.Client, userID ident.UUID, req pageThumbRequest) (string, image.Rectangle, bool, error) {
 	if !req.byIndex {
 		return req.spriteURL, req.rect, true, nil
 	}
@@ -294,8 +295,8 @@ func (s *Server) writeCachedThumbError(c *gin.Context, req pageThumbRequest, err
 // coalescing the whole flow per page. Coalescing the resolution too (not just
 // the sprite fetch) is what keeps a burst of expired-sprite requests down to a
 // single gallery refresh.
-func (s *Server) loadCachedIndexThumbnail(ctx context.Context, userID int64, client *http.Client, req pageThumbRequest) ([]byte, error) {
-	key := fmt.Sprintf("%d/%d:%s:%d", userID, req.galleryID, req.token, req.index)
+func (s *Server) loadCachedIndexThumbnail(ctx context.Context, userID ident.UUID, client *http.Client, req pageThumbRequest) ([]byte, error) {
+	key := fmt.Sprintf("%s/%d:%s:%d", userID, req.galleryID, req.token, req.index)
 	v, err, _ := pageThumbGroup.Do(key, func() (any, error) {
 		flowCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), pageThumbFlowTimeout)
 		defer cancel()
@@ -311,7 +312,7 @@ func (s *Server) loadCachedIndexThumbnail(ctx context.Context, userID int64, cli
 // self-healing an expired sprite URL: it refreshes the gallery cache, and when
 // the shared document cache still serves the expired reference, forces a fresh
 // single-page scrape that bypasses that cache before retrying once.
-func (s *Server) loadCachedIndexThumbnailOnce(ctx context.Context, userID int64, client *http.Client, req pageThumbRequest) ([]byte, error) {
+func (s *Server) loadCachedIndexThumbnailOnce(ctx context.Context, userID ident.UUID, client *http.Client, req pageThumbRequest) ([]byte, error) {
 	thumb, found, err := s.resolveGalleryPageThumb(ctx, userID, client, req.galleryID, req.token, req.index)
 	if err != nil {
 		return nil, err
@@ -362,7 +363,7 @@ func (s *Server) loadCachedIndexThumbnailOnce(ctx context.Context, userID int64,
 // scrapeFreshPageThumb fetches the geometry for one page index directly,
 // bypassing the shared document dedup window so an expired sprite reference is
 // never re-read.
-func (s *Server) scrapeFreshPageThumb(ctx context.Context, client *http.Client, userID, galleryID int64, token string, index int) (model.GalleryPageThumb, bool, error) {
+func (s *Server) scrapeFreshPageThumb(ctx context.Context, client *http.Client, userID ident.UUID, galleryID int64, token string, index int) (model.GalleryPageThumb, bool, error) {
 	u := exhentai.GalleryURLAt(s.upstreamBase(ctx, userID), strconv.FormatInt(galleryID, 10), token)
 	return exhentai.ScrapeGalleryPageThumb(ctx, client, u, index)
 }
@@ -384,7 +385,7 @@ var errThumbResolved = errors.New("page thumbnail resolved from pages stream")
 // also backfills the cache once complete. Only when the walk does not reach
 // the page within pageThumbResolveTimeout does it fall back to a direct
 // one-page scrape, so a cold, far-away index cannot stall the request.
-func (s *Server) resolveGalleryPageThumb(ctx context.Context, userID int64, client *http.Client, galleryID int64, token string, index int) (model.GalleryPageThumb, bool, error) {
+func (s *Server) resolveGalleryPageThumb(ctx context.Context, userID ident.UUID, client *http.Client, galleryID int64, token string, index int) (model.GalleryPageThumb, bool, error) {
 	if db := s.cacheDB(); db != nil {
 		row, found, err := gallerycache.Get(ctx, db, galleryID, token)
 		if err != nil {
@@ -462,7 +463,7 @@ func (s *Server) backfillThumbnail(ctx context.Context, galleryID int64, token s
 // page or the page carries no thumbnail geometry.
 func (s *Server) resolveGalleryPageThumbFromStream(
 	ctx context.Context,
-	userID, galleryID int64,
+	userID ident.UUID, galleryID int64,
 	token string,
 	index int,
 ) (model.GalleryPageThumb, bool, error) {
@@ -546,8 +547,8 @@ func (s *Server) cropSprite(ctx context.Context, spriteURL string, sprite []byte
 
 // cropLive fetches the sprite from upstream and crops it, without touching
 // MinIO. Concurrent identical requests are coalesced.
-func (s *Server) cropLive(ctx context.Context, userID int64, client *http.Client, spriteURL string, rect image.Rectangle) ([]byte, error) {
-	key := fmt.Sprintf("%d|live:", userID) + cropSingleflightKey(spriteURL, rect)
+func (s *Server) cropLive(ctx context.Context, userID ident.UUID, client *http.Client, spriteURL string, rect image.Rectangle) ([]byte, error) {
+	key := fmt.Sprintf("%s|live:", userID) + cropSingleflightKey(spriteURL, rect)
 	v, sfErr, _ := cachedImageGroup.Do(key, func() (any, error) {
 		fetchCtx := context.WithoutCancel(ctx)
 		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
@@ -570,8 +571,8 @@ func (s *Server) cropLive(ctx context.Context, userID int64, client *http.Client
 // sprite; otherwise the sprite is read through the MinIO cache and cropped,
 // and the result is persisted. Concurrent calls for the same crop are
 // coalesced.
-func (s *Server) loadOrCropThumbnail(ctx context.Context, userID int64, client *http.Client, spriteURL string, rect image.Rectangle) ([]byte, error) {
-	key := fmt.Sprintf("%d|", userID) + cropSingleflightKey(spriteURL, rect)
+func (s *Server) loadOrCropThumbnail(ctx context.Context, userID ident.UUID, client *http.Client, spriteURL string, rect image.Rectangle) ([]byte, error) {
+	key := fmt.Sprintf("%s|", userID) + cropSingleflightKey(spriteURL, rect)
 	v, sfErr, _ := cachedImageGroup.Do(key, func() (any, error) {
 		fetchCtx := context.WithoutCancel(ctx)
 		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
@@ -622,10 +623,10 @@ func (s *Server) loadOrCropThumbnail(ctx context.Context, userID int64, client *
 // cache hits — run inside the singleflight, so concurrent crops of different
 // cells of one sprite share a single buffered copy instead of each holding
 // its own.
-func (s *Server) loadOrFetchSprite(ctx context.Context, userID int64, client *http.Client, spriteURL string) ([]byte, error) {
+func (s *Server) loadOrFetchSprite(ctx context.Context, userID ident.UUID, client *http.Client, spriteURL string) ([]byte, error) {
 	key := spriteCacheKey(spriteURL)
 
-	v, sfErr, _ := cachedImageGroup.Do(fmt.Sprintf("%d|sprite:", userID)+key, func() (any, error) {
+	v, sfErr, _ := cachedImageGroup.Do(fmt.Sprintf("%s|sprite:", userID)+key, func() (any, error) {
 		fetchCtx := context.WithoutCancel(ctx)
 		fetchCtx, cancel := context.WithTimeout(fetchCtx, 60*time.Second)
 		defer cancel()

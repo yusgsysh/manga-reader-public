@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"manga-reader/internal/ent/prefilljob"
+	"manga-reader/internal/ident"
 	"manga-reader/internal/model"
 	"time"
 
@@ -23,13 +24,13 @@ type PrefillJobCreate struct {
 }
 
 // SetUserID sets the "user_id" field.
-func (_c *PrefillJobCreate) SetUserID(v int64) *PrefillJobCreate {
+func (_c *PrefillJobCreate) SetUserID(v ident.UUID) *PrefillJobCreate {
 	_c.mutation.SetUserID(v)
 	return _c
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_c *PrefillJobCreate) SetNillableUserID(v *int64) *PrefillJobCreate {
+func (_c *PrefillJobCreate) SetNillableUserID(v *ident.UUID) *PrefillJobCreate {
 	if v != nil {
 		_c.SetUserID(*v)
 	}
@@ -224,7 +225,7 @@ func (_c *PrefillJobCreate) ExecX(ctx context.Context) {
 // defaults sets the default values of the builder before save.
 func (_c *PrefillJobCreate) defaults() {
 	if _, ok := _c.mutation.UserID(); !ok {
-		v := prefilljob.DefaultUserID
+		v := prefilljob.DefaultUserID()
 		_c.mutation.SetUserID(v)
 	}
 	if _, ok := _c.mutation.Token(); !ok {
@@ -326,7 +327,7 @@ func (_c *PrefillJobCreate) createSpec() (*PrefillJob, *sqlgraph.CreateSpec) {
 		_spec.ID.Value = &id
 	}
 	if value, ok := _c.mutation.UserID(); ok {
-		_spec.SetField(prefilljob.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(prefilljob.FieldUserID, field.TypeUUID, value)
 		_node.UserID = value
 	}
 	if value, ok := _c.mutation.GalleryID(); ok {

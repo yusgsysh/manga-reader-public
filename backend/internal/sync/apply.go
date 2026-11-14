@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"manga-reader/internal/ident"
+
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/gallerycache"
@@ -29,7 +31,7 @@ func ApplyChanges(ctx context.Context, client *ent.Client, changes []Change) (ap
 	for _, ch := range changes {
 		// A private row without an owner cannot be attributed safely. Skip it
 		// instead of guessing a user, and let the operator see the warning.
-		if ch.UserID <= 0 && ch.Entity != EntityGalleryCache {
+		if ch.UserID == ident.Nil() && ch.Entity != EntityGalleryCache {
 			slog.Warn("skipping unowned sync change",
 				"entity", ch.Entity, "gallery_id", ch.GalleryID, "token", ch.Token)
 			skipped++
@@ -477,7 +479,7 @@ func ReadChangesSince(ctx context.Context, client *ent.Client, cursor int) ([]Ch
 	// Coalesce per record: the last entry wins (an upsert after a delete
 	// resurrects the row, a delete after an upsert removes it).
 	type dedupeKey struct {
-		userID    int64
+		userID    ident.UUID
 		entity    string
 		galleryID int64
 		token     string
@@ -535,7 +537,7 @@ func ReadChangesSince(ctx context.Context, client *ent.Client, cursor int) ([]Ch
 	return changes, maxID, nil
 }
 
-func fetchRow(ctx context.Context, client *ent.Client, userID int64, entity string, galleryID int64, token string) (*Row, error) {
+func fetchRow(ctx context.Context, client *ent.Client, userID ident.UUID, entity string, galleryID int64, token string) (*Row, error) {
 	switch entity {
 	case EntityReadingProgress:
 		p, err := client.ReadingProgress.Query().

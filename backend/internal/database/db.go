@@ -106,6 +106,10 @@ func initClient(conn *sql.DB, dialectName string) (*DB, error) {
 		client.Close()
 		return nil, fmt.Errorf("prepare multi-user migration: %w", err)
 	}
+	if err := migrateIDsToUUID(migrateCtx, conn, dialectName); err != nil {
+		client.Close()
+		return nil, fmt.Errorf("migrate ids to uuid: %w", err)
+	}
 	if err := client.Schema.Create(migrateCtx,
 		migrate.WithDropIndex(true),
 		migrate.WithDropColumn(true),

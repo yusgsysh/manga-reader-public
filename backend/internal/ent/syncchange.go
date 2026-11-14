@@ -5,6 +5,7 @@ package ent
 import (
 	"fmt"
 	"manga-reader/internal/ent/syncchange"
+	"manga-reader/internal/ident"
 	"strings"
 	"time"
 
@@ -18,7 +19,7 @@ type SyncChange struct {
 	// ID of the ent.
 	ID int `json:"id,omitempty"`
 	// UserID holds the value of the "user_id" field.
-	UserID int64 `json:"user_id,omitempty"`
+	UserID ident.UUID `json:"user_id,omitempty"`
 	// Entity holds the value of the "entity" field.
 	Entity string `json:"entity,omitempty"`
 	// GalleryID holds the value of the "gallery_id" field.
@@ -37,7 +38,9 @@ func (*SyncChange) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case syncchange.FieldID, syncchange.FieldUserID, syncchange.FieldGalleryID:
+		case syncchange.FieldUserID:
+			values[i] = new(ident.UUID)
+		case syncchange.FieldID, syncchange.FieldGalleryID:
 			values[i] = new(sql.NullInt64)
 		case syncchange.FieldEntity, syncchange.FieldToken, syncchange.FieldOp:
 			values[i] = new(sql.NullString)
@@ -65,10 +68,10 @@ func (_m *SyncChange) assignValues(columns []string, values []any) error {
 			}
 			_m.ID = int(value.Int64)
 		case syncchange.FieldUserID:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
+			if value, ok := values[i].(*ident.UUID); !ok {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
-			} else if value.Valid {
-				_m.UserID = value.Int64
+			} else if value != nil {
+				_m.UserID = *value
 			}
 		case syncchange.FieldEntity:
 			if value, ok := values[i].(*sql.NullString); !ok {

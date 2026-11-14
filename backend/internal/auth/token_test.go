@@ -7,16 +7,24 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"manga-reader/internal/ident"
 
 	"manga-reader/internal/config"
 )
+
+// testID returns a deterministic UUID whose last byte is n.
+func testID(n byte) ident.UUID {
+	var id ident.UUID
+	id[15] = n
+	return id
+}
 
 func TestTokenManagerRoundTrip(t *testing.T) {
 	m := newTokenManager(strings.Repeat("s", 32), "manga-reader-test", time.Hour)
 	fixed := time.Now().UTC()
 	m.now = func() time.Time { return fixed }
 
-	raw, expires, err := m.issue(7, "alice", config.RoleAdmin, 3)
+	raw, expires, err := m.issue(testID(7), "alice", config.RoleAdmin, 3)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
@@ -28,7 +36,7 @@ func TestTokenManagerRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if claims.Subject != "7" || claims.UserID != 7 || claims.Username != "alice" ||
+	if claims.Subject != testID(7).String() || claims.UserID != testID(7) || claims.Username != "alice" ||
 		claims.Role != config.RoleAdmin || claims.TokenVersion != 3 {
 		t.Fatalf("claims = %+v", claims)
 	}
@@ -48,13 +56,13 @@ func TestTokenManagerRejectsInvalidClaims(t *testing.T) {
 
 	base := func() Claims {
 		return Claims{
-			UserID:       1,
+			UserID:       testID(1),
 			Username:     "alice",
 			Role:         config.RoleUser,
 			TokenVersion: 0,
 			RegisteredClaims: jwt.RegisteredClaims{
 				Issuer:    "manga-reader-test",
-				Subject:   "1",
+				Subject:   testID(1).String(),
 				IssuedAt:  jwt.NewNumericDate(now.Add(-time.Minute)),
 				NotBefore: jwt.NewNumericDate(now.Add(-time.Minute)),
 				ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
@@ -127,7 +135,7 @@ func TestTokenManagerRejectsInvalidClaims(t *testing.T) {
 			}()),
 		},
 		{
-			name: "non-numeric subject",
+			name: "invalid subject",
 			raw: sign(func() Claims {
 				c := base()
 				c.Subject = "admin"
@@ -146,15 +154,7 @@ func TestTokenManagerRejectsInvalidClaims(t *testing.T) {
 			name: "zero user",
 			raw: sign(func() Claims {
 				c := base()
-				c.UserID = 0
-				return c
-			}()),
-		},
-		{
-			name: "negative user",
-			raw: sign(func() Claims {
-				c := base()
-				c.UserID = -1
+				c.UserID = ident.Nil()
 				return c
 			}()),
 		},
@@ -162,7 +162,7 @@ func TestTokenManagerRejectsInvalidClaims(t *testing.T) {
 			name: "subject does not match user",
 			raw: sign(func() Claims {
 				c := base()
-				c.Subject = "2"
+				c.Subject = testID(2).String()
 				return c
 			}()),
 		},

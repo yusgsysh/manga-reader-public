@@ -1,8 +1,8 @@
 import { apiGet, apiPostJson, ApiRequestError, setAccessToken } from "./client";
 
 export interface AuthUser {
-  id: number;
-  user_id: number;
+  id: string;
+  user_id: string;
   username: string;
   role: string;
 }
@@ -26,8 +26,8 @@ interface LoginResponse {
 }
 
 interface MeResponse {
-  id: number;
-  user_id: number;
+  id: string;
+  user_id: string;
   username: string;
   role: string;
 }

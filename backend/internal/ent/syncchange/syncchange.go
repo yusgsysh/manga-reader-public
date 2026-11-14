@@ -3,6 +3,7 @@
 package syncchange
 
 import (
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -52,7 +53,7 @@ func ValidColumn(column string) bool {
 
 var (
 	// DefaultUserID holds the default value on creation for the "user_id" field.
-	DefaultUserID int64
+	DefaultUserID func() ident.UUID
 	// DefaultOp holds the default value on creation for the "op" field.
 	DefaultOp string
 	// DefaultChangedAt holds the default value on creation for the "changed_at" field.

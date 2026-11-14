@@ -5,6 +5,7 @@ package ent
 import (
 	"fmt"
 	"manga-reader/internal/ent/readingprogress"
+	"manga-reader/internal/ident"
 	"strings"
 	"time"
 
@@ -16,9 +17,9 @@ import (
 type ReadingProgress struct {
 	config `json:"-"`
 	// ID of the ent.
-	ID int `json:"id,omitempty"`
+	ID ident.UUID `json:"id,omitempty"`
 	// UserID holds the value of the "user_id" field.
-	UserID int64 `json:"user_id,omitempty"`
+	UserID ident.UUID `json:"user_id,omitempty"`
 	// GalleryID holds the value of the "gallery_id" field.
 	GalleryID int64 `json:"gallery_id,omitempty"`
 	// Token holds the value of the "token" field.
@@ -41,11 +42,13 @@ func (*ReadingProgress) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case readingprogress.FieldID, readingprogress.FieldUserID:
+			values[i] = new(ident.UUID)
 		case readingprogress.FieldCompleted:
 			values[i] = new(sql.NullBool)
 		case readingprogress.FieldProgress:
 			values[i] = new(sql.NullFloat64)
-		case readingprogress.FieldID, readingprogress.FieldUserID, readingprogress.FieldGalleryID, readingprogress.FieldCurrentPage:
+		case readingprogress.FieldGalleryID, readingprogress.FieldCurrentPage:
 			values[i] = new(sql.NullInt64)
 		case readingprogress.FieldToken:
 			values[i] = new(sql.NullString)
@@ -67,16 +70,16 @@ func (_m *ReadingProgress) assignValues(columns []string, values []any) error {
 	for i := range columns {
 		switch columns[i] {
 		case readingprogress.FieldID:
-			value, ok := values[i].(*sql.NullInt64)
-			if !ok {
-				return fmt.Errorf("unexpected type %T for field id", value)
+			if value, ok := values[i].(*ident.UUID); !ok {
+				return fmt.Errorf("unexpected type %T for field id", values[i])
+			} else if value != nil {
+				_m.ID = *value
 			}
-			_m.ID = int(value.Int64)
 		case readingprogress.FieldUserID:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
+			if value, ok := values[i].(*ident.UUID); !ok {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
-			} else if value.Valid {
-				_m.UserID = value.Int64
+			} else if value != nil {
+				_m.UserID = *value
 			}
 		case readingprogress.FieldGalleryID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {

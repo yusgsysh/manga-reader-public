@@ -17,6 +17,7 @@ import (
 	"manga-reader/internal/ent/tagsyncbaseline"
 	"manga-reader/internal/ent/user"
 	"manga-reader/internal/ent/usersetting"
+	"manga-reader/internal/ident"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,19 +46,23 @@ func init() {
 	bookshelfFields := schema.Bookshelf{}.Fields()
 	_ = bookshelfFields
 	// bookshelfDescUserID is the schema descriptor for user_id field.
-	bookshelfDescUserID := bookshelfFields[0].Descriptor()
+	bookshelfDescUserID := bookshelfFields[1].Descriptor()
 	// bookshelf.DefaultUserID holds the default value on creation for the user_id field.
-	bookshelf.DefaultUserID = bookshelfDescUserID.Default.(int64)
+	bookshelf.DefaultUserID = bookshelfDescUserID.Default.(func() ident.UUID)
 	// bookshelfDescCreatedAt is the schema descriptor for created_at field.
-	bookshelfDescCreatedAt := bookshelfFields[3].Descriptor()
+	bookshelfDescCreatedAt := bookshelfFields[4].Descriptor()
 	// bookshelf.DefaultCreatedAt holds the default value on creation for the created_at field.
 	bookshelf.DefaultCreatedAt = bookshelfDescCreatedAt.Default.(func() time.Time)
 	// bookshelfDescUpdatedAt is the schema descriptor for updated_at field.
-	bookshelfDescUpdatedAt := bookshelfFields[4].Descriptor()
+	bookshelfDescUpdatedAt := bookshelfFields[5].Descriptor()
 	// bookshelf.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	bookshelf.DefaultUpdatedAt = bookshelfDescUpdatedAt.Default.(func() time.Time)
 	// bookshelf.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	bookshelf.UpdateDefaultUpdatedAt = bookshelfDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// bookshelfDescID is the schema descriptor for id field.
+	bookshelfDescID := bookshelfFields[0].Descriptor()
+	// bookshelf.DefaultID holds the default value on creation for the id field.
+	bookshelf.DefaultID = bookshelfDescID.Default.(func() ident.UUID)
 	gallerycacheFields := schema.GalleryCache{}.Fields()
 	_ = gallerycacheFields
 	// gallerycacheDescCreatedAt is the schema descriptor for created_at field.
@@ -129,47 +134,55 @@ func init() {
 	nodeFields := schema.Node{}.Fields()
 	_ = nodeFields
 	// nodeDescName is the schema descriptor for name field.
-	nodeDescName := nodeFields[0].Descriptor()
+	nodeDescName := nodeFields[1].Descriptor()
 	// node.NameValidator is a validator for the "name" field. It is called by the builders before save.
 	node.NameValidator = nodeDescName.Validators[0].(func(string) error)
 	// nodeDescStatus is the schema descriptor for status field.
-	nodeDescStatus := nodeFields[1].Descriptor()
+	nodeDescStatus := nodeFields[2].Descriptor()
 	// node.DefaultStatus holds the default value on creation for the status field.
 	node.DefaultStatus = nodeDescStatus.Default.(string)
 	// nodeDescCreatedAt is the schema descriptor for created_at field.
-	nodeDescCreatedAt := nodeFields[3].Descriptor()
+	nodeDescCreatedAt := nodeFields[4].Descriptor()
 	// node.DefaultCreatedAt holds the default value on creation for the created_at field.
 	node.DefaultCreatedAt = nodeDescCreatedAt.Default.(func() time.Time)
 	// nodeDescUpdatedAt is the schema descriptor for updated_at field.
-	nodeDescUpdatedAt := nodeFields[4].Descriptor()
+	nodeDescUpdatedAt := nodeFields[5].Descriptor()
 	// node.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	node.DefaultUpdatedAt = nodeDescUpdatedAt.Default.(func() time.Time)
 	// node.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	node.UpdateDefaultUpdatedAt = nodeDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// nodeDescID is the schema descriptor for id field.
+	nodeDescID := nodeFields[0].Descriptor()
+	// node.DefaultID holds the default value on creation for the id field.
+	node.DefaultID = nodeDescID.Default.(func() ident.UUID)
 	nodeapikeyFields := schema.NodeAPIKey{}.Fields()
 	_ = nodeapikeyFields
 	// nodeapikeyDescKeyHash is the schema descriptor for key_hash field.
-	nodeapikeyDescKeyHash := nodeapikeyFields[1].Descriptor()
+	nodeapikeyDescKeyHash := nodeapikeyFields[2].Descriptor()
 	// nodeapikey.KeyHashValidator is a validator for the "key_hash" field. It is called by the builders before save.
 	nodeapikey.KeyHashValidator = nodeapikeyDescKeyHash.Validators[0].(func(string) error)
 	// nodeapikeyDescKeyPrefix is the schema descriptor for key_prefix field.
-	nodeapikeyDescKeyPrefix := nodeapikeyFields[2].Descriptor()
+	nodeapikeyDescKeyPrefix := nodeapikeyFields[3].Descriptor()
 	// nodeapikey.KeyPrefixValidator is a validator for the "key_prefix" field. It is called by the builders before save.
 	nodeapikey.KeyPrefixValidator = nodeapikeyDescKeyPrefix.Validators[0].(func(string) error)
 	// nodeapikeyDescStatus is the schema descriptor for status field.
-	nodeapikeyDescStatus := nodeapikeyFields[4].Descriptor()
+	nodeapikeyDescStatus := nodeapikeyFields[5].Descriptor()
 	// nodeapikey.DefaultStatus holds the default value on creation for the status field.
 	nodeapikey.DefaultStatus = nodeapikeyDescStatus.Default.(string)
 	// nodeapikeyDescCreatedAt is the schema descriptor for created_at field.
-	nodeapikeyDescCreatedAt := nodeapikeyFields[7].Descriptor()
+	nodeapikeyDescCreatedAt := nodeapikeyFields[8].Descriptor()
 	// nodeapikey.DefaultCreatedAt holds the default value on creation for the created_at field.
 	nodeapikey.DefaultCreatedAt = nodeapikeyDescCreatedAt.Default.(func() time.Time)
+	// nodeapikeyDescID is the schema descriptor for id field.
+	nodeapikeyDescID := nodeapikeyFields[0].Descriptor()
+	// nodeapikey.DefaultID holds the default value on creation for the id field.
+	nodeapikey.DefaultID = nodeapikeyDescID.Default.(func() ident.UUID)
 	prefilljobFields := schema.PrefillJob{}.Fields()
 	_ = prefilljobFields
 	// prefilljobDescUserID is the schema descriptor for user_id field.
 	prefilljobDescUserID := prefilljobFields[0].Descriptor()
 	// prefilljob.DefaultUserID holds the default value on creation for the user_id field.
-	prefilljob.DefaultUserID = prefilljobDescUserID.Default.(int64)
+	prefilljob.DefaultUserID = prefilljobDescUserID.Default.(func() ident.UUID)
 	// prefilljobDescToken is the schema descriptor for token field.
 	prefilljobDescToken := prefilljobFields[3].Descriptor()
 	// prefilljob.DefaultToken holds the default value on creation for the token field.
@@ -207,17 +220,17 @@ func init() {
 	readingprogressFields := schema.ReadingProgress{}.Fields()
 	_ = readingprogressFields
 	// readingprogressDescUserID is the schema descriptor for user_id field.
-	readingprogressDescUserID := readingprogressFields[0].Descriptor()
+	readingprogressDescUserID := readingprogressFields[1].Descriptor()
 	// readingprogress.DefaultUserID holds the default value on creation for the user_id field.
-	readingprogress.DefaultUserID = readingprogressDescUserID.Default.(int64)
+	readingprogress.DefaultUserID = readingprogressDescUserID.Default.(func() ident.UUID)
 	// readingprogressDescCurrentPage is the schema descriptor for current_page field.
-	readingprogressDescCurrentPage := readingprogressFields[3].Descriptor()
+	readingprogressDescCurrentPage := readingprogressFields[4].Descriptor()
 	// readingprogress.DefaultCurrentPage holds the default value on creation for the current_page field.
 	readingprogress.DefaultCurrentPage = readingprogressDescCurrentPage.Default.(int)
 	// readingprogress.CurrentPageValidator is a validator for the "current_page" field. It is called by the builders before save.
 	readingprogress.CurrentPageValidator = readingprogressDescCurrentPage.Validators[0].(func(int) error)
 	// readingprogressDescProgress is the schema descriptor for progress field.
-	readingprogressDescProgress := readingprogressFields[4].Descriptor()
+	readingprogressDescProgress := readingprogressFields[5].Descriptor()
 	// readingprogress.DefaultProgress holds the default value on creation for the progress field.
 	readingprogress.DefaultProgress = readingprogressDescProgress.Default.(float64)
 	// readingprogress.ProgressValidator is a validator for the "progress" field. It is called by the builders before save.
@@ -237,25 +250,29 @@ func init() {
 		}
 	}()
 	// readingprogressDescCompleted is the schema descriptor for completed field.
-	readingprogressDescCompleted := readingprogressFields[5].Descriptor()
+	readingprogressDescCompleted := readingprogressFields[6].Descriptor()
 	// readingprogress.DefaultCompleted holds the default value on creation for the completed field.
 	readingprogress.DefaultCompleted = readingprogressDescCompleted.Default.(bool)
 	// readingprogressDescCreatedAt is the schema descriptor for created_at field.
-	readingprogressDescCreatedAt := readingprogressFields[6].Descriptor()
+	readingprogressDescCreatedAt := readingprogressFields[7].Descriptor()
 	// readingprogress.DefaultCreatedAt holds the default value on creation for the created_at field.
 	readingprogress.DefaultCreatedAt = readingprogressDescCreatedAt.Default.(func() time.Time)
 	// readingprogressDescUpdatedAt is the schema descriptor for updated_at field.
-	readingprogressDescUpdatedAt := readingprogressFields[7].Descriptor()
+	readingprogressDescUpdatedAt := readingprogressFields[8].Descriptor()
 	// readingprogress.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	readingprogress.DefaultUpdatedAt = readingprogressDescUpdatedAt.Default.(func() time.Time)
 	// readingprogress.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	readingprogress.UpdateDefaultUpdatedAt = readingprogressDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// readingprogressDescID is the schema descriptor for id field.
+	readingprogressDescID := readingprogressFields[0].Descriptor()
+	// readingprogress.DefaultID holds the default value on creation for the id field.
+	readingprogress.DefaultID = readingprogressDescID.Default.(func() ident.UUID)
 	syncchangeFields := schema.SyncChange{}.Fields()
 	_ = syncchangeFields
 	// syncchangeDescUserID is the schema descriptor for user_id field.
 	syncchangeDescUserID := syncchangeFields[0].Descriptor()
 	// syncchange.DefaultUserID holds the default value on creation for the user_id field.
-	syncchange.DefaultUserID = syncchangeDescUserID.Default.(int64)
+	syncchange.DefaultUserID = syncchangeDescUserID.Default.(func() ident.UUID)
 	// syncchangeDescOp is the schema descriptor for op field.
 	syncchangeDescOp := syncchangeFields[4].Descriptor()
 	// syncchange.DefaultOp holds the default value on creation for the op field.
@@ -285,7 +302,7 @@ func init() {
 	// tagpreferenceDescUserID is the schema descriptor for user_id field.
 	tagpreferenceDescUserID := tagpreferenceFields[0].Descriptor()
 	// tagpreference.DefaultUserID holds the default value on creation for the user_id field.
-	tagpreference.DefaultUserID = tagpreferenceDescUserID.Default.(int64)
+	tagpreference.DefaultUserID = tagpreferenceDescUserID.Default.(func() ident.UUID)
 	// tagpreferenceDescAction is the schema descriptor for action field.
 	tagpreferenceDescAction := tagpreferenceFields[2].Descriptor()
 	// tagpreference.ActionValidator is a validator for the "action" field. It is called by the builders before save.
@@ -313,7 +330,7 @@ func init() {
 	// tagsyncbaselineDescUserID is the schema descriptor for user_id field.
 	tagsyncbaselineDescUserID := tagsyncbaselineFields[0].Descriptor()
 	// tagsyncbaseline.DefaultUserID holds the default value on creation for the user_id field.
-	tagsyncbaseline.DefaultUserID = tagsyncbaselineDescUserID.Default.(int64)
+	tagsyncbaseline.DefaultUserID = tagsyncbaselineDescUserID.Default.(func() ident.UUID)
 	// tagsyncbaselineDescAction is the schema descriptor for action field.
 	tagsyncbaselineDescAction := tagsyncbaselineFields[2].Descriptor()
 	// tagsyncbaseline.ActionValidator is a validator for the "action" field. It is called by the builders before save.
@@ -339,35 +356,39 @@ func init() {
 	userFields := schema.User{}.Fields()
 	_ = userFields
 	// userDescUsername is the schema descriptor for username field.
-	userDescUsername := userFields[0].Descriptor()
+	userDescUsername := userFields[1].Descriptor()
 	// user.UsernameValidator is a validator for the "username" field. It is called by the builders before save.
 	user.UsernameValidator = userDescUsername.Validators[0].(func(string) error)
 	// userDescPasswordHash is the schema descriptor for password_hash field.
-	userDescPasswordHash := userFields[1].Descriptor()
+	userDescPasswordHash := userFields[2].Descriptor()
 	// user.PasswordHashValidator is a validator for the "password_hash" field. It is called by the builders before save.
 	user.PasswordHashValidator = userDescPasswordHash.Validators[0].(func(string) error)
 	// userDescRole is the schema descriptor for role field.
-	userDescRole := userFields[2].Descriptor()
+	userDescRole := userFields[3].Descriptor()
 	// user.DefaultRole holds the default value on creation for the role field.
 	user.DefaultRole = userDescRole.Default.(string)
 	// userDescStatus is the schema descriptor for status field.
-	userDescStatus := userFields[3].Descriptor()
+	userDescStatus := userFields[4].Descriptor()
 	// user.DefaultStatus holds the default value on creation for the status field.
 	user.DefaultStatus = userDescStatus.Default.(string)
 	// userDescTokenVersion is the schema descriptor for token_version field.
-	userDescTokenVersion := userFields[4].Descriptor()
+	userDescTokenVersion := userFields[5].Descriptor()
 	// user.DefaultTokenVersion holds the default value on creation for the token_version field.
 	user.DefaultTokenVersion = userDescTokenVersion.Default.(int)
 	// userDescCreatedAt is the schema descriptor for created_at field.
-	userDescCreatedAt := userFields[5].Descriptor()
+	userDescCreatedAt := userFields[6].Descriptor()
 	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
 	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() time.Time)
 	// userDescUpdatedAt is the schema descriptor for updated_at field.
-	userDescUpdatedAt := userFields[6].Descriptor()
+	userDescUpdatedAt := userFields[7].Descriptor()
 	// user.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	user.UpdateDefaultUpdatedAt = userDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// userDescID is the schema descriptor for id field.
+	userDescID := userFields[0].Descriptor()
+	// user.DefaultID holds the default value on creation for the id field.
+	user.DefaultID = userDescID.Default.(func() ident.UUID)
 	usersettingFields := schema.UserSetting{}.Fields()
 	_ = usersettingFields
 	// usersettingDescCookieCiphertext is the schema descriptor for cookie_ciphertext field.

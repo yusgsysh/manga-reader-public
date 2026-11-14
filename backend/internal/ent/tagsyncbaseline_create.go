@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"manga-reader/internal/ent/tagsyncbaseline"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -21,13 +22,13 @@ type TagSyncBaselineCreate struct {
 }
 
 // SetUserID sets the "user_id" field.
-func (_c *TagSyncBaselineCreate) SetUserID(v int64) *TagSyncBaselineCreate {
+func (_c *TagSyncBaselineCreate) SetUserID(v ident.UUID) *TagSyncBaselineCreate {
 	_c.mutation.SetUserID(v)
 	return _c
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_c *TagSyncBaselineCreate) SetNillableUserID(v *int64) *TagSyncBaselineCreate {
+func (_c *TagSyncBaselineCreate) SetNillableUserID(v *ident.UUID) *TagSyncBaselineCreate {
 	if v != nil {
 		_c.SetUserID(*v)
 	}
@@ -124,7 +125,7 @@ func (_c *TagSyncBaselineCreate) ExecX(ctx context.Context) {
 // defaults sets the default values of the builder before save.
 func (_c *TagSyncBaselineCreate) defaults() {
 	if _, ok := _c.mutation.UserID(); !ok {
-		v := tagsyncbaseline.DefaultUserID
+		v := tagsyncbaseline.DefaultUserID()
 		_c.mutation.SetUserID(v)
 	}
 	if _, ok := _c.mutation.Weight(); !ok {
@@ -194,7 +195,7 @@ func (_c *TagSyncBaselineCreate) createSpec() (*TagSyncBaseline, *sqlgraph.Creat
 		_spec = sqlgraph.NewCreateSpec(tagsyncbaseline.Table, nil)
 	)
 	if value, ok := _c.mutation.UserID(); ok {
-		_spec.SetField(tagsyncbaseline.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(tagsyncbaseline.FieldUserID, field.TypeUUID, value)
 		_node.UserID = value
 	}
 	if value, ok := _c.mutation.Action(); ok {

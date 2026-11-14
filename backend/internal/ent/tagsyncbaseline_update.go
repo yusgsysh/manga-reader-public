@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"manga-reader/internal/ent/predicate"
 	"manga-reader/internal/ent/tagsyncbaseline"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -29,23 +30,16 @@ func (_u *TagSyncBaselineUpdate) Where(ps ...predicate.TagSyncBaseline) *TagSync
 }
 
 // SetUserID sets the "user_id" field.
-func (_u *TagSyncBaselineUpdate) SetUserID(v int64) *TagSyncBaselineUpdate {
-	_u.mutation.ResetUserID()
+func (_u *TagSyncBaselineUpdate) SetUserID(v ident.UUID) *TagSyncBaselineUpdate {
 	_u.mutation.SetUserID(v)
 	return _u
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_u *TagSyncBaselineUpdate) SetNillableUserID(v *int64) *TagSyncBaselineUpdate {
+func (_u *TagSyncBaselineUpdate) SetNillableUserID(v *ident.UUID) *TagSyncBaselineUpdate {
 	if v != nil {
 		_u.SetUserID(*v)
 	}
-	return _u
-}
-
-// AddUserID adds value to the "user_id" field.
-func (_u *TagSyncBaselineUpdate) AddUserID(v int64) *TagSyncBaselineUpdate {
-	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -145,7 +139,7 @@ func (_u *TagSyncBaselineUpdate) sqlSave(ctx context.Context) (_node int, err er
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldUserID, field.TypeInt64), sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
+	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldUserID, field.TypeUUID), sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -154,10 +148,7 @@ func (_u *TagSyncBaselineUpdate) sqlSave(ctx context.Context) (_node int, err er
 		}
 	}
 	if value, ok := _u.mutation.UserID(); ok {
-		_spec.SetField(tagsyncbaseline.FieldUserID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUserID(); ok {
-		_spec.AddField(tagsyncbaseline.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(tagsyncbaseline.FieldUserID, field.TypeUUID, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagsyncbaseline.FieldAction, field.TypeString, value)
@@ -192,23 +183,16 @@ type TagSyncBaselineUpdateOne struct {
 }
 
 // SetUserID sets the "user_id" field.
-func (_u *TagSyncBaselineUpdateOne) SetUserID(v int64) *TagSyncBaselineUpdateOne {
-	_u.mutation.ResetUserID()
+func (_u *TagSyncBaselineUpdateOne) SetUserID(v ident.UUID) *TagSyncBaselineUpdateOne {
 	_u.mutation.SetUserID(v)
 	return _u
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_u *TagSyncBaselineUpdateOne) SetNillableUserID(v *int64) *TagSyncBaselineUpdateOne {
+func (_u *TagSyncBaselineUpdateOne) SetNillableUserID(v *ident.UUID) *TagSyncBaselineUpdateOne {
 	if v != nil {
 		_u.SetUserID(*v)
 	}
-	return _u
-}
-
-// AddUserID adds value to the "user_id" field.
-func (_u *TagSyncBaselineUpdateOne) AddUserID(v int64) *TagSyncBaselineUpdateOne {
-	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -321,7 +305,7 @@ func (_u *TagSyncBaselineUpdateOne) sqlSave(ctx context.Context) (_node *TagSync
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldUserID, field.TypeInt64), sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
+	_spec := sqlgraph.NewUpdateSpec(tagsyncbaseline.Table, tagsyncbaseline.Columns, sqlgraph.NewFieldSpec(tagsyncbaseline.FieldUserID, field.TypeUUID), sqlgraph.NewFieldSpec(tagsyncbaseline.FieldID, field.TypeString))
 	if id, ok := _u.mutation.UserID(); !ok {
 		return nil, &ValidationError{Name: "user_id", err: errors.New(`ent: missing "TagSyncBaseline.user_id" for update`)}
 	} else {
@@ -349,10 +333,7 @@ func (_u *TagSyncBaselineUpdateOne) sqlSave(ctx context.Context) (_node *TagSync
 		}
 	}
 	if value, ok := _u.mutation.UserID(); ok {
-		_spec.SetField(tagsyncbaseline.FieldUserID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUserID(); ok {
-		_spec.AddField(tagsyncbaseline.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(tagsyncbaseline.FieldUserID, field.TypeUUID, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagsyncbaseline.FieldAction, field.TypeString, value)

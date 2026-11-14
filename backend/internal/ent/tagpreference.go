@@ -5,6 +5,7 @@ package ent
 import (
 	"fmt"
 	"manga-reader/internal/ent/tagpreference"
+	"manga-reader/internal/ident"
 	"strings"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 type TagPreference struct {
 	config `json:"-"`
 	// UserID holds the value of the "user_id" field.
-	UserID int64 `json:"user_id,omitempty"`
+	UserID ident.UUID `json:"user_id,omitempty"`
 	// Action holds the value of the "action" field.
 	Action string `json:"action,omitempty"`
 	// Weight holds the value of the "weight" field.
@@ -35,7 +36,9 @@ func (*TagPreference) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case tagpreference.FieldUserID, tagpreference.FieldWeight:
+		case tagpreference.FieldUserID:
+			values[i] = new(ident.UUID)
+		case tagpreference.FieldWeight:
 			values[i] = new(sql.NullInt64)
 		case tagpreference.FieldAction, tagpreference.FieldID:
 			values[i] = new(sql.NullString)
@@ -57,10 +60,10 @@ func (_m *TagPreference) assignValues(columns []string, values []any) error {
 	for i := range columns {
 		switch columns[i] {
 		case tagpreference.FieldUserID:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
+			if value, ok := values[i].(*ident.UUID); !ok {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
-			} else if value.Valid {
-				_m.UserID = value.Int64
+			} else if value != nil {
+				_m.UserID = *value
 			}
 		case tagpreference.FieldAction:
 			if value, ok := values[i].(*sql.NullString); !ok {

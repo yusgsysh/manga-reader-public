@@ -5,6 +5,7 @@ package ent
 import (
 	"fmt"
 	"manga-reader/internal/ent/user"
+	"manga-reader/internal/ident"
 	"strings"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 type User struct {
 	config `json:"-"`
 	// ID of the ent.
-	ID int `json:"id,omitempty"`
+	ID ident.UUID `json:"id,omitempty"`
 	// Username holds the value of the "username" field.
 	Username string `json:"username,omitempty"`
 	// PasswordHash holds the value of the "password_hash" field.
@@ -39,7 +40,9 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldID, user.FieldTokenVersion:
+		case user.FieldID:
+			values[i] = new(ident.UUID)
+		case user.FieldTokenVersion:
 			values[i] = new(sql.NullInt64)
 		case user.FieldUsername, user.FieldPasswordHash, user.FieldRole, user.FieldStatus:
 			values[i] = new(sql.NullString)
@@ -61,11 +64,11 @@ func (_m *User) assignValues(columns []string, values []any) error {
 	for i := range columns {
 		switch columns[i] {
 		case user.FieldID:
-			value, ok := values[i].(*sql.NullInt64)
-			if !ok {
-				return fmt.Errorf("unexpected type %T for field id", value)
+			if value, ok := values[i].(*ident.UUID); !ok {
+				return fmt.Errorf("unexpected type %T for field id", values[i])
+			} else if value != nil {
+				_m.ID = *value
 			}
-			_m.ID = int(value.Int64)
 		case user.FieldUsername:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field username", values[i])

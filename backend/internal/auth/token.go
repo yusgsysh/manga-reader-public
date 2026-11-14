@@ -3,13 +3,13 @@ package auth
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
 	"manga-reader/internal/config"
+	"manga-reader/internal/ident"
 )
 
 // ErrInvalidToken is deliberately opaque: callers must not learn whether the
@@ -22,10 +22,10 @@ var ErrInvalidToken = errors.New("invalid token")
 // readable without a database lookup and let logout revoke every outstanding
 // token by bumping users.token_version.
 type Claims struct {
-	UserID       int64  `json:"user_id"`
-	Username     string `json:"username"`
-	Role         string `json:"role"`
-	TokenVersion int    `json:"ver"`
+	UserID       ident.UUID `json:"user_id"`
+	Username     string     `json:"username"`
+	Role         string     `json:"role"`
+	TokenVersion int        `json:"ver"`
 	jwt.RegisteredClaims
 }
 
@@ -45,17 +45,17 @@ func newTokenManager(secret, issuer string, ttl time.Duration) *tokenManager {
 	}
 }
 
-func (m *tokenManager) issue(userID int, username, role string, tokenVersion int) (string, time.Time, error) {
+func (m *tokenManager) issue(userID ident.UUID, username, role string, tokenVersion int) (string, time.Time, error) {
 	now := m.now()
 	expires := now.Add(m.ttl)
 	claims := Claims{
-		UserID:       int64(userID),
+		UserID:       userID,
 		Username:     username,
 		Role:         role,
 		TokenVersion: tokenVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
-			Subject:   strconv.Itoa(userID),
+			Subject:   userID.String(),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expires),
@@ -93,10 +93,10 @@ func (m *tokenManager) parse(raw string) (*Claims, error) {
 	if err != nil || !token.Valid {
 		return nil, ErrInvalidToken
 	}
-	if claims.Subject == "" || claims.Username == "" || claims.UserID <= 0 {
+	if claims.Subject == "" || claims.Username == "" || claims.UserID == ident.Nil() {
 		return nil, ErrInvalidToken
 	}
-	subjectID, err := strconv.ParseInt(claims.Subject, 10, 64)
+	subjectID, err := ident.Parse(claims.Subject)
 	if err != nil || subjectID != claims.UserID {
 		return nil, ErrInvalidToken
 	}

@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 
+	"manga-reader/internal/ident"
 	"manga-reader/internal/model"
 )
 
@@ -34,7 +35,9 @@ func (PrefillJob) Annotations() []schema.Annotation {
 // Fields of the PrefillJob.
 func (PrefillJob) Fields() []ent.Field {
 	return []ent.Field{
-		field.Int64("user_id").Default(0),
+		field.UUID("user_id", ident.UUID{}).
+			Default(uuidNil).
+			SchemaType(uuidSchemaType),
 		// Jobs are identified by a random UUID (stored as "job_id") instead of
 		// an auto-increment counter: one gallery may hold several jobs, so the
 		// (gallery_id, token) pair can only be a lookup key, never the identity.

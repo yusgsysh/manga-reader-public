@@ -27,6 +27,8 @@ package sync
 import (
 	"time"
 
+	"manga-reader/internal/ident"
+
 	"manga-reader/internal/model"
 )
 
@@ -93,7 +95,7 @@ type Row struct {
 // never merges two users' data even though a trusted node sees the whole
 // instance outbox.
 type Change struct {
-	UserID    int64      `json:"user_id"`
+	UserID    ident.UUID `json:"user_id"`
 	Entity    string     `json:"entity"`
 	GalleryID int64      `json:"gallery_id"`
 	Token     string     `json:"token"`

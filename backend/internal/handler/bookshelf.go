@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sync/singleflight"
+	"manga-reader/internal/ident"
 
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/gallerycache"
@@ -30,13 +31,13 @@ const galleryPrefetchTimeout = 60 * time.Second
 
 // prefetchGallery fills the gallery cache (metadata + pages) in the background
 // so the item stays usable offline. Failures are logged and otherwise ignored.
-func (s *Server) prefetchGallery(userID, galleryID int64, token string, seed *model.Gallery) {
+func (s *Server) prefetchGallery(userID ident.UUID, galleryID int64, token string, seed *model.Gallery) {
 	client, err := s.upstreamClient(context.Background(), userID)
 	if err != nil {
 		return
 	}
 
-	key := fmt.Sprintf("%d/%d:%s", userID, galleryID, token)
+	key := fmt.Sprintf("%s/%d:%s", userID, galleryID, token)
 	galleryPrefetchGroup.Do(key, func() (any, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), galleryPrefetchTimeout)
 		defer cancel()
@@ -275,7 +276,7 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 // the upstream ExHentai API is unreachable it falls back to the cached snapshot
 // so collecting a gallery keeps working offline. The returned bool reports
 // whether the cache fallback was used.
-func (s *Server) galleryForBookshelf(ctx context.Context, userID, id int64, token string) (*model.Gallery, bool, error) {
+func (s *Server) galleryForBookshelf(ctx context.Context, userID ident.UUID, id int64, token string) (*model.Gallery, bool, error) {
 	client, err := s.upstreamClient(ctx, userID)
 	if err != nil {
 		return nil, false, err

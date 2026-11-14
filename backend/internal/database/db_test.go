@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"manga-reader/internal/ident"
+
 	"manga-reader/internal/ent/bookshelf"
 )
 
@@ -48,7 +50,7 @@ func TestEntTransactionRollbackAndCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
-	if _, err := tx.Bookshelf.Create().SetUserID(1).SetGalleryID(1).SetToken("rolled-back").Save(ctx); err != nil {
+	if _, err := tx.Bookshelf.Create().SetUserID(ident.Nil()).SetGalleryID(1).SetToken("rolled-back").Save(ctx); err != nil {
 		t.Fatalf("create in tx: %v", err)
 	}
 	if err := tx.Rollback(); err != nil {
@@ -62,7 +64,7 @@ func TestEntTransactionRollbackAndCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
-	if _, err := tx.Bookshelf.Create().SetUserID(1).SetGalleryID(2).SetToken("committed").Save(ctx); err != nil {
+	if _, err := tx.Bookshelf.Create().SetUserID(ident.Nil()).SetGalleryID(2).SetToken("committed").Save(ctx); err != nil {
 		t.Fatalf("create in tx: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -81,21 +83,29 @@ func TestEntUserScopedQueryIsolation(t *testing.T) {
 	defer db.Close()
 	ctx := t.Context()
 
-	for _, userID := range []int64{1, 2} {
+	users := []ident.UUID{testUUID(1), testUUID(2)}
+	for _, userID := range users {
 		if _, err := db.Client.Bookshelf.Create().
 			SetUserID(userID).SetGalleryID(42).SetToken("same").Save(ctx); err != nil {
-			t.Fatalf("seed user %d: %v", userID, err)
+			t.Fatalf("seed user %v: %v", userID, err)
 		}
 	}
 	rows, err := db.Client.Bookshelf.Query().
-		Where(bookshelf.UserIDEQ(1), bookshelf.GalleryID(42)).
+		Where(bookshelf.UserIDEQ(users[0]), bookshelf.GalleryID(42)).
 		All(ctx)
-	if err != nil || len(rows) != 1 || rows[0].UserID != 1 {
+	if err != nil || len(rows) != 1 || rows[0].UserID != users[0] {
 		t.Fatalf("user 1 query = %+v (err %v), want only its row", rows, err)
 	}
 	// The same natural key is allowed once per user, not globally.
 	if _, err := db.Client.Bookshelf.Create().
-		SetUserID(1).SetGalleryID(42).SetToken("same").Save(ctx); err == nil {
+		SetUserID(users[0]).SetGalleryID(42).SetToken("same").Save(ctx); err == nil {
 		t.Fatal("duplicate key within one user was accepted")
 	}
+}
+
+// testUUID returns a deterministic UUID whose last byte is n.
+func testUUID(n byte) ident.UUID {
+	var id ident.UUID
+	id[15] = n
+	return id
 }

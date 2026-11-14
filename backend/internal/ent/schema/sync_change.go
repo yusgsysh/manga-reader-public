@@ -3,6 +3,8 @@ package schema
 import (
 	"time"
 
+	"manga-reader/internal/ident"
+
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
@@ -13,9 +15,11 @@ import (
 // SyncChange is the sync outbox: one row per local mutation of a synced
 // entity (reading_progress or bookshelf), appended by sync.Record.
 //
-// The auto-increment "id" doubles as the replication cursor: peers pull with
-// "id > cursor", which keeps cursors monotonic on this instance's clock only
-// (no cross-machine timestamp comparison when deciding what to send).
+// The auto-increment "id" is deliberately retained here: it doubles as the
+// replication cursor (peers pull with "id > cursor"), which needs a strictly
+// monotonic, append-only sequence local to this instance. This is the one
+// place an auto-increment column earns its keep — replacing it with a
+// timestamp+UUID cursor would be slower and error-prone across clock changes.
 type SyncChange struct {
 	ent.Schema
 }
@@ -30,7 +34,9 @@ func (SyncChange) Annotations() []schema.Annotation {
 // Fields of the SyncChange.
 func (SyncChange) Fields() []ent.Field {
 	return []ent.Field{
-		field.Int64("user_id").Default(0),
+		field.UUID("user_id", ident.UUID{}).
+			Default(uuidNil).
+			SchemaType(uuidSchemaType),
 		field.String("entity"),
 		field.Int64("gallery_id"),
 		field.String("token"),

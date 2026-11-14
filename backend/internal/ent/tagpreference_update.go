@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"manga-reader/internal/ent/predicate"
 	"manga-reader/internal/ent/tagpreference"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -29,23 +30,16 @@ func (_u *TagPreferenceUpdate) Where(ps ...predicate.TagPreference) *TagPreferen
 }
 
 // SetUserID sets the "user_id" field.
-func (_u *TagPreferenceUpdate) SetUserID(v int64) *TagPreferenceUpdate {
-	_u.mutation.ResetUserID()
+func (_u *TagPreferenceUpdate) SetUserID(v ident.UUID) *TagPreferenceUpdate {
 	_u.mutation.SetUserID(v)
 	return _u
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_u *TagPreferenceUpdate) SetNillableUserID(v *int64) *TagPreferenceUpdate {
+func (_u *TagPreferenceUpdate) SetNillableUserID(v *ident.UUID) *TagPreferenceUpdate {
 	if v != nil {
 		_u.SetUserID(*v)
 	}
-	return _u
-}
-
-// AddUserID adds value to the "user_id" field.
-func (_u *TagPreferenceUpdate) AddUserID(v int64) *TagPreferenceUpdate {
-	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -145,7 +139,7 @@ func (_u *TagPreferenceUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(tagpreference.Table, tagpreference.Columns, sqlgraph.NewFieldSpec(tagpreference.FieldUserID, field.TypeInt64), sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeString))
+	_spec := sqlgraph.NewUpdateSpec(tagpreference.Table, tagpreference.Columns, sqlgraph.NewFieldSpec(tagpreference.FieldUserID, field.TypeUUID), sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeString))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -154,10 +148,7 @@ func (_u *TagPreferenceUpdate) sqlSave(ctx context.Context) (_node int, err erro
 		}
 	}
 	if value, ok := _u.mutation.UserID(); ok {
-		_spec.SetField(tagpreference.FieldUserID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUserID(); ok {
-		_spec.AddField(tagpreference.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(tagpreference.FieldUserID, field.TypeUUID, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagpreference.FieldAction, field.TypeString, value)
@@ -192,23 +183,16 @@ type TagPreferenceUpdateOne struct {
 }
 
 // SetUserID sets the "user_id" field.
-func (_u *TagPreferenceUpdateOne) SetUserID(v int64) *TagPreferenceUpdateOne {
-	_u.mutation.ResetUserID()
+func (_u *TagPreferenceUpdateOne) SetUserID(v ident.UUID) *TagPreferenceUpdateOne {
 	_u.mutation.SetUserID(v)
 	return _u
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_u *TagPreferenceUpdateOne) SetNillableUserID(v *int64) *TagPreferenceUpdateOne {
+func (_u *TagPreferenceUpdateOne) SetNillableUserID(v *ident.UUID) *TagPreferenceUpdateOne {
 	if v != nil {
 		_u.SetUserID(*v)
 	}
-	return _u
-}
-
-// AddUserID adds value to the "user_id" field.
-func (_u *TagPreferenceUpdateOne) AddUserID(v int64) *TagPreferenceUpdateOne {
-	_u.mutation.AddUserID(v)
 	return _u
 }
 
@@ -321,7 +305,7 @@ func (_u *TagPreferenceUpdateOne) sqlSave(ctx context.Context) (_node *TagPrefer
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(tagpreference.Table, tagpreference.Columns, sqlgraph.NewFieldSpec(tagpreference.FieldUserID, field.TypeInt64), sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeString))
+	_spec := sqlgraph.NewUpdateSpec(tagpreference.Table, tagpreference.Columns, sqlgraph.NewFieldSpec(tagpreference.FieldUserID, field.TypeUUID), sqlgraph.NewFieldSpec(tagpreference.FieldID, field.TypeString))
 	if id, ok := _u.mutation.UserID(); !ok {
 		return nil, &ValidationError{Name: "user_id", err: errors.New(`ent: missing "TagPreference.user_id" for update`)}
 	} else {
@@ -349,10 +333,7 @@ func (_u *TagPreferenceUpdateOne) sqlSave(ctx context.Context) (_node *TagPrefer
 		}
 	}
 	if value, ok := _u.mutation.UserID(); ok {
-		_spec.SetField(tagpreference.FieldUserID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUserID(); ok {
-		_spec.AddField(tagpreference.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(tagpreference.FieldUserID, field.TypeUUID, value)
 	}
 	if value, ok := _u.mutation.Action(); ok {
 		_spec.SetField(tagpreference.FieldAction, field.TypeString, value)

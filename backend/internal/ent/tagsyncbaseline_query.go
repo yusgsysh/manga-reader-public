@@ -189,7 +189,7 @@ func (_q *TagSyncBaselineQuery) Clone() *TagSyncBaselineQuery {
 // Example:
 //
 //	var v []struct {
-//		UserID int64 `json:"user_id,omitempty"`
+//		UserID ident.UUID `json:"user_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
@@ -212,7 +212,7 @@ func (_q *TagSyncBaselineQuery) GroupBy(field string, fields ...string) *TagSync
 // Example:
 //
 //	var v []struct {
-//		UserID int64 `json:"user_id,omitempty"`
+//		UserID ident.UUID `json:"user_id,omitempty"`
 //	}
 //
 //	client.TagSyncBaseline.Query().

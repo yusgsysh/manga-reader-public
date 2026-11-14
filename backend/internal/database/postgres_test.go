@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"manga-reader/internal/ident"
+
 	"manga-reader/internal/ent/bookshelf"
 )
 
@@ -26,7 +28,7 @@ func TestPostgresCompatibility(t *testing.T) {
 	ctx := t.Context()
 
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
-	userID := int64(1)
+	userID := ident.New()
 	if _, err := db.Client.Bookshelf.Create().
 		SetUserID(userID).SetGalleryID(1).SetToken("pg-" + suffix).Save(ctx); err != nil {
 		t.Fatalf("create bookshelf: %v", err)

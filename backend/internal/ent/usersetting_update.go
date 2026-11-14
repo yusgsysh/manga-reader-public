@@ -150,7 +150,7 @@ func (_u *UserSettingUpdate) defaults() {
 }
 
 func (_u *UserSettingUpdate) sqlSave(ctx context.Context) (_node int, err error) {
-	_spec := sqlgraph.NewUpdateSpec(usersetting.Table, usersetting.Columns, sqlgraph.NewFieldSpec(usersetting.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(usersetting.Table, usersetting.Columns, sqlgraph.NewFieldSpec(usersetting.FieldID, field.TypeUUID))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -337,7 +337,7 @@ func (_u *UserSettingUpdateOne) defaults() {
 }
 
 func (_u *UserSettingUpdateOne) sqlSave(ctx context.Context) (_node *UserSetting, err error) {
-	_spec := sqlgraph.NewUpdateSpec(usersetting.Table, usersetting.Columns, sqlgraph.NewFieldSpec(usersetting.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(usersetting.Table, usersetting.Columns, sqlgraph.NewFieldSpec(usersetting.FieldID, field.TypeUUID))
 	id, ok := _u.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "UserSetting.id" for update`)}

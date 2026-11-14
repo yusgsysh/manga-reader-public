@@ -3,6 +3,7 @@
 package readingprogress
 
 import (
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -58,7 +59,7 @@ func ValidColumn(column string) bool {
 
 var (
 	// DefaultUserID holds the default value on creation for the "user_id" field.
-	DefaultUserID int64
+	DefaultUserID func() ident.UUID
 	// DefaultCurrentPage holds the default value on creation for the "current_page" field.
 	DefaultCurrentPage int
 	// CurrentPageValidator is a validator for the "current_page" field. It is called by the builders before save.
@@ -75,6 +76,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultID holds the default value on creation for the "id" field.
+	DefaultID func() ident.UUID
 )
 
 // OrderOption defines the ordering options for the ReadingProgress queries.

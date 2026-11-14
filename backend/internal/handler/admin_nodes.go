@@ -4,11 +4,11 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"manga-reader/internal/ident"
 
 	"manga-reader/internal/auth"
 	"manga-reader/internal/config"
@@ -21,24 +21,24 @@ import (
 )
 
 type nodeJSON struct {
-	ID         int     `json:"id"`
-	Name       string  `json:"name"`
-	Status     string  `json:"status"`
-	LastSeenAt *string `json:"last_seen_at"`
-	CreatedAt  string  `json:"created_at"`
-	UpdatedAt  string  `json:"updated_at"`
+	ID         ident.UUID `json:"id"`
+	Name       string     `json:"name"`
+	Status     string     `json:"status"`
+	LastSeenAt *string    `json:"last_seen_at"`
+	CreatedAt  string     `json:"created_at"`
+	UpdatedAt  string     `json:"updated_at"`
 }
 
 type nodeKeyJSON struct {
-	ID         int      `json:"id"`
-	NodeID     int      `json:"node_id"`
-	KeyPrefix  string   `json:"key_prefix"`
-	Scopes     []string `json:"scopes"`
-	Status     string   `json:"status"`
-	ExpiresAt  *string  `json:"expires_at"`
-	LastUsedAt *string  `json:"last_used_at"`
-	CreatedAt  string   `json:"created_at"`
-	RevokedAt  *string  `json:"revoked_at"`
+	ID         ident.UUID `json:"id"`
+	NodeID     ident.UUID `json:"node_id"`
+	KeyPrefix  string     `json:"key_prefix"`
+	Scopes     []string   `json:"scopes"`
+	Status     string     `json:"status"`
+	ExpiresAt  *string    `json:"expires_at"`
+	LastUsedAt *string    `json:"last_used_at"`
+	CreatedAt  string     `json:"created_at"`
+	RevokedAt  *string    `json:"revoked_at"`
 }
 
 func formatTimePtr(t *time.Time) *string {
@@ -364,8 +364,8 @@ func (s *Server) handleAdminNodeKeyRevoke(c *gin.Context) {
 	if !ok {
 		return
 	}
-	keyID, err := strconv.Atoi(c.Param("keyId"))
-	if err != nil || keyID <= 0 {
+	keyID, err := ident.Parse(c.Param("keyId"))
+	if err != nil || keyID == ident.Nil() {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid key id"})
 		return
 	}
@@ -395,8 +395,8 @@ func (s *Server) handleAdminNodeKeyRotate(c *gin.Context) {
 	if !ok {
 		return
 	}
-	keyID, err := strconv.Atoi(c.Param("keyId"))
-	if err != nil || keyID <= 0 {
+	keyID, err := ident.Parse(c.Param("keyId"))
+	if err != nil || keyID == ident.Nil() {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid key id"})
 		return
 	}
@@ -457,11 +457,11 @@ func (s *Server) handleAdminNodeKeyRotate(c *gin.Context) {
 	})
 }
 
-func nodeIDParam(c *gin.Context) (int, bool) {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil || id <= 0 {
+func nodeIDParam(c *gin.Context) (ident.UUID, bool) {
+	id, err := ident.Parse(c.Param("id"))
+	if err != nil || id == ident.Nil() {
 		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid node id"})
-		return 0, false
+		return ident.Nil(), false
 	}
 	return id, true
 }

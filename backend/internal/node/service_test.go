@@ -13,6 +13,7 @@ import (
 
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/gin-gonic/gin"
+	"manga-reader/internal/ident"
 	_ "modernc.org/sqlite"
 
 	"manga-reader/internal/config"
@@ -157,7 +158,7 @@ func TestNodeAPIKeyBindsNodeIdentity(t *testing.T) {
 	client := newTestDB(t)
 	n1, _ := client.Node.Create().SetName("n1").SetStatus(config.StatusActive).Save(t.Context())
 	n2, _ := client.Node.Create().SetName("n2").SetStatus(config.StatusActive).Save(t.Context())
-	makeKey := func(nodeID int) string {
+	makeKey := func(nodeID ident.UUID) string {
 		m, err := GenerateKey()
 		if err != nil {
 			t.Fatalf("key: %v", err)
@@ -176,7 +177,7 @@ func TestNodeAPIKeyBindsNodeIdentity(t *testing.T) {
 		id, _ := From(c)
 		c.JSON(http.StatusOK, gin.H{"node_id": id.NodeID})
 	})
-	do := func(key string) int {
+	do := func(key string) ident.UUID {
 		req := httptest.NewRequest(http.MethodPost, "/sync", nil)
 		req.Header.Set("Authorization", "Bearer "+key)
 		w := httptest.NewRecorder()
@@ -185,7 +186,7 @@ func TestNodeAPIKeyBindsNodeIdentity(t *testing.T) {
 			t.Fatalf("auth = %d %s", w.Code, w.Body.String())
 		}
 		var body struct {
-			NodeID int `json:"node_id"`
+			NodeID ident.UUID `json:"node_id"`
 		}
 		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 			t.Fatalf("decode: %v", err)
@@ -193,10 +194,10 @@ func TestNodeAPIKeyBindsNodeIdentity(t *testing.T) {
 		return body.NodeID
 	}
 	if got := do(k1); got != n1.ID {
-		t.Fatalf("key1 node = %d, want %d", got, n1.ID)
+		t.Fatalf("key1 node = %v, want %v", got, n1.ID)
 	}
 	if got := do(k2); got != n2.ID {
-		t.Fatalf("key2 node = %d, want %d", got, n2.ID)
+		t.Fatalf("key2 node = %v, want %v", got, n2.ID)
 	}
 }
 

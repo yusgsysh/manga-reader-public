@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 )
 
@@ -289,14 +290,21 @@ func duplicateUsernames(ctx context.Context, tx *sql.Tx) ([]string, error) {
 }
 
 func firstOwner(ctx context.Context, tx *sql.Tx, dialectName string) (int64, error) {
-	var id int64
+	// After the id->uuid migration users.id is a UUID string; there is no
+	// integer legacy owner to return, which is fine because the ownership
+	// assignment below only runs for tables that still lack a user_id column.
+	var raw string
 	err := tx.QueryRowContext(ctx,
-		`SELECT "id" FROM "users" ORDER BY CASE WHEN "role" IN ('platform_admin', 'tenant_admin', 'admin') THEN 0 ELSE 1 END, "id" LIMIT 1`).Scan(&id)
+		`SELECT "id" FROM "users" ORDER BY CASE WHEN "role" IN ('platform_admin', 'tenant_admin', 'admin') THEN 0 ELSE 1 END, "id" LIMIT 1`).Scan(&raw)
 	if err == sql.ErrNoRows {
 		return 0, nil
 	}
 	if err != nil {
 		return 0, fmt.Errorf("select legacy owner: %w", err)
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, nil
 	}
 	return id, nil
 }
@@ -389,12 +397,13 @@ func detectOwnedKeyCollisions(ctx context.Context, tx *sql.Tx, dialectName strin
 	return nil
 }
 
-// logUnownedRows reports rows left with user_id = 0 after the migration, so an
-// operator can assign them deliberately instead of assuming they were lost.
+// logUnownedRows reports rows left with the zero (unowned) owner UUID after the
+// migration, so an operator can assign them deliberately instead of assuming
+// they were lost.
 func logUnownedRows(ctx context.Context, conn *sql.DB) {
 	for _, table := range userOwnedTables {
 		var count int
-		if err := conn.QueryRowContext(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM "%s" WHERE "user_id" = 0`, table)).Scan(&count); err != nil {
+		if err := conn.QueryRowContext(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM "%s" WHERE "user_id" = '%s'`, table, zeroUUID)).Scan(&count); err != nil {
 			continue
 		}
 		if count > 0 {

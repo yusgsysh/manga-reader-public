@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"manga-reader/internal/ent/bookshelf"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -21,13 +22,13 @@ type BookshelfCreate struct {
 }
 
 // SetUserID sets the "user_id" field.
-func (_c *BookshelfCreate) SetUserID(v int64) *BookshelfCreate {
+func (_c *BookshelfCreate) SetUserID(v ident.UUID) *BookshelfCreate {
 	_c.mutation.SetUserID(v)
 	return _c
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_c *BookshelfCreate) SetNillableUserID(v *int64) *BookshelfCreate {
+func (_c *BookshelfCreate) SetNillableUserID(v *ident.UUID) *BookshelfCreate {
 	if v != nil {
 		_c.SetUserID(*v)
 	}
@@ -74,6 +75,20 @@ func (_c *BookshelfCreate) SetNillableUpdatedAt(v *time.Time) *BookshelfCreate {
 	return _c
 }
 
+// SetID sets the "id" field.
+func (_c *BookshelfCreate) SetID(v ident.UUID) *BookshelfCreate {
+	_c.mutation.SetID(v)
+	return _c
+}
+
+// SetNillableID sets the "id" field if the given value is not nil.
+func (_c *BookshelfCreate) SetNillableID(v *ident.UUID) *BookshelfCreate {
+	if v != nil {
+		_c.SetID(*v)
+	}
+	return _c
+}
+
 // Mutation returns the BookshelfMutation object of the builder.
 func (_c *BookshelfCreate) Mutation() *BookshelfMutation {
 	return _c.mutation
@@ -110,7 +125,7 @@ func (_c *BookshelfCreate) ExecX(ctx context.Context) {
 // defaults sets the default values of the builder before save.
 func (_c *BookshelfCreate) defaults() {
 	if _, ok := _c.mutation.UserID(); !ok {
-		v := bookshelf.DefaultUserID
+		v := bookshelf.DefaultUserID()
 		_c.mutation.SetUserID(v)
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
@@ -120,6 +135,10 @@ func (_c *BookshelfCreate) defaults() {
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		v := bookshelf.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
+	}
+	if _, ok := _c.mutation.ID(); !ok {
+		v := bookshelf.DefaultID()
+		_c.mutation.SetID(v)
 	}
 }
 
@@ -154,8 +173,13 @@ func (_c *BookshelfCreate) sqlSave(ctx context.Context) (*Bookshelf, error) {
 		}
 		return nil, err
 	}
-	id := _spec.ID.Value.(int64)
-	_node.ID = int(id)
+	if _spec.ID.Value != nil {
+		if id, ok := _spec.ID.Value.(*ident.UUID); ok {
+			_node.ID = *id
+		} else if err := _node.ID.Scan(_spec.ID.Value); err != nil {
+			return nil, err
+		}
+	}
 	_c.mutation.id = &_node.ID
 	_c.mutation.done = true
 	return _node, nil
@@ -164,10 +188,14 @@ func (_c *BookshelfCreate) sqlSave(ctx context.Context) (*Bookshelf, error) {
 func (_c *BookshelfCreate) createSpec() (*Bookshelf, *sqlgraph.CreateSpec) {
 	var (
 		_node = &Bookshelf{config: _c.config}
-		_spec = sqlgraph.NewCreateSpec(bookshelf.Table, sqlgraph.NewFieldSpec(bookshelf.FieldID, field.TypeInt))
+		_spec = sqlgraph.NewCreateSpec(bookshelf.Table, sqlgraph.NewFieldSpec(bookshelf.FieldID, field.TypeUUID))
 	)
+	if id, ok := _c.mutation.ID(); ok {
+		_node.ID = id
+		_spec.ID.Value = &id
+	}
 	if value, ok := _c.mutation.UserID(); ok {
-		_spec.SetField(bookshelf.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(bookshelf.FieldUserID, field.TypeUUID, value)
 		_node.UserID = value
 	}
 	if value, ok := _c.mutation.GalleryID(); ok {
@@ -234,10 +262,6 @@ func (_c *BookshelfCreateBulk) Save(ctx context.Context) ([]*Bookshelf, error) {
 					return nil, err
 				}
 				mutation.id = &nodes[i].ID
-				if specs[i].ID.Value != nil {
-					id := specs[i].ID.Value.(int64)
-					nodes[i].ID = int(id)
-				}
 				mutation.done = true
 				return nodes[i], nil
 			})

@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sync/singleflight"
+	"manga-reader/internal/ident"
 
 	"manga-reader/internal/cache"
 	"manga-reader/internal/exhentai"
@@ -265,12 +266,12 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 // is charged for the buffer once, not once per request. Only the leader proves
 // its own flag true because singleflight runs the closure on the leader's
 // goroutine; each caller has a private copy of the variable.
-func (s *Server) loadOrFetchImage(ctx context.Context, userID int64, key string, decodedURL string) (*imageResult, error) {
+func (s *Server) loadOrFetchImage(ctx context.Context, userID ident.UUID, key string, decodedURL string) (*imageResult, error) {
 	client, err := s.upstreamClient(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	flightKey := fmt.Sprintf("%d|%s", userID, key)
+	flightKey := fmt.Sprintf("%s|%s", userID, key)
 	var leader bool
 	v, sfErr, _ := cachedImageGroup.Do(flightKey, func() (any, error) {
 		leader = true
@@ -340,12 +341,12 @@ const pageFetchRetryDelay = 500 * time.Millisecond
 // the upstream on a cache miss. Concurrent calls for the same key are coalesced.
 // The reservation is taken once by the leader and shared by waiters, exactly as
 // in loadOrFetchImage; the caller owns one reference and must release() it.
-func (s *Server) loadOrFetchThumbnail(ctx context.Context, userID int64, key string, rawURL string) (*imageResult, error) {
+func (s *Server) loadOrFetchThumbnail(ctx context.Context, userID ident.UUID, key string, rawURL string) (*imageResult, error) {
 	client, err := s.upstreamClient(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	flightKey := fmt.Sprintf("%d|%s", userID, key)
+	flightKey := fmt.Sprintf("%s|%s", userID, key)
 	var leader bool
 	v, sfErr, _ := cachedImageGroup.Do(flightKey, func() (any, error) {
 		leader = true
@@ -409,7 +410,7 @@ func (s *Server) loadOrFetchThumbnail(ctx context.Context, userID int64, key str
 // Transient upstream errors are ignored. The refresh is best-effort: it never
 // blocks or fails the image request, and concurrent failures for the same
 // gallery collapse into one walk via the fill group.
-func (s *Server) triggerPageRefresh(ctx context.Context, userID int64, pageURL string, fetchErr error) {
+func (s *Server) triggerPageRefresh(ctx context.Context, userID ident.UUID, pageURL string, fetchErr error) {
 	if !exhentai.IsPermanentUpstreamError(fetchErr) {
 		return
 	}

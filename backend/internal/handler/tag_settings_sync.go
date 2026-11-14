@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"manga-reader/internal/ident"
 
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/tagpreference"
@@ -67,7 +68,7 @@ type tagSyncPlan struct {
 }
 
 // loadTagRules reads all stored tag preferences ordered by tag.
-func (s *Server) loadTagRules(ctx context.Context, userID int64) ([]model.TagPreference, error) {
+func (s *Server) loadTagRules(ctx context.Context, userID ident.UUID) ([]model.TagPreference, error) {
 	rows, err := s.DB.Client.TagPreference.Query().
 		Where(tagpreference.UserIDEQ(userID)).
 		Order(ent.Asc(tagpreference.FieldID)).
@@ -84,7 +85,7 @@ func (s *Server) loadTagRules(ctx context.Context, userID int64) ([]model.TagPre
 
 // loadTagBaseline reads the last-synced source snapshot used as the merge
 // common ancestor.
-func (s *Server) loadTagBaseline(ctx context.Context, userID int64) ([]model.TagPreference, error) {
+func (s *Server) loadTagBaseline(ctx context.Context, userID ident.UUID) ([]model.TagPreference, error) {
 	rows, err := s.DB.Client.TagSyncBaseline.Query().
 		Where(tagsyncbaseline.UserIDEQ(userID)).
 		Order(ent.Asc(tagsyncbaseline.FieldID)).
@@ -477,7 +478,7 @@ func (s *Server) handleTagSettingsSync(c *gin.Context) {
 // plan's outcomes; keys mapped to nil drop their row.
 func (s *Server) applyTagSyncState(
 	ctx context.Context,
-	userID int64,
+	userID ident.UUID,
 	pulls []tagPullOp,
 	baseline []model.TagPreference,
 	after map[string]*model.TagPreference,

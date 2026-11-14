@@ -4,53 +4,54 @@ package node
 
 import (
 	"manga-reader/internal/ent/predicate"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
 )
 
 // ID filters vertices based on their ID field.
-func ID(id int) predicate.Node {
+func ID(id ident.UUID) predicate.Node {
 	return predicate.Node(sql.FieldEQ(FieldID, id))
 }
 
 // IDEQ applies the EQ predicate on the ID field.
-func IDEQ(id int) predicate.Node {
+func IDEQ(id ident.UUID) predicate.Node {
 	return predicate.Node(sql.FieldEQ(FieldID, id))
 }
 
 // IDNEQ applies the NEQ predicate on the ID field.
-func IDNEQ(id int) predicate.Node {
+func IDNEQ(id ident.UUID) predicate.Node {
 	return predicate.Node(sql.FieldNEQ(FieldID, id))
 }
 
 // IDIn applies the In predicate on the ID field.
-func IDIn(ids ...int) predicate.Node {
+func IDIn(ids ...ident.UUID) predicate.Node {
 	return predicate.Node(sql.FieldIn(FieldID, ids...))
 }
 
 // IDNotIn applies the NotIn predicate on the ID field.
-func IDNotIn(ids ...int) predicate.Node {
+func IDNotIn(ids ...ident.UUID) predicate.Node {
 	return predicate.Node(sql.FieldNotIn(FieldID, ids...))
 }
 
 // IDGT applies the GT predicate on the ID field.
-func IDGT(id int) predicate.Node {
+func IDGT(id ident.UUID) predicate.Node {
 	return predicate.Node(sql.FieldGT(FieldID, id))
 }
 
 // IDGTE applies the GTE predicate on the ID field.
-func IDGTE(id int) predicate.Node {
+func IDGTE(id ident.UUID) predicate.Node {
 	return predicate.Node(sql.FieldGTE(FieldID, id))
 }
 
 // IDLT applies the LT predicate on the ID field.
-func IDLT(id int) predicate.Node {
+func IDLT(id ident.UUID) predicate.Node {
 	return predicate.Node(sql.FieldLT(FieldID, id))
 }
 
 // IDLTE applies the LTE predicate on the ID field.
-func IDLTE(id int) predicate.Node {
+func IDLTE(id ident.UUID) predicate.Node {
 	return predicate.Node(sql.FieldLTE(FieldID, id))
 }
 

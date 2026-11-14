@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"manga-reader/internal/ent/tagpreference"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -21,13 +22,13 @@ type TagPreferenceCreate struct {
 }
 
 // SetUserID sets the "user_id" field.
-func (_c *TagPreferenceCreate) SetUserID(v int64) *TagPreferenceCreate {
+func (_c *TagPreferenceCreate) SetUserID(v ident.UUID) *TagPreferenceCreate {
 	_c.mutation.SetUserID(v)
 	return _c
 }
 
 // SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_c *TagPreferenceCreate) SetNillableUserID(v *int64) *TagPreferenceCreate {
+func (_c *TagPreferenceCreate) SetNillableUserID(v *ident.UUID) *TagPreferenceCreate {
 	if v != nil {
 		_c.SetUserID(*v)
 	}
@@ -124,7 +125,7 @@ func (_c *TagPreferenceCreate) ExecX(ctx context.Context) {
 // defaults sets the default values of the builder before save.
 func (_c *TagPreferenceCreate) defaults() {
 	if _, ok := _c.mutation.UserID(); !ok {
-		v := tagpreference.DefaultUserID
+		v := tagpreference.DefaultUserID()
 		_c.mutation.SetUserID(v)
 	}
 	if _, ok := _c.mutation.Weight(); !ok {
@@ -194,7 +195,7 @@ func (_c *TagPreferenceCreate) createSpec() (*TagPreference, *sqlgraph.CreateSpe
 		_spec = sqlgraph.NewCreateSpec(tagpreference.Table, nil)
 	)
 	if value, ok := _c.mutation.UserID(); ok {
-		_spec.SetField(tagpreference.FieldUserID, field.TypeInt64, value)
+		_spec.SetField(tagpreference.FieldUserID, field.TypeUUID, value)
 		_node.UserID = value
 	}
 	if value, ok := _c.mutation.Action(); ok {

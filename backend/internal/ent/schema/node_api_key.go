@@ -3,6 +3,8 @@ package schema
 import (
 	"time"
 
+	"manga-reader/internal/ident"
+
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
@@ -27,7 +29,11 @@ func (NodeAPIKey) Annotations() []schema.Annotation {
 // Fields of the NodeAPIKey.
 func (NodeAPIKey) Fields() []ent.Field {
 	return []ent.Field{
-		field.Int("node_id"),
+		field.UUID("id", ident.UUID{}).
+			Default(uuidV7).
+			SchemaType(uuidSchemaType),
+		field.UUID("node_id", ident.UUID{}).
+			SchemaType(uuidSchemaType),
 		field.String("key_hash").NotEmpty().Unique().Sensitive(),
 		// key_prefix is safe to display in the UI and lets verification
 		// select a small candidate set before constant-time comparison.

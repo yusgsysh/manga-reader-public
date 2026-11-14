@@ -3,6 +3,7 @@
 package tagsyncbaseline
 
 import (
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -49,7 +50,7 @@ func ValidColumn(column string) bool {
 
 var (
 	// DefaultUserID holds the default value on creation for the "user_id" field.
-	DefaultUserID int64
+	DefaultUserID func() ident.UUID
 	// ActionValidator is a validator for the "action" field. It is called by the builders before save.
 	ActionValidator func(string) error
 	// DefaultWeight holds the default value on creation for the "weight" field.

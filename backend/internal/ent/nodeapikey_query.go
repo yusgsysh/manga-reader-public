@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"manga-reader/internal/ent/nodeapikey"
 	"manga-reader/internal/ent/predicate"
+	"manga-reader/internal/ident"
 	"math"
 
 	"entgo.io/ent"
@@ -82,8 +83,8 @@ func (_q *NodeAPIKeyQuery) FirstX(ctx context.Context) *NodeAPIKey {
 
 // FirstID returns the first NodeAPIKey ID from the query.
 // Returns a *NotFoundError when no NodeAPIKey ID was found.
-func (_q *NodeAPIKeyQuery) FirstID(ctx context.Context) (id int, err error) {
-	var ids []int
+func (_q *NodeAPIKeyQuery) FirstID(ctx context.Context) (id ident.UUID, err error) {
+	var ids []ident.UUID
 	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
@@ -95,7 +96,7 @@ func (_q *NodeAPIKeyQuery) FirstID(ctx context.Context) (id int, err error) {
 }
 
 // FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *NodeAPIKeyQuery) FirstIDX(ctx context.Context) int {
+func (_q *NodeAPIKeyQuery) FirstIDX(ctx context.Context) ident.UUID {
 	id, err := _q.FirstID(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -133,8 +134,8 @@ func (_q *NodeAPIKeyQuery) OnlyX(ctx context.Context) *NodeAPIKey {
 // OnlyID is like Only, but returns the only NodeAPIKey ID in the query.
 // Returns a *NotSingularError when more than one NodeAPIKey ID is found.
 // Returns a *NotFoundError when no entities are found.
-func (_q *NodeAPIKeyQuery) OnlyID(ctx context.Context) (id int, err error) {
-	var ids []int
+func (_q *NodeAPIKeyQuery) OnlyID(ctx context.Context) (id ident.UUID, err error) {
+	var ids []ident.UUID
 	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
@@ -150,7 +151,7 @@ func (_q *NodeAPIKeyQuery) OnlyID(ctx context.Context) (id int, err error) {
 }
 
 // OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *NodeAPIKeyQuery) OnlyIDX(ctx context.Context) int {
+func (_q *NodeAPIKeyQuery) OnlyIDX(ctx context.Context) ident.UUID {
 	id, err := _q.OnlyID(ctx)
 	if err != nil {
 		panic(err)
@@ -178,7 +179,7 @@ func (_q *NodeAPIKeyQuery) AllX(ctx context.Context) []*NodeAPIKey {
 }
 
 // IDs executes the query and returns a list of NodeAPIKey IDs.
-func (_q *NodeAPIKeyQuery) IDs(ctx context.Context) (ids []int, err error) {
+func (_q *NodeAPIKeyQuery) IDs(ctx context.Context) (ids []ident.UUID, err error) {
 	if _q.ctx.Unique == nil && _q.path != nil {
 		_q.Unique(true)
 	}
@@ -190,7 +191,7 @@ func (_q *NodeAPIKeyQuery) IDs(ctx context.Context) (ids []int, err error) {
 }
 
 // IDsX is like IDs, but panics if an error occurs.
-func (_q *NodeAPIKeyQuery) IDsX(ctx context.Context) []int {
+func (_q *NodeAPIKeyQuery) IDsX(ctx context.Context) []ident.UUID {
 	ids, err := _q.IDs(ctx)
 	if err != nil {
 		panic(err)
@@ -262,7 +263,7 @@ func (_q *NodeAPIKeyQuery) Clone() *NodeAPIKeyQuery {
 // Example:
 //
 //	var v []struct {
-//		NodeID int `json:"node_id,omitempty"`
+//		NodeID ident.UUID `json:"node_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
@@ -285,7 +286,7 @@ func (_q *NodeAPIKeyQuery) GroupBy(field string, fields ...string) *NodeAPIKeyGr
 // Example:
 //
 //	var v []struct {
-//		NodeID int `json:"node_id,omitempty"`
+//		NodeID ident.UUID `json:"node_id,omitempty"`
 //	}
 //
 //	client.NodeAPIKey.Query().
@@ -365,7 +366,7 @@ func (_q *NodeAPIKeyQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (_q *NodeAPIKeyQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(nodeapikey.Table, nodeapikey.Columns, sqlgraph.NewFieldSpec(nodeapikey.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewQuerySpec(nodeapikey.Table, nodeapikey.Columns, sqlgraph.NewFieldSpec(nodeapikey.FieldID, field.TypeUUID))
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique

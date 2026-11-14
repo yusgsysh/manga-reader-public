@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"manga-reader/internal/ent/nodeapikey"
 	"manga-reader/internal/ent/predicate"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -30,23 +31,16 @@ func (_u *NodeAPIKeyUpdate) Where(ps ...predicate.NodeAPIKey) *NodeAPIKeyUpdate 
 }
 
 // SetNodeID sets the "node_id" field.
-func (_u *NodeAPIKeyUpdate) SetNodeID(v int) *NodeAPIKeyUpdate {
-	_u.mutation.ResetNodeID()
+func (_u *NodeAPIKeyUpdate) SetNodeID(v ident.UUID) *NodeAPIKeyUpdate {
 	_u.mutation.SetNodeID(v)
 	return _u
 }
 
 // SetNillableNodeID sets the "node_id" field if the given value is not nil.
-func (_u *NodeAPIKeyUpdate) SetNillableNodeID(v *int) *NodeAPIKeyUpdate {
+func (_u *NodeAPIKeyUpdate) SetNillableNodeID(v *ident.UUID) *NodeAPIKeyUpdate {
 	if v != nil {
 		_u.SetNodeID(*v)
 	}
-	return _u
-}
-
-// AddNodeID adds value to the "node_id" field.
-func (_u *NodeAPIKeyUpdate) AddNodeID(v int) *NodeAPIKeyUpdate {
-	_u.mutation.AddNodeID(v)
 	return _u
 }
 
@@ -221,7 +215,7 @@ func (_u *NodeAPIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(nodeapikey.Table, nodeapikey.Columns, sqlgraph.NewFieldSpec(nodeapikey.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(nodeapikey.Table, nodeapikey.Columns, sqlgraph.NewFieldSpec(nodeapikey.FieldID, field.TypeUUID))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -230,10 +224,7 @@ func (_u *NodeAPIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 		}
 	}
 	if value, ok := _u.mutation.NodeID(); ok {
-		_spec.SetField(nodeapikey.FieldNodeID, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedNodeID(); ok {
-		_spec.AddField(nodeapikey.FieldNodeID, field.TypeInt, value)
+		_spec.SetField(nodeapikey.FieldNodeID, field.TypeUUID, value)
 	}
 	if value, ok := _u.mutation.KeyHash(); ok {
 		_spec.SetField(nodeapikey.FieldKeyHash, field.TypeString, value)
@@ -294,23 +285,16 @@ type NodeAPIKeyUpdateOne struct {
 }
 
 // SetNodeID sets the "node_id" field.
-func (_u *NodeAPIKeyUpdateOne) SetNodeID(v int) *NodeAPIKeyUpdateOne {
-	_u.mutation.ResetNodeID()
+func (_u *NodeAPIKeyUpdateOne) SetNodeID(v ident.UUID) *NodeAPIKeyUpdateOne {
 	_u.mutation.SetNodeID(v)
 	return _u
 }
 
 // SetNillableNodeID sets the "node_id" field if the given value is not nil.
-func (_u *NodeAPIKeyUpdateOne) SetNillableNodeID(v *int) *NodeAPIKeyUpdateOne {
+func (_u *NodeAPIKeyUpdateOne) SetNillableNodeID(v *ident.UUID) *NodeAPIKeyUpdateOne {
 	if v != nil {
 		_u.SetNodeID(*v)
 	}
-	return _u
-}
-
-// AddNodeID adds value to the "node_id" field.
-func (_u *NodeAPIKeyUpdateOne) AddNodeID(v int) *NodeAPIKeyUpdateOne {
-	_u.mutation.AddNodeID(v)
 	return _u
 }
 
@@ -498,7 +482,7 @@ func (_u *NodeAPIKeyUpdateOne) sqlSave(ctx context.Context) (_node *NodeAPIKey, 
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(nodeapikey.Table, nodeapikey.Columns, sqlgraph.NewFieldSpec(nodeapikey.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(nodeapikey.Table, nodeapikey.Columns, sqlgraph.NewFieldSpec(nodeapikey.FieldID, field.TypeUUID))
 	id, ok := _u.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "NodeAPIKey.id" for update`)}
@@ -524,10 +508,7 @@ func (_u *NodeAPIKeyUpdateOne) sqlSave(ctx context.Context) (_node *NodeAPIKey, 
 		}
 	}
 	if value, ok := _u.mutation.NodeID(); ok {
-		_spec.SetField(nodeapikey.FieldNodeID, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedNodeID(); ok {
-		_spec.AddField(nodeapikey.FieldNodeID, field.TypeInt, value)
+		_spec.SetField(nodeapikey.FieldNodeID, field.TypeUUID, value)
 	}
 	if value, ok := _u.mutation.KeyHash(); ok {
 		_spec.SetField(nodeapikey.FieldKeyHash, field.TypeString, value)

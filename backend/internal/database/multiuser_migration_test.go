@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"manga-reader/internal/ident"
+
 	"manga-reader/internal/config"
 	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/readingprogress"
@@ -170,44 +172,49 @@ INSERT INTO node (name, tenant_id, status, created_at, updated_at) VALUES
 	}
 
 	roles := map[string]string{}
+	userIDs := map[string]ident.UUID{}
 	rows, err := db.Client.User.Query().All(ctx)
 	if err != nil || len(rows) != 4 {
 		t.Fatalf("users = %d (err %v), want 4", len(rows), err)
 	}
 	for _, row := range rows {
 		roles[row.Username] = row.Role
+		userIDs[row.Username] = row.ID
 	}
 	if roles["admin-a"] != config.RoleAdmin || roles["admin-b"] != config.RoleAdmin ||
 		roles["member-a"] != config.RoleUser || roles["member-b"] != config.RoleUser {
 		t.Fatalf("roles after migration = %+v", roles)
 	}
 
-	assertShelf := func(userID, galleryID int64, token string) {
+	adminA := userIDs["admin-a"]
+	adminB := userIDs["admin-b"]
+
+	assertShelf := func(userID ident.UUID, galleryID int64, token string) {
 		t.Helper()
 		if _, err := db.Client.Bookshelf.Query().
 			Where(bookshelf.UserIDEQ(userID), bookshelf.GalleryID(galleryID), bookshelf.Token(token)).
 			Only(ctx); err != nil {
-			t.Fatalf("bookshelf user=%d %d/%s missing: %v", userID, galleryID, token, err)
+			t.Fatalf("bookshelf user=%v %d/%s missing: %v", userID, galleryID, token, err)
 		}
 	}
-	assertShelf(1, 42, "same")
-	assertShelf(3, 42, "same")
-	assertShelf(0, 43, "orphan")
+	assertShelf(adminA, 42, "same")
+	assertShelf(adminB, 42, "same")
+	assertShelf(ident.Nil(), 43, "orphan")
 
-	for userID, page := range map[int64]int{1: 4, 3: 8} {
+	for userID, page := range map[ident.UUID]int{adminA: 4, adminB: 8} {
 		p, err := db.Client.ReadingProgress.Query().
 			Where(readingprogress.UserIDEQ(userID), readingprogress.GalleryID(42), readingprogress.Token("same")).
 			Only(ctx)
 		if err != nil || p.CurrentPage != page {
-			t.Fatalf("progress user=%d = %+v (err %v), want page %d", userID, p, err, page)
+			t.Fatalf("progress user=%v = %+v (err %v), want page %d", userID, p, err, page)
 		}
 	}
-	for userID, action := range map[int64]string{1: "like", 3: "dislike"} {
+	for userID, action := range map[ident.UUID]string{adminA: "like", adminB: "dislike"} {
 		tag, err := db.Client.TagPreference.Query().
 			Where(tagpreference.UserIDEQ(userID), tagpreference.IDEQ("female:yuri")).
 			Only(ctx)
 		if err != nil || tag.Action != action {
-			t.Fatalf("tag user=%d = %+v (err %v), want %s", userID, tag, err, action)
+			t.Fatalf("tag user=%v = %+v (err %v), want %s", userID, tag, err, action)
 		}
 	}
 	if n, err := db.Client.Node.Query().Count(ctx); err != nil || n != 2 {
@@ -238,8 +245,8 @@ INSERT INTO node (name, tenant_id, status, created_at, updated_at) VALUES
 	defer again.Close()
 	orphan, err := again.Client.Bookshelf.Query().
 		Where(bookshelf.GalleryID(43), bookshelf.Token("orphan")).Only(context.Background())
-	if err != nil || orphan.UserID != 0 {
-		t.Fatalf("orphan row = %+v (err %v), want user_id 0", orphan, err)
+	if err != nil || orphan.UserID != ident.Nil() {
+		t.Fatalf("orphan row = %+v (err %v), want user_id nil", orphan, err)
 	}
 }
 

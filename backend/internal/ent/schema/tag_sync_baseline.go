@@ -3,6 +3,8 @@ package schema
 import (
 	"time"
 
+	"manga-reader/internal/ident"
+
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
@@ -31,7 +33,9 @@ func (TagSyncBaseline) Annotations() []schema.Annotation {
 // Fields of the TagSyncBaseline.
 func (TagSyncBaseline) Fields() []ent.Field {
 	return []ent.Field{
-		field.Int64("user_id").Default(0),
+		field.UUID("user_id", ident.UUID{}).
+			Default(uuidNil).
+			SchemaType(uuidSchemaType),
 		// The tag itself is the identity within a user: the primary key is
 		// (user_id, tag).
 		field.String("id").

@@ -4,13 +4,14 @@ package tagpreference
 
 import (
 	"manga-reader/internal/ent/predicate"
+	"manga-reader/internal/ident"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
 )
 
 // UserID applies equality check predicate on the "user_id" field. It's identical to UserIDEQ.
-func UserID(v int64) predicate.TagPreference {
+func UserID(v ident.UUID) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldEQ(FieldUserID, v))
 }
 
@@ -40,42 +41,42 @@ func ID(v string) predicate.TagPreference {
 }
 
 // UserIDEQ applies the EQ predicate on the "user_id" field.
-func UserIDEQ(v int64) predicate.TagPreference {
+func UserIDEQ(v ident.UUID) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldEQ(FieldUserID, v))
 }
 
 // UserIDNEQ applies the NEQ predicate on the "user_id" field.
-func UserIDNEQ(v int64) predicate.TagPreference {
+func UserIDNEQ(v ident.UUID) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldNEQ(FieldUserID, v))
 }
 
 // UserIDIn applies the In predicate on the "user_id" field.
-func UserIDIn(vs ...int64) predicate.TagPreference {
+func UserIDIn(vs ...ident.UUID) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldIn(FieldUserID, vs...))
 }
 
 // UserIDNotIn applies the NotIn predicate on the "user_id" field.
-func UserIDNotIn(vs ...int64) predicate.TagPreference {
+func UserIDNotIn(vs ...ident.UUID) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldNotIn(FieldUserID, vs...))
 }
 
 // UserIDGT applies the GT predicate on the "user_id" field.
-func UserIDGT(v int64) predicate.TagPreference {
+func UserIDGT(v ident.UUID) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldGT(FieldUserID, v))
 }
 
 // UserIDGTE applies the GTE predicate on the "user_id" field.
-func UserIDGTE(v int64) predicate.TagPreference {
+func UserIDGTE(v ident.UUID) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldGTE(FieldUserID, v))
 }
 
 // UserIDLT applies the LT predicate on the "user_id" field.
-func UserIDLT(v int64) predicate.TagPreference {
+func UserIDLT(v ident.UUID) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldLT(FieldUserID, v))
 }
 
 // UserIDLTE applies the LTE predicate on the "user_id" field.
-func UserIDLTE(v int64) predicate.TagPreference {
+func UserIDLTE(v ident.UUID) predicate.TagPreference {
 	return predicate.TagPreference(sql.FieldLTE(FieldUserID, v))
 }
 
