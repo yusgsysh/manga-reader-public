@@ -174,10 +174,13 @@ function PageThumb({
       )}
       {showShimmer && (
         // The wrapper is absolute while .skeleton-shimmer keeps
-        // `position: relative`, so the shimmer fills the tile.
-        <span className="absolute inset-0 overflow-hidden" aria-hidden>
-          <span className="skeleton-shimmer h-full w-full bg-kumo-recessed" />
-        </span>
+        // `position: relative`, so the shimmer fills the tile. Use block-level
+        // <div>s (like the gallery grid): `position: relative` does not
+        // blockify an inline <span>, so `h-full w-full` would be ignored and
+        // the placeholder would collapse to nothing.
+        <div className="absolute inset-0 overflow-hidden" aria-hidden>
+          <div className="skeleton-shimmer h-full w-full bg-kumo-recessed" />
+        </div>
       )}
       <span className="absolute right-1 bottom-1 rounded-full bg-black/65 px-1.5 py-0.5 text-[11px] font-semibold leading-relaxed text-white tabular-nums">
         {index + 1}
