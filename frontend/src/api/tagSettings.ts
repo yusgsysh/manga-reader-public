@@ -19,7 +19,7 @@ export interface TagSettings {
 }
 
 /** One tag the sync could not apply on the source. */
-export interface TagSyncFailure {
+interface TagSyncFailure {
   tag: string;
   error: string;
 }

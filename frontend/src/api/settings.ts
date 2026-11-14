@@ -1,6 +1,6 @@
 import { apiDelete, apiGet, apiPostJson, apiPut } from "./client";
 
-export type CookieStatus = "unset" | "unverified" | "valid" | "invalid";
+type CookieStatus = "unset" | "unverified" | "valid" | "invalid";
 export type ExhentaiSite = "exhentai" | "e-hentai";
 
 export interface CookieSummary {
@@ -13,30 +13,13 @@ export interface CookieSummary {
   has_sk: boolean;
 }
 
-export interface PersonalSettings {
-  preferences: Record<string, unknown>;
-  site: ExhentaiSite;
-  cookie: CookieSummary
-}
-
-export interface CookieUpdate {
+interface CookieUpdate {
   cookie?: string;
   ipb_member_id?: string;
   ipb_pass_hash?: string;
   igneous?: string;
   sk?: string;
   site?: ExhentaiSite;
-}
-
-export function fetchSettings(): Promise<PersonalSettings> {
-  return apiGet<PersonalSettings>("/api/settings");
-}
-
-export function saveSettings(input: {
-  preferences: Record<string, unknown>;
-  site?: ExhentaiSite;
-}): Promise<PersonalSettings> {
-  return apiPut<PersonalSettings>("/api/settings", input);
 }
 
 export function fetchCookie(): Promise<CookieSummary> {

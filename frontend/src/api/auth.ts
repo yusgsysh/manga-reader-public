@@ -7,11 +7,11 @@ export interface AuthUser {
   role: string;
 }
 
-export interface AuthIdentity {
+interface AuthIdentity {
   user: AuthUser;
 }
 
-export interface AuthStatus {
+interface AuthStatus {
   initialized: boolean;
 }
 
@@ -32,11 +32,11 @@ interface MeResponse {
   role: string;
 }
 
-export function fetchAuthStatus(): Promise<AuthStatus> {
+function fetchAuthStatus(): Promise<AuthStatus> {
   return apiGet<AuthStatus>("/api/auth/status");
 }
 
-export async function fetchCurrentUser(): Promise<AuthIdentity> {
+async function fetchCurrentUser(): Promise<AuthIdentity> {
   const response = await apiGet<MeResponse>("/api/auth/me");
   return {
     user: {

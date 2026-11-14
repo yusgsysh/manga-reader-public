@@ -1,7 +1,7 @@
 import { apiDelete, apiGet, apiPostJson, apiPut } from "./client";
 
-export type NodeStatus = "active" | "disabled";
-export type NodeKeyStatus = "active" | "revoked";
+type NodeStatus = "active" | "disabled";
+type NodeKeyStatus = "active" | "revoked";
 /** Sync scopes are checked by default; metrics access is a separate opt-in. */
 export const NODE_SCOPES = ["sync:read", "sync:write", "sync:events"] as const;
 export const METRICS_SCOPE = "metrics:read" as const;
@@ -28,7 +28,7 @@ export interface NodeAPIKey {
   revoked_at: string | null;
 }
 
-export interface CreatedNodeKey {
+interface CreatedNodeKey {
   /** Full plaintext key. Returned only once by the server. */
   key: string;
   api_key: NodeAPIKey;

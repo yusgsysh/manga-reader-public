@@ -6,7 +6,7 @@ import {
   apiPut,
 } from "./client";
 
-export type UserStatus = "active" | "disabled";
+type UserStatus = "active" | "disabled";
 export type UserRole = "admin" | "user";
 
 export interface AdminUser {
@@ -23,7 +23,7 @@ export function fetchUsers(): Promise<{ users: AdminUser[] }> {
   return apiGet<{ users: AdminUser[] }>("/api/admin/users");
 }
 
-export interface CreateUserInput {
+interface CreateUserInput {
   username: string;
   password: string;
   role?: UserRole;
@@ -34,7 +34,7 @@ export function createUser(input: CreateUserInput): Promise<AdminUser> {
   return apiPostJson<AdminUser>("/api/admin/users", input);
 }
 
-export interface UpdateUserInput {
+interface UpdateUserInput {
   username?: string;
   password?: string;
   role?: UserRole;

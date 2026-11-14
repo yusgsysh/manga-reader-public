@@ -22,8 +22,6 @@
   --color-kumo-brand-hover: #1d4ed8;
   --color-kumo-focus: var(--app-accent);
   --text-color-kumo-link: var(--app-accent);
-
-  --app-cover-radius: 0.75rem;
 }
 
 [data-mode="dark"] {

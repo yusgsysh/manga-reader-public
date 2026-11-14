@@ -1,8 +1,8 @@
 import { useKumoToastManager } from "@cloudflare/kumo";
 
-export type ToastVariant = "default" | "success" | "error" | "warning" | "info";
+type ToastVariant = "default" | "success" | "error" | "warning" | "info";
 
-export interface ToastOptions {
+interface ToastOptions {
   title: string;
   description?: string;
   variant?: ToastVariant;

@@ -13,7 +13,7 @@ import {
   type TagSyncResult,
 } from "../api/tagSettings";
 
-export const TAG_SETTINGS_QUERY_KEY = ["tag-settings"] as const;
+const TAG_SETTINGS_QUERY_KEY = ["tag-settings"] as const;
 
 /**
  * Solid-background chip classes matching the source My Tags colours
@@ -25,7 +25,7 @@ export const TAG_ACTION_CHIP_CLASS: Record<TagAction, string> = {
   dislike: "bg-[#FF6666] text-[#f1f1f1]",
 };
 
-export function tagKey(namespace: string, name: string): string {
+function tagKey(namespace: string, name: string): string {
   return namespace ? `${namespace}:${name}` : name;
 }
 
@@ -34,7 +34,7 @@ const ACTION_ORDER: Record<TagAction, number> = { like: 0, dislike: 1 };
 const NEUTRAL_ORDER = 2;
 
 /** Full preference for one tag: action + sort weight (mirrors My Tags). */
-export interface TagRule {
+interface TagRule {
   action: TagAction;
   weight: number;
 }

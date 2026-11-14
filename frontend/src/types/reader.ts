@@ -1,4 +1,4 @@
-export interface GalleryPageThumb {
+interface GalleryPageThumb {
   sprite_url: string;
   x: number;
   y: number;

@@ -5,13 +5,13 @@ export type PrefillStatus =
   | "cancelled"
   | "failed";
 
-export interface PrefillProgress {
+interface PrefillProgress {
   done: number;
   cached: number;
   fetched: number;
 }
 
-export interface PrefillItemError {
+interface PrefillItemError {
   index: number;
   url: string;
   error: string;

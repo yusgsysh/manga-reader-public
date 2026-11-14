@@ -2,12 +2,12 @@ import { useState } from "react";
 import { CaretDown } from "@phosphor-icons/react";
 import { cn } from "@cloudflare/kumo";
 
-export interface SettingsNavItem {
+interface SettingsNavItem {
   id: string;
   label: string;
 }
 
-export interface SettingsNavGroup {
+interface SettingsNavGroup {
   id: string;
   label: string;
   items: SettingsNavItem[];
