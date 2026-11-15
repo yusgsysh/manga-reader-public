@@ -256,6 +256,15 @@ bun run repro:reader-loading      # 诊断探针：仍白屏则 exit 0，已修�
 
 5. 建议同时向上游提 issue/PR（合并两条渲染分支、补齐触摸事件、暴露 back/全屏事件与隐藏宽屏选项），最终移除补丁。
 
+### 应用侧自绘控件动画
+
+阅读器顶栏的按钮使用项目自己的 `IconButton` 组件，没有沿用 comimi 的控件。为了让这些按钮也有和 comimi 内置按钮一致的按压反馈，参考 comimi 的 `comimi-pop` 关键帧给 `IconButton` 加了「按下时图标弹一下」的动画：
+
+- `src/components/ui/IconButton.tsx`：在 `onMouseDown` 时移除再重新添加 `icon-button-pop` 类，触发 CSS 动画；动画结束后通过 `onAnimationEnd` 清理类名。
+- `src/index.css`：新增 `icon-button-pop` 关键帧，让图标在 50% 时纵向压扁、横向拉长，75% 时反向回弹，最终恢复；同时给 `IconButton` 内的 SVG 加上基于 `--reader-spring` 的 `transform` 过渡，并在 `prefers-reduced-motion: reduce` 时关闭动画。
+
+这样阅读器工具栏的「返回 / 播放 / 全屏 / 快捷键 / 页面列表 / 设置」等按钮在按下时都会获得与 comimi 视图切换器、翻页模式按钮同款的弹性反馈。
+
 ## 环境变量
 
 复制 `.env.example` 为 `.env` 并按需修改：

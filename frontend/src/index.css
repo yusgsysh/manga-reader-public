@@ -369,6 +369,47 @@ body {
   animation: settings-section-slide 0.22s ease-out;
 }
 
+/*
+ * Icon button "pop" animation, modelled after comimi's own `comimi-pop`
+ * keyframes (used for the view-mode switcher / page-mode icons).
+ * The animation is retriggered on every mousedown by removing/adding the
+ * class in JS, so the icon briefly squeezes and bounces back.
+ */
+@keyframes icon-button-pop {
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+  50% {
+    transform: scale(0.92, 1.12);
+  }
+  75% {
+    transform: scale(1.08, 0.92);
+  }
+}
+
+.icon-button {
+  transform-origin: center bottom;
+}
+
+.icon-button > svg {
+  transition: transform 0.36s var(--reader-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+
+.icon-button-pop {
+  animation: icon-button-pop 0.42s ease-in-out 0s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-button-pop {
+    animation: none;
+  }
+
+  .icon-button > svg {
+    transition: none;
+  }
+}
+
 .skeleton-shimmer {
   position: relative;
   overflow: hidden;
