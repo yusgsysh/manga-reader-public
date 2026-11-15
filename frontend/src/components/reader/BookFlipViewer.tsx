@@ -45,7 +45,7 @@ import {
   type ReadingDirection,
 } from "../../lib/bookPages";
 import { PageImageCache } from "../../lib/pageImages";
-import { fitPageTexture, pageFit } from "../../lib/pageTexture";
+import { fitPageTexture } from "../../lib/pageTexture";
 
 /** One page's width over its height, until the first image says otherwise. */
 const FALLBACK_PAGE_RATIO = 0.7;
@@ -480,7 +480,6 @@ export const BookFlipViewer = forwardRef<
         key={index}
         index={index}
         images={images}
-        pageRatio={pageRatio}
         onSize={handlePageSize}
       />
     );
@@ -537,16 +536,13 @@ export const BookFlipViewer = forwardRef<
 function BookPageImage({
   index,
   images,
-  pageRatio,
   onSize,
 }: {
   index: number;
   images: PageImageCache;
-  pageRatio: number;
   onSize: (ratio: number) => void;
 }) {
   const [source, setSource] = useState<string | null>(null);
-  const [imageRatio, setImageRatio] = useState<number | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
 
@@ -558,10 +554,7 @@ function BookPageImage({
         if (!live) return;
         const width = image.naturalWidth || 0;
         const height = image.naturalHeight || 0;
-        if (width > 0 && height > 0) {
-          setImageRatio(width / height);
-          onSize(width / height);
-        }
+        if (width > 0 && height > 0) onSize(width / height);
         setSource(image.src);
         setState("ready");
       })
@@ -576,17 +569,24 @@ function BookPageImage({
   return (
     <div className="book-flip-page">
       {state === "ready" && source ? (
-        <img
-          src={source}
-          alt={`第 ${index + 1} 页`}
-          draggable={false}
-          decoding="async"
-          style={{
-            objectFit:
-              imageRatio === null ? "contain" : pageFit(imageRatio, pageRatio),
-          }}
-          className="book-flip-image"
-        />
+        <>
+          {/* Ambient bleed: the same page, blurred and cover-cropped, fills the
+              margins so no paper rim shows while peeking or turning. */}
+          <img
+            src={source}
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            className="book-flip-bleed"
+          />
+          <img
+            src={source}
+            alt={`第 ${index + 1} 页`}
+            draggable={false}
+            decoding="async"
+            className="book-flip-image"
+          />
+        </>
       ) : state === "error" ? (
         <div className="book-flip-page-state">
           <p>第 {index + 1} 页加载失败</p>

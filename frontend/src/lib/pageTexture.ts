@@ -1,36 +1,16 @@
-/** Largest texture edge kept when letterboxing a page for the GPU. */
+/** Largest texture edge kept when composing a page for the GPU. */
 const MAX_TEXTURE = 2048;
 
-/**
- * An image within this share of the page cell's aspect ratio is scaled to fill
- * the cell (`cover`); the small crop removes the paper margin that would
- * otherwise show as a white rim while a page peeks or turns. A larger
- * difference (a double-page spread) is contained so no content is cut off.
- */
-const COVER_TOLERANCE = 0.05;
-
-export type PageFit = "contain" | "cover";
-
-export function pageFit(imageRatio: number, pageRatio: number): PageFit {
-  if (
-    !Number.isFinite(imageRatio) ||
-    imageRatio <= 0 ||
-    !Number.isFinite(pageRatio) ||
-    pageRatio <= 0
-  ) {
-    return "contain";
-  }
-  return Math.abs(imageRatio - pageRatio) / pageRatio <= COVER_TOLERANCE
-    ? "cover"
-    : "contain";
-}
+/** Width of the tiny image used to build the blurred page background. */
+const BLEED_WIDTH = 64;
 
 /**
  * WebGL draws a page image straight over the sheet, so an image whose aspect
- * ratio differs from the book's page cell would stretch. Draw it into a canvas
- * with the cell's ratio first: near-matching images cover it (no white rim),
- * very different ones are contained with transparent margins that the shader
- * fills with paper.
+ * ratio differs from the book's page cell would stretch. Compose it into a
+ * canvas with the cell's ratio instead: a heavily blurred, cover-cropped copy
+ * of the same image fills the margins (ambient bleed), and the sharp page is
+ * drawn contained on top. Nothing is cropped from the page itself, and no
+ * paper margin is left to show as a white rim while peeking or turning.
  */
 export function fitPageTexture(
   image: HTMLImageElement,
@@ -41,9 +21,8 @@ export function fitPageTexture(
   if (!width || !height || !Number.isFinite(pageRatio) || pageRatio <= 0) {
     return image;
   }
-  const imageRatio = width / height;
   // Already the page's shape: the GPU can sample it directly.
-  if (Math.abs(imageRatio / pageRatio - 1) < 0.0005) return image;
+  if (Math.abs(width / height / pageRatio - 1) < 0.0005) return image;
 
   let canvasWidth = width;
   let canvasHeight = Math.round(width / pageRatio);
@@ -61,11 +40,35 @@ export function fitPageTexture(
   if (!ctx) return image;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  const fit = pageFit(imageRatio, pageRatio);
-  const scale =
-    fit === "cover"
-      ? Math.max(canvasWidth / width, canvasHeight / height)
-      : Math.min(canvasWidth / width, canvasHeight / height);
+
+  // The bleed: downscale the image with a cover fit, then stretch that tiny
+  // canvas back over the page. The bilinear upscale is a cheap, smooth blur.
+  const blurWidth = BLEED_WIDTH;
+  const blurHeight = Math.max(1, Math.round(blurWidth / pageRatio));
+  const blur = document.createElement("canvas");
+  blur.width = blurWidth;
+  blur.height = blurHeight;
+  const blurCtx = blur.getContext("2d");
+  if (blurCtx) {
+    blurCtx.imageSmoothingEnabled = true;
+    blurCtx.imageSmoothingQuality = "high";
+    const coverScale = Math.max(blurWidth / width, blurHeight / height);
+    const coverWidth = width * coverScale;
+    const coverHeight = height * coverScale;
+    blurCtx.drawImage(
+      image,
+      (blurWidth - coverWidth) / 2,
+      (blurHeight - coverHeight) / 2,
+      coverWidth,
+      coverHeight,
+    );
+    ctx.drawImage(blur, 0, 0, canvasWidth, canvasHeight);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+  }
+
+  // The page itself: contained, never cropped or stretched.
+  const scale = Math.min(canvasWidth / width, canvasHeight / height);
   const drawWidth = width * scale;
   const drawHeight = height * scale;
   ctx.drawImage(
