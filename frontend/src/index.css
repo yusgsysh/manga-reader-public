@@ -547,6 +547,139 @@ body {
 }
 
 /*
+ * Book-flip animation for the "书本翻页" setting.
+ *
+ * comimi's patched page stage sets `data-flipping="next|previous"` on
+ * `.comimi-stage` and `data-spine="left|right"` on the current page group
+ * during the turn. We turn those hooks into a 3D page-flip by giving the
+ * stage a perspective container and rotating the leaving group around its
+ * spine edge.
+ */
+.reader-shell .comimi-stage {
+  perspective: 1400px;
+  transform-style: preserve-3d;
+}
+
+.reader-shell .comimi-page-group {
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+}
+
+/* The page leaving the spread. Its spine edge is fixed in place. */
+.reader-shell .comimi-stage[data-flipping] .comimi-page-group[data-placement="current"] {
+  transition: transform 500ms var(--reader-spring);
+}
+
+.reader-shell .comimi-stage[data-flipping="next"]
+  .comimi-page-group[data-placement="current"][data-spine="right"] {
+  transform: rotateY(-100deg);
+  transform-origin: 100% 50%;
+}
+
+.reader-shell .comimi-stage[data-flipping="next"]
+  .comimi-page-group[data-placement="current"][data-spine="left"] {
+  transform: rotateY(100deg);
+  transform-origin: 0% 50%;
+}
+
+.reader-shell .comimi-stage[data-flipping="previous"]
+  .comimi-page-group[data-placement="current"][data-spine="right"] {
+  transform: rotateY(100deg);
+  transform-origin: 100% 50%;
+}
+
+.reader-shell .comimi-stage[data-flipping="previous"]
+  .comimi-page-group[data-placement="current"][data-spine="left"] {
+  transform: rotateY(-100deg);
+  transform-origin: 0% 50%;
+}
+
+/*
+ * The incoming page sits beneath the turning page and slides into place.
+ * Without this rule comimi would leave it translated off-screen until the
+ * turn commits.
+ */
+.reader-shell .comimi-stage[data-flipping]
+  .comimi-page-group[data-placement="next"],
+.reader-shell .comimi-stage[data-flipping]
+  .comimi-page-group[data-placement="previous"] {
+  opacity: 1;
+  transform: translateX(0%);
+}
+
+/*
+ * Subtle spine shadow on the turning page.
+ * The gradient is mirrored so the dark edge always lands on the spine side.
+ */
+.reader-shell .comimi-stage[data-flipping]
+  .comimi-page-group[data-placement="current"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transform: translateZ(1px);
+  opacity: 0;
+  transition: opacity 500ms var(--reader-spring);
+}
+
+.reader-shell .comimi-stage[data-flipping="next"]
+  .comimi-page-group[data-placement="current"][data-spine="right"]::after,
+.reader-shell .comimi-stage[data-flipping="previous"]
+  .comimi-page-group[data-placement="current"][data-spine="left"]::after {
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.22) 0%,
+    rgba(0, 0, 0, 0.05) 18%,
+    transparent 45%
+  );
+  opacity: 1;
+}
+
+.reader-shell .comimi-stage[data-flipping="next"]
+  .comimi-page-group[data-placement="current"][data-spine="left"]::after,
+.reader-shell .comimi-stage[data-flipping="previous"]
+  .comimi-page-group[data-placement="current"][data-spine="right"]::after {
+  background: linear-gradient(
+    to left,
+    rgba(0, 0, 0, 0.22) 0%,
+    rgba(0, 0, 0, 0.05) 18%,
+    transparent 45%
+  );
+  opacity: 1;
+}
+
+/*
+ * Incoming pages must stay on top while they are translated into position in
+ * slide mode. In book mode the current page is the one that should lift and
+ * turn above its sibling, so lower its sibling to the normal stacking order.
+ */
+.reader-shell .comimi-stage[data-flipping]
+  .comimi-page-group[data-placement="next"],
+.reader-shell .comimi-stage[data-flipping]
+  .comimi-page-group[data-placement="previous"] {
+  z-index: 0;
+}
+
+.reader-shell .comimi-stage[data-flipping]
+  .comimi-page-group[data-placement="current"] {
+  z-index: 1;
+}
+
+/* Respect reduced-motion: turn instantly without 3D rotation. */
+@media (prefers-reduced-motion: reduce) {
+  .reader-shell .comimi-page-group,
+  .reader-shell .comimi-stage[data-flipping] .comimi-page-group[data-placement="current"] {
+    transition: none;
+    transform: none !important;
+  }
+
+  .reader-shell .comimi-stage[data-flipping]
+    .comimi-page-group[data-placement="current"]::after {
+    display: none;
+  }
+}
+
+/*
  * Kumo's toast viewport ships at z-1, below the app chrome (z-50 header and
  * back-to-top, z-60 drawer) and dialog overlays. Lift it so stacked toasts —
  * newest in front, older ones receding behind — stay visible on every page.
