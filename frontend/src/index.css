@@ -693,6 +693,15 @@ body {
 }
 
 /*
+ * A spread can leave a hairline gap between the two page cells at the spine.
+ * Give the book a dark backing so that gap reads as part of the gutter instead
+ * of flashing the reader's white background while a sheet moves.
+ */
+.reader-book .grabfold {
+  background: #000;
+}
+
+/*
  * One page of the book. The cell already has the page's aspect ratio, so
  * `cover` fills near-matching images (no paper rim during a peek or turn) and
  * `contain` only letterboxes a page whose image really is a different shape
