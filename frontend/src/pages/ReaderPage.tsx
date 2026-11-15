@@ -30,6 +30,7 @@ import {
   parsePageParam,
   slotPageSrcResolver,
 } from "../lib/reader";
+import { bookPageMap, positionForPage } from "../lib/bookPages";
 import {
   DEFAULT_READER_SETTINGS,
   mergeReaderSettings,
@@ -45,6 +46,7 @@ import {
 import { ErrorState } from "../components/common/ErrorState";
 import { LoadingScreen } from "../components/common/LoadingScreen";
 import { ReaderToolbar } from "../components/reader/ReaderToolbar";
+import { ReaderControlsBar } from "../components/reader/ReaderControlsBar";
 import { ReaderSettingsPreference } from "../components/reader/ReaderSettingsPreference";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { getReaderPreferences } from "../lib/readerPrefs";
@@ -453,6 +455,28 @@ export function ReaderPage() {
     [isDark, layoutMode, readerSettings],
   );
 
+  // Book spreads share one position for two comic pages, so the control bar's
+  // bounds come from the same map the book uses; slide mode is one page per
+  // position.
+  const turnBounds = useMemo(() => {
+    if (!isBookMode) {
+      return { canPrev: readerPage > 0, canNext: readerPage < total - 1 };
+    }
+    const map = bookPageMap(
+      total,
+      readerSettings.pageTurnMode,
+      readerSettings.hasCover,
+    );
+    const position = positionForPage(map, readerPage);
+    return { canPrev: position > map.first, canNext: position < map.last };
+  }, [
+    isBookMode,
+    readerPage,
+    total,
+    readerSettings.pageTurnMode,
+    readerSettings.hasCover,
+  ]);
+
   const loading =
     galleryQuery.isLoading || pagesQuery.isLoading || progressQuery.isLoading;
   const error =
@@ -536,7 +560,6 @@ export function ReaderPage() {
         onToggleFullscreen={toggleFullscreen}
         onToggleAutoPageTurn={handleToggleAutoPageTurn}
         onGoToPage={handleGoToPage}
-        onTurnPage={handleTurnPage}
         onClosePanel={handleClosePanel}
         onUpdateSettings={handleUpdateSettings}
       />
@@ -602,6 +625,19 @@ export function ReaderPage() {
           />
         )}
       </div>
+
+      {/* One control bar for both viewers: slide and book modes never swap
+          control sets, and comimi's own dock/arrows are hidden in the shell. */}
+      <ReaderControlsBar
+        page={readerPage}
+        total={total}
+        visible={overlayVisible}
+        readingDirection={readerSettings.readingDirection}
+        canPrev={turnBounds.canPrev}
+        canNext={turnBounds.canNext}
+        onTurnPage={handleTurnPage}
+        onGoToPage={handleGoToPage}
+      />
 
       {/* App-level reader preference, appended to comimi's settings sheet. */}
       {settingsHost &&

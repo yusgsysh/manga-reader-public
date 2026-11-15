@@ -474,6 +474,26 @@ body {
 }
 
 /*
+ * The shared bottom control bar follows the same show/hide rhythm as the top
+ * bar. It stays mounted so its page input can be read at any time, but hidden
+ * it drops out of reach.
+ */
+.reader-shell .reader-controls-bar {
+  transition:
+    transform 0.6s var(--reader-spring),
+    opacity 0.3s linear;
+}
+
+.reader-shell .reader-controls-bar[data-visible="false"] {
+  transform: translate(-50%, 35px);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 0.3s var(--reader-spring),
+    opacity 0.15s linear;
+}
+
+/*
  * Page thumbnails: comimi frames them at a fixed 100/141 ratio with
  * `object-fit: contain` over a white panel background. When a page's crop is
  * not exactly that ratio this shows as a white border. Fill the frame instead.
@@ -546,24 +566,13 @@ body {
 }
 
 /*
- * The top bar owns settings and the reader chrome now only needs the seek bar:
- * hide the dock's autoplay, page-mode (single/spread) and view-mode
- * (fullscreen) buttons that sit below the progress bar, then collapse the
- * now-empty controls row so the dock is a single progress-bar row.
+ * Both reading modes share the app's bottom control bar (ReaderControlsBar).
+ * Hide comimi's own dock and side arrows so slide mode never shows a second
+ * control set next to the app bar.
  */
-.reader-shell .comimi-controls-dock .comimi-autoplay,
-.reader-shell .comimi-controls-dock .comimi-page-mode,
-.reader-shell .comimi-controls-dock .comimi-view-switcher,
-.reader-shell .comimi-controls-dock .comimi-settings {
+.reader-shell .comimi-controls-dock,
+.reader-shell .comimi-arrows {
   display: none;
-}
-
-.reader-shell .comimi-controls-dock .comimi-controls-row {
-  display: none;
-}
-
-.reader-shell .comimi-controls-dock .comimi-seek {
-  margin-bottom: 0;
 }
 
 /*

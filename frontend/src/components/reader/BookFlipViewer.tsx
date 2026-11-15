@@ -357,7 +357,7 @@ export const BookFlipViewer = forwardRef<
       const target = event.target;
       if (
         target instanceof Element &&
-        target.closest("[data-book-chrome], button, a, input, [role='dialog']")
+        target.closest("button, a, input, [role='dialog']")
       ) {
         return;
       }
@@ -459,16 +459,7 @@ export const BookFlipViewer = forwardRef<
     return () => window.clearInterval(timer);
   }, [autoPageTurn, autoPageTurnIntervalMs, onToggleAutoPageTurn]);
 
-  const [scrub, setScrub] = useState<number | null>(null);
-  const commitScrub = () => {
-    if (scrub !== null) goToPage(scrub);
-    setScrub(null);
-  };
-
   /* ------------------------------------------------------------- render */
-
-  const canPrev = view.position > map.first;
-  const canNext = view.position < map.last;
 
   const renderPage = (page: PageRef) => {
     const index = pageForRef(map, page);
@@ -522,107 +513,9 @@ export const BookFlipViewer = forwardRef<
         label="漫画"
         className="book-flip-host h-full w-full"
       />
-
-      {overlayVisible && (
-        <div
-          data-book-chrome
-          className="reader-book-overlay pointer-events-auto absolute left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-kumo-hairline bg-kumo-base/95 px-2 py-1.5 shadow-lg backdrop-blur"
-          style={{ bottom: "max(0.75rem, env(safe-area-inset-bottom, 0px))" }}
-        >
-          <button
-            type="button"
-            aria-label="上一页"
-            disabled={!canPrev}
-            onClick={() => turn("previous")}
-            className="grid size-8 place-items-center rounded-full text-kumo-subtle transition-colors hover:bg-kumo-recessed hover:text-kumo-default disabled:opacity-35 disabled:hover:bg-transparent"
-          >
-            <ChevronLeftIcon />
-          </button>
-          <span className="flex items-center gap-1 text-xs tabular-nums text-kumo-default">
-            <PageNumberInput
-              page={currentPage}
-              total={total}
-              onGoToPage={goToPage}
-            />
-            <span className="text-kumo-subtle">/ {total}</span>
-          </span>
-          <input
-            type="range"
-            aria-label="跳转页码"
-            min={0}
-            max={Math.max(0, total - 1)}
-            value={Math.min(scrub ?? currentPage, Math.max(0, total - 1))}
-            onChange={(event) => setScrub(Number(event.target.value))}
-            onPointerUp={commitScrub}
-            onKeyUp={commitScrub}
-            onBlur={() => setScrub(null)}
-            className="reader-book-seek h-1 w-32 cursor-pointer appearance-none rounded-full bg-kumo-recessed accent-[var(--app-accent)] sm:w-48"
-          />
-          <button
-            type="button"
-            aria-label="下一页"
-            disabled={!canNext}
-            onClick={() => turn("next")}
-            className="grid size-8 place-items-center rounded-full text-kumo-subtle transition-colors hover:bg-kumo-recessed hover:text-kumo-default disabled:opacity-35 disabled:hover:bg-transparent"
-          >
-            <ChevronRightIcon />
-          </button>
-        </div>
-      )}
     </div>
   );
 });
-
-/** A page number the reader can type, like the paged reader's seek input. */
-function PageNumberInput({
-  page,
-  total,
-  onGoToPage,
-}: {
-  page: number;
-  total: number;
-  onGoToPage: (pageIndex: number) => void;
-}) {
-  // Follow the book until the reader starts typing. A turn that lands while a
-  // draft is being typed replaces it, so the field can never lie about where
-  // the book is.
-  const [field, setField] = useState({ page, draft: String(page + 1) });
-  if (field.page !== page) {
-    setField({ page, draft: String(page + 1) });
-  }
-  const draft = field.page === page ? field.draft : String(page + 1);
-
-  const commit = () => {
-    const wanted = Number(draft);
-    if (!Number.isFinite(wanted) || draft === "") {
-      setField({ page, draft: String(page + 1) });
-      return;
-    }
-    const clamped = Math.min(Math.max(Math.round(wanted) - 1, 0), total - 1);
-    setField({ page, draft: String(clamped + 1) });
-    if (clamped !== page) onGoToPage(clamped);
-  };
-
-  return (
-    <input
-      type="text"
-      inputMode="numeric"
-      aria-label="当前页码"
-      value={draft}
-      onChange={(event) =>
-        setField({ page, draft: event.target.value.replace(/\D/g, "") })
-      }
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key !== "Enter") return;
-        event.preventDefault();
-        commit();
-        event.currentTarget.blur();
-      }}
-      className="w-9 rounded border border-transparent bg-transparent text-right text-xs tabular-nums text-kumo-default outline-none focus:border-kumo-hairline focus:bg-kumo-recessed"
-    />
-  );
-}
 
 /**
  * One comic page inside the book. Its image is loaded through the shared
@@ -694,33 +587,5 @@ function BookPageImage({
         </div>
       )}
     </div>
-  );
-}
-
-function ChevronLeftIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-4" fill="none" aria-hidden="true">
-      <path
-        d="M15 5l-7 7 7 7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function ChevronRightIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-4" fill="none" aria-hidden="true">
-      <path
-        d="M9 5l7 7-7 7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }

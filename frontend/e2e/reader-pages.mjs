@@ -82,10 +82,15 @@ try {
   console.log("scenario 1002: cache miss, progressive stream");
   {
     const { page, livePages, mountedMs } = await openReader(browser, 1002);
-    const shown = await page.locator(".comimi-seek").innerText();
+    const current = await page.locator('[aria-label="当前页码"]').inputValue();
+    const totalLabel = await page.locator(".reader-controls-bar").innerText();
     check("mounts after the first batch", mountedMs < 6000, `${mountedMs}ms`);
     check("streams from the live endpoint", livePages === 1, `${livePages} requests`);
-    check("shows the gallery total", /1\s*\/\s*50/.test(shown), shown);
+    check(
+      "shows the gallery total",
+      Number(current) === 1 && /\b50\b/.test(totalLabel),
+      `${current} / ${totalLabel}`,
+    );
     await page.close();
   }
 
@@ -328,28 +333,30 @@ try {
     const leftX = box.x + box.width * 0.15;
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
-    const seek = () => page.locator(".comimi-seek").innerText();
-    const bookChromeVisible = async () => (await page.locator(".reader-book-overlay").count()) > 0;
-    const showBookChrome = async () => {
+    const seek = () =>
+      page.locator('[aria-label="当前页码"]').inputValue();
+    const controlsVisible = async () =>
+      (await page.locator('.reader-controls-bar[data-visible="true"]').count()) > 0;
+    const showControls = async () => {
       for (let i = 0; i < 6; i++) {
-        if (await bookChromeVisible()) return true;
+        if (await controlsVisible()) return true;
         await page.mouse.click(cx, cy);
         await sleep(350);
       }
-      return bookChromeVisible();
+      return controlsVisible();
     };
-    const hideBookChrome = async () => {
-      if (!(await bookChromeVisible())) return;
+    const hideControls = async () => {
+      if (!(await controlsVisible())) return;
       await page.mouse.click(cx, cy);
       await sleep(350);
     };
     const readBookPage = async () => {
-      await showBookChrome();
-      return page.locator('[aria-label="当前页码"]').inputValue();
+      await showControls();
+      return seek();
     };
     const readBookPageThenHide = async () => {
       const value = await readBookPage();
-      await hideBookChrome();
+      await hideControls();
       return value;
     };
 
@@ -367,17 +374,16 @@ try {
     await sleep(200);
 
     // rtl reading: the left third is the next page.
-    const before = await seek();
+    const before = await readBookPageThenHide();
     await page.mouse.click(leftX, cy);
     await sleep(400);
     check("clicking turns the page", (await seek()) !== before, `${before} -> ${await seek()}`);
 
     // The top bar now slides away with the overlay, so reveal it again before
     // opening the settings panel it anchors.
-    await page.mouse.click(cx, cy);
-    await sleep(400);
+    await showControls();
 
-    const pageBeforeBook = Number((await seek()).match(/(\d+)\s*\//)?.[1]);
+    const pageBeforeBook = Number(await seek());
     await page.locator("header").getByRole("button", { name: "阅读设置" }).click();
     await page.waitForSelector("text=翻页动画", { timeout: 10000 });
     await page.getByRole("button", { name: "书本" }).click();
@@ -474,7 +480,7 @@ try {
 
     // Jump through the top bar's page list: it must land on the same comic
     // page the chrome shows.
-    await showBookChrome();
+    await showControls();
     await page.locator("header").getByRole("button", { name: "页面列表" }).click();
     await page.waitForSelector(".reader-page-list-item", { timeout: 10000 });
     await page.locator(".reader-page-list-item").nth(9).click();
@@ -487,7 +493,7 @@ try {
     );
 
     // Spread mode pairs consecutive pages without losing the current one.
-    await showBookChrome();
+    await showControls();
     await page.locator("header").getByRole("button", { name: "阅读设置" }).click();
     await page.waitForSelector("text=翻页模式", { timeout: 10000 });
     await page.getByRole("button", { name: "双页" }).click();
@@ -510,7 +516,7 @@ try {
     );
 
     // Reading direction only changes the binding; the page stays.
-    await showBookChrome();
+    await showControls();
     await page.locator("header").getByRole("button", { name: "阅读设置" }).click();
     await page.waitForSelector("text=阅读方向", { timeout: 10000 });
     await page.getByRole("button", { name: "从左到右" }).click();
@@ -533,7 +539,7 @@ try {
     );
 
     // Back to the paged reader at the same comic page.
-    await showBookChrome();
+    await showControls();
     await page.locator("header").getByRole("button", { name: "阅读设置" }).click();
     await page.waitForSelector("text=翻页动画", { timeout: 10000 });
     await page.getByRole("button", { name: "平移" }).click();
@@ -545,12 +551,11 @@ try {
       (await page.locator(".grabfold").count()) === 0 &&
         (await page.locator("canvas.grabfold-curl-canvas").count()) === 0,
     );
-    const backSeek = await seek();
-    const backPage = Number((backSeek.match(/(\d+)\s*\//) ?? [])[1]);
+    const backPage = Number(await seek());
     check(
       "the paged reader opens at the book's page",
       backPage === Number(directionPage),
-      `${backSeek} vs ${directionPage}`,
+      `${backPage} vs ${directionPage}`,
     );
 
     await page.close();
