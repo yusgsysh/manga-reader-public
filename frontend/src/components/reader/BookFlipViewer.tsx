@@ -40,12 +40,13 @@ import {
   positionForPage,
   turnForKey,
   turnForSide,
+  visiblePages,
   type BookPageMap,
   type PageTurn,
   type ReadingDirection,
 } from "../../lib/bookPages";
 import { PageImageCache } from "../../lib/pageImages";
-import { fitPageTexture, pageFit } from "../../lib/pageTexture";
+import { fitPageTexture } from "../../lib/pageTexture";
 
 /** One page's width over its height, until the first image says otherwise. */
 const FALLBACK_PAGE_RATIO = 0.7;
@@ -261,11 +262,18 @@ export const BookFlipViewer = forwardRef<
     // rather than through the render that happened to create it.
     /* oxlint-disable react/refs */
     const texture = (page: PageRef) => {
-      const index = pageForRef(mapRef.current, page);
+      const mapNow = mapRef.current;
+      const index = pageForRef(mapNow, page);
       if (index === null) return null;
+      const align =
+        mapNow.layout === "spread"
+          ? page.kind === "front"
+            ? "left"
+            : "right"
+          : undefined;
       return imagesRef.current
         .load(index)
-        .then((image) => fitPageTexture(image, pageRatioRef.current))
+        .then((image) => fitPageTexture(image, pageRatioRef.current, align))
         .catch(() => null);
     };
     /* oxlint-enable react/refs */
@@ -475,20 +483,34 @@ export const BookFlipViewer = forwardRef<
     if (index === null) {
       return <div className="book-flip-blank" aria-hidden="true" />;
     }
+    // In a spread the right-hand (front) page anchors its image to the left
+    // (spine) edge so the paper margin falls on the outer right; the left-hand
+    // (back) page anchors to the right edge, leaving the margin on the outer
+    // left. The seam itself stays flush.
+    const align =
+      map.layout === "spread"
+        ? page.kind === "front"
+          ? "left"
+          : "right"
+        : undefined;
     return (
       <BookPageImage
         key={index}
         index={index}
         images={images}
-        pageRatio={pageRatio}
+        align={align}
         onSize={handlePageSize}
       />
     );
   };
 
+  const twoPageSpread =
+    map.layout === "spread" && visiblePages(map, view.position).length === 2;
+
   return (
     <div
       className="reader-book relative h-full w-full overflow-hidden bg-kumo-base"
+      data-two-pages={twoPageSpread}
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       onClick={handleSurfaceClick}
     >
@@ -539,16 +561,15 @@ export const BookFlipViewer = forwardRef<
 function BookPageImage({
   index,
   images,
-  pageRatio,
+  align,
   onSize,
 }: {
   index: number;
   images: PageImageCache;
-  pageRatio: number;
+  align?: "left" | "right";
   onSize: (ratio: number) => void;
 }) {
   const [source, setSource] = useState<string | null>(null);
-  const [imageRatio, setImageRatio] = useState<number | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
 
@@ -560,10 +581,7 @@ function BookPageImage({
         if (!live) return;
         const width = image.naturalWidth || 0;
         const height = image.naturalHeight || 0;
-        if (width > 0 && height > 0) {
-          setImageRatio(width / height);
-          onSize(width / height);
-        }
+        if (width > 0 && height > 0) onSize(width / height);
         setSource(image.src);
         setState("ready");
       })
@@ -584,8 +602,12 @@ function BookPageImage({
           draggable={false}
           decoding="async"
           style={{
-            objectFit:
-              imageRatio === null ? "contain" : pageFit(imageRatio, pageRatio),
+            objectPosition:
+              align === "left"
+                ? "left center"
+                : align === "right"
+                  ? "right center"
+                  : undefined,
           }}
           className="book-flip-image"
         />

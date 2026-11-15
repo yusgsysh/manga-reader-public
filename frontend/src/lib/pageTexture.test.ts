@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fitPageTexture, pageFit } from "./pageTexture";
+import { fitPageTexture } from "./pageTexture";
 
 function image(width: number, height: number): HTMLImageElement {
   return {
@@ -61,21 +61,17 @@ describe("fitPageTexture", () => {
     expect(y).toBeCloseTo(0, 1);
   });
 
-  it("fills near-matching pages to remove the paper rim", () => {
-    expect(pageFit(704 / 1000, 0.7)).toBe("cover");
-    expect(pageFit(1200 / 600, 0.7)).toBe("contain");
+  it("pushes the paper margin to the outer edge in a spread", () => {
+    const left = stubCanvas();
+    fitPageTexture(image(800, 2000), 1.4, "left");
+    const [, leftX] = left.mock.calls[0];
+    expect(leftX).toBe(0);
 
-    const drawImage = stubCanvas();
-    const source = image(704, 1000);
-    const result = fitPageTexture(source, 0.7);
-    const canvas = result as HTMLCanvasElement;
-    expect(canvas.width).toBe(704);
-    expect(canvas.height).toBe(1006);
-    const [, x, y, width, height] = drawImage.mock.calls[0];
-    expect(width).toBeCloseTo(708.2, 1);
-    expect(height).toBeCloseTo(1006, 1);
-    expect(x).toBeLessThan(0);
-    expect(y).toBeCloseTo(0, 1);
+    vi.restoreAllMocks();
+    const right = stubCanvas();
+    fitPageTexture(image(800, 2000), 1.4, "right");
+    const [, rightX, , rightWidth] = right.mock.calls[0];
+    expect(rightX).toBeCloseTo(800 - rightWidth, 1);
   });
 
   it("caps huge textures while keeping the page ratio", () => {

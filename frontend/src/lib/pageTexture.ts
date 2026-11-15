@@ -1,49 +1,28 @@
 /** Largest texture edge kept when letterboxing a page for the GPU. */
 const MAX_TEXTURE = 2048;
 
-/**
- * An image within this share of the page cell's aspect ratio is scaled to fill
- * the cell (`cover`); the small crop removes the paper margin that would
- * otherwise show as a white rim while a page peeks or turns. A larger
- * difference (a double-page spread) is contained so no content is cut off.
- */
-const COVER_TOLERANCE = 0.05;
-
-export type PageFit = "contain" | "cover";
-
-export function pageFit(imageRatio: number, pageRatio: number): PageFit {
-  if (
-    !Number.isFinite(imageRatio) ||
-    imageRatio <= 0 ||
-    !Number.isFinite(pageRatio) ||
-    pageRatio <= 0
-  ) {
-    return "contain";
-  }
-  return Math.abs(imageRatio - pageRatio) / pageRatio <= COVER_TOLERANCE
-    ? "cover"
-    : "contain";
-}
+export type PageAlign = "left" | "right" | undefined;
 
 /**
  * WebGL draws a page image straight over the sheet, so an image whose aspect
  * ratio differs from the book's page cell would stretch. Draw it into a canvas
- * with the cell's ratio first: near-matching images cover it (no white rim),
- * very different ones are contained with transparent margins that the shader
- * fills with paper.
+ * with the cell's ratio instead, contained: the margins stay transparent and
+ * the shader fills them with paper. Nothing is cropped, and a page whose shape
+ * differs simply shows paper margins. In a spread, `align` pushes those
+ * margins to the outer edge so the spine seam stays flush.
  */
 export function fitPageTexture(
   image: HTMLImageElement,
   pageRatio: number,
+  align?: PageAlign,
 ): HTMLImageElement | HTMLCanvasElement {
   const width = image.naturalWidth || image.width;
   const height = image.naturalHeight || image.height;
   if (!width || !height || !Number.isFinite(pageRatio) || pageRatio <= 0) {
     return image;
   }
-  const imageRatio = width / height;
   // Already the page's shape: the GPU can sample it directly.
-  if (Math.abs(imageRatio / pageRatio - 1) < 0.0005) return image;
+  if (Math.abs(width / height / pageRatio - 1) < 0.0005) return image;
 
   let canvasWidth = width;
   let canvasHeight = Math.round(width / pageRatio);
@@ -61,16 +40,18 @@ export function fitPageTexture(
   if (!ctx) return image;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  const fit = pageFit(imageRatio, pageRatio);
-  const scale =
-    fit === "cover"
-      ? Math.max(canvasWidth / width, canvasHeight / height)
-      : Math.min(canvasWidth / width, canvasHeight / height);
+  const scale = Math.min(canvasWidth / width, canvasHeight / height);
   const drawWidth = width * scale;
   const drawHeight = height * scale;
+  const x =
+    align === "left"
+      ? 0
+      : align === "right"
+        ? canvasWidth - drawWidth
+        : (canvasWidth - drawWidth) / 2;
   ctx.drawImage(
     image,
-    (canvasWidth - drawWidth) / 2,
+    x,
     (canvasHeight - drawHeight) / 2,
     drawWidth,
     drawHeight,

@@ -693,19 +693,24 @@ body {
 }
 
 /*
- * A spread can leave a hairline gap between the two page cells at the spine.
- * Give the book a dark backing so that gap reads as part of the gutter instead
- * of flashing the reader's white background while a sheet moves.
+ * In a two-page spread, paint only the spine hairline dark. The page cells
+ * cover the rest of the book, so this never shows as a black band; the line
+ * sits behind the turning sheet and hides the paper gap during a turn.
  */
-.reader-book .grabfold {
-  background: #000;
+.reader-book[data-two-pages="true"] .grabfold {
+  background: linear-gradient(
+    to right,
+    transparent calc(50% - 1px),
+    #000 calc(50% - 1px),
+    #000 calc(50% + 1px),
+    transparent calc(50% + 1px)
+  );
 }
 
 /*
- * One page of the book. The cell already has the page's aspect ratio, so
- * `cover` fills near-matching images (no paper rim during a peek or turn) and
- * `contain` only letterboxes a page whose image really is a different shape
- * (a double-page spread); neither stretches.
+ * One page of the book. The cell has the page's aspect ratio; every image is
+ * contained, so a page whose image is a different shape shows paper margins
+ * and is never cropped or stretched.
  */
 .book-flip-page {
   display: grid;
