@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fitPageTexture } from "./pageTexture";
+import { fitPageTexture, pageFit } from "./pageTexture";
 
 function image(width: number, height: number): HTMLImageElement {
   return {
@@ -58,6 +58,23 @@ describe("fitPageTexture", () => {
     expect(width).toBeCloseTo(571 * (800 / 2000), 1);
     expect(height).toBeCloseTo(571, 1);
     expect(x).toBeCloseTo((800 - width) / 2, 1);
+    expect(y).toBeCloseTo(0, 1);
+  });
+
+  it("fills near-matching pages to remove the paper rim", () => {
+    expect(pageFit(704 / 1000, 0.7)).toBe("cover");
+    expect(pageFit(1200 / 600, 0.7)).toBe("contain");
+
+    const drawImage = stubCanvas();
+    const source = image(704, 1000);
+    const result = fitPageTexture(source, 0.7);
+    const canvas = result as HTMLCanvasElement;
+    expect(canvas.width).toBe(704);
+    expect(canvas.height).toBe(1006);
+    const [, x, y, width, height] = drawImage.mock.calls[0];
+    expect(width).toBeCloseTo(708.2, 1);
+    expect(height).toBeCloseTo(1006, 1);
+    expect(x).toBeLessThan(0);
     expect(y).toBeCloseTo(0, 1);
   });
 

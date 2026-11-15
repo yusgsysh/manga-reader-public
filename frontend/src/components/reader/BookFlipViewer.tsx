@@ -45,7 +45,7 @@ import {
   type ReadingDirection,
 } from "../../lib/bookPages";
 import { PageImageCache } from "../../lib/pageImages";
-import { fitPageTexture } from "../../lib/pageTexture";
+import { fitPageTexture, pageFit } from "../../lib/pageTexture";
 
 /** One page's width over its height, until the first image says otherwise. */
 const FALLBACK_PAGE_RATIO = 0.7;
@@ -480,6 +480,7 @@ export const BookFlipViewer = forwardRef<
         key={index}
         index={index}
         images={images}
+        pageRatio={pageRatio}
         onSize={handlePageSize}
       />
     );
@@ -536,13 +537,16 @@ export const BookFlipViewer = forwardRef<
 function BookPageImage({
   index,
   images,
+  pageRatio,
   onSize,
 }: {
   index: number;
   images: PageImageCache;
+  pageRatio: number;
   onSize: (ratio: number) => void;
 }) {
   const [source, setSource] = useState<string | null>(null);
+  const [imageRatio, setImageRatio] = useState<number | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
 
@@ -554,7 +558,10 @@ function BookPageImage({
         if (!live) return;
         const width = image.naturalWidth || 0;
         const height = image.naturalHeight || 0;
-        if (width > 0 && height > 0) onSize(width / height);
+        if (width > 0 && height > 0) {
+          setImageRatio(width / height);
+          onSize(width / height);
+        }
         setSource(image.src);
         setState("ready");
       })
@@ -574,6 +581,10 @@ function BookPageImage({
           alt={`第 ${index + 1} 页`}
           draggable={false}
           decoding="async"
+          style={{
+            objectFit:
+              imageRatio === null ? "contain" : pageFit(imageRatio, pageRatio),
+          }}
           className="book-flip-image"
         />
       ) : state === "error" ? (

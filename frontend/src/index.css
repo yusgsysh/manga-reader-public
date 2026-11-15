@@ -694,8 +694,9 @@ body {
 
 /*
  * One page of the book. The cell already has the page's aspect ratio, so
+ * `cover` fills near-matching images (no paper rim during a peek or turn) and
  * `contain` only letterboxes a page whose image really is a different shape
- * (a double-page spread); it never stretches one.
+ * (a double-page spread); neither stretches.
  */
 .book-flip-page {
   display: grid;
