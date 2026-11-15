@@ -469,6 +469,11 @@ func (s *Server) resolveGalleryPageThumbFromStream(
 ) (model.GalleryPageThumb, bool, error) {
 	var thumb model.GalleryPageThumb
 	found := false
+	// scrapeGalleryPages drains the shared walk in batches: each emit call gets
+	// only the pages appended since the previous call (drain passes
+	// s.thumbnails[cursor:]), not the full prefix. Track the running offset so
+	// the absolute `index` maps to the right element of the current batch.
+	offset := 0
 
 	_, err := s.scrapeGalleryPages(ctx, userID, galleryID, token, func(total int, pageURLs []string, thumbnails []model.GalleryPageThumb) error {
 		if total > 0 && index >= total {
@@ -476,10 +481,12 @@ func (s *Server) resolveGalleryPageThumbFromStream(
 			// remaining pages to conclude the index does not exist.
 			return errThumbResolved
 		}
-		if index < len(thumbnails) {
-			thumb, found = thumbnails[index], thumbnails[index].SpriteURL != ""
+		local := index - offset
+		if local >= 0 && local < len(thumbnails) {
+			thumb, found = thumbnails[local], thumbnails[local].SpriteURL != ""
 			return errThumbResolved
 		}
+		offset += len(thumbnails)
 		return nil
 	})
 
