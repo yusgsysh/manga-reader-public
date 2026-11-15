@@ -11,7 +11,14 @@ import {
   settleDuration,
 } from "./bookFold";
 
-describe("bookFold geometry", () => {
+/**
+ * These tests act as integration smoke tests for the grabfold adapter used by
+ * comimi. The underlying geometry and physics are covered by grabfold's own
+ * unit tests; here we only verify that the re-exported API behaves as the
+ * reader expects.
+ */
+
+describe("bookFold geometry adapter", () => {
   it("clips a rectangle with a half-plane", () => {
     const square = [
       { x: 0, y: 0 },
@@ -71,7 +78,7 @@ describe("bookFold geometry", () => {
   });
 });
 
-describe("bookFold physics", () => {
+describe("bookFold physics adapter", () => {
   it("detects a flick from recent samples", () => {
     const samples = [
       { time: 0, progress: 0 },

@@ -23,6 +23,7 @@
     "@tanstack/react-query": "^5.107.1",
     "@yui540/comimi": "^0.26.0",
     "@yui540/comimi-react": "^0.3.0",
+    "grabfold": "^0.1.0",
     "motion": "^13.5.1",
     "react": "^19.3.1",
     "react-colorful": "^5.8.1",

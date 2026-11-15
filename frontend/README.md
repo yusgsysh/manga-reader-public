@@ -212,20 +212,19 @@ comimi 原生的翻页只有一种整块舞台的横向平移，而且只在触�
 
 #### grabfold 风格动态折叠
 
-comimi 补丁只把书本翻页做成整块绕书脊旋转；为了支持「从任意位置抓页」的真实折叠效果，应用侧自实现了一套 grabfold 几何与渲染，不引入新依赖。
+comimi 补丁只把书本翻页做成整块绕书脊旋转；为了支持「从任意位置抓页」的真实折叠效果，阅读器直接引入 [grabfold](https://github.com/javocsoft/grabfold)（[npm](https://www.npmjs.com/package/grabfold)，MIT License © JavocSoft）作为运行时依赖，并将其 `FoldingSheet` 叠加在 comimi 舞台之上完成动态折叠。
 
-> 实现参考：[grabfold](https://github.com/javocsoft/grabfold)（[npm](https://www.npmjs.com/package/grabfold)，MIT License © JavocSoft）。本项目复用了其折叠几何、指针驱动翻页与渲染思路，并以纯函数形式集成到 comimi 舞台之上。
->
 > 详见 `frontend/THIRD-PARTY-NOTICES.md`。
 
-- **几何模块**：`src/lib/bookFold.ts` 移植 grabfold 的 `foldGeometry`、`foldDepth`、半平面裁剪、反射、以及 flick/peek 物理（`releaseSpeed`、`releaseTarget`、`settleDuration`、`peekProgress`）。
+- **几何模块**：`src/lib/bookFold.ts` 从 grabfold 直接导出 `foldGeometry`、`foldDepth`、半平面裁剪、反射、以及 flick/peek 物理（`releaseSpeed`、`releaseTarget`、`settleDuration`、`peekProgress`）；该文件同时提供一个本地的 `polygon` CSS 辅助函数。
 - **渲染器**：`src/lib/bookFoldRenderer.ts` 的 `BookFoldRenderer` 监听 comimi 舞台的 `data-flipping` 属性，在书本翻页期间：
-  - 把当前 `.comimi-page-group[data-placement="current"]` 作为「leaf」，用 `clip-path` 裁出仍平铺的部分；
-  - 克隆当前页组作为「flap」，镜像内容，再用 `clip-path` 裁出折叠部分，并按 grabfold `place` 变换定位到折痕另一侧；
-  - 叠加 crease roll 与 cast shadow 两条渐变阴影带，以及 spine gutter 阴影；
-  - 动画完成或 `data-flipping` 移除时清理所有临时层，恢复原始页组样式。
-- **交互拖动**：`src/hooks/useBookFold.ts` 在 comimi 舞台上以 capture 阶段监听 pointer 事件。当用户在书页自由边缘附近按下时，启动 `beginDrag`；移动时按指针位置驱动折叠进度与倾斜（`lift`）；松开时根据 flick 物理决定翻回还是翻过去，翻过去则触发对应箭头按钮让 comimi 提交页面。未越过拖动阈值的点击会回退为普通点击，不影响 comimi 的点击翻页。
-- **Reduced motion**：`ReaderPage` 通过 `useMediaQuery("(prefers-reduced-motion: reduce)")` 把偏好传给 `useBookFold`，渲染器将动画时长设为 0，CSS 也隐藏所有折叠层。
+  - 隐藏当前 `.comimi-page-group[data-placement="current"]`，避免与折叠层重复渲染；
+  - 在当前页 cell 上创建一个 grabfold `FoldingSheet`；
+  - 把当前页组克隆到 sheet 的 `restingSlot`（leaf）和 `turnedSlot`（flap），后者通过 CSS `scaleX(-1)` 镜像以模拟单面页背；
+  - 每帧调用 sheet 的 `draw(frame)`，由 grabfold 内部计算 `clip-path`、反射变换、crease roll / cast shadow 渐变带与 gutter 阴影；
+  - 动画完成或 `data-flipping` 移除时销毁 sheet，恢复原始页组显示。
+- **交互拖动**：`src/hooks/useBookFold.ts` 在 comimi 舞台上以 capture 阶段监听 pointer 事件。当用户在书页自由边缘附近按下时，启动 `beginDrag`；移动时按指针位置驱动折叠进度与倾斜（`lift`）；松开时根据 grabfold 的 flick 物理决定翻回还是翻过去，翻过去则触发对应箭头按钮让 comimi 提交页面。未越过拖动阈值的点击会回退为普通点击，不影响 comimi 的点击翻页。
+- **Reduced motion**：`ReaderPage` 通过 `useMediaQuery("(prefers-reduced-motion: reduce)")` 把偏好传给 `useBookFold`，渲染器将动画时长设为 0，CSS 隐藏 grabfold sheet。
 
 新增单元测试覆盖纯几何/物理函数：`src/lib/bookFold.test.ts`。
 

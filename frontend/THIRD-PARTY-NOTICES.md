@@ -4,10 +4,10 @@
 
 - Source: https://github.com/javocsoft/grabfold
 - npm: https://www.npmjs.com/package/grabfold
-- Purpose: Page-fold geometry and physics for the "书本翻页" animation.
-- Adaptation: The fold geometry (`foldGeometry`), depth, clipping, reflection, flick/peek physics and rendering concepts are adapted from grabfold's core API and documentation.
+- Package: `grabfold` is a runtime dependency in `frontend/package.json`.
+- Purpose: Page-fold geometry, physics and rendering for the "书本翻页" animation.
+- Usage: The reader imports `foldGeometry`, `foldDepth`, `releaseSpeed`, `releaseTarget`, `settleDuration`, `peekProgress`, `FoldingSheet` and `gutterGradient` directly from `grabfold` via `frontend/src/lib/bookFold.ts`. The `BookFoldRenderer` overlays a grabfold `FoldingSheet` on comimi's stage during a book turn.
 - License: MIT License © JavocSoft
-- Notice: grabfold is a standalone library and is not included as a runtime dependency; the relevant ideas are re-implemented in this project to avoid adding a new dependency.
 
 ## EhTagTranslation/Database
 

@@ -2,15 +2,15 @@ import { useEffect, useRef } from "react";
 import { BookFoldRenderer } from "../lib/bookFoldRenderer";
 
 /**
- * Attaches a grabfold-style renderer to a comimi stage inside the given shell.
+ * Attaches a grabfold renderer to a comimi stage inside the given shell.
  *
- * Grabfold concepts (pointer-driven drag/flick turns and dynamic page folding)
- * are adapted from grabfold (https://github.com/javocsoft/grabfold, MIT License
- * © JavocSoft). See `frontend/THIRD-PARTY-NOTICES.md` for attribution.
+ * This hook uses the grabfold npm package (https://github.com/javocsoft/grabfold,
+ * MIT License © JavocSoft). It watches comimi's `data-flipping` marker and
+ * overlays a grabfold FoldingSheet on the current page cell, replacing comimi's
+ * stock rotateY with grabfold's clip-path fold. It also supports grabfold's
+ * pointer-driven drag/flick turns.
  *
- * The renderer watches for comimi's `data-flipping` marker and replaces the
- * stock CSS rotateY with a dynamic clip-path fold. It also supports an
- * interactive drag/flick mode for pointer-driven turns.
+ * See `frontend/THIRD-PARTY-NOTICES.md` for attribution.
  */
 export function useBookFold(
   shellEl: HTMLElement | null,

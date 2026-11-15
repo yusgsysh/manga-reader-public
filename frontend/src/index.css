@@ -600,11 +600,9 @@ body {
  *
  * comimi's patched page stage sets `data-flipping="next|previous"` on
  * `.comimi-stage` and `data-spine="left|right"` on the current page group
- * during the turn. A BookFoldRenderer watches those markers and replaces the
- * stock CSS rotateY with a dynamic clip-path fold driven by grabfold geometry.
- *
- * comimi ships its own `comimi-book-fold-*` keyframes as a fallback; we keep
- * them disabled when the reader shell is active.
+ * during the turn. BookFoldRenderer watches those markers and overlays a
+ * grabfold FoldingSheet (https://github.com/javocsoft/grabfold) on the current
+ * page cell, replacing comimi's stock rotateY with grabfold's clip-path fold.
  */
 .reader-shell .comimi-root[data-page-turn-animation="book"] .comimi-stage {
   perspective: 1400px;
@@ -618,21 +616,42 @@ body {
 /*
  * Dynamic grabfold rendering.
  *
- * When comimi sets `data-flipping`, BookFoldRenderer clips the current page
- * group to the flat leaf and creates a mirrored flap clone plus crease/cast
- * shading bands. The rules below keep the stage positioned correctly and make
- * sure comimi's stock rotateY transition does not fight the renderer.
+ * When comimi sets `data-flipping`, BookFoldRenderer hides the original current
+ * page group and creates a grabfold FoldingSheet over its cell. The sheet owns
+ * the leaf, flap and shading bands; the rules below keep the stage positioned
+ * correctly and cancel comimi's stock rotateY transition so it does not fight
+ * the grabfold overlay.
  */
 .reader-shell .comimi-root[data-page-turn-animation="book"]
   .comimi-stage[data-flipping]
   .comimi-page-group[data-placement="current"] {
   /* Cancel comimi's built-in fold keyframes. */
   animation: none !important;
-  /* The renderer manages clip-path and stacking directly. */
+  /* The sheet manages clip-path and stacking directly. */
   transition: none !important;
-  transform: none !important;
   backface-visibility: visible !important;
-  position: relative;
+}
+
+/* Position the grabfold sheet inside comimi's stage. */
+.reader-shell
+  .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping]
+  .grabfold-sheet {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Mirror the turned-slot content so the single-sided page simulates the paper back. */
+.reader-shell
+  .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping]
+  .grabfold-turned-slot
+  > * {
+  transform: scaleX(-1);
+  transform-origin: center;
 }
 
 /*
@@ -684,62 +703,14 @@ body {
   z-index: 3;
 }
 
-/* Flap, cast shadow and roll shading created by BookFoldRenderer. */
-.reader-shell .comimi-book-fold-flap-wrap,
-.reader-shell .comimi-book-fold-band-wrap,
-.reader-shell .comimi-book-fold-flap,
-.reader-shell .comimi-book-fold-cast,
-.reader-shell .comimi-book-fold-roll,
-.reader-shell .comimi-book-fold-gutter {
-  position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: none;
-}
-
-.reader-shell .comimi-book-fold-flap-wrap {
-  z-index: 5;
-  overflow: hidden;
-}
-
-.reader-shell .comimi-book-fold-band-wrap {
-  z-index: 6;
-  overflow: visible;
-}
-
-.reader-shell .comimi-book-fold-flap {
-  width: 100%;
-  height: 100%;
-  will-change: transform, clip-path;
-  /* The flap shows the current page mirrored, simulating the paper back. */
-  transform: scaleX(-1);
-  background: var(--color-kumo-base, #ffffff);
-}
-
-[data-mode="dark"] .reader-shell .comimi-book-fold-flap {
-  background: var(--color-kumo-base, #18181b);
-}
-
-.reader-shell .comimi-book-fold-cast,
-.reader-shell .comimi-book-fold-roll {
-  transform-origin: 0 0;
-}
-
-.reader-shell .comimi-book-fold-gutter {
-  inset: 0;
-  z-index: 4;
-}
-
 /*
- * When the dynamic renderer is not active (e.g. before it mounts) fall back
- * to the simpler 3D rotation so the book animation still looks reasonable.
+ * When the grabfold renderer has not mounted yet (or is unavailable), fall back
+ * to comimi's simpler 3D rotation so the book animation still looks reasonable.
  */
 .reader-shell
   .comimi-root[data-page-turn-animation="book"]
   .comimi-stage[data-flipping]
-  .comimi-page-group[data-placement="current"]:not(
-    .comimi-book-fold-leaf
-  ) {
+  .comimi-page-group[data-placement="current"]:not(:has(.grabfold-sheet)) {
   transition: transform 180ms var(--reader-spring);
   transform-origin: 100% 50%;
 }
@@ -747,36 +718,28 @@ body {
 .reader-shell
   .comimi-root[data-page-turn-animation="book"]
   .comimi-stage[data-flipping="next"]
-  .comimi-page-group[data-placement="current"][data-spine="right"]:not(
-    .comimi-book-fold-leaf
-  ) {
+  .comimi-page-group[data-placement="current"][data-spine="right"]:not(:has(.grabfold-sheet)) {
   transform: rotateY(90deg);
 }
 
 .reader-shell
   .comimi-root[data-page-turn-animation="book"]
   .comimi-stage[data-flipping="next"]
-  .comimi-page-group[data-placement="current"][data-spine="left"]:not(
-    .comimi-book-fold-leaf
-  ) {
+  .comimi-page-group[data-placement="current"][data-spine="left"]:not(:has(.grabfold-sheet)) {
   transform: rotateY(-90deg);
 }
 
 .reader-shell
   .comimi-root[data-page-turn-animation="book"]
   .comimi-stage[data-flipping="previous"]
-  .comimi-page-group[data-placement="current"][data-spine="right"]:not(
-    .comimi-book-fold-leaf
-  ) {
+  .comimi-page-group[data-placement="current"][data-spine="right"]:not(:has(.grabfold-sheet)) {
   transform: rotateY(-90deg);
 }
 
 .reader-shell
   .comimi-root[data-page-turn-animation="book"]
   .comimi-stage[data-flipping="previous"]
-  .comimi-page-group[data-placement="current"][data-spine="left"]:not(
-    .comimi-book-fold-leaf
-  ) {
+  .comimi-page-group[data-placement="current"][data-spine="left"]:not(:has(.grabfold-sheet)) {
   transform: rotateY(90deg);
 }
 
@@ -791,12 +754,7 @@ body {
     animation: none !important;
   }
 
-  .reader-shell .comimi-book-fold-flap-wrap,
-  .reader-shell .comimi-book-fold-band-wrap,
-  .reader-shell .comimi-book-fold-flap,
-  .reader-shell .comimi-book-fold-cast,
-  .reader-shell .comimi-book-fold-roll,
-  .reader-shell .comimi-book-fold-gutter {
+  .reader-shell .grabfold-sheet {
     display: none !important;
   }
 }
