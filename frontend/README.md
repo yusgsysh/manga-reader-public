@@ -288,9 +288,10 @@ bun run repro:reader-loading      # 诊断探针：仍白屏则 exit 0，已修�
 阅读设置面板里的「阅读方向 / 翻页动画 / 翻页模式」分段切换器原本用静态背景色表示选中项。为了与 comimi 内置的 `comimi-view-switcher` / `comimi-page-mode-indicator` 滑动指示器保持一致，改为由 `SegmentGroup` 单独渲染一个 `reader-segment-indicator` 背景元素：
 
 - `src/components/reader/ReaderToolbar.tsx`：新增 `SegmentGroup` 组件，根据当前选中项计算对应按钮的 `offsetLeft` / `offsetWidth`，并设置到指示器上；切换时指示器通过 CSS `transform` 与 `width` 过渡平滑滑到新的位置。
-- `src/index.css`：新增 `.reader-segment-indicator` 过渡样式，使用 `--reader-spring` 曲线；`prefers-reduced-motion: reduce` 时关闭动画。
+- `src/index.css`：新增 `.reader-segment-indicator` 过渡样式，使用短平快的 `ease-out` 曲线，避免过冲；`prefers-reduced-motion: reduce` 时关闭动画。
+- 首次渲染（如设置面板刚打开）时指示器直接定位到当前值，不播放进入动画。
 
-这样阅读器设置面板的分段切换器在切换时会像 comimi 的视图/翻页模式切换器一样有弹性的滑动指示器效果。
+这样阅读器设置面板的分段切换器在切换时会有平滑跟随的滑动指示器，但打开面板时不会从远处滑入或产生弹性过冲。
 
 ## 环境变量
 

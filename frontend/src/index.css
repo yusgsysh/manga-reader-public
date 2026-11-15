@@ -519,8 +519,8 @@ body {
 
 .reader-segment-indicator {
   transition:
-    transform 0.36s var(--reader-spring),
-    width 0.36s var(--reader-spring);
+    transform 0.18s ease-out,
+    width 0.18s ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {

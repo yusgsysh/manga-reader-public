@@ -97,8 +97,15 @@ function SegmentGroup({
     );
     const selected = buttons[selectedIndex];
     if (!selected) return;
+
+    // Skip the animation on first paint (e.g. when the settings panel opens)
+    // so the indicator snaps to the current value instead of sliding in.
+    const isInitial = !indicator.dataset.initialized;
     indicator.style.width = `${selected.offsetWidth}px`;
     indicator.style.transform = `translateX(${selected.offsetLeft}px)`;
+    if (isInitial) {
+      indicator.dataset.initialized = "true";
+    }
   }, [selectedIndex]);
 
   return (
