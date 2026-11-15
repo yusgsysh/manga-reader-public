@@ -551,12 +551,11 @@ body {
  *
  * comimi's patched page stage sets `data-flipping="next|previous"` on
  * `.comimi-stage` and `data-spine="left|right"` on the current page group
- * during the turn. We layer a stronger 3D fold on top by giving the stage a
- * perspective container and rotating the leaving page around its spine edge.
+ * during the turn. A BookFoldRenderer watches those markers and replaces the
+ * stock CSS rotateY with a dynamic clip-path fold driven by grabfold geometry.
  *
  * comimi ships its own `comimi-book-fold-*` keyframes as a fallback; we keep
- * them disabled when the reader shell is active so the transition below is
- * the only animation in play.
+ * them disabled when the reader shell is active.
  */
 .reader-shell .comimi-root[data-page-turn-animation="book"] .comimi-stage {
   perspective: 1400px;
@@ -567,54 +566,24 @@ body {
   transform-style: preserve-3d;
 }
 
-/* The page leaving the spread. Its spine edge is fixed in place. */
+/*
+ * Dynamic grabfold rendering.
+ *
+ * When comimi sets `data-flipping`, BookFoldRenderer clips the current page
+ * group to the flat leaf and creates a mirrored flap clone plus crease/cast
+ * shading bands. The rules below keep the stage positioned correctly and make
+ * sure comimi's stock rotateY transition does not fight the renderer.
+ */
 .reader-shell .comimi-root[data-page-turn-animation="book"]
   .comimi-stage[data-flipping]
   .comimi-page-group[data-placement="current"] {
-  transition: transform 180ms var(--reader-spring);
   /* Cancel comimi's built-in fold keyframes. */
   animation: none !important;
-  /* comimi sets backface-visibility: hidden on the current group; that is
-   * fine for its 90° keyframes but would hide the page during our spring
-   * overshoot, so keep the group itself visible. */
+  /* The renderer manages clip-path and stacking directly. */
+  transition: none !important;
+  transform: none !important;
   backface-visibility: visible !important;
   position: relative;
-}
-
-/*
- * Rotation direction logic:
- * - The spine edge stays fixed (transform-origin on the spine side).
- * - The free edge of the page flips toward the incoming page.
- * - In RTL the next page sits to the left, so a right-spined page flips left
- *   (rotateY(90deg)). In LTR the next page sits to the right, so a left-spined
- *   page flips right (rotateY(-90deg)). Previous is the mirror of next.
- */
-.reader-shell .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping="next"]
-  .comimi-page-group[data-placement="current"][data-spine="right"] {
-  transform: rotateY(90deg);
-  transform-origin: 100% 50%;
-}
-
-.reader-shell .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping="next"]
-  .comimi-page-group[data-placement="current"][data-spine="left"] {
-  transform: rotateY(-90deg);
-  transform-origin: 0% 50%;
-}
-
-.reader-shell .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping="previous"]
-  .comimi-page-group[data-placement="current"][data-spine="right"] {
-  transform: rotateY(-90deg);
-  transform-origin: 100% 50%;
-}
-
-.reader-shell .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping="previous"]
-  .comimi-page-group[data-placement="current"][data-spine="left"] {
-  transform: rotateY(90deg);
-  transform-origin: 0% 50%;
 }
 
 /*
@@ -647,52 +616,6 @@ body {
 }
 
 /*
- * Spine shadow on the turning page.
- * The gradient is mirrored so the dark edge always lands on the spine side.
- */
-.reader-shell .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping]
-  .comimi-page-group[data-placement="current"]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  transform: translateZ(1px);
-  opacity: 0;
-  transition: opacity 180ms var(--reader-spring);
-}
-
-.reader-shell .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping="next"]
-  .comimi-page-group[data-placement="current"][data-spine="right"]::after,
-.reader-shell .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping="previous"]
-  .comimi-page-group[data-placement="current"][data-spine="left"]::after {
-  background: linear-gradient(
-    to right,
-    rgba(0, 0, 0, 0.22) 0%,
-    rgba(0, 0, 0, 0.05) 18%,
-    transparent 45%
-  );
-  opacity: 1;
-}
-
-.reader-shell .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping="next"]
-  .comimi-page-group[data-placement="current"][data-spine="left"]::after,
-.reader-shell .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping="previous"]
-  .comimi-page-group[data-placement="current"][data-spine="right"]::after {
-  background: linear-gradient(
-    to left,
-    rgba(0, 0, 0, 0.22) 0%,
-    rgba(0, 0, 0, 0.05) 18%,
-    transparent 45%
-  );
-  opacity: 1;
-}
-
-/*
  * Incoming pages must stay on top while they are translated into position in
  * slide mode. In book mode the current page is the one that should lift and
  * turn above its sibling, so lower its sibling to the normal stacking order.
@@ -709,10 +632,106 @@ body {
 .reader-shell .comimi-root[data-page-turn-animation="book"]
   .comimi-stage[data-flipping]
   .comimi-page-group[data-placement="current"] {
-  z-index: 1;
+  z-index: 3;
 }
 
-/* Respect reduced-motion: turn instantly without 3D rotation. */
+/* Flap, cast shadow and roll shading created by BookFoldRenderer. */
+.reader-shell .comimi-book-fold-flap-wrap,
+.reader-shell .comimi-book-fold-band-wrap,
+.reader-shell .comimi-book-fold-flap,
+.reader-shell .comimi-book-fold-cast,
+.reader-shell .comimi-book-fold-roll,
+.reader-shell .comimi-book-fold-gutter {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.reader-shell .comimi-book-fold-flap-wrap {
+  z-index: 5;
+  overflow: hidden;
+}
+
+.reader-shell .comimi-book-fold-band-wrap {
+  z-index: 6;
+  overflow: visible;
+}
+
+.reader-shell .comimi-book-fold-flap {
+  width: 100%;
+  height: 100%;
+  will-change: transform, clip-path;
+  /* The flap shows the current page mirrored, simulating the paper back. */
+  transform: scaleX(-1);
+  background: var(--color-kumo-base, #ffffff);
+}
+
+[data-mode="dark"] .reader-shell .comimi-book-fold-flap {
+  background: var(--color-kumo-base, #18181b);
+}
+
+.reader-shell .comimi-book-fold-cast,
+.reader-shell .comimi-book-fold-roll {
+  transform-origin: 0 0;
+}
+
+.reader-shell .comimi-book-fold-gutter {
+  inset: 0;
+  z-index: 4;
+}
+
+/*
+ * When the dynamic renderer is not active (e.g. before it mounts) fall back
+ * to the simpler 3D rotation so the book animation still looks reasonable.
+ */
+.reader-shell
+  .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping]
+  .comimi-page-group[data-placement="current"]:not(
+    .comimi-book-fold-leaf
+  ) {
+  transition: transform 180ms var(--reader-spring);
+  transform-origin: 100% 50%;
+}
+
+.reader-shell
+  .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping="next"]
+  .comimi-page-group[data-placement="current"][data-spine="right"]:not(
+    .comimi-book-fold-leaf
+  ) {
+  transform: rotateY(90deg);
+}
+
+.reader-shell
+  .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping="next"]
+  .comimi-page-group[data-placement="current"][data-spine="left"]:not(
+    .comimi-book-fold-leaf
+  ) {
+  transform: rotateY(-90deg);
+}
+
+.reader-shell
+  .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping="previous"]
+  .comimi-page-group[data-placement="current"][data-spine="right"]:not(
+    .comimi-book-fold-leaf
+  ) {
+  transform: rotateY(-90deg);
+}
+
+.reader-shell
+  .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping="previous"]
+  .comimi-page-group[data-placement="current"][data-spine="left"]:not(
+    .comimi-book-fold-leaf
+  ) {
+  transform: rotateY(90deg);
+}
+
+/* Respect reduced-motion: turn instantly without fold animation. */
 @media (prefers-reduced-motion: reduce) {
   .reader-shell .comimi-page-group,
   .reader-shell .comimi-root[data-page-turn-animation="book"]
@@ -723,10 +742,13 @@ body {
     animation: none !important;
   }
 
-  .reader-shell .comimi-root[data-page-turn-animation="book"]
-    .comimi-stage[data-flipping]
-    .comimi-page-group[data-placement="current"]::after {
-    display: none;
+  .reader-shell .comimi-book-fold-flap-wrap,
+  .reader-shell .comimi-book-fold-band-wrap,
+  .reader-shell .comimi-book-fold-flap,
+  .reader-shell .comimi-book-fold-cast,
+  .reader-shell .comimi-book-fold-roll,
+  .reader-shell .comimi-book-fold-gutter {
+    display: none !important;
   }
 }
 

@@ -194,6 +194,8 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
 
 comimi 原生的翻页只有一种整块舞台的横向平移，而且只在触摸滑动结束时的「惯性翻页」路径触发；点击屏幕左右两侧、左右箭头按钮和键盘翻页都是即时跳转、没有任何过渡。要让阅读器支持「平移」和「书本翻页」两种可切换的翻页动画，需要在 comimi 里新增一个设置项，并把所有单步翻页路径统一收口到动画入口。
 
+书本翻页最初由 comimi 补丁用 CSS `rotateY` 实现；后续在应用侧叠加了 grabfold 风格的动态折叠，使页面可以沿任意抓握位置形成折痕。
+
 #### comimi 侧补丁
 
 - **设置项**：`dist/types.d.ts` 新增 `PageTurnAnimation = "slide" | "book"`，`ViewerSettings` 增加 `pageTurnAnimation` 字段；`dist/index.js` 的默认值对象补 `pageTurnAnimation: "slide"`。
@@ -202,11 +204,26 @@ comimi 原生的翻页只有一种整块舞台的横向平移，而且只在触�
 - **书本翻页实现**：`PageStage` 新增 `beginBookFlip(direction, settings)` / `endBookFlip()`。`animatePageTurn` 在 `pageTurnAnimation === "book"` 且未放大（`zoomScale <= 1`，放大时页面组带内联 transform，不能叠加旋转）时走书本翻页，否则沿用原来的整块平移。
   - `beginBookFlip` 先把舞台复位（`snapTransform`），给「当前页」组打上 `data-spine`（根据阅读方向与翻页方向算出书脊在左还是右），把「目标页」组的 transform 改为 `translateX(0%)`（靠 CSS 过渡滑入），并在舞台上标记 `data-flipping`。
   - 180ms 后 `endBookFlip` 清除标记，再由回调提交页面（提交是同步的，会立刻重建舞台，因此不会闪一帧「翻回来的过渡」）。
-- **CSS**：在 `.comimi-stage` 的样式串尾部追加书本翻页样式——舞台 `perspective`、翻页时「当前页」绕书脊 `rotateY(±90°)` 的 `comimi-book-fold-left/right` 关键帧、书脊侧阴影 `comimi-book-shadow`，以及 `prefers-reduced-motion` 下关闭动画。
+- **CSS**：在 `.comimi-stage` 的样式串尾部追加书本翻页基础样式——舞台 `perspective`、书脊侧阴影等。实际的折叠动画由应用侧 `BookFoldRenderer` 覆盖。
 
 #### 应用侧
 
 `ReaderPage` 的 `settings` 增加 `pageTurnAnimation: "slide"` 默认值；`ReaderToolbar` 的「阅读设置」面板新增「翻页动画」分段控件（平移 / 书本翻页），点击调用 `updateSettings({ pageTurnAnimation })`。该偏好与其他阅读设置一样随会话有效、不持久化（comimi 的 `storage` 已关闭）。
+
+#### grabfold 风格动态折叠
+
+comimi 补丁只把书本翻页做成整块绕书脊旋转；为了支持「从任意位置抓页」的真实折叠效果，应用侧自实现了一套 grabfold 几何与渲染，不引入新依赖：
+
+- **几何模块**：`src/lib/bookFold.ts` 移植 grabfold 的 `foldGeometry`、`foldDepth`、半平面裁剪、反射、以及 flick/peek 物理（`releaseSpeed`、`releaseTarget`、`settleDuration`、`peekProgress`）。
+- **渲染器**：`src/lib/bookFoldRenderer.ts` 的 `BookFoldRenderer` 监听 comimi 舞台的 `data-flipping` 属性，在书本翻页期间：
+  - 把当前 `.comimi-page-group[data-placement="current"]` 作为「leaf」，用 `clip-path` 裁出仍平铺的部分；
+  - 克隆当前页组作为「flap」，镜像内容，再用 `clip-path` 裁出折叠部分，并按 grabfold `place` 变换定位到折痕另一侧；
+  - 叠加 crease roll 与 cast shadow 两条渐变阴影带，以及 spine gutter 阴影；
+  - 动画完成或 `data-flipping` 移除时清理所有临时层，恢复原始页组样式。
+- **交互拖动**：`src/hooks/useBookFold.ts` 在 comimi 舞台上以 capture 阶段监听 pointer 事件。当用户在书页自由边缘附近按下时，启动 `beginDrag`；移动时按指针位置驱动折叠进度与倾斜（`lift`）；松开时根据 flick 物理决定翻回还是翻过去，翻过去则触发对应箭头按钮让 comimi 提交页面。未越过拖动阈值的点击会回退为普通点击，不影响 comimi 的点击翻页。
+- **Reduced motion**：`ReaderPage` 通过 `useMediaQuery("(prefers-reduced-motion: reduce)")` 把偏好传给 `useBookFold`，渲染器将动画时长设为 0，CSS 也隐藏所有折叠层。
+
+新增单元测试覆盖纯几何/物理函数：`src/lib/bookFold.test.ts`。
 
 ### 回归测试
 
