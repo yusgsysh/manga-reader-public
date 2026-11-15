@@ -7,6 +7,8 @@ import {
 } from "react";
 import {
   ArrowLeft,
+  CaretLeft,
+  CaretRight,
   CornersIn,
   CornersOut,
   GearSix,
@@ -18,6 +20,7 @@ import {
 } from "@phosphor-icons/react";
 import { cn } from "@cloudflare/kumo";
 import type { ViewerSettings } from "@yui540/comimi-react";
+import type { ReaderSettings } from "../../lib/readerSettings";
 import { useReaderPreferences } from "../../hooks/useReaderPreferences";
 import { IconButton } from "../ui";
 import { ReaderPageList, ReaderShortcuts } from "./ReaderToolbarPanels";
@@ -30,7 +33,7 @@ interface ReaderToolbarProps {
   title: string;
   fullscreen: boolean;
   overlayVisible: boolean;
-  viewerSettings: ViewerSettings | null;
+  viewerSettings: ReaderSettings | null;
   id: number;
   token: string;
   total: number;
@@ -40,6 +43,7 @@ interface ReaderToolbarProps {
   onToggleFullscreen: () => void;
   onToggleAutoPageTurn: () => void;
   onGoToPage: (pageIndex: number) => void;
+  onTurnPage: (direction: "previous" | "next") => void;
   onClosePanel: () => void;
   onUpdateSettings: (patch: Partial<ViewerSettings>) => void;
 }
@@ -185,6 +189,7 @@ export function ReaderToolbar({
   onToggleFullscreen,
   onToggleAutoPageTurn,
   onGoToPage,
+  onTurnPage,
   onClosePanel,
   onUpdateSettings,
 }: ReaderToolbarProps) {
@@ -244,6 +249,27 @@ export function ReaderToolbar({
         </h1>
 
         <div className="flex items-center gap-0.5">
+          {/* The book view has no comimi dock, so its page-turn controls live
+              here; other modes keep comimi's own arrows and are unchanged. */}
+          {viewerSettings?.pageTurnAnimation === "book" && (
+            <>
+              <IconButton
+                label="上一页"
+                className="hidden sm:flex"
+                onClick={() => onTurnPage("previous")}
+              >
+                <CaretLeft className="size-5" weight="bold" />
+              </IconButton>
+              <IconButton
+                label="下一页"
+                className="hidden sm:flex"
+                onClick={() => onTurnPage("next")}
+              >
+                <CaretRight className="size-5" weight="bold" />
+              </IconButton>
+            </>
+          )}
+
           <IconButton
             label={autoPageTurnEnabled ? "停止自动播放" : "自动播放"}
             aria-pressed={autoPageTurnEnabled}

@@ -596,171 +596,105 @@ body {
 }
 
 /*
- * Book-flip animation for the "书本" setting.
+ * GrabFold book view for the "书本" page-turn animation.
  *
- * comimi's patched page stage sets `data-flipping="next|previous"` on
- * `.comimi-stage` and `data-spine="left|right"` on the current page group
- * during the turn. BookFoldRenderer watches those markers and overlays a
- * grabfold FoldingSheet (https://github.com/javocsoft/grabfold) on the current
- * page cell, replacing comimi's stock rotateY with grabfold's clip-path fold.
+ * The book is its own viewer (see components/reader/BookFlipViewer.tsx), not
+ * comimi's stage: grabfold draws the paper, folds and shadows, and the WebGL
+ * renderer curls the turning leaf. Only the paper colours and the page image
+ * box are styled here, so the book sits in the reader theme without touching
+ * any other reading mode.
  */
-.reader-shell .comimi-root[data-page-turn-animation="book"] .comimi-stage {
-  perspective: 1400px;
-  transform-style: preserve-3d;
-}
-
-.reader-shell .comimi-root[data-page-turn-animation="book"] .comimi-page-group {
-  transform-style: preserve-3d;
-}
-
-/*
- * Dynamic grabfold rendering.
- *
- * When comimi sets `data-flipping`, BookFoldRenderer hides the original current
- * page group and creates a grabfold FoldingSheet over its cell. The sheet owns
- * the leaf, flap and shading bands; the rules below keep the stage positioned
- * correctly and cancel comimi's stock rotateY transition so it does not fight
- * the grabfold overlay.
- */
-.reader-shell .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping]
-  .comimi-page-group[data-placement="current"] {
-  /* Cancel comimi's built-in fold keyframes. */
-  animation: none !important;
-  /* The sheet manages clip-path and stacking directly. */
-  transition: none !important;
-  backface-visibility: visible !important;
-}
-
-/* Position the grabfold sheet inside comimi's stage. */
-.reader-shell
-  .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping]
-  .grabfold-sheet {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 5;
-  pointer-events: none;
-}
-
-/*
- * The paper colours grabfold shades the turning leaf with. The turned face is
- * left blank, so a single-sided manga page reads as its paper back rather than
- * a mirrored image of the front.
- */
-.reader-shell .comimi-root[data-page-turn-animation="book"] {
+.reader-book {
   --grabfold-paper: var(--color-kumo-base, #fbf8f1);
   --grabfold-lift: #ffffff;
+  --grabfold-edge: var(--color-kumo-base, #fbf8f1);
 }
 
-[data-mode="dark"] .reader-shell .comimi-root[data-page-turn-animation="book"] {
+[data-mode="dark"] .reader-book {
   --grabfold-paper: var(--color-kumo-base, #18181b);
   --grabfold-lift: #2a2a2e;
 }
 
-/*
- * The incoming page sits beneath the turning page and slides into place.
- * Without this rule comimi would leave it translated off-screen until the
- * turn commits.
- */
-.reader-shell .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping]
-  .comimi-page-group[data-placement="next"],
-.reader-shell .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping]
-  .comimi-page-group[data-placement="previous"] {
-  opacity: 1;
-  transform: translateX(0%);
-  background: var(--color-kumo-base, #ffffff);
-}
-
-[data-mode="dark"]
-  .reader-shell
-  .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping]
-  .comimi-page-group[data-placement="next"],
-[data-mode="dark"]
-  .reader-shell
-  .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping]
-  .comimi-page-group[data-placement="previous"] {
-  background: var(--color-kumo-base, #18181b);
+.reader-book .grabfold:focus {
+  outline: none;
 }
 
 /*
- * Incoming pages must stay on top while they are translated into position in
- * slide mode. In book mode the current page is the one that should lift and
- * turn above its sibling, so lower its sibling to the normal stacking order.
+ * One page of the book. The cell already has the page's aspect ratio, so
+ * `contain` only letterboxes a page whose image really is a different shape
+ * (a double-page spread); it never stretches one.
  */
-.reader-shell .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping]
-  .comimi-page-group[data-placement="next"],
-.reader-shell .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping]
-  .comimi-page-group[data-placement="previous"] {
-  z-index: 0;
+.book-flip-page {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  background: var(--grabfold-paper);
 }
 
-.reader-shell .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping]
-  .comimi-page-group[data-placement="current"] {
-  z-index: 3;
+.book-flip-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
 }
 
-/*
- * When the grabfold renderer has not mounted yet (or is unavailable), fall back
- * to comimi's simpler 3D rotation so the book animation still looks reasonable.
- */
-.reader-shell
-  .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping]
-  .comimi-page-group[data-placement="current"]:not(:has(.grabfold-sheet)) {
-  transition: transform 180ms var(--reader-spring);
-  transform-origin: 100% 50%;
+.book-flip-blank {
+  width: 100%;
+  height: 100%;
+  background: var(--grabfold-paper);
 }
 
-.reader-shell
-  .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping="next"]
-  .comimi-page-group[data-placement="current"][data-spine="right"]:not(:has(.grabfold-sheet)) {
-  transform: rotateY(90deg);
+.book-flip-page-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-kumo-default, #3f3f46);
+  text-align: center;
 }
 
-.reader-shell
-  .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping="next"]
-  .comimi-page-group[data-placement="current"][data-spine="left"]:not(:has(.grabfold-sheet)) {
-  transform: rotateY(-90deg);
+.book-flip-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid color-mix(in oklab, currentColor 25%, transparent);
+  border-top-color: currentColor;
+  border-radius: 999px;
+  animation: book-flip-spin 0.9s linear infinite;
 }
 
-.reader-shell
-  .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping="previous"]
-  .comimi-page-group[data-placement="current"][data-spine="right"]:not(:has(.grabfold-sheet)) {
-  transform: rotateY(-90deg);
-}
-
-.reader-shell
-  .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping="previous"]
-  .comimi-page-group[data-placement="current"][data-spine="left"]:not(:has(.grabfold-sheet)) {
-  transform: rotateY(90deg);
-}
-
-/* Respect reduced-motion: turn instantly without fold animation. */
-@media (prefers-reduced-motion: reduce) {
-  .reader-shell .comimi-page-group,
-  .reader-shell .comimi-root[data-page-turn-animation="book"]
-    .comimi-stage[data-flipping]
-    .comimi-page-group[data-placement="current"] {
-    transition: none;
-    transform: none !important;
-    animation: none !important;
+@keyframes book-flip-spin {
+  to {
+    transform: rotate(1turn);
   }
+}
 
-  .reader-shell .grabfold-sheet {
-    display: none !important;
+/* The page-jump slider reads like the reader's own progress bar. */
+.reader-book-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--app-accent);
+}
+
+.reader-book-seek::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--app-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .book-flip-spinner {
+    animation: none;
   }
 }
 

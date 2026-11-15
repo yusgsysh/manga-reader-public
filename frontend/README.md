@@ -194,7 +194,7 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
 
 comimi 原生的翻页只有一种整块舞台的横向平移，而且只在触摸滑动结束时的「惯性翻页」路径触发；点击屏幕左右两侧、左右箭头按钮和键盘翻页都是即时跳转、没有任何过渡。要让阅读器支持「平移」和「书本」两种可切换的翻页动画，需要在 comimi 里新增一个设置项，并把所有单步翻页路径统一收口到动画入口。
 
-书本翻页最初由 comimi 补丁用 CSS `rotateY` 实现；后续在应用侧叠加了 grabfold 风格的动态折叠，使页面可以沿任意抓握位置形成折痕。
+书本翻页最初由 comimi 补丁用 CSS `rotateY` 实现，之后又在应用侧把 grabfold 的 `FoldingSheet` 叠加到 comimi 舞台上。这两种做法都只是在 comimi 的单页舞台外面套一层动画：页面被克隆、背面留空、无法做双页映射，也没有 WebGL 卷曲。现在「书本」是一个独立的阅读器实现（`BookFlipViewer`），使用 grabfold 官方的 React 适配器与 WebGL 渲染器；comimi 只负责「平移」等其余模式。
 
 #### comimi 侧补丁
 
@@ -204,38 +204,33 @@ comimi 原生的翻页只有一种整块舞台的横向平移，而且只在触�
 - **书本实现**：`PageStage` 新增 `beginBookFlip(direction, settings)` / `endBookFlip()`。`animatePageTurn` 在 `pageTurnAnimation === "book"` 且未放大（`zoomScale <= 1`，放大时页面组带内联 transform，不能叠加旋转）时走书本，否则沿用原来的整块平移。
   - `beginBookFlip` 先把舞台复位（`snapTransform`），给「当前页」组打上 `data-spine`（根据阅读方向与翻页方向算出书脊在左还是右），把「目标页」组的 transform 改为 `translateX(0%)`（靠 CSS 过渡滑入），并在舞台上标记 `data-flipping`。
   - 180ms 后 `endBookFlip` 清除标记，再由回调提交页面（提交是同步的，会立刻重建舞台，因此不会闪一帧「翻回来的过渡」）。
-- **CSS**：在 `.comimi-stage` 的样式串尾部追加书本翻页基础样式——舞台 `perspective`、书脊侧阴影等。实际的折叠动画由应用侧 `BookFoldRenderer` 覆盖。
+- **CSS**：在 `.comimi-stage` 的样式串尾部追加书本翻页基础样式——舞台 `perspective`、书脊侧阴影等。
+- **现状**：应用在「书本」模式下不再挂载 comimi，因此补丁里的 `beginBookFlip` / 书本 CSS 不会被触发；`pageTurnAnimation` 设置本身仍由补丁提供类型与默认值，应用用它来选择 `BookFlipViewer`。保留补丁的这部分实现，是为了不破坏 comimi 自身的其它宿主用法。
 
 #### 应用侧
 
 `ReaderPage` 的 `settings` 增加 `pageTurnAnimation: "slide"` 默认值；`ReaderToolbar` 的「阅读设置」面板新增「翻页动画」分段控件（平移 / 书本），点击调用 `updateSettings({ pageTurnAnimation })`。该偏好与其他阅读设置一样随会话有效、不持久化（comimi 的 `storage` 已关闭）。
 
-#### grabfold 风格动态折叠
+#### GrabFold 书本阅读器
 
-comimi 补丁只把书本翻页做成整块绕书脊旋转；为了支持「从任意位置抓页」的真实折叠效果，阅读器直接引入 [grabfold](https://github.com/javocsoft/grabfold)（[npm](https://www.npmjs.com/package/grabfold)，MIT License © JavocSoft）作为运行时依赖，并将其 `FoldingSheet` 叠加在 comimi 舞台之上，完整复刻 grabfold 演示站的交互。
+「书本」模式现在由 [grabfold](https://github.com/javocsoft/grabfold)（[npm](https://www.npmjs.com/package/grabfold)，MIT License © JavocSoft）驱动，封装为独立的 `BookFlipViewer`：
 
-> 详见 `frontend/THIRD-PARTY-NOTICES.md`。
+- **按模式分发**：`ReaderPage` 根据 `pageTurnAnimation` 在 `MangaViewer`（平移）与 `BookFlipViewer`（书本）之间切换。`BookFlipViewer` 通过 `React.lazy` 动态加载（构建产物里是独立的 `BookFlipViewer-*.js` chunk），平移模式不会加载 grabfold 的运行时。
+- **使用官方适配器**：`grabfold/react` 的 `GrabfoldBook` 负责书本、翻页、拖动、flick、peek、整叠抓页与生命周期；`grabfold/webgl` 的 `webglFold` 把翻起的纸张映射到圆柱面并在 GPU 上渲染折痕、卷曲、透视与动态光照；DOM 折叠（grabfold 默认渲染器）是自动回退方案。
+- **页面映射**（`src/lib/bookPages.ts`）：漫画页始终是 0-based，grabfold 的 position 只由漫画页推导，从不写入后端。
+  - 双页：`Sheet n` 的正面是第 `2n` 页、背面是第 `2n+1` 页；显示封面时第 0 页单独占右侧首屏，之后成对 `(1,2)`、`(3,4)`…；隐藏封面时首屏就是 `(0,1)`（Sheet 0 的正面是空白的环衬）。
+  - 单页：单页布局只显示纸张正面，所以每张 Sheet 只承载一张漫画页（`Sheet n` 正面 = 第 `n` 页），背面在翻页过程中作为纸背经过。
+  - 布局或封面开关变化时，按当前漫画页重新计算 Sheet 数量与 position，并重建书本，因此切换前后停留的是同一张漫画页。
+- **阅读方向**：`binding` 由阅读方向决定（RTL → `"right"`，LTR → `"left"`）；页面内容不做镜像。方向切换只改变装订与翻页方向，position 保持不变。
+- **交互**：拖动、触摸、flick、peek、整叠抓页由 grabfold 直接处理；点击左右 30% 区域、方向键、PageUp/PageDown、Home/End、空格、`A`/`F`/`O`/`P`/`C` 与底部浮层（上一页 / 页码输入 / 进度条 / 下一页）都通过同一个组件句柄驱动，工具栏与页码列表也走 `goToPage`，不存在第二套页码状态。浮层的显示/隐藏沿用 comimi 的规则（出现 3 秒后自动隐藏，点击中间区域切换），顶部工具栏随浮层一起显示。
+- **图片与纹理**（`src/lib/pageImages.ts`）：页面 URL 仍由现有的 `/api/image-cache/page` 接口解析（`PageUrlStore` 流式注入），每张图只解析、解码一次；同一份 `HTMLImageElement` 既交给 WebGL 纹理，也用于页面 `<img>`（同一 URL，浏览器缓存复用）。缓存按字节数和张数封顶（桌面 112MB / 10 张，移动端 48MB / 6 张），预加载/保留当前页前后各一到两个跨页，翻页前已解码；离开视窗的页面被 LRU 淘汰。单页解码失败时页内显示「重试」。
+- **生命周期**：grabfold 实例与 `GrabfoldBook` 组件绑定，卸载时 `destroy()` 销毁 WebGL 上下文与纹理；WebGL 上下文只在书本视图存活期间存在，切换模式即释放。StrictMode 的双次挂载/卸载已验证只保留一个实例、一个 canvas。`prefers-reduced-motion` 交给 grabfold 处理（瞬时翻页）。
+- **WebGL 回退**：先用一次性探测 canvas 检查 `webgl2`/`webgl`（探测后立即 `loseContext`），不可用时不创建 `webglFold`；即使上下文创建或着色器链接失败，`webglFold` 自身也会退回 DOM 折叠，阅读器不会因此不可用。
+- **阅读进度**：只在翻页落定（`onPositionChange`）时把锚点漫画页交给 `useReadingProgressSync` 的 debounce 保存；拖动中途松手回弹不会写入；退出阅读器时照常 flush。重新进入时可从后端进度恢复到同一页。
+- **视觉参数**：`pageRatio` 取第一张成功加载的漫画页比例（避免把跨页大图当成书本比例）；`duration=620`、`commitAt=0.38`、`dragThreshold=8`、`thickness=14`、`shadow=0.32`、`gutter=0.24`、`lift=40`；WebGL `radius=0.12`、`segments=48`、`maxPixelRatio=min(devicePixelRatio, 2)`、纹理缓存 6 张。纸色/提亮色通过 `--grabfold-paper` / `--grabfold-lift` 跟随亮暗主题（见 `src/index.css`）。
+- **布局**：书本使用 `fit: "contain"` 在阅读区域内居中，容器带 `env(safe-area-inset-bottom)` 内边距；grabfold 用 `ResizeObserver` 跟随窗口、全屏与旋转。页面按原始比例显示（`object-fit: contain`），不会拉伸。
 
-- **几何模块**：`src/lib/bookFold.ts` 从 grabfold 导出 `foldGeometry`、`foldDepth`、半平面裁剪、反射，以及 flick/peek 物理（`releaseSpeed`、`releaseTarget`、`settleDuration`、`peekProgress`）；另提供 `polygon` CSS 辅助函数，以及把「拖动方向 / 点击侧」映射到 comimi 翻页方向与书脊侧的纯函数（`turnDirection`、`spineFor`、`sideTurn`、`foldSign`）——映射关系与 comimi 补丁的 `beginBookFlip` 完全一致。
-- **渲染器**：`src/lib/bookFoldRenderer.ts` 的 `BookFoldRenderer` 监听 comimi 舞台的 `data-flipping` 属性，在书本翻页期间：
-  - 隐藏当前 `.comimi-page-group[data-placement="current"]`，避免与折叠层重复渲染；
-  - 在当前页 cell 上创建一个 grabfold `FoldingSheet`（含 top 偏移修正）；
-  - 把当前页组克隆到 sheet 的 `restingSlot`（leaf）；`turnedSlot`（flap）**留空**，单面漫画页翻起时露出的是纸背，而不是镜像的正面的图；
-  - 每帧调用 sheet 的 `draw(frame)`，由 grabfold 内部计算 `clip-path`、反射变换、crease roll / cast shadow 渐变带与 gutter 阴影；
-  - 动画完成或 `data-flipping` 移除时销毁 sheet，恢复原始页组显示。
-- **交互拖动（抓任意位置）**：`src/hooks/useBookFold.ts` 在 comimi 舞台上以 capture 阶段监听 pointer 事件，书本模式且未放大时接管页面区域的指针：
-  - 按下页面任意位置并横向拖动超过阈值后，按阅读方向（从 comimi 进度条 `data-direction` 读取）决定翻页方向与书脊侧，开始实时折叠；
-  - 折叠进度跟随横向位移，纵向位移让折痕随手倾斜（垂直平分线几何，即 grabfold 的核心效果）；
-  - 松手时按 grabfold 的 flick 物理决定翻回还是翻过；翻过则等折叠落定后点击 comimi 对应箭头（按阅读方向选择左/右箭头，`data-disabled` 用于边界判断）提交页面；
-  - 拖动结束后的那次 `click` 会在 capture 阶段被吞掉——`pointerdown` 的 `preventDefault` 只能抑制 mousedown/mouseup，抑制不了派生的 `click`，而 comimi 的点击翻页正是监听 `click`；
-  - 指针悬停在页面自由边缘附近时页面会「窥视」（peek）：页角按 `peekProgress` 轻微抬起并跟随指针，按下时折叠无缝接管 peek；离开时放下。peek 与点击翻页一样带边界判断；
-  - 普通点击（未拖动）不拦截，comimi 自身的点击翻页（左右 30% 区域）与中键唤出浮层照常工作。
-- **Reduced motion**：`ReaderPage` 通过 `useMediaQuery("(prefers-reduced-motion: reduce)")` 把偏好传给 `useBookFold`，渲染器将动画时长设为 0，CSS 隐藏 grabfold sheet。
-- **纸色**：`src/index.css` 为书本模式设置 `--grabfold-paper` / `--grabfold-lift`（跟随亮暗主题），折叠的纸背与提亮色随之变化。
-
-新增单元测试覆盖纯几何/物理函数与方向映射：`src/lib/bookFold.test.ts`。
-
-交互用 e2e mock（`e2e/mock-server.mjs` 的 `/reader/1001/tok`）手工验证过：自动翻页折叠、任意位置抓页 + 折痕倾斜、flick 提交翻页、拖动后的 click 不再误触 comimi 翻页、悬停 peek 建立与回收。
+单元测试：`src/lib/bookPages.test.ts`（1/2/3/奇数/偶数页、首末页、单双页切换、封面开关、RTL/LTR、position 与漫画页互转、预加载窗口）与 `src/lib/pageImages.test.ts`（去重、并发上限、LRU/字节预算、失败重试、销毁）。e2e（`e2e/reader-pages.mjs`）覆盖：书本模式挂载与 comimi 卸载、WebGL canvas、点击/键盘/拖动/flick/回弹取消翻页、页码列表跳转、双页映射、方向切换保页、返回平移模式保页，以及在禁用 WebGL 的上下文里回退到 DOM 折叠。
 
 ### 回归测试
 

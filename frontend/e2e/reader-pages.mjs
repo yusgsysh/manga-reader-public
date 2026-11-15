@@ -329,6 +329,29 @@ try {
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
     const seek = () => page.locator(".comimi-seek").innerText();
+    const bookChromeVisible = async () => (await page.locator(".reader-book-overlay").count()) > 0;
+    const showBookChrome = async () => {
+      for (let i = 0; i < 6; i++) {
+        if (await bookChromeVisible()) return true;
+        await page.mouse.click(cx, cy);
+        await sleep(350);
+      }
+      return bookChromeVisible();
+    };
+    const hideBookChrome = async () => {
+      if (!(await bookChromeVisible())) return;
+      await page.mouse.click(cx, cy);
+      await sleep(350);
+    };
+    const readBookPage = async () => {
+      await showBookChrome();
+      return page.locator('[aria-label="当前页码"]').inputValue();
+    };
+    const readBookPageThenHide = async () => {
+      const value = await readBookPage();
+      await hideBookChrome();
+      return value;
+    };
 
     check(
       "defaults to the slide page-turn animation",
@@ -354,33 +377,227 @@ try {
     await page.mouse.click(cx, cy);
     await sleep(400);
 
+    const pageBeforeBook = Number((await seek()).match(/(\d+)\s*\//)?.[1]);
     await page.locator("header").getByRole("button", { name: "阅读设置" }).click();
     await page.waitForSelector("text=翻页动画", { timeout: 10000 });
     await page.getByRole("button", { name: "书本" }).click();
-    await sleep(200);
+    await sleep(500);
     check(
-      "switching to book mode updates the reader",
-      (await page.evaluate(
-        () => document.querySelector(".comimi-root")?.dataset.pageTurnAnimation,
-      )) === "book",
+      "switching to book mode replaces comimi's stage",
+      (await page.locator(".grabfold").count()) === 1 &&
+        (await page.locator(".comimi-root").count()) === 0,
+    );
+    check(
+      "book mode curls the turning leaf with WebGL",
+      (await page.locator("canvas.grabfold-curl-canvas").count()) === 1,
+    );
+    check(
+      "the book opens at the page the paged reader was on",
+      Number(await readBookPage()) === pageBeforeBook,
+      `${pageBeforeBook} -> ${await readBookPage()}`,
     );
     await page.keyboard.press("Escape");
-    await sleep(200);
-
-    // Dismiss the overlay again so the left-third click turns a page.
-    await page.mouse.click(cx, cy);
-    await sleep(200);
-
-    const beforeBook = await seek();
-    await page.mouse.click(leftX, cy);
     await sleep(400);
+
+    // Click zones and keys both go through the book's control handle.
+    const beforeBook = await readBookPageThenHide();
+    await page.mouse.click(leftX, cy);
+    await sleep(900);
+    const afterBookClick = await readBookPageThenHide();
     check(
-      "book-mode click still turns the page",
-      (await seek()) !== beforeBook,
-      `${beforeBook} -> ${await seek()}`,
+      "book-mode click turns the page",
+      afterBookClick !== beforeBook,
+      `${beforeBook} -> ${afterBookClick}`,
+    );
+
+    const beforeKey = afterBookClick;
+    await page.keyboard.press("ArrowLeft");
+    await sleep(900);
+    const afterKey = await readBookPageThenHide();
+    check(
+      "book-mode arrow key turns the page",
+      Number(afterKey) === Number(beforeKey) + 1,
+      `${beforeKey} -> ${afterKey}`,
+    );
+
+    // A slow drag well past the commit point turns the page, and letting go
+    // before it drops it back without saving a new position.
+    const beforeDrag = afterKey;
+    await page.mouse.move(cx - 120, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx - 40, cy, { steps: 4 });
+    await page.mouse.move(cx + 260, cy, { steps: 6 });
+    await page.mouse.up();
+    await sleep(900);
+    const afterDrag = await readBookPageThenHide();
+    check(
+      "book-mode drag turns the page",
+      afterDrag !== beforeDrag,
+      `${beforeDrag} -> ${afterDrag}`,
+    );
+
+    const beforeCancel = afterDrag;
+    await page.mouse.move(cx - 120, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx - 100, cy);
+    await sleep(120);
+    await page.mouse.move(cx - 80, cy);
+    await sleep(120);
+    await page.mouse.move(cx - 60, cy);
+    await sleep(120);
+    await page.mouse.up();
+    await sleep(900);
+    const afterCancel = await readBookPageThenHide();
+    check(
+      "a drag let go early keeps the page",
+      afterCancel === beforeCancel,
+      `${beforeCancel} -> ${afterCancel}`,
+    );
+
+    // A quick flick: short pull, fast enough to carry the page over.
+    const beforeFlick = afterCancel;
+    await page.mouse.move(cx - 100, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx - 40, cy, { steps: 2 });
+    await sleep(20);
+    await page.mouse.move(cx + 40, cy, { steps: 2 });
+    await sleep(20);
+    await page.mouse.move(cx + 100, cy, { steps: 2 });
+    await page.mouse.up();
+    await sleep(900);
+    const afterFlick = await readBookPageThenHide();
+    check(
+      "book-mode flick turns the page",
+      afterFlick !== beforeFlick,
+      `${beforeFlick} -> ${afterFlick}`,
+    );
+
+    // Jump through the top bar's page list: it must land on the same comic
+    // page the chrome shows.
+    await showBookChrome();
+    await page.locator("header").getByRole("button", { name: "页面列表" }).click();
+    await page.waitForSelector(".reader-page-list-item", { timeout: 10000 });
+    await page.locator(".reader-page-list-item").nth(9).click();
+    await sleep(1200);
+    const jumped = await readBookPage();
+    check(
+      "the page list jumps the book to the chosen page",
+      jumped === "10",
+      jumped,
+    );
+
+    // Spread mode pairs consecutive pages without losing the current one.
+    await showBookChrome();
+    await page.locator("header").getByRole("button", { name: "阅读设置" }).click();
+    await page.waitForSelector("text=翻页模式", { timeout: 10000 });
+    await page.getByRole("button", { name: "双页" }).click();
+    await sleep(1000);
+    await page.keyboard.press("Escape");
+    await sleep(300);
+    const spreadPage = await readBookPage();
+    const spreadState = await page.evaluate(() => ({
+      count: document.querySelectorAll(".grabfold-content").length,
+    }));
+    check(
+      "spread mode shows two comic pages",
+      spreadState.count === 2,
+      `${spreadState.count} pages`,
+    );
+    check(
+      "switching to spread keeps the comic page",
+      Number(spreadPage) === 10 || Number(spreadPage) === 9,
+      `page ${spreadPage}`,
+    );
+
+    // Reading direction only changes the binding; the page stays.
+    await showBookChrome();
+    await page.locator("header").getByRole("button", { name: "阅读设置" }).click();
+    await page.waitForSelector("text=阅读方向", { timeout: 10000 });
+    await page.getByRole("button", { name: "从左到右" }).click();
+    await sleep(700);
+    await page.keyboard.press("Escape");
+    await sleep(300);
+    const directionPage = await readBookPage();
+    const afterDirection = await page.evaluate(() => ({
+      mirrored: getComputedStyle(document.querySelector(".grabfold")).transform,
+    }));
+    check(
+      "switching reading direction keeps the page",
+      Number(directionPage) === 10 || Number(directionPage) === 9,
+      `page ${directionPage}`,
+    );
+    check(
+      "ltr binds the book on the left",
+      afterDirection.mirrored === "none",
+      afterDirection.mirrored,
+    );
+
+    // Back to the paged reader at the same comic page.
+    await showBookChrome();
+    await page.locator("header").getByRole("button", { name: "阅读设置" }).click();
+    await page.waitForSelector("text=翻页动画", { timeout: 10000 });
+    await page.getByRole("button", { name: "平移" }).click();
+    await sleep(1000);
+    await page.keyboard.press("Escape");
+    await page.waitForSelector(".comimi-root", { timeout: 10000 });
+    check(
+      "leaving book mode returns to comimi",
+      (await page.locator(".grabfold").count()) === 0 &&
+        (await page.locator("canvas.grabfold-curl-canvas").count()) === 0,
+    );
+    const backSeek = await seek();
+    const backPage = Number((backSeek.match(/(\d+)\s*\//) ?? [])[1]);
+    check(
+      "the paged reader opens at the book's page",
+      backPage === Number(directionPage),
+      `${backSeek} vs ${directionPage}`,
     );
 
     await page.close();
+  }
+
+  console.log("reader: book mode falls back to the DOM fold");
+  {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await context.addInitScript(() => {
+      const original = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (type, ...rest) {
+        if (String(type).includes("webgl")) return null;
+        return original.call(this, type, ...rest);
+      };
+    });
+    const page = await context.newPage();
+    await page.goto(`${BASE}/reader/1001/tok`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".comimi-page-group[data-placement='current']", { timeout: 30000 });
+    await sleep(1300);
+    const cx = 640;
+    const cy = 400;
+    await page.mouse.click(cx, cy);
+    await sleep(250);
+    await page.mouse.click(cx, cy);
+    await sleep(250);
+    await page.locator("header").getByRole("button", { name: "阅读设置" }).click();
+    await page.waitForSelector("text=翻页动画", { timeout: 10000 });
+    await page.getByRole("button", { name: "书本" }).click();
+    await sleep(900);
+    await page.keyboard.press("Escape");
+    await sleep(400);
+    check(
+      "book mode without WebGL still opens",
+      (await page.locator(".grabfold").count()) === 1 &&
+        (await page.locator("canvas.grabfold-curl-canvas").count()) === 0,
+    );
+    const pageValue = () =>
+      page.locator('[aria-label="当前页码"]').inputValue().catch(() => null);
+    const beforeNoWebgl = await pageValue();
+    await page.keyboard.press("ArrowLeft");
+    await sleep(900);
+    check(
+      "the DOM fold still turns pages",
+      (await pageValue()) !== beforeNoWebgl,
+      `${beforeNoWebgl} -> ${await pageValue()}`,
+    );
+    await context.close();
   }
 
   console.log("bookshelf: reading round trip keeps the source nav highlighted");

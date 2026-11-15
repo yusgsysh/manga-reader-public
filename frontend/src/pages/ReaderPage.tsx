@@ -1,7 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { useParams, useSearchParams } from "react-router";
-import { Button } from "@cloudflare/kumo";
+import { Button, Loader } from "@cloudflare/kumo";
 import { ArrowLeft } from "@phosphor-icons/react";
 import {
   MangaViewer,
@@ -18,9 +26,17 @@ import {
   clampPageIndex,
   galleryPageSlotsToManga,
   PageUrlStore,
+  pageIndexSrcResolver,
   parsePageParam,
   slotPageSrcResolver,
 } from "../lib/reader";
+import {
+  DEFAULT_READER_SETTINGS,
+  mergeReaderSettings,
+  pickReaderSettings,
+  sameReaderSettings,
+  type ReaderSettings,
+} from "../lib/readerSettings";
 import {
   loadThumbnails,
   type LoadThumbnailsHandle,
@@ -31,8 +47,17 @@ import { LoadingScreen } from "../components/common/LoadingScreen";
 import { ReaderToolbar } from "../components/reader/ReaderToolbar";
 import { ReaderSettingsPreference } from "../components/reader/ReaderSettingsPreference";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { useBookFold } from "../hooks/useBookFold";
 import { getReaderPreferences } from "../lib/readerPrefs";
+import type { BookFlipViewerHandle } from "../components/reader/BookFlipViewer";
+
+// The grabfold book view (and its WebGL renderer) is only downloaded when the
+// reader is actually switched to "书本"; the paged and sliding modes never pay
+// for it.
+const LazyBookFlipViewer = lazy(() =>
+  import("../components/reader/BookFlipViewer").then((module) => ({
+    default: module.BookFlipViewer,
+  })),
+);
 
 // 菜单底部返回入口的文案：补丁只引用 key，库内没有内置。
 const READER_TRANSLATIONS = { "menu.backToGallery": "返回画廊" };
@@ -42,6 +67,7 @@ export function ReaderPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { resolvedMode } = useTheme();
   const viewerRef = useRef<MangaViewerHandle>(null);
+  const bookRef = useRef<BookFlipViewerHandle>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   // The shell mounts only once the reader data is ready, which can happen
   // after `manga` is already set — keying the thumbnail watcher off the element
@@ -68,17 +94,19 @@ export function ReaderPage() {
     parsePageParam(searchParams.get("page")),
   );
 
-  // Reader chrome (top bar) mirrors the viewer state instead of owning it.
+  // Reader chrome (top bar) mirrors the active viewer state instead of owning
+  // it. Both viewers are driven from the same comic page index.
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("inline");
   const [nativeFullscreen, setNativeFullscreen] = useState(
     () => typeof document !== "undefined" && document.fullscreenElement !== null,
   );
   const [viewerReady, setViewerReady] = useState(false);
-  const [viewerSettingsState, setViewerSettingsState] =
-    useState<ViewerSettings | null>(null);
+  const [readerSettings, setReaderSettings] = useState<ReaderSettings>(
+    DEFAULT_READER_SETTINGS,
+  );
   const [autoPageTurnEnabled, setAutoPageTurnEnabled] = useState(false);
-  // Mirrors comimi's overlay state (the auto-hiding progress bar + arrows) so
-  // the top bar can show and hide together with it.
+  // Mirrors the active viewer's overlay state (the auto-hiding progress bar)
+  // so the top bar can show and hide together with it.
   const [overlayVisible, setOverlayVisible] = useState(false);
   // The app-level preference is appended to comimi's own settings sheet.
   const [settingsHost, setSettingsHost] = useState<HTMLElement | null>(null);
@@ -89,96 +117,9 @@ export function ReaderPage() {
   );
 
   const isDark = resolvedMode === "dark";
-
-  // 引用固定：comimi-react 按引用比较 settings，内联对象会导致每次翻页都全量重渲染
-  const viewerSettings = useMemo<Partial<ViewerSettings>>(
-    () => ({
-      theme: isDark ? "dark" : "light",
-      backgroundColor: isDark ? "black" : "white",
-      pageTurnMode: "single",
-      // 翻页动画：默认「平移」，可在「阅读设置」切换为「书本」。
-      pageTurnAnimation: "slide",
-      // 打开时默认「标准」，可点 dock 的全屏按钮进入全屏。
-      layoutMode: "inline",
-    }),
-    [isDark],
-  );
+  const isBookMode = readerSettings.pageTurnAnimation === "book";
 
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
-
-  // 全屏 = 库的 browserFullscreen 布局（跨平台一致、iOS 可用）叠加容器的
-  // 原生全屏（可用时隐藏浏览器 UI）。退出全屏由库内 dock 的视图切换器负责。
-  const toggleFullscreen = useCallback(() => {
-    const viewer = viewerRef.current;
-    if (!viewer) return;
-    const mode = viewer.getState().layout.mode;
-    const isFull =
-      document.fullscreenElement !== null ||
-      mode === "browserFullscreen" ||
-      mode === "nativeFullscreen";
-    if (isFull) {
-      // setLayoutMode("inline") 会在必要时自行 exitFullscreen
-      void viewer.setLayoutMode("inline");
-      return;
-    }
-    void viewer.setLayoutMode("browserFullscreen");
-    const el = containerRef.current;
-    if (el && typeof el.requestFullscreen === "function") {
-      el.requestFullscreen().catch(() => {});
-    }
-  }, []);
-
-  // 用户通过浏览器/系统手势退出原生全屏时，库不会自行回到 inline，这里补齐。
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      const active = document.fullscreenElement !== null;
-      setNativeFullscreen(active);
-      const viewer = viewerRef.current;
-      if (!viewer || active) return;
-      const mode = viewer.getState().layout.mode;
-      if (mode === "nativeFullscreen" || mode === "browserFullscreen") {
-        void viewer.setLayoutMode("inline");
-      }
-    };
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () =>
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
-  }, []);
-
-  // The app preference appends a row to comimi's settings sheet. The sheet is
-  // created by the library after the viewer mounts, so wait for it instead of
-  // assuming it exists.
-  useEffect(() => {
-    if (!shellEl) return;
-    const findHost = () =>
-      shellEl.querySelector<HTMLElement>(".comimi-settings-panel-inner");
-    const attach = () => {
-      const found = findHost();
-      if (!found) return;
-      observer.disconnect();
-      setSettingsHost(found);
-    };
-    // The sheet is built after the viewer's first update, and on a cached
-    // mount it may already be there before this effect runs. Check on the next
-    // frame and listen for the rest instead of setting state synchronously.
-    const observer = new MutationObserver(attach);
-    observer.observe(shellEl, { childList: true, subtree: true });
-    const frame = requestAnimationFrame(attach);
-    return () => {
-      observer.disconnect();
-      cancelAnimationFrame(frame);
-    };
-  }, [shellEl]);
-
-  // 离开路由时主动退出全屏，不依赖「节点移除浏览器自动退出」的时机
-  useEffect(
-    () => () => {
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      }
-    },
-    [],
-  );
 
   const galleryQuery = useGallery(id, token ?? "");
   const pagesQuery = useGalleryPages(id, token ?? "");
@@ -196,6 +137,20 @@ export function ReaderPage() {
     if (restart) return 0;
     return clampPageIndex(progressQuery.data?.current_page ?? 0, total);
   }, [total, pageOverride, restart, progressQuery.data?.current_page]);
+
+  // The comic page is the one reading position the page owns. Both viewers
+  // report into it, and either is opened at it, so a mode switch never jumps.
+  // `navigated` keeps the streamed progress from resetting a page the reader
+  // has already moved to; the adjustment runs during render, before the
+  // viewers read the value.
+  const [navigation, setNavigation] = useState({
+    page: initialPage,
+    navigated: false,
+  });
+  if (!navigation.navigated && navigation.page !== initialPage) {
+    setNavigation({ page: initialPage, navigated: false });
+  }
+  const readerPage = navigation.page;
 
   // Drop the deep-link `page` param once captured so a refresh resumes from
   // the saved progress instead of jumping to the old target again.
@@ -238,11 +193,16 @@ export function ReaderPage() {
     if (pagesQuery.data.pages.length < total) pageUrlStore.failAll();
   }, [pageUrlStore, pagesQuery.data, pagesQuery.isFetching, total]);
 
+  const recordPage = useCallback((pageIndex: number) => {
+    setNavigation({ page: pageIndex, navigated: true });
+    onPageChange(pageIndex);
+  }, [onPageChange]);
+
   const handlePageChange = useCallback(
     ({ pageIndex }: { pageIndex: number }) => {
-      onPageChange(pageIndex);
+      recordPage(pageIndex);
     },
-    [onPageChange],
+    [recordPage],
   );
 
   // comimi 菜单里的返回入口：先落盘进度，再按浏览器历史 / 深链回退规则返回。
@@ -257,71 +217,187 @@ export function ReaderPage() {
     viewerRef.current?.setPanel("none");
   }, []);
 
-  const handleGoToPage = useCallback((pageIndex: number) => {
-    viewerRef.current?.goToPage(pageIndex);
-  }, []);
+  const handleGoToPage = useCallback(
+    (pageIndex: number) => {
+      const page = clampPageIndex(pageIndex, total);
+      setNavigation({ page, navigated: true });
+      if (isBookMode) bookRef.current?.goToPage(page);
+      else viewerRef.current?.goToPage(page);
+    },
+    [isBookMode, total],
+  );
 
-  // The page list reads the live viewer position instead of mirroring it into
-  // state: comimi keeps the source of truth, so the highlight can never lag
-  // behind (e.g. after the viewer remounts on a gallery change).
-  const getCurrentPage = useCallback(
-    () => viewerRef.current?.getState().currentPageIndex ?? 0,
-    [],
+  // The page list reads the live reading position instead of mirroring it into
+  // state: the active viewer keeps the source of truth, so the highlight can
+  // never lag behind (e.g. after a viewer remount on a mode change).
+  const getCurrentPage = useCallback(() => readerPage, [readerPage]);
+
+  // One step through the book (a spread in spread mode), never a page number
+  // arithmetic that could land back inside the same spread.
+  const handleTurnPage = useCallback(
+    (direction: "previous" | "next") => {
+      if (isBookMode) {
+        if (direction === "next") bookRef.current?.next();
+        else bookRef.current?.previous();
+        return;
+      }
+      if (direction === "next") viewerRef.current?.nextPage();
+      else viewerRef.current?.previousPage();
+    },
+    [isBookMode],
   );
 
   const handleUpdateSettings = useCallback(
     (patch: Partial<ViewerSettings>) => {
-      void viewerRef.current?.updateSettings(patch);
+      const next = mergeReaderSettings(readerSettings, {
+        readingDirection: patch.readingDirection ?? readerSettings.readingDirection,
+        pageTurnMode: patch.pageTurnMode ?? readerSettings.pageTurnMode,
+        pageTurnAnimation:
+          patch.pageTurnAnimation ?? readerSettings.pageTurnAnimation,
+        hasCover: patch.hasCover ?? readerSettings.hasCover,
+        autoPageTurnIntervalMs:
+          patch.autoPageTurnIntervalMs ?? readerSettings.autoPageTurnIntervalMs,
+      });
+      setReaderSettings(next);
+      if (!isBookMode) void viewerRef.current?.updateSettings(patch);
+    },
+    [isBookMode, readerSettings],
+  );
+
+  const handleSettingsChange = useCallback(
+    ({ settings }: { settings: ViewerSettings }) => {
+      const next = pickReaderSettings(settings);
+      setReaderSettings((current) =>
+        sameReaderSettings(current, next) ? current : next,
+      );
     },
     [],
   );
 
   const handleToggleAutoPageTurn = useCallback(() => {
+    if (isBookMode) {
+      setAutoPageTurnEnabled((enabled) => !enabled);
+      return;
+    }
     viewerRef.current?.toggleAutoPageTurn();
-  }, []);
+  }, [isBookMode]);
+
+  const handleTogglePageTurnMode = useCallback(() => {
+    handleUpdateSettings({
+      pageTurnMode:
+        readerSettings.pageTurnMode === "spread" ? "single" : "spread",
+    });
+  }, [handleUpdateSettings, readerSettings.pageTurnMode]);
+
+  const handleToggleCover = useCallback(() => {
+    handleUpdateSettings({ hasCover: !readerSettings.hasCover });
+  }, [handleUpdateSettings, readerSettings.hasCover]);
 
   const handleReady = useCallback(() => {
     setViewerReady(true);
+    if (autoPageTurnEnabled) viewerRef.current?.setAutoPageTurn(true);
+  }, [autoPageTurnEnabled]);
+
+  // Once comimi is ready, apply the "start in fullscreen" preference. The
+  // starting click already asked for native fullscreen where possible; only
+  // fall back to the library's layout when it did not take. This is an
+  // opening-time decision, so it only runs on the first ready.
+  const seededFullscreen = useRef(false);
+  useEffect(() => {
+    if (!viewerReady || seededFullscreen.current) return;
+    seededFullscreen.current = true;
+    const viewer = viewerRef.current;
+    if (!viewer || isBookMode) return;
+    if (!autoFullscreenOnOpenRef.current) return;
+    if (viewer.getState().layout.mode !== "inline") return;
+    if (document.fullscreenElement) {
+      void viewer.updateSettings({ layoutMode: "browserFullscreen" });
+    } else {
+      void viewer.setLayoutMode("browserFullscreen");
+    }
+  }, [isBookMode, viewerReady]);
+
+  const applyLayoutMode = useCallback((mode: LayoutMode) => {
+    setLayoutMode(mode);
+    if (!isBookMode) {
+      void viewerRef.current?.setLayoutMode(mode);
+      return;
+    }
+    // The book view has no comimi instance to lay out: fullscreen is just the
+    // native API plus the shell's fullscreen styling.
+    if (mode === "inline") {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      return;
+    }
+    const el = containerRef.current;
+    if (el && typeof el.requestFullscreen === "function") {
+      el.requestFullscreen().catch(() => {});
+    }
+  }, [isBookMode]);
+
+  // 全屏 = 库的 browserFullscreen 布局（跨平台一致、iOS 可用）叠加容器的
+  // 原生全屏（可用时隐藏浏览器 UI）。退出全屏由库内 dock 的视图切换器负责。
+  const toggleFullscreen = useCallback(() => {
+    const isFull =
+      document.fullscreenElement !== null ||
+      layoutMode === "browserFullscreen" ||
+      layoutMode === "nativeFullscreen";
+    applyLayoutMode(isFull ? "inline" : "browserFullscreen");
+  }, [applyLayoutMode, layoutMode]);
+
+  // 用户通过浏览器/系统手势退出原生全屏时，库不会自行回到 inline，这里补齐。
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const active = document.fullscreenElement !== null;
+      setNativeFullscreen(active);
+      if (active) return;
+      setLayoutMode((mode) =>
+        mode === "nativeFullscreen" || mode === "browserFullscreen"
+          ? "inline"
+          : mode,
+      );
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
-  // Once the viewer is ready, seed the chrome from its state and apply the
-  // "start in fullscreen" preference. The comimi-react instance is only
-  // available after its mount effect, so this cannot run on the first commit.
+  // The app preference appends a row to comimi's settings sheet. The sheet is
+  // created by the library after the viewer mounts, so wait for it instead of
+  // assuming it exists. It is rebuilt whenever the viewer is remounted (for
+  // example after leaving the book view), hence `isBookMode` in the deps.
   useEffect(() => {
-    if (!viewerReady) return;
-    const viewer = viewerRef.current;
-    if (!viewer) return;
-    const state = viewer.getState();
-    setViewerSettingsState(state.settings);
-    setLayoutMode(state.layout.mode);
-    setAutoPageTurnEnabled(state.autoPageTurnEnabled);
-    if (autoFullscreenOnOpenRef.current && state.layout.mode === "inline") {
-      // The gallery's start-reading click already asked for native fullscreen
-      // (`requestReaderFullscreenIfEnabled`). comimi's
-      // `setLayoutMode("browserFullscreen")` exits any active native fullscreen,
-      // which would undo that request — the "enter then immediately exit"
-      // flicker. When native fullscreen is already on, apply the fullscreen
-      // layout via `updateSettings` (it only changes `layout.mode`, with no
-      // fullscreen side effects). Otherwise fall back to the library layout so
-      // the reader still fills the window when the browser refused.
-      if (document.fullscreenElement) {
-        void viewer.updateSettings({ layoutMode: "browserFullscreen" });
-      } else {
-        void viewer.setLayoutMode("browserFullscreen");
-      }
-    }
-  }, [viewerReady]);
+    if (!shellEl || isBookMode) return;
+    const findHost = () =>
+      shellEl.querySelector<HTMLElement>(".comimi-settings-panel-inner");
+    const attach = () => {
+      const found = findHost();
+      if (!found) return;
+      observer.disconnect();
+      setSettingsHost(found);
+    };
+    const observer = new MutationObserver(attach);
+    observer.observe(shellEl, { childList: true, subtree: true });
+    const frame = requestAnimationFrame(attach);
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [shellEl, isBookMode]);
 
-  const handleLayoutChange = useCallback(
-    ({ layoutMode: nextMode }: { layoutMode: LayoutMode }) => {
-      setLayoutMode(nextMode);
+  // 离开路由时主动退出全屏，不依赖「节点移除浏览器自动退出」的时机
+  useEffect(
+    () => () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
     },
     [],
   );
 
-  const handleSettingsChange = useCallback(
-    ({ settings }: { settings: ViewerSettings }) => {
-      setViewerSettingsState(settings);
+  const handleLayoutChange = useCallback(
+    ({ layoutMode: nextMode }: { layoutMode: LayoutMode }) => {
+      setLayoutMode(nextMode);
     },
     [],
   );
@@ -340,6 +416,10 @@ export function ReaderPage() {
     [],
   );
 
+  const handleBookOverlayChange = useCallback((visible: boolean) => {
+    setOverlayVisible(visible);
+  }, []);
+
   // Fixed page slots from the authoritative total: comimi sees the full count
   // from the first render and never rebuilds its page list, so the total and
   // thumbnails stay put while the real page URLs stream into the store.
@@ -355,6 +435,22 @@ export function ReaderPage() {
   const resolvePageSrc = useMemo(
     () => slotPageSrcResolver(pageUrlStore),
     [pageUrlStore],
+  );
+  const resolvePageIndexSrc = useMemo(
+    () => pageIndexSrcResolver(pageUrlStore),
+    [pageUrlStore],
+  );
+
+  // comimi is seeded from the shared reader settings, so handing the book view
+  // over and back keeps direction, spread, cover and turn animation intact.
+  const comimiSettings = useMemo<Partial<ViewerSettings>>(
+    () => ({
+      theme: isDark ? "dark" : "light",
+      backgroundColor: isDark ? "black" : "white",
+      layoutMode,
+      ...readerSettings,
+    }),
+    [isDark, layoutMode, readerSettings],
   );
 
   const loading =
@@ -378,9 +474,6 @@ export function ReaderPage() {
       handle();
     };
   }, [shellEl]);
-
-  // Enhance the "书本翻页" animation with grabfold-style folding.
-  useBookFold(shellEl, { reducedMotion });
 
   useDocumentTitle(gallery?.title);
 
@@ -433,7 +526,7 @@ export function ReaderPage() {
         title={gallery.title}
         fullscreen={isFullscreen}
         overlayVisible={overlayVisible}
-        viewerSettings={viewerSettingsState}
+        viewerSettings={readerSettings}
         id={id}
         token={token ?? ""}
         total={total}
@@ -443,34 +536,71 @@ export function ReaderPage() {
         onToggleFullscreen={toggleFullscreen}
         onToggleAutoPageTurn={handleToggleAutoPageTurn}
         onGoToPage={handleGoToPage}
+        onTurnPage={handleTurnPage}
         onClosePanel={handleClosePanel}
         onUpdateSettings={handleUpdateSettings}
       />
 
       {/* Reader：返回与全屏入口在上方工具栏，comimi 自己的浮动菜单头行已隐藏 */}
       <div className="min-h-0 flex-1">
-        <MangaViewer
-          // Remount on gallery change so `initialPageIndex` applies to the new
-          // gallery (comimi only reads it when the viewer is created).
-          key={`${id}:${token ?? ""}`}
-          ref={viewerRef}
-          manga={manga!}
-          initialPageIndex={initialPage}
-          locale="zh-CN"
-          translations={READER_TRANSLATIONS}
-          storage={{ enabled: false }}
-          settings={viewerSettings}
-          resolvePageSrc={resolvePageSrc}
-          onReady={handleReady}
-          onPageChange={handlePageChange}
-          onBack={handleBack}
-          onFullscreenRequest={toggleFullscreen}
-          onLayoutChange={handleLayoutChange}
-          onSettingsChange={handleSettingsChange}
-          onAutoPageTurnChange={handleAutoPageTurnChange}
-          onOverlayChange={handleOverlayChange}
-          className="h-full w-full"
-        />
+        {isBookMode ? (
+          <Suspense
+            fallback={
+              <div className="relative h-full w-full">
+                <Loader
+                  size={32}
+                  aria-label="正在加载书本"
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+                />
+              </div>
+            }
+          >
+            <LazyBookFlipViewer
+              // The book is opening at the page the reader was already on;
+              // remount only when the gallery changes.
+              key={`${id}:${token ?? ""}`}
+              ref={bookRef}
+              total={total}
+              initialPage={readerPage}
+              readingDirection={readerSettings.readingDirection}
+              pageTurnMode={readerSettings.pageTurnMode}
+              hasCover={readerSettings.hasCover}
+              autoPageTurn={autoPageTurnEnabled}
+              autoPageTurnIntervalMs={readerSettings.autoPageTurnIntervalMs}
+              reducedMotion={reducedMotion}
+              resolvePageSrc={resolvePageIndexSrc}
+              onPageChange={recordPage}
+              onOverlayChange={handleBookOverlayChange}
+              onToggleFullscreen={toggleFullscreen}
+              onToggleAutoPageTurn={handleToggleAutoPageTurn}
+              onTogglePageTurnMode={handleTogglePageTurnMode}
+              onToggleCover={handleToggleCover}
+            />
+          </Suspense>
+        ) : (
+          <MangaViewer
+            // Remount on gallery change so `initialPageIndex` applies to the new
+            // gallery (comimi only reads it when the viewer is created).
+            key={`${id}:${token ?? ""}`}
+            ref={viewerRef}
+            manga={manga!}
+            initialPageIndex={readerPage}
+            locale="zh-CN"
+            translations={READER_TRANSLATIONS}
+            storage={{ enabled: false }}
+            settings={comimiSettings}
+            resolvePageSrc={resolvePageSrc}
+            onReady={handleReady}
+            onPageChange={handlePageChange}
+            onBack={handleBack}
+            onFullscreenRequest={toggleFullscreen}
+            onLayoutChange={handleLayoutChange}
+            onSettingsChange={handleSettingsChange}
+            onAutoPageTurnChange={handleAutoPageTurnChange}
+            onOverlayChange={handleOverlayChange}
+            className="h-full w-full"
+          />
+        )}
       </div>
 
       {/* App-level reader preference, appended to comimi's settings sheet. */}

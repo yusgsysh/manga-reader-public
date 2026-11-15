@@ -100,6 +100,19 @@ export function galleryPageSlotsToManga(
   };
 }
 
+/**
+ * Resolves a 0-based comic page index to the reader image URL. Shared by
+ * comimi's page slots and the grabfold book view.
+ */
+export function pageIndexSrcResolver(
+  store: PageUrlStore,
+): (pageIndex: number) => Promise<string> {
+  return async (pageIndex) => {
+    const url = await store.wait(pageIndex);
+    return url === MISSING_PAGE_SRC ? url : getReaderImageURL(url);
+  };
+}
+
 type SlotPageSrcResolver = (context: {
   page: ImagePage;
   pageIndex: number;
@@ -110,10 +123,8 @@ type SlotPageSrcResolver = (context: {
 export function slotPageSrcResolver(
   store: PageUrlStore,
 ): SlotPageSrcResolver {
-  return async ({ pageIndex }) => {
-    const url = await store.wait(pageIndex);
-    return url === MISSING_PAGE_SRC ? url : getReaderImageURL(url);
-  };
+  const resolve = pageIndexSrcResolver(store);
+  return async ({ pageIndex }) => resolve(pageIndex);
 }
 
 /**
