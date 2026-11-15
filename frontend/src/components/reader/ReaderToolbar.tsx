@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -89,7 +90,7 @@ function SegmentGroup({
   const indicatorRef = useRef<HTMLDivElement>(null);
   const selectedIndex = options.findIndex((option) => option.value === value);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const group = groupRef.current;
     const indicator = indicatorRef.current;
     if (!group || !indicator || selectedIndex === -1) return;
@@ -99,13 +100,20 @@ function SegmentGroup({
     const selected = buttons[selectedIndex];
     if (!selected) return;
 
-    // Skip the animation on first paint (e.g. when the settings panel opens)
-    // so the indicator snaps to the current value instead of sliding in.
+    // Snap to the current value on first paint (e.g. when the settings panel
+    // opens) instead of sliding in from the left edge: disable the transition,
+    // apply the position, then flush the styles before restoring it so later
+    // option switches still animate normally.
     const isInitial = !indicator.dataset.initialized;
+    if (isInitial) {
+      indicator.dataset.initialized = "true";
+      indicator.style.transition = "none";
+    }
     indicator.style.width = `${selected.offsetWidth}px`;
     indicator.style.transform = `translateX(${selected.offsetLeft}px)`;
     if (isInitial) {
-      indicator.dataset.initialized = "true";
+      void indicator.offsetWidth;
+      indicator.style.transition = "";
     }
   }, [selectedIndex]);
 
