@@ -551,46 +551,69 @@ body {
  *
  * comimi's patched page stage sets `data-flipping="next|previous"` on
  * `.comimi-stage` and `data-spine="left|right"` on the current page group
- * during the turn. We turn those hooks into a 3D page-flip by giving the
- * stage a perspective container and rotating the leaving group around its
- * spine edge.
+ * during the turn. We layer a stronger 3D fold on top by giving the stage a
+ * perspective container and rotating the leaving page around its spine edge.
+ *
+ * comimi ships its own `comimi-book-fold-*` keyframes as a fallback; we keep
+ * them disabled when the reader shell is active so the transition below is
+ * the only animation in play.
  */
-.reader-shell .comimi-stage {
+.reader-shell .comimi-root[data-page-turn-animation="book"] .comimi-stage {
   perspective: 1400px;
   transform-style: preserve-3d;
 }
 
-.reader-shell .comimi-page-group {
+.reader-shell .comimi-root[data-page-turn-animation="book"] .comimi-page-group {
   transform-style: preserve-3d;
-  backface-visibility: hidden;
 }
 
 /* The page leaving the spread. Its spine edge is fixed in place. */
-.reader-shell .comimi-stage[data-flipping] .comimi-page-group[data-placement="current"] {
-  transition: transform 500ms var(--reader-spring);
+.reader-shell .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping]
+  .comimi-page-group[data-placement="current"] {
+  transition: transform 180ms var(--reader-spring);
+  /* Cancel comimi's built-in fold keyframes. */
+  animation: none !important;
+  /* comimi sets backface-visibility: hidden on the current group; that is
+   * fine for its 90° keyframes but would hide the page during our spring
+   * overshoot, so keep the group itself visible. */
+  backface-visibility: visible !important;
+  position: relative;
 }
 
-.reader-shell .comimi-stage[data-flipping="next"]
+/*
+ * Rotation direction logic:
+ * - The spine edge stays fixed (transform-origin on the spine side).
+ * - The free edge of the page flips toward the incoming page.
+ * - In RTL the next page sits to the left, so a right-spined page flips left
+ *   (rotateY(90deg)). In LTR the next page sits to the right, so a left-spined
+ *   page flips right (rotateY(-90deg)). Previous is the mirror of next.
+ */
+.reader-shell .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping="next"]
   .comimi-page-group[data-placement="current"][data-spine="right"] {
-  transform: rotateY(-100deg);
+  transform: rotateY(90deg);
   transform-origin: 100% 50%;
 }
 
-.reader-shell .comimi-stage[data-flipping="next"]
+.reader-shell .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping="next"]
   .comimi-page-group[data-placement="current"][data-spine="left"] {
-  transform: rotateY(100deg);
+  transform: rotateY(-90deg);
   transform-origin: 0% 50%;
 }
 
-.reader-shell .comimi-stage[data-flipping="previous"]
+.reader-shell .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping="previous"]
   .comimi-page-group[data-placement="current"][data-spine="right"] {
-  transform: rotateY(100deg);
+  transform: rotateY(-90deg);
   transform-origin: 100% 50%;
 }
 
-.reader-shell .comimi-stage[data-flipping="previous"]
+.reader-shell .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping="previous"]
   .comimi-page-group[data-placement="current"][data-spine="left"] {
-  transform: rotateY(-100deg);
+  transform: rotateY(90deg);
   transform-origin: 0% 50%;
 }
 
@@ -599,19 +622,36 @@ body {
  * Without this rule comimi would leave it translated off-screen until the
  * turn commits.
  */
-.reader-shell .comimi-stage[data-flipping]
+.reader-shell .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping]
   .comimi-page-group[data-placement="next"],
-.reader-shell .comimi-stage[data-flipping]
+.reader-shell .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping]
   .comimi-page-group[data-placement="previous"] {
   opacity: 1;
   transform: translateX(0%);
+  background: var(--color-kumo-base, #ffffff);
+}
+
+[data-mode="dark"]
+  .reader-shell
+  .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping]
+  .comimi-page-group[data-placement="next"],
+[data-mode="dark"]
+  .reader-shell
+  .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping]
+  .comimi-page-group[data-placement="previous"] {
+  background: var(--color-kumo-base, #18181b);
 }
 
 /*
- * Subtle spine shadow on the turning page.
+ * Spine shadow on the turning page.
  * The gradient is mirrored so the dark edge always lands on the spine side.
  */
-.reader-shell .comimi-stage[data-flipping]
+.reader-shell .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping]
   .comimi-page-group[data-placement="current"]::after {
   content: "";
   position: absolute;
@@ -619,12 +659,14 @@ body {
   pointer-events: none;
   transform: translateZ(1px);
   opacity: 0;
-  transition: opacity 500ms var(--reader-spring);
+  transition: opacity 180ms var(--reader-spring);
 }
 
-.reader-shell .comimi-stage[data-flipping="next"]
+.reader-shell .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping="next"]
   .comimi-page-group[data-placement="current"][data-spine="right"]::after,
-.reader-shell .comimi-stage[data-flipping="previous"]
+.reader-shell .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping="previous"]
   .comimi-page-group[data-placement="current"][data-spine="left"]::after {
   background: linear-gradient(
     to right,
@@ -635,9 +677,11 @@ body {
   opacity: 1;
 }
 
-.reader-shell .comimi-stage[data-flipping="next"]
+.reader-shell .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping="next"]
   .comimi-page-group[data-placement="current"][data-spine="left"]::after,
-.reader-shell .comimi-stage[data-flipping="previous"]
+.reader-shell .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping="previous"]
   .comimi-page-group[data-placement="current"][data-spine="right"]::after {
   background: linear-gradient(
     to left,
@@ -653,14 +697,17 @@ body {
  * slide mode. In book mode the current page is the one that should lift and
  * turn above its sibling, so lower its sibling to the normal stacking order.
  */
-.reader-shell .comimi-stage[data-flipping]
+.reader-shell .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping]
   .comimi-page-group[data-placement="next"],
-.reader-shell .comimi-stage[data-flipping]
+.reader-shell .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping]
   .comimi-page-group[data-placement="previous"] {
   z-index: 0;
 }
 
-.reader-shell .comimi-stage[data-flipping]
+.reader-shell .comimi-root[data-page-turn-animation="book"]
+  .comimi-stage[data-flipping]
   .comimi-page-group[data-placement="current"] {
   z-index: 1;
 }
@@ -668,12 +715,16 @@ body {
 /* Respect reduced-motion: turn instantly without 3D rotation. */
 @media (prefers-reduced-motion: reduce) {
   .reader-shell .comimi-page-group,
-  .reader-shell .comimi-stage[data-flipping] .comimi-page-group[data-placement="current"] {
+  .reader-shell .comimi-root[data-page-turn-animation="book"]
+    .comimi-stage[data-flipping]
+    .comimi-page-group[data-placement="current"] {
     transition: none;
     transform: none !important;
+    animation: none !important;
   }
 
-  .reader-shell .comimi-stage[data-flipping]
+  .reader-shell .comimi-root[data-page-turn-animation="book"]
+    .comimi-stage[data-flipping]
     .comimi-page-group[data-placement="current"]::after {
     display: none;
   }
