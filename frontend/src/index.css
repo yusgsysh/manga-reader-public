@@ -693,40 +693,20 @@ body {
 }
 
 /*
- * One page of the book. The cell already has the page's aspect ratio; the
- * sharp image is always contained so it is never cropped or stretched, and
- * the ambient bleed behind it fills any margin instead of leaving paper.
+ * One page of the book. The cell already has the page's aspect ratio, so
+ * `cover` fills near-matching images (no paper rim during a peek or turn) and
+ * `contain` only letterboxes a page whose image really is a different shape
+ * (a double-page spread); neither stretches.
  */
 .book-flip-page {
-  position: relative;
   display: grid;
   width: 100%;
   height: 100%;
   place-items: center;
-  overflow: hidden;
   background: var(--grabfold-paper);
 }
 
-/*
- * Ambient bleed: the same page blurred and cover-cropped under the sharp,
- * contained page. This fills whatever margin the image leaves with its own
- * colours instead of paper, so peeking or turning never reveals a white rim.
- * The slight overscale hides the blur's transparent edge.
- */
-.book-flip-bleed {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: blur(28px) brightness(0.7);
-  transform: scale(1.12);
-  pointer-events: none;
-}
-
 .book-flip-image {
-  position: relative;
-  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
