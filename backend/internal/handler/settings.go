@@ -113,25 +113,33 @@ func (s *Server) handleCookiePut(c *gin.Context) {
 			}
 		}
 		if !cfg.IsValid() {
-			// A site-only update is allowed once a cookie exists; it must not
-			// require re-pasting the secret.
-			current, err := svc.Summary(c.Request.Context(), uid)
-			if err != nil {
-				web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
-				return
-			}
-			if current.Configured && strings.TrimSpace(body.Site) != "" {
-				if _, err := svc.SaveSite(c.Request.Context(), uid, body.Site); err != nil {
+			// A site-only update never needs credentials. Without a stored
+			// cookie an account may still pick e-hentai, where public browsing
+			// is anonymous; exhentai needs a session.
+			if !body.hasCookieInput() && strings.TrimSpace(body.Site) != "" {
+				site, err := usercookie.NormalizeSite(body.Site)
+				if err != nil {
 					web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
-				updated, err := svc.Summary(c.Request.Context(), uid)
+				current, err := svc.Summary(c.Request.Context(), uid)
 				if err != nil {
 					web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
 					return
 				}
-				web.JSON(c, http.StatusOK, updated)
-				return
+				if current.Configured || site == usercookie.SiteEHentai {
+					if _, err := svc.SaveSite(c.Request.Context(), uid, site); err != nil {
+						web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
+						return
+					}
+					updated, err := svc.Summary(c.Request.Context(), uid)
+					if err != nil {
+						web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
+						return
+					}
+					web.JSON(c, http.StatusOK, updated)
+					return
+				}
 			}
 			web.JSON(c, http.StatusBadRequest, gin.H{"error": "ipb_member_id and ipb_pass_hash are required"})
 			return
@@ -158,7 +166,12 @@ func (s *Server) handleCookieDelete(c *gin.Context) {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "clear cookie failed"})
 		return
 	}
-	web.JSON(c, http.StatusOK, usercookie.Summary{Status: usercookie.StatusUnset, Site: usercookie.SiteExHentai})
+	summary, err := svc.Summary(c.Request.Context(), uid)
+	if err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
+		return
+	}
+	web.JSON(c, http.StatusOK, summary)
 }
 
 func (s *Server) handleCookieVerify(c *gin.Context) {

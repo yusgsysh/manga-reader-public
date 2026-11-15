@@ -76,12 +76,12 @@ func (s *Server) upstreamClientForRequest(c *gin.Context) (*http.Client, ident.U
 
 // upstreamBase returns the base URL of the user's preferred upstream site.
 // The cookie jar authenticates both hosts, so the preference only switches
-// which one is browsed; the default stays exhentai.org.
+// which one is browsed; the default is e-hentai.org, which works anonymously.
 func (s *Server) upstreamBase(ctx context.Context, userID ident.UUID) string {
 	if s.UserCookies != nil {
 		if site, err := s.UserCookies.Site(ctx, userID); err == nil {
 			return exhentai.SiteBaseURL(site)
 		}
 	}
-	return exhentai.ExhentaiURL
+	return exhentai.EHentaiURL
 }

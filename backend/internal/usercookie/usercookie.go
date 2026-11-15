@@ -89,40 +89,60 @@ func New(db *ent.Client, jwtSecret string) *Service {
 
 // Client returns the user's dedicated ExHentai HTTP client. Credentials are
 // loaded from the encrypted row and never shared with another user.
+//
+// E-Hentai serves public galleries without a session, so a user whose stored
+// site is e-hentai and who never saved a cookie gets an anonymous client
+// instead of ErrNotConfigured. ExHentai still requires credentials.
 func (s *Service) Client(ctx context.Context, userID ident.UUID) (*http.Client, error) {
 	row, err := s.setting(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	if row == nil || row.CookieCiphertext == "" {
-		return nil, ErrNotConfigured
+	sealed := ""
+	site := SiteEHentai
+	if row != nil {
+		sealed = row.CookieCiphertext
+		if row.Site != "" {
+			site = row.Site
+		}
 	}
 
 	s.mu.Lock()
 	cached, ok := s.clients[userID]
 	s.mu.Unlock()
-	if ok && cached.sealed == row.CookieCiphertext && cached.site == row.Site {
+	if ok && cached.sealed == sealed && cached.site == site {
 		return cached.client, nil
 	}
 
-	plain, err := s.open(row.CookieCiphertext)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt exhentai cookie: %w", err)
-	}
-	cfg := config.ParseCookieString(plain)
-	if !cfg.IsValid() {
-		return nil, ErrNotConfigured
-	}
-	client, err := exhentai.CreateHTTPClient(&cfg)
-	if err != nil {
-		return nil, err
+	var client *http.Client
+	if sealed == "" {
+		if site != SiteEHentai {
+			return nil, ErrNotConfigured
+		}
+		client, err = exhentai.NewAnonymousHTTPClient()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		plain, err := s.open(sealed)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt exhentai cookie: %w", err)
+		}
+		cfg := config.ParseCookieString(plain)
+		if !cfg.IsValid() {
+			return nil, ErrNotConfigured
+		}
+		client, err = exhentai.CreateHTTPClient(&cfg)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	s.mu.Lock()
 	s.clients[userID] = cachedClient{
 		client:   client,
-		sealed:   row.CookieCiphertext,
-		site:     row.Site,
+		sealed:   sealed,
+		site:     site,
 		loadedAt: time.Now(),
 	}
 	s.mu.Unlock()
@@ -154,14 +174,15 @@ func (s *Service) Invalidate(userID ident.UUID) {
 }
 
 // Site returns the user's preferred upstream site ("exhentai" or "e-hentai").
-// Users without a stored preference default to exhentai.
+// Users without a stored preference default to e-hentai, which allows public
+// browsing without a cookie.
 func (s *Service) Site(ctx context.Context, userID ident.UUID) (string, error) {
 	row, err := s.setting(ctx, userID)
 	if err != nil {
 		return "", err
 	}
 	if row == nil || row.Site == "" {
-		return SiteExHentai, nil
+		return SiteEHentai, nil
 	}
 	return row.Site, nil
 }
@@ -173,7 +194,7 @@ func (s *Service) Summary(ctx context.Context, userID ident.UUID) (Summary, erro
 		return Summary{}, err
 	}
 	if row == nil {
-		return Summary{Status: StatusUnset, Site: SiteExHentai}, nil
+		return Summary{Status: StatusUnset, Site: SiteEHentai}, nil
 	}
 	summary := Summary{
 		Configured: row.CookieCiphertext != "",
@@ -181,6 +202,12 @@ func (s *Service) Summary(ctx context.Context, userID ident.UUID) (Summary, erro
 		Site:       row.Site,
 		VerifiedAt: row.CookieVerifiedAt,
 		UpdatedAt:  &row.UpdatedAt,
+	}
+	if summary.Status == "" {
+		summary.Status = StatusUnset
+	}
+	if summary.Site == "" {
+		summary.Site = SiteEHentai
 	}
 	if row.CookieCiphertext != "" {
 		if plain, err := s.open(row.CookieCiphertext); err == nil {
@@ -293,13 +320,14 @@ func (s *Service) SavePreferences(ctx context.Context, userID ident.UUID, prefs 
 	return err
 }
 
-// NormalizeSite validates the site preference.
+// NormalizeSite validates the site preference. An omitted value picks
+// e-hentai, where public browsing needs no cookie.
 func NormalizeSite(site string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(site)) {
-	case "", SiteExHentai:
-		return SiteExHentai, nil
-	case SiteEHentai, "ehentai", "e_hentai":
+	case "", SiteEHentai, "ehentai", "e_hentai":
 		return SiteEHentai, nil
+	case SiteExHentai:
+		return SiteExHentai, nil
 	default:
 		return "", fmt.Errorf("site must be %q or %q", SiteExHentai, SiteEHentai)
 	}

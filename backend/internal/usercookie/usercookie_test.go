@@ -39,7 +39,7 @@ func newTestClient(t *testing.T) *ent.Client {
 	return client
 }
 
-// Site returns the stored preference, defaulting to exhentai for users
+// Site returns the stored preference, defaulting to e-hentai for users
 // without a row or an unset site.
 func TestSitePreference(t *testing.T) {
 	client := newTestClient(t)
@@ -50,8 +50,8 @@ func TestSitePreference(t *testing.T) {
 	if err != nil {
 		t.Fatalf("site without row: %v", err)
 	}
-	if site != SiteExHentai {
-		t.Fatalf("default site = %q, want %q", site, SiteExHentai)
+	if site != SiteEHentai {
+		t.Fatalf("default site = %q, want %q", site, SiteEHentai)
 	}
 
 	cfg := config.CookieConfig{IpbMemberID: "1", IpbPassHash: strings.Repeat("a", 32)}
@@ -70,6 +70,33 @@ func TestSitePreference(t *testing.T) {
 	}
 	if site, _ = svc.Site(ctx, testID(7)); site != SiteExHentai {
 		t.Fatalf("site after SaveSite = %q, want %q", site, SiteExHentai)
+	}
+}
+
+// A user without a cookie browses e-hentai anonymously; exhentai still needs a
+// session.
+func TestAnonymousClientOnEHentai(t *testing.T) {
+	client := newTestClient(t)
+	svc := New(client, strings.Repeat("s", 32))
+	ctx := t.Context()
+
+	c, err := svc.Client(ctx, testID(8))
+	if err != nil {
+		t.Fatalf("anonymous e-hentai client: %v", err)
+	}
+	if c.Jar == nil {
+		t.Fatal("anonymous client must carry a cookie jar")
+	}
+	cached, err := svc.Client(ctx, testID(8))
+	if err != nil || cached != c {
+		t.Fatalf("anonymous client not cached: %v", err)
+	}
+
+	if _, err := svc.SaveSite(ctx, testID(8), SiteExHentai); err != nil {
+		t.Fatalf("save site: %v", err)
+	}
+	if _, err := svc.Client(ctx, testID(8)); err != ErrNotConfigured {
+		t.Fatalf("exhentai without cookie = %v, want ErrNotConfigured", err)
 	}
 }
 

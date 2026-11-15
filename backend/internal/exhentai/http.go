@@ -22,7 +22,8 @@ const (
 	ExhentaiURL = "https://exhentai.org"
 	EHentaiURL  = "https://e-hentai.org"
 
-	// Site preference values stored per user. ExHentai is the default.
+	// Site preference values stored per user. E-Hentai is the default because
+	// public galleries need no cookie; ExHentai requires a session.
 	SiteExHentai = "exhentai"
 	SiteEHentai  = "e-hentai"
 )

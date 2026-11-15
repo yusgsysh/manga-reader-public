@@ -295,6 +295,34 @@ func TestCookiePartialUpdateMergesStoredFields(t *testing.T) {
 	}
 }
 
+func TestCookieSiteOnlyUpdateWithoutCredentials(t *testing.T) {
+	f := newMUFixture(t)
+	token := f.login(t, "user-a")
+
+	// A fresh account can select e-hentai without saving a cookie; public
+	// browsing works anonymously.
+	w := f.do(t, http.MethodPut, "/api/settings/cookie", map[string]string{"site": "e-hentai"}, token)
+	if w.Code != http.StatusOK {
+		t.Fatalf("site-only e-hentai update = %d %s", w.Code, w.Body.String())
+	}
+	var summary usercookie.Summary
+	if err := json.Unmarshal(w.Body.Bytes(), &summary); err != nil {
+		t.Fatalf("decode summary: %v", err)
+	}
+	if summary.Configured || summary.Site != usercookie.SiteEHentai {
+		t.Fatalf("summary = %+v, want unconfigured e-hentai", summary)
+	}
+	if _, err := f.cookie.Client(t.Context(), f.userA.ID); err != nil {
+		t.Fatalf("anonymous e-hentai client: %v", err)
+	}
+
+	// ExHentai still requires a session.
+	w = f.do(t, http.MethodPut, "/api/settings/cookie", map[string]string{"site": "exhentai"}, token)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("site-only exhentai update = %d %s, want 400", w.Code, w.Body.String())
+	}
+}
+
 func TestMultiUserAdminIsolation(t *testing.T) {
 	f := newMUFixture(t)
 	userToken, adminToken := f.login(t, "user-a"), f.login(t, "admin-a")

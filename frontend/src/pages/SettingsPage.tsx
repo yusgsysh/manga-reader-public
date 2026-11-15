@@ -34,7 +34,6 @@ import {
 } from "../api/settings";
 import { useTheme } from "../hooks/useTheme";
 import { useTagTranslation } from "../hooks/useTagTranslation";
-import { useReaderPreferences } from "../hooks/useReaderPreferences";
 import { SETTINGS_STALE_TIME } from "../lib/cacheConfig";
 import { ACCENT_PRESETS, DEFAULT_ACCENT, isPresetAccent } from "../lib/accent";
 import { formatDateTime } from "../lib/time";
@@ -85,7 +84,7 @@ function CookieSection() {
   const [ipbPassHash, setIpbPassHash] = useState("");
   const [igneous, setIgneous] = useState("");
   const [sk, setSk] = useState("");
-  const [site, setSite] = useState<ExhentaiSite>("exhentai");
+  const [site, setSite] = useState<ExhentaiSite>("e-hentai");
   const [applied, setApplied] = useState<CookieSummary | null>(null);
   const current = query.data;
   if (current && current !== applied) {
@@ -99,7 +98,10 @@ function CookieSection() {
   const credentialsComplete = hasMemberId && hasPassHash;
   const credentialsPartial = hasMemberId !== hasPassHash;
   const hasOptional = igneous.trim() !== "" || sk.trim() !== "";
-  const siteChanged = site !== (current?.site ?? "exhentai");
+  const siteChanged = site !== (current?.site ?? "e-hentai");
+  // E-Hentai serves public galleries anonymously, so a cookie is optional
+  // there; ExHentai still needs a session.
+  const credentialsRequired = site === "exhentai" && !configured;
 
   const save = useMutation({
     mutationFn: () =>
@@ -116,7 +118,7 @@ function CookieSection() {
       setIpbPassHash("");
       setIgneous("");
       setSk("");
-      toast.success("ExHentai Cookie 已保存");
+      toast.success("Cookie 设置已保存");
     },
     onError: (error) => toast.error("保存 Cookie 失败", error),
   });
@@ -153,14 +155,14 @@ function CookieSection() {
   const canSave =
     !save.isPending &&
     !credentialsPartial &&
-    (siteChanged || credentialsComplete || hasOptional) &&
-    (configured || credentialsComplete);
+    !(credentialsRequired && !credentialsComplete) &&
+    (siteChanged || credentialsComplete || (configured && hasOptional));
 
   const fields: CookieField[] = [
     {
       id: "ipb_member_id",
       label: "ipb_member_id",
-      required: true,
+      required: site === "exhentai",
       value: ipbMemberId,
       onChange: setIpbMemberId,
       placeholder: "例如 12345678",
@@ -168,7 +170,7 @@ function CookieSection() {
     {
       id: "ipb_pass_hash",
       label: "ipb_pass_hash",
-      required: true,
+      required: site === "exhentai",
       value: ipbPassHash,
       onChange: setIpbPassHash,
       placeholder: "32 位哈希",
@@ -206,7 +208,11 @@ function CookieSection() {
             <div className="flex flex-wrap items-center gap-2">
               <Cookie className="size-5 text-kumo-subtle" />
               <span className="font-medium">
-                {configured ? COOKIE_STATUS_LABELS[summary?.status ?? "unset"] : "未配置"}
+                {configured
+                  ? COOKIE_STATUS_LABELS[summary?.status ?? "unset"]
+                  : site === "e-hentai"
+                    ? "未配置（匿名浏览 E-Hentai）"
+                    : "未配置"}
               </span>
               {configured && (
                 <span className="text-xs text-kumo-subtle">
@@ -220,9 +226,9 @@ function CookieSection() {
             </p>
 
             <div>
-              <div className="mb-1.5 text-sm font-medium">ExHentai 站点</div>
+              <div className="mb-1.5 text-sm font-medium">浏览站点</div>
               <select
-                aria-label="ExHentai 站点"
+                aria-label="浏览站点"
                 value={site}
                 onChange={(event) => setSite(event.target.value as ExhentaiSite)}
                 className="h-9 w-full rounded-lg border border-kumo-hairline bg-kumo-base px-3 text-sm text-kumo-default"
@@ -230,6 +236,11 @@ function CookieSection() {
                 <option value="exhentai">ExHentai (exhentai.org)</option>
                 <option value="e-hentai">E-Hentai (e-hentai.org)</option>
               </select>
+              <p className="mt-1.5 text-xs text-kumo-subtle">
+                {site === "e-hentai"
+                  ? "E-Hentai 可匿名浏览，Cookie 可留空；登录后可访问受限画廊。"
+                  : "ExHentai 需要登录，请填写 ipb_member_id 与 ipb_pass_hash。"}
+              </p>
             </div>
 
             <div className="space-y-3">
@@ -439,26 +450,6 @@ function AppearanceSection() {
             </div>
           )}
         </div>
-      </div>
-    </Section>
-  );
-}
-
-function ReaderSection() {
-  const { autoFullscreenOnStart, setAutoFullscreenOnStart } =
-    useReaderPreferences();
-
-  return (
-    <Section title="阅读器">
-      <div className="card-surface p-4 text-sm">
-        <Switch
-          label="开始阅读时自动全屏"
-          checked={autoFullscreenOnStart}
-          onCheckedChange={setAutoFullscreenOnStart}
-        />
-        <p className="mt-2 text-xs leading-relaxed text-kumo-subtle">
-          从画廊点「开始阅读」或页面缩略图时自动进入全屏。浏览器拒绝原生全屏时，阅读页仍会占满窗口。
-        </p>
       </div>
     </Section>
   );
@@ -851,13 +842,6 @@ const SECTION_DEFS: SectionDef[] = [
     group: "general",
     show: "always",
     element: <AppearanceSection />,
-  },
-  {
-    id: "reader",
-    label: "阅读器",
-    group: "general",
-    show: "always",
-    element: <ReaderSection />,
   },
   {
     id: "cookie",

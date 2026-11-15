@@ -240,7 +240,7 @@ var (
 		{Name: "cookie_ciphertext", Type: field.TypeString, Default: ""},
 		{Name: "cookie_status", Type: field.TypeString, Default: "unset"},
 		{Name: "cookie_verified_at", Type: field.TypeTime, Nullable: true},
-		{Name: "site", Type: field.TypeString, Default: "exhentai"},
+		{Name: "site", Type: field.TypeString, Default: "e-hentai"},
 		{Name: "preferences", Type: field.TypeJSON, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},

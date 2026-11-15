@@ -45,8 +45,9 @@ func (UserSetting) Fields() []ent.Field {
 		// unset | unverified | valid | invalid
 		field.String("cookie_status").Default("unset"),
 		field.Time("cookie_verified_at").Optional().Nillable(),
-		// exhentai | e-hentai (the account's preferred upstream host).
-		field.String("site").Default("exhentai"),
+		// exhentai | e-hentai (the account's preferred upstream host). The
+		// default is e-hentai, which serves public galleries without a cookie.
+		field.String("site").Default("e-hentai"),
 		// Arbitrary personal preferences (search defaults, tag filters, display,
 		// reader, preload, image policy). Structured server-side, never shared
 		// between users.

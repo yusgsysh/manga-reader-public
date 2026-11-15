@@ -211,7 +211,9 @@ Cookie settings accept either a browser-style `cookie` header or the four
 individual fields. When a cookie is already configured, supplying only some
 fields (for example a freshly rotated `igneous`) merges into the stored
 credentials; a body with no credential fields and only `site` changes just the
-site preference.
+site preference. On `e-hentai` the cookie is optional: an account without one
+browses public galleries anonymously. `exhentai` still requires
+`ipb_member_id` and `ipb_pass_hash`.
 
 Cookie responses contain only a non-secret summary:
 
@@ -229,7 +231,7 @@ Cookie responses contain only a non-secret summary:
 
 - The cookie is encrypted at rest with AES-256-GCM (key derived from `JWT_SECRET`); it is never returned, logged, or shared with another user.
 - Each user gets a separate HTTP client and cookie jar; every ExHentai API/scrape request uses the current user's session.
-- The per-user `site` picks the browsing host: `exhentai` (default) scrapes exhentai.org, `e-hentai` scrapes e-hentai.org (search, listings, gallery pages, torrents; gallery ids/tokens are valid on both). The session cookie jar authenticates both hosts. Tag synchronisation always uses exhentai — the `s.exhentai.org` mutation API has no e-hentai equivalent.
+- The per-user `site` picks the browsing host: `e-hentai` (default) scrapes e-hentai.org, `exhentai` scrapes exhentai.org (search, listings, gallery pages, torrents; gallery ids/tokens are valid on both). The session cookie jar authenticates both hosts; with no cookie stored, e-hentai browsing is anonymous and exhentai endpoints answer `412` (precondition failed). Tag synchronisation always uses exhentai — the `s.exhentai.org` mutation API has no e-hentai equivalent.
 - `status` is `unset`, `unverified`, `valid` or `invalid`; `verify` performs one authenticated upstream request.
 
 ### 0.6 User administration (admin)

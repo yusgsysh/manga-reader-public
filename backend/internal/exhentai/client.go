@@ -84,6 +84,33 @@ func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 		jar.SetCookies(u, domainCookies(domain, cfg))
 	}
 
+	// Cookie lengths (never values) make a truncated paste or an ignored
+	// .env entry visible without leaking the session: ipb_pass_hash is always 32
+	// hex chars, and a missing igneous means the first request has to earn one.
+	slog.Info("exhentai cookies loaded",
+		"ipb_member_id_len", len(cfg.IpbMemberID),
+		"ipb_pass_hash_len", len(cfg.IpbPassHash),
+		"igneous_len", len(cfg.Igneous),
+		"sk_len", len(cfg.SK),
+	)
+
+	return newHTTPClient(jar), nil
+}
+
+// NewAnonymousHTTPClient creates a client with an empty cookie jar for public
+// browsing. E-Hentai serves public galleries without a session, so an account
+// that only selected the e-hentai site can read without saving a cookie.
+func NewAnonymousHTTPClient() (*http.Client, error) {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return nil, err
+	}
+	slog.Debug("anonymous http client created")
+	return newHTTPClient(jar), nil
+}
+
+// newHTTPClient builds the shared production transport around a cookie jar.
+func newHTTPClient(jar http.CookieJar) *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.ResponseHeaderTimeout = 30 * time.Second
 	transport.MaxIdleConns = 50
@@ -95,15 +122,6 @@ func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 		"max_idle_conns", transport.MaxIdleConns,
 		"max_idle_conns_per_host", transport.MaxIdleConnsPerHost,
 		"max_conns_per_host", transport.MaxConnsPerHost,
-	)
-	// Cookie lengths (never values) make a truncated paste or an ignored
-	// .env entry visible without leaking the session: ipb_pass_hash is always 32
-	// hex chars, and a missing igneous means the first request has to earn one.
-	slog.Info("exhentai cookies loaded",
-		"ipb_member_id_len", len(cfg.IpbMemberID),
-		"ipb_pass_hash_len", len(cfg.IpbPassHash),
-		"igneous_len", len(cfg.Igneous),
-		"sk_len", len(cfg.SK),
 	)
 
 	return &http.Client{
@@ -118,5 +136,5 @@ func CreateHTTPClient(cfg *CookieConfig) (*http.Client, error) {
 			}
 			return validateUpstreamURL(req.URL.String())
 		},
-	}, nil
+	}
 }
