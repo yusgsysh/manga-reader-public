@@ -13,6 +13,7 @@ import { useGallery, useGalleryPages, useReadingProgress } from "../hooks/useRea
 import { useReadingProgressSync } from "../hooks/useReadingProgressSync";
 import { useTheme } from "../hooks/useTheme";
 import { useBackNavigation } from "../hooks/useBackNavigation";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import {
   clampPageIndex,
   galleryPageSlotsToManga,
@@ -30,6 +31,7 @@ import { LoadingScreen } from "../components/common/LoadingScreen";
 import { ReaderToolbar } from "../components/reader/ReaderToolbar";
 import { ReaderSettingsPreference } from "../components/reader/ReaderSettingsPreference";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { useBookFold } from "../hooks/useBookFold";
 import { getReaderPreferences } from "../lib/readerPrefs";
 
 // 菜单底部返回入口的文案：补丁只引用 key，库内没有内置。
@@ -101,6 +103,8 @@ export function ReaderPage() {
     }),
     [isDark],
   );
+
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
 
   // 全屏 = 库的 browserFullscreen 布局（跨平台一致、iOS 可用）叠加容器的
   // 原生全屏（可用时隐藏浏览器 UI）。退出全屏由库内 dock 的视图切换器负责。
@@ -374,6 +378,9 @@ export function ReaderPage() {
       handle();
     };
   }, [shellEl]);
+
+  // Enhance the "书本翻页" animation with grabfold-style folding.
+  useBookFold(shellEl, { reducedMotion });
 
   useDocumentTitle(gallery?.title);
 
