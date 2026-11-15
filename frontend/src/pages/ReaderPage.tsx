@@ -47,6 +47,7 @@ import { ErrorState } from "../components/common/ErrorState";
 import { LoadingScreen } from "../components/common/LoadingScreen";
 import { ReaderToolbar } from "../components/reader/ReaderToolbar";
 import { ReaderControlsBar } from "../components/reader/ReaderControlsBar";
+import { ReaderAutoplayProgress } from "../components/reader/ReaderAutoplayProgress";
 import { ReaderSettingsPreference } from "../components/reader/ReaderSettingsPreference";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { getReaderPreferences } from "../lib/readerPrefs";
@@ -638,6 +639,14 @@ export function ReaderPage() {
         onTurnPage={handleTurnPage}
         onGoToPage={handleGoToPage}
       />
+
+      {isBookMode && (
+        <ReaderAutoplayProgress
+          enabled={autoPageTurnEnabled}
+          overlayVisible={overlayVisible}
+          intervalMs={readerSettings.autoPageTurnIntervalMs}
+        />
+      )}
 
       {/* App-level reader preference, appended to comimi's settings sheet. */}
       {settingsHost &&

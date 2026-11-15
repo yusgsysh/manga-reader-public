@@ -130,8 +130,10 @@ export function pageForRef(map: BookPageMap, ref: PageRef | null): number | null
   if (!Number.isInteger(sheet) || sheet < 0 || sheet >= map.sheets) return null;
 
   if (map.layout === "single") {
-    // Single layout shows fronts only: its backs are the paper seen mid-turn.
-    return ref.kind === "front" && sheet < map.pages ? sheet : null;
+    // Single layout shows one comic page per sheet. The back carries the same
+    // image (the fold mirrors it), so the turning leaf shows the previous page
+    // as a print instead of a blank gray back.
+    return sheet < map.pages ? sheet : null;
   }
 
   if (map.hasCover) {

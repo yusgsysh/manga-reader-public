@@ -219,10 +219,10 @@ comimi 原生的翻页只有一种整块舞台的横向平移，而且只在触�
 - **使用官方适配器**：`grabfold/react` 的 `GrabfoldBook` 负责书本、翻页、拖动、flick、peek、整叠抓页与生命周期；`grabfold/webgl` 的 `webglFold` 把翻起的纸张映射到圆柱面并在 GPU 上渲染折痕、卷曲、透视与动态光照；DOM 折叠（grabfold 默认渲染器）是自动回退方案。
 - **页面映射**（`src/lib/bookPages.ts`）：漫画页始终是 0-based，grabfold 的 position 只由漫画页推导，从不写入后端。
   - 双页：`Sheet n` 的正面是第 `2n` 页、背面是第 `2n+1` 页；显示封面时第 0 页单独占右侧首屏，之后成对 `(1,2)`、`(3,4)`…；隐藏封面时首屏就是 `(0,1)`（Sheet 0 的正面是空白的环衬）。
-  - 单页：单页布局只显示纸张正面，所以每张 Sheet 只承载一张漫画页（`Sheet n` 正面 = 第 `n` 页），背面在翻页过程中作为纸背经过。
+  - 单页：单页布局只显示纸张正面，所以每张 Sheet 只承载一张漫画页（`Sheet n` 正面 = 第 `n` 页）；翻页时纸张背面显示同一张图的镜像作为纸背图案，不再是空白灰纸。背面由折页的翻折变换自然镜像。
   - 布局或封面开关变化时，按当前漫画页重新计算 Sheet 数量与 position，并重建书本，因此切换前后停留的是同一张漫画页。
 - **阅读方向**：`binding` 由阅读方向决定（RTL → `"right"`，LTR → `"left"`）；页面内容不做镜像。方向切换只改变装订与翻页方向，position 保持不变。
-- **交互**：拖动、触摸、flick、peek、整叠抓页由 grabfold 直接处理；点击左右 30% 区域、方向键、PageUp/PageDown、Home/End、空格、`A`/`F`/`O`/`P`/`C` 与底部控制条（上一页 / 页码输入 / 进度条 / 下一页）都通过同一个组件句柄驱动，工具栏与页码列表也走 `goToPage`，不存在第二套页码状态。底部控制条由 `ReaderControlsBar` 提供，平移与书本模式共用同一组控件；comimi 自己的 dock 与左右箭头在阅读器内隐藏，避免两套控件并存。控制条的显示/隐藏沿用 comimi 的规则（出现 3 秒后自动隐藏，点击中间区域切换），顶部工具栏随浮层一起显示。
+- **交互**：拖动、触摸、flick、peek、整叠抓页由 grabfold 直接处理；点击左右 30% 区域、方向键、PageUp/PageDown、Home/End、空格、`A`/`F`/`O`/`P`/`C` 与底部控制条（上一页 / 页码输入 / 进度条 / 下一页）都通过同一个组件句柄驱动，工具栏与页码列表也走 `goToPage`，不存在第二套页码状态。底部控制条由 `ReaderControlsBar` 提供，平移与书本模式共用同一组控件；comimi 自己的 dock 与左右箭头在阅读器内隐藏，避免两套控件并存。控制条的显示/隐藏沿用 comimi 的规则（出现 3 秒后自动隐藏，点击中间区域切换），顶部工具栏随浮层一起显示。自动播放时，书本模式在控制条隐藏后显示与 comimi 相同的底部灰色进度线（`ReaderAutoplayProgress`，动画时长跟随自动翻页间隔）。
 - **图片与纹理**（`src/lib/pageImages.ts`）：页面 URL 仍由现有的 `/api/image-cache/page` 接口解析（`PageUrlStore` 流式注入），每张图只解析、解码一次；同一份 `HTMLImageElement` 既交给 WebGL 纹理，也用于页面 `<img>`（同一 URL，浏览器缓存复用）。缓存按字节数和张数封顶（桌面 112MB / 10 张，移动端 48MB / 6 张），预加载/保留当前页前后各一到两个跨页，翻页前已解码；离开视窗的页面被 LRU 淘汰。单页解码失败时页内显示「重试」。
 - **生命周期**：grabfold 实例与 `GrabfoldBook` 组件绑定，卸载时 `destroy()` 销毁 WebGL 上下文与纹理；WebGL 上下文只在书本视图存活期间存在，切换模式即释放。StrictMode 的双次挂载/卸载已验证只保留一个实例、一个 canvas。`prefers-reduced-motion` 交给 grabfold 处理（瞬时翻页）。
 - **WebGL 回退**：先用一次性探测 canvas 检查 `webgl2`/`webgl`（探测后立即 `loseContext`），不可用时不创建 `webglFold`；即使上下文创建或着色器链接失败，`webglFold` 自身也会退回 DOM 折叠，阅读器不会因此不可用。

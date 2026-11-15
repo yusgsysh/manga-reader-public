@@ -74,7 +74,7 @@ describe("book page map", () => {
     }
   });
 
-  it("gives single layout one comic page per sheet, fronts only", () => {
+  it("gives single layout one comic page per sheet, with the page mirrored on the back", () => {
     const map = bookPageMap(7, "single", true);
     expect(map.sheets).toBe(7);
     expect(map.covers).toBe("none");
@@ -83,11 +83,12 @@ describe("book page map", () => {
 
     for (let sheet = 0; sheet < map.sheets; sheet += 1) {
       expect(pageForRef(map, { kind: "front", sheet })).toBe(sheet);
-      // The back of a single-sided comic page is blank paper, not a mirrored
-      // copy of the next page.
-      expect(pageForRef(map, { kind: "back", sheet })).toBeNull();
+      // The turning sheet shows the same image on its back; the fold mirrors it,
+      // so the previous page appears as a print instead of blank paper.
+      expect(pageForRef(map, { kind: "back", sheet })).toBe(sheet);
     }
     expect(pageForRef(map, { kind: "front", sheet: 7 })).toBeNull();
+    expect(pageForRef(map, { kind: "back", sheet: 7 })).toBeNull();
   });
 
   it("puts the first comic page alone on the right when covers are shown", () => {

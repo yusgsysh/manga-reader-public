@@ -561,6 +561,48 @@ try {
     await page.close();
   }
 
+  console.log("reader: book autoplay shows the bottom progress line");
+  {
+    const page = await browser.newPage();
+    await page.goto(`${BASE}/reader/1001/tok`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".reader-shell", { timeout: 30000 });
+    await page.waitForSelector(".comimi-stage .comimi-page-group[data-placement='current']", {
+      timeout: 30000,
+    });
+    await page.locator("header").getByRole("button", { name: "阅读设置" }).click();
+    await page.waitForSelector("text=翻页动画", { timeout: 10000 });
+    await page.getByRole("button", { name: "书本" }).click();
+    await sleep(600);
+    await page.keyboard.press("Escape");
+    await sleep(300);
+    await page.locator("header").getByRole("button", { name: "自动播放" }).click();
+    await sleep(3400);
+
+    const bar = page.locator(".reader-autoplay-progress");
+    check(
+      "book autoplay shows the gray bottom progress line",
+      (await bar.count()) === 1 &&
+        (await bar.getAttribute("data-visible")) === "true",
+      `${await bar.count()} bars`,
+    );
+    const barStyle = await page.evaluate(() => {
+      const fill = document.querySelector(".reader-autoplay-progress-bar");
+      if (!fill) return null;
+      const style = getComputedStyle(fill);
+      return {
+        animationDuration: style.animationDuration,
+        background: style.backgroundColor,
+      };
+    });
+    check(
+      "the progress line uses comimi's timing and color",
+      barStyle?.animationDuration === "5s" &&
+        barStyle?.background === "rgb(102, 102, 102)",
+      JSON.stringify(barStyle),
+    );
+    await page.close();
+  }
+
   console.log("reader: book mode falls back to the DOM fold");
   {
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -602,6 +644,20 @@ try {
       (await pageValue()) !== beforeNoWebgl,
       `${beforeNoWebgl} -> ${await pageValue()}`,
     );
+
+    await page.mouse.move(cx - 120, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx - 40, cy, { steps: 4 });
+    await sleep(300);
+    const backImage = await page.locator(".grabfold-flap .book-flip-image").count();
+    check(
+      "the folding back shows the page image instead of blank paper",
+      backImage > 0,
+      `${backImage} images`,
+    );
+    await page.mouse.up();
+    await sleep(900);
+
     await context.close();
   }
 

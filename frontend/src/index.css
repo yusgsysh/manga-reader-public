@@ -494,6 +494,54 @@ body {
 }
 
 /*
+ * Auto page turn progress: a 5px gray line along the bottom edge, matching
+ * comimi's own overlay progress bar and animation. comimi draws it for slide
+ * mode; book mode mounts this app copy so both viewers show the same bar.
+ */
+.reader-shell .reader-autoplay-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 5px;
+  z-index: 50;
+  overflow: hidden;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.06);
+  opacity: 0;
+  transition: opacity 0.16s linear;
+}
+
+[data-mode="dark"] .reader-shell .reader-autoplay-progress {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.reader-shell .reader-autoplay-progress[data-visible="true"] {
+  opacity: 1;
+}
+
+.reader-shell .reader-autoplay-progress-bar {
+  display: block;
+  position: absolute;
+  inset: 0;
+  background: #666;
+  animation: reader-autoplay-progress 3s linear 0s infinite;
+}
+
+[data-mode="dark"] .reader-shell .reader-autoplay-progress-bar {
+  background: #b3b3b3;
+}
+
+@keyframes reader-autoplay-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/*
  * Page thumbnails: comimi frames them at a fixed 100/141 ratio with
  * `object-fit: contain` over a white panel background. When a page's crop is
  * not exactly that ratio this shows as a white border. Fill the frame instead.
