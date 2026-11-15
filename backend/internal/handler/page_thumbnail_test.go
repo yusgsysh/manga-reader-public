@@ -602,6 +602,66 @@ func TestCachedPageThumbnail_ByIndexWalkPopulatesCache(t *testing.T) {
 	}
 }
 
+// A resolve for a page past the first batch of the shared walk must map the
+// absolute index onto the current batch. The walk emits pages in batches
+// (the gallery document, then ?p=1, ?p=2, ...); before the running offset was
+// tracked, the resolve compared the absolute index against the batch length
+// and missed every page after the first batch, so the resolve stalled and fell
+// back to a direct scrape instead of reading the already-streamed geometry.
+func TestCachedPageThumbnail_ByIndexAcrossWalkBatches(t *testing.T) {
+	const perPage = 40
+	const total = perPage + 1 // one page lives on ?p=1
+
+	pageLink := func(i int) string {
+		return fmt.Sprintf(
+			`<a href="https://exhentai.org/s/p/%d"><div><div title="Page %d" style="width:4px;height:4px;background:transparent url(%s) -%dpx 0 no-repeat"></div></div></a>`,
+			i, i, testSpriteURLTwo, (i%2)*4,
+		)
+	}
+	buildPage := func(start, count int, gpc string) string {
+		var b strings.Builder
+		for i := start; i < start+count; i++ {
+			b.WriteString(pageLink(i))
+		}
+		return fmt.Sprintf(
+			`<html><body><div class="gpc">%s</div><div id="gdt" class="gt200">%s</div></body></html>`,
+			gpc, b.String(),
+		)
+	}
+	first := buildPage(0, perPage, fmt.Sprintf("Showing 1 - %d of %d images", perPage, total))
+	second := buildPage(perPage, total-perPage, fmt.Sprintf("Showing %d - %d of %d images", perPage+1, total, total))
+
+	sprite := makeTestSprite(t)
+	srv := newMockServer(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/g/") {
+			w.Header().Set("Content-Type", "text/html")
+			if r.URL.Query().Get("p") == "1" {
+				fmt.Fprint(w, second)
+			} else {
+				fmt.Fprint(w, first)
+			}
+			return
+		}
+		w.Header().Set("Content-Type", "image/webp")
+		_, _ = w.Write(sprite)
+	})
+	t.Cleanup(srv.Close)
+
+	db := newTestDB(t)
+	server := &Server{
+		Client: newMockClient(srv.URL),
+		DB:     &database.DB{Client: db},
+		Cache:  newMockImageCache(),
+	}
+	r := setupMockRouter(server)
+
+	// Page 41 (index 40) is delivered by the ?p=1 batch, not the first batch.
+	res := requestThumb(r, indexThumbPathFor(cachedThumbPath, "777005", "batches", perPage))
+	if res.code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", res.code, res.body)
+	}
+}
+
 // An index past the gallery total resolves to 404 as soon as the walk reports
 // the total, without waiting for the remaining pages.
 func TestCachedPageThumbnail_ByIndexOutOfRangeCached(t *testing.T) {
