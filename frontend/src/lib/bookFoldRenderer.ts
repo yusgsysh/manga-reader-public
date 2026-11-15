@@ -1,12 +1,15 @@
 /**
  * Renders a grabfold-style page fold on top of comimi's existing stage.
  *
+ * Rendering approach adapted from grabfold (https://github.com/javocsoft/grabfold,
+ * MIT License © JavocSoft): the flat part of the page stays in place, the folded
+ * part is carried across the crease by a reflected transform, and shading bands
+ * follow the crease to suggest depth.
+ *
  * comimi's patched PageStage already marks `.comimi-stage` with
  * `data-flipping="next|previous"` and the current `.comimi-page-group` with
  * `data-spine="left|right"` during a book turn. This renderer watches those
- * markers and replaces the stock CSS rotateY with a dynamic clip-path fold:
- * the flat part of the page stays in place, the folded part is carried across
- * the crease by a reflected transform, and shading bands follow the crease.
+ * markers and replaces the stock CSS rotateY with a dynamic clip-path fold.
  *
  * No DOM inside the page group is modified; a short-lived clone is used for
  * the folded flap so the page's own images, loading states and event handlers

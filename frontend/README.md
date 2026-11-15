@@ -212,7 +212,11 @@ comimi 原生的翻页只有一种整块舞台的横向平移，而且只在触�
 
 #### grabfold 风格动态折叠
 
-comimi 补丁只把书本翻页做成整块绕书脊旋转；为了支持「从任意位置抓页」的真实折叠效果，应用侧自实现了一套 grabfold 几何与渲染，不引入新依赖：
+comimi 补丁只把书本翻页做成整块绕书脊旋转；为了支持「从任意位置抓页」的真实折叠效果，应用侧自实现了一套 grabfold 几何与渲染，不引入新依赖。
+
+> 实现参考：[grabfold](https://github.com/javocsoft/grabfold)（[npm](https://www.npmjs.com/package/grabfold)，MIT License © JavocSoft）。本项目复用了其折叠几何、指针驱动翻页与渲染思路，并以纯函数形式集成到 comimi 舞台之上。
+>
+> 详见 `frontend/THIRD-PARTY-NOTICES.md`。
 
 - **几何模块**：`src/lib/bookFold.ts` 移植 grabfold 的 `foldGeometry`、`foldDepth`、半平面裁剪、反射、以及 flick/peek 物理（`releaseSpeed`、`releaseTarget`、`settleDuration`、`peekProgress`）。
 - **渲染器**：`src/lib/bookFoldRenderer.ts` 的 `BookFoldRenderer` 监听 comimi 舞台的 `data-flipping` 属性，在书本翻页期间：

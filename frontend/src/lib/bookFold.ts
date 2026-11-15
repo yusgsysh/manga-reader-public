@@ -1,9 +1,16 @@
 /**
  * Grabfold-style page-fold geometry and physics, adapted for comimi.
  *
- * These are pure functions ported from grabfold's core. They describe where
- * the crease falls, how the flat and folded parts are clipped, where the
- * folded face lands, and how fast a flick sends the page over.
+ * Adapted from grabfold (https://github.com/javocsoft/grabfold, MIT License
+ * © JavocSoft). The fold is modelled as the perpendicular bisector between the
+ * grab point on the free edge and the current pointer, with the flat part of
+ * the page clipped in place and the folded part reflected across the crease.
+ *
+ * These are pure functions re-implemented from grabfold's documented core
+ * ideas (`foldGeometry`, `foldDepth`, half-plane clipping, reflection, flick
+ * and peek physics). They describe where the crease falls, how the flat and
+ * folded parts are clipped, where the folded face lands, and how fast a flick
+ * sends the page over.
  */
 
 export interface Point {

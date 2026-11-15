@@ -4,6 +4,10 @@ import { BookFoldRenderer } from "../lib/bookFoldRenderer";
 /**
  * Attaches a grabfold-style renderer to a comimi stage inside the given shell.
  *
+ * Grabfold concepts (pointer-driven drag/flick turns and dynamic page folding)
+ * are adapted from grabfold (https://github.com/javocsoft/grabfold, MIT License
+ * © JavocSoft). See `frontend/THIRD-PARTY-NOTICES.md` for attribution.
+ *
  * The renderer watches for comimi's `data-flipping` marker and replaces the
  * stock CSS rotateY with a dynamic clip-path fold. It also supports an
  * interactive drag/flick mode for pointer-driven turns.
