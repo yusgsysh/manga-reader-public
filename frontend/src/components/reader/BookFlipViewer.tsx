@@ -45,6 +45,7 @@ import {
   type ReadingDirection,
 } from "../../lib/bookPages";
 import { PageImageCache } from "../../lib/pageImages";
+import { fitPageTexture } from "../../lib/pageTexture";
 
 /** One page's width over its height, until the first image says otherwise. */
 const FALLBACK_PAGE_RATIO = 0.7;
@@ -218,6 +219,10 @@ export const BookFlipViewer = forwardRef<
   useEffect(() => () => images.clear(), [images]);
 
   const [pageRatio, setPageRatio] = useState(FALLBACK_PAGE_RATIO);
+  const pageRatioRef = useRef(pageRatio);
+  useEffect(() => {
+    pageRatioRef.current = pageRatio;
+  }, [pageRatio]);
   const ratioSettled = useRef(false);
   const handlePageSize = useCallback((ratio: number) => {
     // The first real page defines the book's shape. A later double-page
@@ -225,6 +230,7 @@ export const BookFlipViewer = forwardRef<
     if (ratioSettled.current) return;
     if (!Number.isFinite(ratio) || ratio < 0.4 || ratio > 1.1) return;
     ratioSettled.current = true;
+    pageRatioRef.current = ratio;
     setPageRatio(ratio);
   }, []);
 
@@ -257,7 +263,10 @@ export const BookFlipViewer = forwardRef<
     const texture = (page: PageRef) => {
       const index = pageForRef(mapRef.current, page);
       if (index === null) return null;
-      return imagesRef.current.load(index).catch(() => null);
+      return imagesRef.current
+        .load(index)
+        .then((image) => fitPageTexture(image, pageRatioRef.current))
+        .catch(() => null);
     };
     /* oxlint-enable react/refs */
     try {
@@ -501,7 +510,8 @@ export const BookFlipViewer = forwardRef<
         flick
         peek
         grabBlock
-        thickness={14}
+        // No page-block edge beside the sheet: the book is the open page.
+        thickness={0}
         shadow={0.32}
         gutter={0.24}
         lift={40}

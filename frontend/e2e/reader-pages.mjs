@@ -407,6 +407,15 @@ try {
         dockStyle?.background === "rgba(255, 255, 255, 0.8)",
       JSON.stringify(dockStyle),
     );
+    const stackWidth = await page.evaluate(() => {
+      const stack = document.querySelector(".grabfold-stack");
+      return stack ? stack.getBoundingClientRect().width : 0;
+    });
+    check(
+      "the book has no page-block edge",
+      stackWidth < 1,
+      `${stackWidth}px`,
+    );
     check(
       "book mode curls the turning leaf with WebGL",
       (await page.locator("canvas.grabfold-curl-canvas").count()) === 1,
