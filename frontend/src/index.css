@@ -547,7 +547,7 @@ body {
 }
 
 /*
- * Book-flip animation for the "书本翻页" setting.
+ * Book-flip animation for the "书本" setting.
  *
  * comimi's patched page stage sets `data-flipping="next|previous"` on
  * `.comimi-stage` and `data-spine="left|right"` on the current page group

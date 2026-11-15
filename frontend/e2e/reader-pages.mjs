@@ -356,7 +356,7 @@ try {
 
     await page.locator("header").getByRole("button", { name: "阅读设置" }).click();
     await page.waitForSelector("text=翻页动画", { timeout: 10000 });
-    await page.getByRole("button", { name: "书本翻页" }).click();
+    await page.getByRole("button", { name: "书本" }).click();
     await sleep(200);
     check(
       "switching to book mode updates the reader",

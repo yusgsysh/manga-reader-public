@@ -297,7 +297,7 @@ export function ReaderToolbar({
                   active={viewerSettings?.pageTurnAnimation === "book"}
                   onClick={() => onUpdateSettings({ pageTurnAnimation: "book" })}
                 >
-                  书本翻页
+                  书本
                 </Segment>
               </div>
             </div>
