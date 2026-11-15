@@ -1,5 +1,5 @@
 diff --git a/dist/index.js b/dist/index.js
-index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..df1f9c8888d5b45cfefdc5f27c2f13d39a362593 100644
+index 4fd4ab2..de17499 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -3,6 +3,7 @@ var e = {
@@ -215,8 +215,17 @@ index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..df1f9c8888d5b45cfefdc5f27c2f13d3
  					break;
  				case "m":
  				case "M": {
+@@ -3192,7 +3220,7 @@ var Rt = class {
+ 				this.toggleAutoPageTurn();
+ 				return;
+ 			}
+-			this.commitNextPage(), this.isAtLastPage() && this.toggleAutoPageTurn();
++			this.nextPage(), this.isAtLastPage() && this.toggleAutoPageTurn();
+ 		}, this.store.getState().settings.autoPageTurnIntervalMs));
+ 	}
+ 	isAtLastPage() {
 diff --git a/dist/types.d.ts b/dist/types.d.ts
-index 873f6474b43b8a777fdeaccc9036931739c35468..bbfeb1e0cf1d64a3fdccc2f6e6e41b7deb1cd3c9 100644
+index 873f647..bbfeb1e 100644
 --- a/dist/types.d.ts
 +++ b/dist/types.d.ts
 @@ -1,5 +1,6 @@
