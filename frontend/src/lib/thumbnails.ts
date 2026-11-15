@@ -154,6 +154,13 @@ export function loadThumbnails(
     // gate it behind `getLimit` (the streamed-page cap), so hovering an
     // unstreamed page would show a blank preview. Leave it to load natively.
     if (node.closest(".comimi-seek-preview")) return;
+    // The app's own top-bar page list (ReaderPageList) runs its own ungated
+    // loadThumbnails on its container. The stream-gated observer (the reader's,
+    // which is the only one passing `getLimit`) must leave those thumbnails to
+    // it: the user opened that list to see every page, so its index-addressed
+    // thumbnails load straight away instead of waiting on the streamed-page cap
+    // that limits comimi's eager menu thumbnails.
+    if (getLimit && node.closest(".reader-page-list")) return;
     const stored = node.dataset[LAZY_SRC];
     const url = stored ?? node.src;
     if (!url || !isPageThumbnailURL(url)) return;

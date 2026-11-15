@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { pageThumbnailUrl } from "../../lib/image";
+import { loadThumbnails, THUMBNAIL_CONCURRENCY } from "../../lib/thumbnails";
 
 /*
  * App-owned reader panels, rendered from the reader top bar.
@@ -196,6 +197,17 @@ export function ReaderPageList({
   onGoToPage,
 }: ReaderPageListProps) {
   const listRef = useRef<HTMLDivElement>(null);
+
+  // The top-bar page list is a user-opened view of every page, so its
+  // index-addressed thumbnails load through their own concurrency-limited queue
+  // — un-gated by the streamed-page limit (`getLimit`) that caps comimi's eager
+  // menu thumbnails. The reader's shell-wide loadThumbnails skips this container
+  // (`.reader-page-list`) to avoid double-queueing.
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    return loadThumbnails(el, { concurrency: THUMBNAIL_CONCURRENCY });
+  }, []);
 
   // Centre the current page when the list opens so deep progress is visible.
   useEffect(() => {

@@ -225,4 +225,41 @@ describe("loadThumbnails", () => {
     handle();
     root.remove();
   });
+
+  it("leaves the app page-list thumbnails to their own queue", () => {
+    const root = document.createElement("div");
+
+    // comimi's menu thumbnail: intercepted and gated by the stream limit.
+    const menuThumb = document.createElement("div");
+    menuThumb.className = "comimi-page-list-thumb";
+    const menuImg = document.createElement("img");
+    menuImg.src = thumbURL(3);
+    menuThumb.append(menuImg);
+
+    // The app's top-bar page list runs its own ungated loadThumbnails, so the
+    // shell-wide observer must leave its thumbnails untouched (no src removal,
+    // no gating) — otherwise the two observers would fight over the same img.
+    const appList = document.createElement("div");
+    appList.className = "reader-page-list";
+    const appItem = document.createElement("button");
+    appItem.className = "reader-page-list-item";
+    const appImg = document.createElement("img");
+    appImg.src = thumbURL(9);
+    appItem.append(appImg);
+    appList.append(appItem);
+
+    root.append(menuThumb, appList);
+    document.body.append(root);
+
+    // A zero limit blocks every index-addressed thumbnail, so a gated img would
+    // be left src-less. The app page-list img must keep its src (its own queue
+    // decides when to load it).
+    const handle = loadThumbnails(root, { concurrency: 1, getLimit: () => 0 });
+
+    expect(menuImg.hasAttribute("src")).toBe(false);
+    expect(appImg.getAttribute("src")).toBe(thumbURL(9));
+
+    handle();
+    root.remove();
+  });
 });
