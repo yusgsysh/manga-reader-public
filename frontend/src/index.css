@@ -508,9 +508,28 @@ body {
   animation: reader-panel-enter 0.28s var(--reader-spring) both;
 }
 
+/*
+ * App-owned segmented controls in the reader settings panel mirror comimi's
+ * view/page-mode switchers: a sliding indicator that follows the active option
+ * with the same spring curve.
+ */
+.reader-segment-group {
+  --reader-segment-gap: 0.25rem;
+}
+
+.reader-segment-indicator {
+  transition:
+    transform 0.36s var(--reader-spring),
+    width 0.36s var(--reader-spring);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .reader-panel-enter {
     animation: none;
+  }
+
+  .reader-segment-indicator {
+    transition: none;
   }
 }
 

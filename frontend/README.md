@@ -282,9 +282,16 @@ bun run repro:reader-loading      # 诊断探针：仍白屏则 exit 0，已修�
 阅读器顶栏的「阅读设置 / 键盘快捷键 / 页面列表」面板使用项目自己的 `ReaderToolbar.Panel` 实现，没有沿用 comimi 的菜单/设置面板。为了让这些弹出面板也有和 comimi 内置面板一致的展开动效，参考 comimi 菜单面板的进入动画给 `Panel` 加了入场动画：
 
 - `src/components/reader/ReaderToolbar.tsx`：给 `Panel` 容器加上 `reader-panel-enter` 类，在 `onAnimationEnd` 时清理类名。
-- `src/index.css`：新增 `reader-panel-enter` 关键帧，面板从 `translateY(-12px) scale(0.96)` 与 `opacity: 0` 过渡到正常位置与完全不透明，使用 `--reader-spring` 曲线；`prefers-reduced-motion: reduce` 时关闭动画。
+- `src/index.css`：新增 `reader-panel-enter` 关键帧，面板从 `translateY(-12px)` 与 `opacity: 0` 垂直下落到正常位置与完全不透明，使用 `--reader-spring` 曲线；`prefers-reduced-motion: reduce` 时关闭动画。
 
-这样阅读器工具栏弹出的面板会与 comimi 自身的菜单/设置面板保持一致的弹性进入感。
+### 应用侧自绘分段切换器动画
+
+阅读设置面板里的「阅读方向 / 翻页动画 / 翻页模式」分段切换器原本用静态背景色表示选中项。为了与 comimi 内置的 `comimi-view-switcher` / `comimi-page-mode-indicator` 滑动指示器保持一致，改为由 `SegmentGroup` 单独渲染一个 `reader-segment-indicator` 背景元素：
+
+- `src/components/reader/ReaderToolbar.tsx`：新增 `SegmentGroup` 组件，根据当前选中项计算对应按钮的 `offsetLeft` / `offsetWidth`，并设置到指示器上；切换时指示器通过 CSS `transform` 与 `width` 过渡平滑滑到新的位置。
+- `src/index.css`：新增 `.reader-segment-indicator` 过渡样式，使用 `--reader-spring` 曲线；`prefers-reduced-motion: reduce` 时关闭动画。
+
+这样阅读器设置面板的分段切换器在切换时会像 comimi 的视图/翻页模式切换器一样有弹性的滑动指示器效果。
 
 ## 环境变量
 

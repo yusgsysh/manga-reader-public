@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ArrowLeft,
   CornersIn,
@@ -53,14 +59,66 @@ function Segment({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+        "relative z-[1] rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
         active
-          ? "bg-kumo-base text-kumo-default shadow-sm"
+          ? "text-kumo-default"
           : "text-kumo-subtle hover:text-kumo-default",
       )}
     >
       {children}
     </button>
+  );
+}
+
+interface SegmentOptionData {
+  value: string;
+  label: ReactNode;
+}
+
+function SegmentGroup({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: SegmentOptionData[];
+}) {
+  const groupRef = useRef<HTMLDivElement>(null);
+  const indicatorRef = useRef<HTMLDivElement>(null);
+  const selectedIndex = options.findIndex((option) => option.value === value);
+
+  useEffect(() => {
+    const group = groupRef.current;
+    const indicator = indicatorRef.current;
+    if (!group || !indicator || selectedIndex === -1) return;
+    const buttons = Array.from(
+      group.querySelectorAll<HTMLButtonElement>(":scope > button"),
+    );
+    const selected = buttons[selectedIndex];
+    if (!selected) return;
+    indicator.style.width = `${selected.offsetWidth}px`;
+    indicator.style.transform = `translateX(${selected.offsetLeft}px)`;
+  }, [selectedIndex]);
+
+  return (
+    <div ref={groupRef} className="reader-segment-group relative grid grid-cols-2 gap-1 rounded-lg bg-kumo-recessed p-1">
+      <div
+        ref={indicatorRef}
+        className="reader-segment-indicator pointer-events-none absolute top-1 bottom-1 left-0 rounded-md bg-kumo-base shadow-sm"
+        aria-hidden="true"
+        style={{ width: 0, transform: "translateX(0)" }}
+      />
+      {options.map((option) => (
+        <Segment
+          key={option.value}
+          active={option.value === value}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </Segment>
+      ))}
+    </div>
   );
 }
 
@@ -269,60 +327,54 @@ export function ReaderToolbar({
               <div className="mb-1.5 text-xs font-medium text-kumo-subtle">
                 阅读方向
               </div>
-              <div className="grid grid-cols-2 gap-1 rounded-lg bg-kumo-recessed p-1">
-                <Segment
-                  active={viewerSettings?.readingDirection === "rtl"}
-                  onClick={() => onUpdateSettings({ readingDirection: "rtl" })}
-                >
-                  从右到左
-                </Segment>
-                <Segment
-                  active={viewerSettings?.readingDirection === "ltr"}
-                  onClick={() => onUpdateSettings({ readingDirection: "ltr" })}
-                >
-                  从左到右
-                </Segment>
-              </div>
+              <SegmentGroup
+                value={viewerSettings?.readingDirection ?? "rtl"}
+                onChange={(value) =>
+                  onUpdateSettings({
+                    readingDirection: value as "rtl" | "ltr",
+                  })
+                }
+                options={[
+                  { value: "rtl", label: "从右到左" },
+                  { value: "ltr", label: "从左到右" },
+                ]}
+              />
             </div>
 
             <div>
               <div className="mb-1.5 text-xs font-medium text-kumo-subtle">
                 翻页动画
               </div>
-              <div className="grid grid-cols-2 gap-1 rounded-lg bg-kumo-recessed p-1">
-                <Segment
-                  active={viewerSettings?.pageTurnAnimation !== "book"}
-                  onClick={() => onUpdateSettings({ pageTurnAnimation: "slide" })}
-                >
-                  平移
-                </Segment>
-                <Segment
-                  active={viewerSettings?.pageTurnAnimation === "book"}
-                  onClick={() => onUpdateSettings({ pageTurnAnimation: "book" })}
-                >
-                  书本
-                </Segment>
-              </div>
+              <SegmentGroup
+                value={viewerSettings?.pageTurnAnimation ?? "slide"}
+                onChange={(value) =>
+                  onUpdateSettings({
+                    pageTurnAnimation: value as "slide" | "book",
+                  })
+                }
+                options={[
+                  { value: "slide", label: "平移" },
+                  { value: "book", label: "书本" },
+                ]}
+              />
             </div>
 
             <div>
               <div className="mb-1.5 text-xs font-medium text-kumo-subtle">
                 翻页模式
               </div>
-              <div className="grid grid-cols-2 gap-1 rounded-lg bg-kumo-recessed p-1">
-                <Segment
-                  active={viewerSettings?.pageTurnMode === "single"}
-                  onClick={() => onUpdateSettings({ pageTurnMode: "single" })}
-                >
-                  单页
-                </Segment>
-                <Segment
-                  active={viewerSettings?.pageTurnMode === "spread"}
-                  onClick={() => onUpdateSettings({ pageTurnMode: "spread" })}
-                >
-                  双页
-                </Segment>
-              </div>
+              <SegmentGroup
+                value={viewerSettings?.pageTurnMode ?? "single"}
+                onChange={(value) =>
+                  onUpdateSettings({
+                    pageTurnMode: value as "single" | "spread",
+                  })
+                }
+                options={[
+                  { value: "single", label: "单页" },
+                  { value: "spread", label: "双页" },
+                ]}
+              />
             </div>
 
             <div className="flex items-center justify-between gap-3">
