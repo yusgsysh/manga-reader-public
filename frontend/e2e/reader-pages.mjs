@@ -349,6 +349,11 @@ try {
     await sleep(400);
     check("clicking turns the page", (await seek()) !== before, `${before} -> ${await seek()}`);
 
+    // The top bar now slides away with the overlay, so reveal it again before
+    // opening the settings panel it anchors.
+    await page.mouse.click(cx, cy);
+    await sleep(400);
+
     await page.locator("header").getByRole("button", { name: "阅读设置" }).click();
     await page.waitForSelector("text=翻页动画", { timeout: 10000 });
     await page.getByRole("button", { name: "书本翻页" }).click();
@@ -360,6 +365,10 @@ try {
       )) === "book",
     );
     await page.keyboard.press("Escape");
+    await sleep(200);
+
+    // Dismiss the overlay again so the left-third click turns a page.
+    await page.mouse.click(cx, cy);
     await sleep(200);
 
     const beforeBook = await seek();

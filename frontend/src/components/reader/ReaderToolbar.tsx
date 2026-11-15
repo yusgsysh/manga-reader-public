@@ -23,6 +23,7 @@ type ToolbarPanel = "settings" | "shortcuts" | "pages";
 interface ReaderToolbarProps {
   title: string;
   fullscreen: boolean;
+  overlayVisible: boolean;
   viewerSettings: ViewerSettings | null;
   id: number;
   token: string;
@@ -105,6 +106,7 @@ function Panel({
 export function ReaderToolbar({
   title,
   fullscreen,
+  overlayVisible,
   viewerSettings,
   id,
   token,
@@ -162,11 +164,8 @@ export function ReaderToolbar({
         />
       )}
       <header
-        className={cn(
-          "relative z-[1001] flex shrink-0 items-center gap-1 border-b border-kumo-hairline bg-kumo-base/95 px-2 backdrop-blur",
-          "pt-[env(safe-area-inset-top)]",
-          fullscreen && "fixed inset-x-0 top-0",
-        )}
+        data-visible={overlayVisible || openPanel !== null}
+        className="reader-topbar flex items-center gap-1 px-2 py-1.5"
       >
         <IconButton label="返回画廊" onClick={onBack}>
           <ArrowLeft className="size-5" weight="bold" />

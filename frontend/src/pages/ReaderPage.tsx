@@ -75,6 +75,9 @@ export function ReaderPage() {
   const [viewerSettingsState, setViewerSettingsState] =
     useState<ViewerSettings | null>(null);
   const [autoPageTurnEnabled, setAutoPageTurnEnabled] = useState(false);
+  // Mirrors comimi's overlay state (the auto-hiding progress bar + arrows) so
+  // the top bar can show and hide together with it.
+  const [overlayVisible, setOverlayVisible] = useState(false);
   // The app-level preference is appended to comimi's own settings sheet.
   const [settingsHost, setSettingsHost] = useState<HTMLElement | null>(null);
   // Read once: changing the preference later must not yank the current book
@@ -326,6 +329,13 @@ export function ReaderPage() {
     [],
   );
 
+  const handleOverlayChange = useCallback(
+    ({ visible }: { visible: boolean }) => {
+      setOverlayVisible(visible);
+    },
+    [],
+  );
+
   // Fixed page slots from the authoritative total: comimi sees the full count
   // from the first render and never rebuilds its page list, so the total and
   // thumbnails stay put while the real page URLs stream into the store.
@@ -410,11 +420,12 @@ export function ReaderPage() {
     <div
       ref={attachShell}
       data-fullscreen={isFullscreen}
-      className="reader-shell flex h-[100dvh] flex-col bg-kumo-base"
+      className="reader-shell relative flex h-[100dvh] flex-col bg-kumo-base"
     >
       <ReaderToolbar
         title={gallery.title}
         fullscreen={isFullscreen}
+        overlayVisible={overlayVisible}
         viewerSettings={viewerSettingsState}
         id={id}
         token={token ?? ""}
@@ -450,6 +461,7 @@ export function ReaderPage() {
           onLayoutChange={handleLayoutChange}
           onSettingsChange={handleSettingsChange}
           onAutoPageTurnChange={handleAutoPageTurnChange}
+          onOverlayChange={handleOverlayChange}
           className="h-full w-full"
         />
       </div>

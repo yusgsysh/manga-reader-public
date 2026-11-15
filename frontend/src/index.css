@@ -420,6 +420,60 @@ body {
 }
 
 /*
+ * Reader top bar: a floating glass panel styled to match comimi's controls
+ * dock (the progress bar). It slides in/out in sync with the overlay, so the
+ * top bar and the progress bar appear and hide together.
+ */
+.reader-shell {
+  --reader-glass: rgba(255, 255, 255, 0.8);
+  --reader-shadow: 0 0 8px rgba(0, 0, 0, 0.1);
+  --reader-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+[data-mode="dark"] .reader-shell {
+  --reader-glass: rgba(40, 40, 43, 0.82);
+  --reader-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+}
+
+.reader-shell .reader-topbar {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  right: 24px;
+  z-index: 1001;
+  border-radius: 20px;
+  background: var(--reader-glass);
+  box-shadow: var(--reader-shadow);
+  backdrop-filter: blur(5px);
+  transition:
+    transform 0.6s var(--reader-spring),
+    opacity 0.3s linear;
+}
+
+.reader-shell .reader-topbar[data-visible="false"] {
+  transform: translateY(calc(-100% - 24px));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 0.3s var(--reader-spring),
+    opacity 0.15s linear;
+}
+
+@media (max-width: 767px) {
+  .reader-shell .reader-topbar {
+    top: 0;
+    left: 0;
+    right: 0;
+    border-radius: 0 0 20px 20px;
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .reader-shell .reader-topbar[data-visible="false"] {
+    transform: translateY(-100%);
+  }
+}
+
+/*
  * Page thumbnails: comimi frames them at a fixed 100/141 ratio with
  * `object-fit: contain` over a white panel background. When a page's crop is
  * not exactly that ratio this shows as a white border. Fill the frame instead.
@@ -463,27 +517,21 @@ body {
   margin-bottom: 0;
 }
 
-/* comimi's keyboard-opened menu panel unfolds below the app's top bar. */
+/*
+ * comimi's keyboard-opened menu panel unfolds below the app's floating top bar.
+ */
 .reader-shell .comimi-root .comimi-menu-panel {
-  top: 16px;
-  left: 16px;
-  width: min(500px, calc(100% - 32px));
+  top: 84px;
+  left: 24px;
+  width: min(500px, calc(100% - 48px));
 }
 
 @media (max-width: 767px) {
   .reader-shell .comimi-root .comimi-menu-panel {
-    top: 8px;
+    top: calc(60px + env(safe-area-inset-top, 0px));
     left: 8px;
     width: calc(100% - 16px);
   }
-}
-
-/*
- * In fullscreen the top bar floats over the viewer (`position: fixed`), so the
- * panels need to clear it instead of sliding underneath.
- */
-.reader-shell[data-fullscreen="true"] .comimi-root .comimi-menu-panel {
-  top: calc(64px + env(safe-area-inset-top, 0px));
 }
 
 /*
