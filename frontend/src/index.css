@@ -474,26 +474,6 @@ body {
 }
 
 /*
- * The shared bottom control bar follows the same show/hide rhythm as the top
- * bar. It stays mounted so its page input can be read at any time, but hidden
- * it drops out of reach.
- */
-.reader-shell .reader-controls-bar {
-  transition:
-    transform 0.6s var(--reader-spring),
-    opacity 0.3s linear;
-}
-
-.reader-shell .reader-controls-bar[data-visible="false"] {
-  transform: translate(-50%, 35px);
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    transform 0.3s var(--reader-spring),
-    opacity 0.15s linear;
-}
-
-/*
  * Auto page turn progress: a 5px gray line along the bottom edge, matching
  * comimi's own overlay progress bar and animation. comimi draws it for slide
  * mode; book mode mounts this app copy so both viewers show the same bar.
@@ -614,13 +594,49 @@ body {
 }
 
 /*
- * Both reading modes share the app's bottom control bar (ReaderControlsBar).
- * Hide comimi's own dock and side arrows so slide mode never shows a second
- * control set next to the app bar.
+ * Slide mode uses comimi's dock, reduced to its progress bar (the app top bar
+ * owns autoplay/settings/page mode). Side arrows stay hidden: page turns come
+ * from the click zones, keys and the seek bar in both modes.
  */
-.reader-shell .comimi-controls-dock,
 .reader-shell .comimi-arrows {
   display: none;
+}
+
+.reader-shell .comimi-controls-dock .comimi-autoplay,
+.reader-shell .comimi-controls-dock .comimi-page-mode,
+.reader-shell .comimi-controls-dock .comimi-view-switcher,
+.reader-shell .comimi-controls-dock .comimi-settings {
+  display: none;
+}
+
+.reader-shell .comimi-controls-dock .comimi-controls-row {
+  display: none;
+}
+
+.reader-shell .comimi-controls-dock .comimi-seek {
+  margin-bottom: 0;
+}
+
+/*
+ * Book mode has no comimi instance, so ReaderControlsBar renders the same dock
+ * markup there. These are the theme variables comimi normally provides from
+ * `.comimi-root`; keep them in sync so both seekers look identical.
+ */
+.reader-shell .reader-book-dock {
+  --comimi-fg: #333;
+  --comimi-soft: #999;
+  --comimi-line: #e0e0e0;
+  --comimi-muted: #666;
+  --comimi-glass: var(--reader-glass);
+  --comimi-shadow: var(--reader-shadow);
+  --comimi-spring: var(--reader-spring);
+}
+
+[data-mode="dark"] .reader-shell .reader-book-dock {
+  --comimi-fg: #ededed;
+  --comimi-soft: #7e7e82;
+  --comimi-line: #3f3f43;
+  --comimi-muted: #b3b3b3;
 }
 
 /*
@@ -728,25 +744,6 @@ body {
   to {
     transform: rotate(1turn);
   }
-}
-
-/* The page-jump slider reads like the reader's own progress bar. */
-.reader-book-seek::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 12px;
-  height: 12px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--app-accent);
-}
-
-.reader-book-seek::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--app-accent);
 }
 
 @media (prefers-reduced-motion: reduce) {

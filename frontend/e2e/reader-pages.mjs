@@ -82,8 +82,8 @@ try {
   console.log("scenario 1002: cache miss, progressive stream");
   {
     const { page, livePages, mountedMs } = await openReader(browser, 1002);
-    const current = await page.locator('[aria-label="当前页码"]').inputValue();
-    const totalLabel = await page.locator(".reader-controls-bar").innerText();
+    const current = await page.locator(".comimi-seek-current").innerText();
+    const totalLabel = await page.locator(".comimi-seek-total").innerText();
     check("mounts after the first batch", mountedMs < 6000, `${mountedMs}ms`);
     check("streams from the live endpoint", livePages === 1, `${livePages} requests`);
     check(
@@ -333,10 +333,9 @@ try {
     const leftX = box.x + box.width * 0.15;
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
-    const seek = () =>
-      page.locator('[aria-label="当前页码"]').inputValue();
+    const seek = () => page.locator(".comimi-seek-current").innerText();
     const controlsVisible = async () =>
-      (await page.locator('.reader-controls-bar[data-visible="true"]').count()) > 0;
+      (await page.locator('.comimi-controls-dock[data-overlay="true"]').count()) > 0;
     const showControls = async () => {
       for (let i = 0; i < 6; i++) {
         if (await controlsVisible()) return true;
@@ -392,6 +391,21 @@ try {
       "switching to book mode replaces comimi's stage",
       (await page.locator(".grabfold").count()) === 1 &&
         (await page.locator(".comimi-root").count()) === 0,
+    );
+    const dockStyle = await page.evaluate(() => {
+      const dock = document.querySelector(".reader-book-dock");
+      const bg = dock?.querySelector(".comimi-controls-bg");
+      if (!dock || !bg) return null;
+      return {
+        position: getComputedStyle(dock).position,
+        background: getComputedStyle(bg).backgroundColor,
+      };
+    });
+    check(
+      "the book seek keeps comimi's dock styling",
+      dockStyle?.position === "absolute" &&
+        dockStyle?.background === "rgba(255, 255, 255, 0.8)",
+      JSON.stringify(dockStyle),
     );
     check(
       "book mode curls the turning leaf with WebGL",
@@ -635,7 +649,7 @@ try {
         (await page.locator("canvas.grabfold-curl-canvas").count()) === 0,
     );
     const pageValue = () =>
-      page.locator('[aria-label="当前页码"]').inputValue().catch(() => null);
+      page.locator(".comimi-seek-current").innerText().catch(() => null);
     const beforeNoWebgl = await pageValue();
     await page.keyboard.press("ArrowLeft");
     await sleep(900);

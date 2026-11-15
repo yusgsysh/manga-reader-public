@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import { ReaderControlsBar } from "./ReaderControlsBar";
 
 const baseProps = {
@@ -8,46 +8,47 @@ const baseProps = {
   total: 10,
   visible: true,
   readingDirection: "rtl" as const,
-  canPrev: true,
-  canNext: true,
-  onTurnPage: () => {},
   onGoToPage: () => {},
 };
 
 describe("ReaderControlsBar", () => {
-  it("shows the current page and total", () => {
-    render(<ReaderControlsBar {...baseProps} />);
-    expect((screen.getByLabelText("当前页码") as HTMLInputElement).value).toBe(
-      "3",
+  it("shows the current page and total like comimi's seek bar", () => {
+    const { container } = render(<ReaderControlsBar {...baseProps} />);
+    expect(
+      container.querySelector(".comimi-seek-current")?.textContent,
+    ).toBe("3");
+    expect(container.querySelector(".comimi-seek-total")?.textContent).toBe(
+      " / 10",
     );
-    expect(screen.getByText("/ 10")).toBeTruthy();
+    const fill = container.querySelector(".comimi-seek-fill") as HTMLElement;
+    expect(parseFloat(fill.style.width)).toBeCloseTo((2 / 9) * 100, 2);
   });
 
-  it("reports page turns from the shared bar", () => {
-    const onTurnPage = vi.fn();
-    render(<ReaderControlsBar {...baseProps} onTurnPage={onTurnPage} />);
-    fireEvent.click(screen.getByLabelText("下一页"));
-    fireEvent.click(screen.getByLabelText("上一页"));
-    expect(onTurnPage.mock.calls).toEqual([["next"], ["previous"]]);
-  });
-
-  it("stays mounted while hidden so both modes keep one bar", () => {
+  it("jumps to the scrubbed page on release", () => {
+    const onGoToPage = vi.fn();
     const { container } = render(
+      <ReaderControlsBar {...baseProps} onGoToPage={onGoToPage} />,
+    );
+    const input = container.querySelector(
+      ".comimi-seek-input",
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "7" } });
+    fireEvent.pointerUp(input);
+    expect(onGoToPage).toHaveBeenCalledWith(7);
+  });
+
+  it("toggles comimi's overlay state and leaves the tab order when hidden", () => {
+    const { container, rerender } = render(
       <ReaderControlsBar {...baseProps} visible={false} />,
     );
-    const bar = container.querySelector(".reader-controls-bar") as HTMLElement;
-    expect(bar.dataset.visible).toBe("false");
-    expect((screen.getByLabelText("当前页码") as HTMLInputElement).value).toBe(
-      "3",
-    );
-  });
+    const dock = container.querySelector(
+      ".reader-book-dock",
+    ) as HTMLElement;
+    expect(dock.dataset.overlay).toBe("false");
+    expect(dock.hasAttribute("inert")).toBe(true);
 
-  it("jumps to a typed page (1-based input)", () => {
-    const onGoToPage = vi.fn();
-    render(<ReaderControlsBar {...baseProps} onGoToPage={onGoToPage} />);
-    const input = screen.getByLabelText("当前页码") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "7" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-    expect(onGoToPage).toHaveBeenCalledWith(6);
+    rerender(<ReaderControlsBar {...baseProps} visible />);
+    expect(dock.dataset.overlay).toBe("true");
+    expect(dock.hasAttribute("inert")).toBe(false);
   });
 });
