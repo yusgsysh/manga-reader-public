@@ -81,11 +81,14 @@ function Panel({
       role="dialog"
       aria-label={label}
       className={cn(
-        "absolute top-full right-2 z-[1002] mt-1 space-y-4 rounded-2xl border border-kumo-hairline bg-kumo-base p-4 shadow-xl",
+        "reader-panel reader-panel-enter absolute top-full right-2 z-[1002] mt-1 space-y-4 rounded-2xl border border-kumo-hairline bg-kumo-base p-4 shadow-xl",
         wide
           ? "w-[min(30rem,calc(100vw-1rem))]"
           : "w-[min(22rem,calc(100vw-1rem))]",
       )}
+      onAnimationEnd={(event) => {
+        event.currentTarget.classList.remove("reader-panel-enter");
+      }}
     >
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-kumo-default">{label}</h2>

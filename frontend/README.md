@@ -256,14 +256,14 @@ bun run repro:reader-loading      # 诊断探针：仍白屏则 exit 0，已修�
 
 5. 建议同时向上游提 issue/PR（合并两条渲染分支、补齐触摸事件、暴露 back/全屏事件与隐藏宽屏选项），最终移除补丁。
 
-### 应用侧自绘控件动画
+### 应用侧自绘面板动画
 
-阅读器顶栏的按钮使用项目自己的 `IconButton` 组件，没有沿用 comimi 的控件。为了让这些按钮也有和 comimi 内置按钮一致的按压反馈，参考 comimi 的 `comimi-pop` 关键帧给 `IconButton` 加了「按下时图标弹一下」的动画：
+阅读器顶栏的「阅读设置 / 键盘快捷键 / 页面列表」面板使用项目自己的 `ReaderToolbar.Panel` 实现，没有沿用 comimi 的菜单/设置面板。为了让这些弹出面板也有和 comimi 内置面板一致的展开动效，参考 comimi 菜单面板的进入动画给 `Panel` 加了入场动画：
 
-- `src/components/ui/IconButton.tsx`：在 `onMouseDown` 时移除再重新添加 `icon-button-pop` 类，触发 CSS 动画；动画结束后通过 `onAnimationEnd` 清理类名。
-- `src/index.css`：新增 `icon-button-pop` 关键帧，让图标在 50% 时纵向压扁、横向拉长，75% 时反向回弹，最终恢复；同时给 `IconButton` 内的 SVG 加上基于 `--reader-spring` 的 `transform` 过渡，并在 `prefers-reduced-motion: reduce` 时关闭动画。
+- `src/components/reader/ReaderToolbar.tsx`：给 `Panel` 容器加上 `reader-panel-enter` 类，在 `onAnimationEnd` 时清理类名。
+- `src/index.css`：新增 `reader-panel-enter` 关键帧，面板从 `translateY(-12px) scale(0.96)` 与 `opacity: 0` 过渡到正常位置与完全不透明，使用 `--reader-spring` 曲线；`prefers-reduced-motion: reduce` 时关闭动画。
 
-这样阅读器工具栏的「返回 / 播放 / 全屏 / 快捷键 / 页面列表 / 设置」等按钮在按下时都会获得与 comimi 视图切换器、翻页模式按钮同款的弹性反馈。
+这样阅读器工具栏弹出的面板会与 comimi 自身的菜单/设置面板保持一致的弹性进入感。
 
 ## 环境变量
 
