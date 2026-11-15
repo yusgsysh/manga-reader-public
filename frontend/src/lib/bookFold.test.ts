@@ -3,12 +3,16 @@ import {
   clipHalfPlane,
   foldDepth,
   foldGeometry,
+  foldSign,
   peekProgress,
   polygon,
   reflect,
   releaseSpeed,
   releaseTarget,
   settleDuration,
+  sideTurn,
+  spineFor,
+  turnDirection,
 } from "./bookFold";
 
 /**
@@ -105,5 +109,33 @@ describe("bookFold physics adapter", () => {
   it("peeks more near the edge", () => {
     expect(peekProgress(0, 40)).toBeGreaterThan(peekProgress(20, 40));
     expect(peekProgress(50, 40)).toBe(0);
+  });
+});
+
+describe("bookFold direction mapping", () => {
+  it("turns a drag the way comimi does", () => {
+    expect(turnDirection(-10, "rtl")).toBe("previous");
+    expect(turnDirection(10, "rtl")).toBe("next");
+    expect(turnDirection(-10, "ltr")).toBe("next");
+    expect(turnDirection(10, "ltr")).toBe("previous");
+  });
+
+  it("picks the spine the same way as comimi's book flip", () => {
+    expect(spineFor("next", "rtl")).toBe("right");
+    expect(spineFor("previous", "rtl")).toBe("left");
+    expect(spineFor("next", "ltr")).toBe("left");
+    expect(spineFor("previous", "ltr")).toBe("right");
+  });
+
+  it("folds left-bound pages against the drag, right-bound pages with it", () => {
+    expect(foldSign("left")).toBe(-1);
+    expect(foldSign("right")).toBe(1);
+  });
+
+  it("maps a side press to a turn", () => {
+    expect(sideTurn("left", "rtl")).toBe("next");
+    expect(sideTurn("right", "rtl")).toBe("previous");
+    expect(sideTurn("right", "ltr")).toBe("next");
+    expect(sideTurn("left", "ltr")).toBe("previous");
   });
 });

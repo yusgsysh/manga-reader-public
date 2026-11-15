@@ -2,20 +2,27 @@
  * Renders a grabfold page fold on top of comimi's existing stage.
  *
  * This renderer uses grabfold's own FoldingSheet (https://github.com/javocsoft/grabfold,
- * MIT License © JavocSoft) instead of a hand-rolled DOM structure. comimi's patched
- * PageStage marks `.comimi-stage` with `data-flipping="next|previous"` and the
- * current `.comimi-page-group` with `data-spine="left|right"` during a book turn;
- * we watch those markers, create a grabfold FoldingSheet over the current cell,
- * and drive it with grabfold's foldGeometry.
+ * MIT License © JavocSoft). comimi's patched PageStage marks `.comimi-stage` with
+ * `data-flipping="next|previous"` and the current `.comimi-page-group` with
+ * `data-spine="left|right"` during a book turn; we watch those markers, create a
+ * grabfold FoldingSheet over the current cell, and drive it with grabfold's
+ * foldGeometry.
  *
- * The current page group is cloned into the sheet's resting and turned slots so
- * that comimi's original DOM is left untouched: its images, loading states and
- * event handlers stay in place, and the clones are removed once the turn ends.
+ * The current page group is cloned into the sheet's resting slot (the face that
+ * lifts) and the turned slot is left blank, so a single-sided manga page reads
+ * as paper on the back rather than a mirrored image. The clone is removed once
+ * the turn ends, leaving comimi's original DOM — its images, loading states and
+ * event handlers — untouched.
+ *
+ * The renderer also owns the *interactive* turn: a page can be taken hold of
+ * anywhere and dragged, the crease tilting with the hand, and a quick flick or
+ * a hover peek behave the way grabfold's own book does.
  */
 
 import {
   FoldingSheet,
   gutterGradient,
+  peekProgress,
   releaseSpeed,
   releaseTarget,
   settleDuration,
@@ -24,11 +31,12 @@ import {
   type SheetFrame,
 } from "./bookFold";
 
+/** Full turn duration in ms for API/keyboard turns, matching comimi's timeout. */
 const DEFAULT_DURATION = 180;
-const DRAG_COMMIT_AT = 0.4;
 
-/** Minimum horizontal movement, in pixels, before a press becomes a drag. */
+const DRAG_COMMIT_AT = 0.4;
 const DRAG_THRESHOLD = 8;
+const PEEK_ZONE = 72;
 
 /** Default shading values matching grabfold's defaults. */
 const DEFAULT_SHADING: Shading = {
@@ -46,20 +54,31 @@ export interface BookFoldRendererOptions {
   reducedMotion?: boolean;
 }
 
-interface TurnState {
-  direction: "next" | "previous";
-  spine: "left" | "right";
-  rect: DOMRect;
-  start: number;
-  fromProgress: number;
-  toProgress: number;
-  duration: number;
+type Direction = "next" | "previous";
+type Spine = "left" | "right";
+
+interface Turn {
+  direction: Direction;
+  spine: Spine;
+  /** The current page cell within the stage, in stage pixels. */
+  rect: { left: number; top: number; width: number; height: number };
+  /** The current page cell in viewport pixels, for pointer math. */
+  viewport: { left: number; top: number; width: number; height: number };
+  /** The page element being lifted (hidden while the sheet takes over). */
+  current: HTMLElement;
+  mode: "drag" | "peek";
+  progress: number;
   grabY: number;
   lift: number;
-  samples: Sample[];
-  /** The pointer x at drag start, used to filter accidental presses. */
+  /** Pointer position when the turn began (drag or peek). */
   startX: number;
+  startY: number;
+  /** Progress when a drag actually started, and the x it was measured from. */
+  baseProgress: number;
+  baseX: number;
+  /** Whether the press has crossed the drag threshold. */
   dragging: boolean;
+  samples: Sample[];
 }
 
 export class BookFoldRenderer {
@@ -68,7 +87,7 @@ export class BookFoldRenderer {
   private reducedMotion: boolean;
   private observer: MutationObserver | null = null;
   private raf: number | null = null;
-  private turn: TurnState | null = null;
+  private turn: Turn | null = null;
   private sheet: FoldingSheet | null = null;
   private cleanupFns: Array<() => void> = [];
 
@@ -97,20 +116,21 @@ export class BookFoldRenderer {
     this.reducedMotion = reduced;
   }
 
-  /** Returns true if a drag/animation is currently in progress. */
+  /** Returns true if a drag/animation/peek is currently in progress. */
   get isActive(): boolean {
     return this.turn !== null;
   }
 
+  /* ------------------------------------------------------------- auto turn */
+
   private sync(): void {
-    const flipping = this.stage.dataset.flipping as
-      | "next"
-      | "previous"
-      | undefined;
+    const flipping = this.stage.dataset.flipping as Direction | undefined;
     if (!flipping) {
       this.cancel();
       return;
     }
+    // A drag that already went the same way owns the sheet; comimi's own
+    // `data-flipping` window is just the landing dwell before it commits.
     if (this.turn?.direction === flipping) return;
 
     const current = this.stage.querySelector<HTMLElement>(
@@ -121,7 +141,7 @@ export class BookFoldRenderer {
       return;
     }
 
-    const spine = current.dataset.spine as "left" | "right" | undefined;
+    const spine = current.dataset.spine as Spine | undefined;
     if (!spine) {
       this.cancel();
       return;
@@ -138,169 +158,215 @@ export class BookFoldRenderer {
   }
 
   private startAutoTurn(
-    direction: "next" | "previous",
-    spine: "left" | "right",
+    direction: Direction,
+    spine: Spine,
     current: HTMLElement,
     rect: DOMRect,
     stageRect: DOMRect,
   ): void {
     this.cancel();
 
-    const height = rect.height;
-    const grabY = height / 2;
-    const lift = 0;
-
     this.turn = {
       direction,
       spine,
       rect: this.relativeRect(rect, stageRect),
-      start: performance.now(),
-      fromProgress: 0,
-      toProgress: 1,
-      duration: this.reducedMotion ? 0 : this.duration,
-      grabY,
-      lift,
-      samples: [],
+      viewport: this.viewportRect(rect),
+      current,
+      mode: "drag",
+      progress: 0,
+      grabY: rect.height / 2,
+      lift: 0,
       startX: 0,
+      startY: 0,
+      baseProgress: 0,
+      baseX: 0,
       dragging: true,
+      samples: [],
     };
 
-    this.createSheet(current);
-    this.raf = requestAnimationFrame((now) => this.tick(now));
+    this.createSheet(current, spine);
+    this.animateTo(1, this.reducedMotion ? 0 : this.duration);
   }
 
+  /* ------------------------------------------------------------------- drag */
+
   /**
-   * Begin an interactive drag turn. The caller should call `drag()` on
-   * pointermove and `release()` on pointerup.
+   * Begin an interactive drag turn from a press at `pointer` (the pointer-down
+   * position). `direction` and `spine` are resolved by the caller from the
+   * reading direction and the drag movement. The caller should then call
+   * `drag()` on pointermove and `release()` on pointerup.
    */
   beginDrag(
-    direction: "next" | "previous",
-    spine: "left" | "right",
+    direction: Direction,
+    spine: Spine,
     current: HTMLElement,
     pointer: { x: number; y: number },
   ): void {
+    // Adopt an in-flight peek rather than rebuilding the sheet underneath it.
+    if (this.turn?.mode === "peek" && this.turn.current === current) {
+      const turn = this.turn;
+      turn.mode = "drag";
+      turn.direction = direction;
+      turn.spine = spine;
+      turn.dragging = false;
+      turn.baseProgress = turn.progress;
+      turn.baseX = pointer.x;
+      turn.startX = pointer.x;
+      turn.startY = pointer.y;
+      turn.samples = [{ time: performance.now(), progress: turn.progress }];
+      return;
+    }
+
     this.cancel();
 
     const rect = current.getBoundingClientRect();
     const stageRect = this.stage.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
 
-    const rel = this.relativeRect(rect, stageRect);
-    const grabY = clamp(pointer.y - rect.top, 0, rect.height);
+    this.turn = {
+      direction,
+      spine,
+      rect: this.relativeRect(rect, stageRect),
+      viewport: this.viewportRect(rect),
+      current,
+      mode: "drag",
+      progress: 0,
+      grabY: clamp(pointer.y - rect.top, 0, rect.height),
+      lift: 0,
+      startX: pointer.x,
+      startY: pointer.y,
+      baseProgress: 0,
+      baseX: pointer.x,
+      dragging: false,
+      samples: [{ time: performance.now(), progress: 0 }],
+    };
+
+    this.createSheet(current, spine);
+    this.updateFold();
+  }
+
+  /** Update an active drag from the current pointer position. */
+  drag(pointer: { x: number; y: number }): void {
+    const turn = this.turn;
+    if (!turn || turn.mode !== "drag") return;
+
+    if (!turn.dragging) {
+      const moved = Math.abs(pointer.x - turn.startX);
+      if (moved < DRAG_THRESHOLD) return;
+      turn.dragging = true;
+      turn.baseProgress = turn.progress;
+      turn.baseX = pointer.x;
+    }
+
+    const sign = turn.spine === "left" ? -1 : 1;
+    const travel = Math.max(1, turn.viewport.width * 0.9);
+    turn.progress = clamp(turn.baseProgress + (sign * (pointer.x - turn.baseX)) / travel, 0, 1);
+    turn.lift = pointer.y - turn.startY;
+    turn.samples.push({ time: performance.now(), progress: turn.progress });
+    if (turn.samples.length > 24) turn.samples.splice(0, turn.samples.length - 24);
+    this.updateFold();
+  }
+
+  /**
+   * Finish a drag, applying grabfold's flick physics. Resolves once the sheet
+   * has settled at its target; `wentOver` tells the caller whether the turn
+   * should be committed.
+   */
+  release(): { wentOver: boolean; done: Promise<void> } {
+    const turn = this.turn;
+    if (!turn || turn.mode !== "drag") {
+      return { wentOver: false, done: Promise.resolve() };
+    }
+
+    // A press that never crossed the threshold is a tap, not a turn.
+    if (!turn.dragging) {
+      this.cancel();
+      return { wentOver: false, done: Promise.resolve() };
+    }
+
+    const speed = releaseSpeed(turn.samples);
+    const target = releaseTarget(turn.progress, speed, DRAG_COMMIT_AT);
+    const remaining = target - turn.progress;
+    const duration = this.reducedMotion
+      ? 0
+      : settleDuration(remaining, this.duration, speed);
+
+    const done = new Promise<void>((resolve) => {
+      this.animateTo(target, duration, resolve);
+    });
+    return { wentOver: target === 1, done };
+  }
+
+  /* ------------------------------------------------------------------- peek */
+
+  /** Start a hover peek: the page edge lifts a little under the pointer. */
+  beginPeek(
+    direction: Direction,
+    spine: Spine,
+    current: HTMLElement,
+    pointer: { x: number; y: number },
+  ): void {
+    if (this.turn?.mode === "peek" && this.turn.current === current) return;
+    this.cancel();
+
+    const rect = current.getBoundingClientRect();
+    const stageRect = this.stage.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
 
     this.turn = {
       direction,
       spine,
-      rect: rel,
-      start: performance.now(),
-      fromProgress: 0,
-      toProgress: 0,
-      duration: 0,
-      grabY,
+      rect: this.relativeRect(rect, stageRect),
+      viewport: this.viewportRect(rect),
+      current,
+      mode: "peek",
+      progress: 0,
+      grabY: clamp(pointer.y - rect.top, 0, rect.height),
       lift: 0,
-      samples: [{ time: performance.now(), progress: 0 }],
       startX: pointer.x,
+      startY: pointer.y,
+      baseProgress: 0,
+      baseX: pointer.x,
       dragging: false,
+      samples: [],
     };
 
-    this.createSheet(current);
-    this.updateFold(0);
+    this.createSheet(current, spine);
+    this.updatePeek(pointer);
   }
 
-  /** Update an active drag. */
-  drag(pointer: { x: number; y: number }): void {
-    if (!this.turn) return;
+  /** Update the peek to follow the pointer. */
+  updatePeek(pointer: { x: number; y: number }): void {
+    const turn = this.turn;
+    if (!turn || turn.mode !== "peek") return;
 
-    const { rect, spine, startX } = this.turn;
-    const width = rect.width;
+    const zone = Math.min(PEEK_ZONE, turn.viewport.width * 0.18);
+    const distance =
+      turn.spine === "left"
+        ? turn.viewport.left + turn.viewport.width - pointer.x
+        : pointer.x - turn.viewport.left;
 
-    if (!this.turn.dragging) {
-      const moved = Math.abs(pointer.x - startX);
-      if (moved < DRAG_THRESHOLD) return;
-      this.turn.dragging = true;
-    }
-
-    const rawX =
-      spine === "left" ? pointer.x - rect.left : rect.right - pointer.x;
-    const progress = clamp(rawX / width, 0, 1);
-    const lift = pointer.y - rect.top - this.turn.grabY;
-
-    this.turn.lift = lift;
-    this.turn.toProgress = progress;
-    this.turn.fromProgress = progress;
-    this.turn.samples.push({ time: performance.now(), progress });
-    this.updateFold(progress);
+    turn.progress = peekProgress(distance, zone);
+    turn.grabY = clamp(pointer.y - turn.viewport.top, 0, turn.viewport.height);
+    // A corner lifts, pulled in towards the middle of the page: a dog-ear.
+    const reach = turn.progress / 0.06;
+    turn.lift = (turn.viewport.height / 2 - turn.grabY) * 0.3 * reach;
+    this.updateFold();
   }
 
-  /** Finish a drag, applying flick physics if appropriate. */
-  release(): { finish: () => void; wentOver: boolean } | null {
-    if (!this.turn) return { finish: () => {}, wentOver: false };
-
-    // Treat a press that never crossed the drag threshold as a normal click.
-    if (!this.turn.dragging) {
-      this.cancel();
-      return { finish: () => {}, wentOver: false };
-    }
-
-    const speed = releaseSpeed(this.turn.samples);
-    const target = releaseTarget(this.turn.toProgress, speed, DRAG_COMMIT_AT);
-    const remaining = target - this.turn.toProgress;
-
-    this.turn.fromProgress = this.turn.toProgress;
-    this.turn.toProgress = target;
-    this.turn.start = performance.now();
-    this.turn.duration = this.reducedMotion
-      ? 0
-      : settleDuration(remaining, this.duration, speed);
-    this.turn.samples = [];
-
-    this.raf ??= requestAnimationFrame((now) => this.tick(now));
-
-    return {
-      finish: () => {
-        this.cancel();
-      },
-      wentOver: target === 1,
-    };
+  /** Drop a peek at once. */
+  endPeek(): void {
+    if (this.turn?.mode !== "peek") return;
+    this.cancel();
   }
 
-  private tick(now: number): void {
-    if (!this.turn) return;
+  /* ---------------------------------------------------------------- drawing */
 
-    const { start, duration: dur, fromProgress, toProgress } = this.turn;
-    let t = dur <= 0 ? 1 : (now - start) / dur;
-    t = clamp(t, 0, 1);
-
-    const progress = fromProgress + (toProgress - fromProgress) * easeOut(t);
-    this.updateFold(progress);
-
-    if (t >= 1) {
-      // Keep the sheet visible until comimi removes data-flipping; that way the
-      // fold does not vanish before the page swap commits.
-      this.raf = null;
-      return;
-    }
-
-    this.raf = requestAnimationFrame((next) => this.tick(next));
-  }
-
-  private updateFold(progress: number): void {
-    if (!this.turn || !this.sheet) return;
-
-    const { rect, spine, grabY, lift } = this.turn;
-    const width = rect.width;
-    const height = rect.height;
-
-    const frame: SheetFrame = { spine, width, height, progress, grabY, lift };
-    this.sheet.draw(frame);
-  }
-
-  private createSheet(current: HTMLElement): void {
+  private createSheet(current: HTMLElement, spine: Spine): void {
     this.cleanup();
 
     const rect = this.turn?.rect;
-    const spine = this.turn?.spine;
-    if (!rect || !spine) return;
+    if (!rect) return;
 
     // Hide the original page group while the sheet takes over; this avoids
     // duplicating visible content and keeps comimi's DOM untouched.
@@ -313,24 +379,17 @@ export class BookFoldRenderer {
     const sheet = new FoldingSheet(document, DEFAULT_SHADING);
     this.sheet = sheet;
 
-    // Position the sheet over the current page cell.
+    // Position the sheet over the current page cell, top included.
     sheet.place(rect.left, rect.width, rect.height);
+    sheet.root.style.top = `${rect.top}px`;
 
-    // Fill the resting (leaf) slot with a clone of the current page.
+    // The resting (leaf) slot shows the page being lifted. The turned slot is
+    // left blank so a single-sided manga page reads as its paper back.
     const restingClone = current.cloneNode(true) as HTMLElement;
     restingClone.style.display = "";
     restingClone.style.width = "100%";
     restingClone.style.height = "100%";
     sheet.restingSlot.appendChild(restingClone);
-
-    // Fill the turned (flap) slot with a mirrored clone so the single-sided
-    // page reads as the paper back. The mirroring is applied via CSS on the
-    // grabfold slot.
-    const turnedClone = current.cloneNode(true) as HTMLElement;
-    turnedClone.style.display = "";
-    turnedClone.style.width = "100%";
-    turnedClone.style.height = "100%";
-    sheet.turnedSlot.appendChild(turnedClone);
 
     // Set the gutter shading to match the spine side.
     const gutter = sheet.root.querySelector(".grabfold-gutter") as HTMLElement | null;
@@ -347,13 +406,67 @@ export class BookFoldRenderer {
     });
   }
 
-  private cancel(): void {
+  /** One frame of the fold from the current turn state. */
+  private updateFold(): void {
+    if (!this.turn || !this.sheet) return;
+
+    const { rect, spine, grabY, lift, progress } = this.turn;
+    const frame: SheetFrame = {
+      spine,
+      width: rect.width,
+      height: rect.height,
+      progress,
+      grabY,
+      lift,
+    };
+    this.sheet.draw(frame);
+  }
+
+  /** Eases the fold from its current progress to `target`, then calls `onDone`. */
+  private animateTo(target: number, durationMs: number, onDone?: () => void): void {
+    const turn = this.turn;
+    if (!turn) {
+      onDone?.();
+      return;
+    }
+    this.cancelRaf();
+
+    const from = turn.progress;
+    const liftFrom = turn.lift;
+    const start = performance.now();
+
+    const step = (now: number) => {
+      if (this.turn !== turn) return;
+      const t = durationMs <= 0 ? 1 : Math.min(1, (now - start) / durationMs);
+      const eased = easeOut(t);
+      turn.progress = from + (target - from) * eased;
+      // The tilt runs out as the sheet arrives, so a landed page is flat.
+      turn.lift = liftFrom * (1 - eased);
+      this.updateFold();
+
+      if (t >= 1) {
+        this.raf = null;
+        onDone?.();
+        return;
+      }
+      this.raf = requestAnimationFrame(step);
+    };
+    this.raf = requestAnimationFrame(step);
+  }
+
+  /* ---------------------------------------------------------------- teardown */
+
+  cancel(): void {
+    this.cancelRaf();
+    this.turn = null;
+    this.cleanup();
+  }
+
+  private cancelRaf(): void {
     if (this.raf !== null) {
       cancelAnimationFrame(this.raf);
       this.raf = null;
     }
-    this.turn = null;
-    this.cleanup();
   }
 
   private cleanup(): void {
@@ -362,13 +475,20 @@ export class BookFoldRenderer {
     this.sheet = null;
   }
 
-  private relativeRect(rect: DOMRect, stageRect: DOMRect): DOMRect {
-    return new DOMRect(
-      rect.left - stageRect.left,
-      rect.top - stageRect.top,
-      rect.width,
-      rect.height,
-    );
+  private relativeRect(
+    rect: DOMRect,
+    stageRect: DOMRect,
+  ): { left: number; top: number; width: number; height: number } {
+    return {
+      left: rect.left - stageRect.left,
+      top: rect.top - stageRect.top,
+      width: rect.width,
+      height: rect.height,
+    };
+  }
+
+  private viewportRect(rect: DOMRect): { left: number; top: number; width: number; height: number } {
+    return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
   }
 }
 
@@ -377,6 +497,5 @@ function clamp(value: number, low: number, high: number): number {
 }
 
 function easeOut(t: number): number {
-  // Smooth deceleration matching the stock spring feel.
-  return 1 - (1 - t) * (1 - t);
+  return 1 - (1 - t) * (1 - t) * (1 - t);
 }

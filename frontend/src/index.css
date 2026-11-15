@@ -644,14 +644,19 @@ body {
   pointer-events: none;
 }
 
-/* Mirror the turned-slot content so the single-sided page simulates the paper back. */
-.reader-shell
-  .comimi-root[data-page-turn-animation="book"]
-  .comimi-stage[data-flipping]
-  .grabfold-turned-slot
-  > * {
-  transform: scaleX(-1);
-  transform-origin: center;
+/*
+ * The paper colours grabfold shades the turning leaf with. The turned face is
+ * left blank, so a single-sided manga page reads as its paper back rather than
+ * a mirrored image of the front.
+ */
+.reader-shell .comimi-root[data-page-turn-animation="book"] {
+  --grabfold-paper: var(--color-kumo-base, #fbf8f1);
+  --grabfold-lift: #ffffff;
+}
+
+[data-mode="dark"] .reader-shell .comimi-root[data-page-turn-animation="book"] {
+  --grabfold-paper: var(--color-kumo-base, #18181b);
+  --grabfold-lift: #2a2a2e;
 }
 
 /*
