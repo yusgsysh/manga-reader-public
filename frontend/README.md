@@ -152,6 +152,7 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
 
 - **事件**：`dist/types.d.ts` 的 `ViewerEventMap` 只新增 `fullscreenRequest`（`back` 事件链随菜单一起删除）；`dist/index.js` 的核心回调新增 `requestFullscreen` 并 `emit`，没有监听者时回退到 `setLayoutMode("browserFullscreen")`。
 - **全屏入口**：`F` 键改为派发 `fullscreenRequest`（应用顶栏的全屏按钮直接调用同一个 `toggleFullscreen`），由应用侧统一处理（保持原来的 `browserFullscreen` + 原生 `requestFullscreen` + `fullscreenchange` 同步）。
+- **移除状态提示**：删掉 `setLayoutMode` 的布局模式 toast（进入/退出全屏时弹出的「全屏」）、`toggleAutoPageTurn` 的自动播放开始/停止 toast，以及 `notifyFavoriteAdded` 的收藏 toast；应用自身不调用 `notify()`，因此 `.comimi-notifications` 不再出现。
 - **删除被顶栏替代的 UI**：菜单面板 `Ce`（菜单/页面列表/收藏/快捷键/分享/关于视图与菜单兔）、设置层 `ke`、左右箭头 `we`、视图切换器 `je`，以及 dock 的 `comimi-controls-row`（autoplay / page-mode / settings 按钮）。renderer 不再创建或插入它们，`applyOverlayVisibility` 与点击吞掉选择器也移除了对应类名。
 - **移除宽屏 UI**：快捷键列表与键盘 `W` 分支删除；视图切换器随 `je` 整体删除。`LayoutMode` 类型与 `setLayoutMode("wide")` 仍保留给 API 使用，但不再有 UI 入口。
 
@@ -205,8 +206,10 @@ comimi 原生的平移翻页只在触摸滑动结束时的「惯性翻页」路�
 | dock 的自动播放、单页/双页、视图切换、设置按钮 | `Me.buildRow` / `.comimi-controls-row` / `je` / `.comimi-autoplay` / `.comimi-page-mode` / `.comimi-view-switcher` / `.comimi-settings` | 删除（顶栏与设置面板已覆盖） |
 | dock 进度条与触摸预览 | `Me.buildSeek` / `.comimi-seek*` | **保留** |
 | 键盘 `M`（菜单）与 `S`（设置） | `bindKeyboard` | 删除（无对应面板，应用顶栏接管菜单） |
-| 键盘 `Esc` 关闭面板 | `bindKeyboard` | 只保留「回到 inline」；面板关闭与退出阅读器由应用顶栏接管 |
+| 键盘 `N`（标准）与 `C`（封面） | `bindKeyboard` | 删除（应用改用 `C` 切换跨页） |
+| 键盘 `Esc` | `bindKeyboard` | 删除（面板关闭与退出阅读器由应用顶栏接管） |
 | 键盘 `←` / `→` / `Space` / `A` / `F` / `P` / `O` | `bindKeyboard` | **保留**（分别翻页、自动播放、全屏请求、跨页、控制层），其中 `F` / `P` / `O` 由应用侧映射覆盖 |
+| 状态提示 toast（全屏 / 标准、自动播放开始 / 停止、收藏） | `notify(...)` / `.comimi-toast` | 删除调用，不再弹出 |
 
 第二轮清理继续删除只服务上述 UI 的传递性代码：
 

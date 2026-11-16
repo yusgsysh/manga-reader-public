@@ -1,5 +1,5 @@
 diff --git a/dist/index.js b/dist/index.js
-index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..286ec81ba05b3a54cac4022a560de7251eef73c7 100644
+index 4fd4ab2..bafb4a7 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -466,7 +466,7 @@ var s = {
@@ -1249,7 +1249,21 @@ index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..286ec81ba05b3a54cac4022a560de725
  	emit(e, t) {
  		let n = this.handlers.get(e);
  		if (n) for (let e of n) try {
-@@ -2744,6 +1742,9 @@ var Rt = class {
+@@ -2636,12 +1634,7 @@ var At = class {
+ 	"pageTurnMode",
+ 	"hasCover",
+ 	"readingDirection"
+-], Nt = {
+-	inline: "layout.inline",
+-	wide: "layout.wide",
+-	browserFullscreen: "layout.browserFullscreen",
+-	nativeFullscreen: "layout.browserFullscreen"
+-}, Pt = 3e3, Ft = [
++], Pt = 3e3, Ft = [
+ 	"mousemove",
+ 	"mousedown",
+ 	"touchstart",
+@@ -2744,6 +1737,9 @@ var Rt = class {
  					pageIndex: e,
  					page: t
  				});
@@ -1259,7 +1273,7 @@ index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..286ec81ba05b3a54cac4022a560de725
  			}
  		};
  		this.renderer = new wt(this.container, {
-@@ -2752,10 +1753,7 @@ var Rt = class {
+@@ -2752,10 +1748,7 @@ var Rt = class {
  			i18n: this.i18n,
  			className: i.className,
  			resolvePageSrc: i.resolvePageSrc,
@@ -1271,7 +1285,15 @@ index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..286ec81ba05b3a54cac4022a560de725
  		});
  		for (let [e, t] of Object.entries(i.events ?? {})) this.on(e, t);
  		this.unsubscribers.push(this.store.subscribe((e, t) => {
-@@ -2923,10 +1921,12 @@ var Rt = class {
+@@ -2826,7 +1819,6 @@ var Rt = class {
+ 		this.setFavorites([]);
+ 	}
+ 	notifyFavoriteAdded(e) {
+-		this.notify(this.i18n.t(e ? "favorites.added" : "favorites.addedUnsaved"), e ? "success" : "info");
+ 	}
+ 	pressFavorite(e) {
+ 		let t = this.store.getState(), n = t.manga.pages[e];
+@@ -2923,10 +1915,12 @@ var Rt = class {
  		}
  	}
  	nextPage() {
@@ -1286,10 +1308,25 @@ index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..286ec81ba05b3a54cac4022a560de725
  	}
  	commitNextPage() {
  		if (this.renderer.isMobileViewport()) {
-@@ -3068,31 +2068,13 @@ var Rt = class {
- 					e.preventDefault(), this.setLayoutMode("inline");
+@@ -2956,8 +1950,6 @@ var Rt = class {
+ 	}
+ 	toggleAutoPageTurn() {
+ 		this.store.dispatch({ type: "toggleAutoPageTurn" }), this.syncAutoTimer();
+-		let e = this.store.getState().autoPageTurnEnabled;
+-		this.notify(this.i18n.t(e ? "autoplay.start" : "autoplay.stop"));
+ 	}
+ 	setAutoPageTurn(e) {
+ 		this.store.getState().autoPageTurnEnabled !== e && this.toggleAutoPageTurn();
+@@ -3062,59 +2054,19 @@ var Rt = class {
+ 				case "A":
+ 					e.preventDefault(), this.toggleAutoPageTurn();
  					break;
- 				case "Escape":
+-				case "n":
+-				case "N":
+-					if (this.lockLayoutMode) break;
+-					e.preventDefault(), this.setLayoutMode("inline");
+-					break;
+-				case "Escape":
 -					e.preventDefault(), this.store.dispatch({
 -						type: "setPanel",
 -						panel: "none"
@@ -1299,13 +1336,13 @@ index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..286ec81ba05b3a54cac4022a560de725
 -				case "W":
 -					if (this.lockLayoutMode) break;
 -					e.preventDefault(), this.setLayoutMode("wide");
-+					e.preventDefault(), this.lockLayoutMode || this.setLayoutMode("inline");
- 					break;
+-					break;
  				case "f":
  				case "F":
  					if (this.lockLayoutMode) break;
 -					e.preventDefault(), this.setLayoutMode("browserFullscreen");
--					break;
++					e.preventDefault(), this.events.has("fullscreenRequest") ? this.events.emit("fullscreenRequest", void 0) : this.setLayoutMode(this.store.getState().layout.mode === "inline" ? "browserFullscreen" : "inline");
+ 					break;
 -				case "m":
 -				case "M": {
 -					e.preventDefault();
@@ -1314,13 +1351,17 @@ index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..286ec81ba05b3a54cac4022a560de725
 -						type: "setPanel",
 -						panel: t ? "none" : "menu"
 -					});
-+					e.preventDefault(), this.events.has("fullscreenRequest") ? this.events.emit("fullscreenRequest", void 0) : this.setLayoutMode("browserFullscreen");
- 					break;
+-					break;
 -				}
  				case "p":
  				case "P":
  					e.preventDefault(), this.updateSettings({ pageTurnMode: this.store.getState().settings.pageTurnMode === "spread" ? "single" : "spread" });
-@@ -3105,16 +2087,6 @@ var Rt = class {
+ 					break;
+-				case "c":
+-				case "C":
+-					e.preventDefault(), this.updateSettings({ hasCover: !this.store.getState().settings.hasCover });
+-					break;
+ 				case "o":
  				case "O":
  					e.preventDefault(), this.toggleOverlay();
  					break;
@@ -1337,7 +1378,20 @@ index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..286ec81ba05b3a54cac4022a560de725
  			}
  		};
  		window.addEventListener("keydown", e), this.unsubscribers.push(() => window.removeEventListener("keydown", e));
-@@ -3192,7 +2164,7 @@ var Rt = class {
+@@ -3155,11 +2107,10 @@ var Rt = class {
+ 				heightPx: e
+ 			});
+ 		}
+-		let t = this.store.getState().layout.mode;
+ 		this.store.dispatch({
+ 			type: "setLayoutMode",
+ 			layoutMode: e
+-		}), e !== t && this.notify(this.i18n.t(Nt[e])), await this.storage.saveSettings($(this.store.getState().settings)), await this.storage.saveLayout(this.store.getState().layout), this.events.emit("layoutChange", { layoutMode: e });
++		}), await this.storage.saveSettings($(this.store.getState().settings)), await this.storage.saveLayout(this.store.getState().layout), this.events.emit("layoutChange", { layoutMode: e });
+ 	}
+ 	setWideHeight(e) {
+ 		this.store.dispatch({
+@@ -3192,7 +2143,7 @@ var Rt = class {
  				this.toggleAutoPageTurn();
  				return;
  			}
@@ -1347,7 +1401,7 @@ index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..286ec81ba05b3a54cac4022a560de725
  	}
  	isAtLastPage() {
 diff --git a/dist/types.d.ts b/dist/types.d.ts
-index 873f6474b43b8a777fdeaccc9036931739c35468..84dd7c5033231061382e7822f5d0f30b3777bab8 100644
+index 873f647..84dd7c5 100644
 --- a/dist/types.d.ts
 +++ b/dist/types.d.ts
 @@ -253,6 +253,8 @@ export interface ViewerEventMap {
