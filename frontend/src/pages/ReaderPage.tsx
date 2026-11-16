@@ -37,12 +37,22 @@ import { LoadingScreen } from "../components/common/LoadingScreen";
 import { ReaderToolbar } from "../components/reader/ReaderToolbar";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { getReaderPreferences } from "../lib/readerPrefs";
+import {
+  exitElementFullscreen,
+  FULLSCREEN_CHANGE_EVENTS,
+  getFullscreenElement,
+  requestElementFullscreen,
+} from "../lib/fullscreen";
 
 export function ReaderPage() {
   const { id: idParam, token } = useParams<{ id: string; token: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { resolvedMode } = useTheme();
   const viewerRef = useRef<MangaViewerHandle>(null);
+  // The reader shell doubles as the native-fullscreen element: requesting it
+  // (rather than `documentElement`) keeps the app top bar inside the fullscreen
+  // subtree, so the exit button stays reachable on desktop.
+  const shellRef = useRef<HTMLDivElement>(null);
   // Stable for the component's lifetime: page URLs stream in here while comimi
   // keeps a fixed set of page slots (see galleryPageSlotsToManga).
   const [pageUrlStore] = useState(() => new PageUrlStore());
@@ -60,7 +70,7 @@ export function ReaderPage() {
   // same handle.
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("inline");
   const [nativeFullscreen, setNativeFullscreen] = useState(
-    () => typeof document !== "undefined" && document.fullscreenElement !== null,
+    () => getFullscreenElement() !== null,
   );
   const [viewerReady, setViewerReady] = useState(false);
   const [readerSettings, setReaderSettings] = useState<ReaderSettings>(
@@ -207,6 +217,10 @@ export function ReaderPage() {
     viewerRef.current?.toggleAutoPageTurn();
   }, []);
 
+  const handleSetOverlayVisible = useCallback((visible: boolean) => {
+    viewerRef.current?.setOverlayVisible(visible);
+  }, []);
+
   const handleReady = useCallback(() => {
     setViewerReady(true);
     if (autoPageTurnEnabled) viewerRef.current?.setAutoPageTurn(true);
@@ -224,7 +238,7 @@ export function ReaderPage() {
     if (!viewer) return;
     if (!autoFullscreenOnOpenRef.current) return;
     if (viewer.getState().layout.mode !== "inline") return;
-    if (document.fullscreenElement) {
+    if (getFullscreenElement()) {
       void viewer.updateSettings({ layoutMode: "browserFullscreen" });
     } else {
       void viewer.setLayoutMode("browserFullscreen");
@@ -237,19 +251,28 @@ export function ReaderPage() {
   }, []);
 
   // 全屏 = 库的 browserFullscreen 布局（跨平台一致、iOS 可用）叠加容器的
-  // 原生全屏（可用时隐藏浏览器 UI）。退出全屏由库内 dock 的视图切换器负责。
+  // 原生全屏（可用时隐藏浏览器 UI）。只设置布局模式在已经铺满视口的阅读器里
+  // 看不出任何区别，所以进入时必须真的请求原生全屏；退出时由库的
+  // setLayoutMode("inline") 负责 exitFullscreen。即使浏览器不支持原生全屏
+  // （如 iOS），布局模式仍会切换，按钮和 F 键至少不会变成空操作。
   const toggleFullscreen = useCallback(() => {
     const isFull =
-      document.fullscreenElement !== null ||
+      getFullscreenElement() !== null ||
       layoutMode === "browserFullscreen" ||
       layoutMode === "nativeFullscreen";
-    applyLayoutMode(isFull ? "inline" : "browserFullscreen");
+    if (isFull) {
+      applyLayoutMode("inline");
+      void exitElementFullscreen();
+      return;
+    }
+    applyLayoutMode("browserFullscreen");
+    void requestElementFullscreen(shellRef.current);
   }, [applyLayoutMode, layoutMode]);
 
   // 用户通过浏览器/系统手势退出原生全屏时，库不会自行回到 inline，这里补齐。
   useEffect(() => {
     const handleFullscreenChange = () => {
-      const active = document.fullscreenElement !== null;
+      const active = getFullscreenElement() !== null;
       setNativeFullscreen(active);
       if (active) return;
       setLayoutMode((mode) =>
@@ -258,17 +281,20 @@ export function ReaderPage() {
           : mode,
       );
     };
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () =>
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    for (const eventName of FULLSCREEN_CHANGE_EVENTS) {
+      document.addEventListener(eventName, handleFullscreenChange);
+    }
+    return () => {
+      for (const eventName of FULLSCREEN_CHANGE_EVENTS) {
+        document.removeEventListener(eventName, handleFullscreenChange);
+      }
+    };
   }, []);
 
   // 离开路由时主动退出全屏，不依赖「节点移除浏览器自动退出」的时机
   useEffect(
     () => () => {
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      }
+      void exitElementFullscreen();
     },
     [],
   );
@@ -371,6 +397,7 @@ export function ReaderPage() {
 
   return (
     <div
+      ref={shellRef}
       data-fullscreen={isFullscreen}
       className="reader-shell relative flex h-[100dvh] flex-col bg-kumo-base"
     >
@@ -387,6 +414,7 @@ export function ReaderPage() {
         onBack={handleBack}
         onToggleFullscreen={toggleFullscreen}
         onToggleAutoPageTurn={handleToggleAutoPageTurn}
+        onSetOverlayVisible={handleSetOverlayVisible}
         onGoToPage={handleGoToPage}
         onUpdateSettings={handleUpdateSettings}
       />

@@ -204,9 +204,9 @@ comimi 原生的平移翻页只在触摸滑动结束时的「惯性翻页」路�
 | 左右侧箭头 | `we` / `.comimi-arrows` | 删除（点击区域、按键和进度条已覆盖翻页） |
 | dock 的自动播放、单页/双页、视图切换、设置按钮 | `Me.buildRow` / `.comimi-controls-row` / `je` / `.comimi-autoplay` / `.comimi-page-mode` / `.comimi-view-switcher` / `.comimi-settings` | 删除（顶栏与设置面板已覆盖） |
 | dock 进度条与触摸预览 | `Me.buildSeek` / `.comimi-seek*` | **保留** |
-| 键盘 `M`（菜单）与 `S`（设置） | `bindKeyboard` | 删除（无对应面板） |
-| 键盘 `Esc` 关闭面板 | `bindKeyboard` | 只保留「回到 inline」，不再 `setPanel("none")` |
-| 键盘 `←` / `→` / `Space` / `A` / `N` / `F` / `P` / `C` / `O` | `bindKeyboard` | **保留**（分别翻页、自动播放、标准布局、全屏请求、跨页、封面、控制层） |
+| 键盘 `M`（菜单）与 `S`（设置） | `bindKeyboard` | 删除（无对应面板，应用顶栏接管菜单） |
+| 键盘 `Esc` 关闭面板 | `bindKeyboard` | 只保留「回到 inline」；面板关闭与退出阅读器由应用顶栏接管 |
+| 键盘 `←` / `→` / `Space` / `A` / `F` / `P` / `O` | `bindKeyboard` | **保留**（分别翻页、自动播放、全屏请求、跨页、控制层），其中 `F` / `P` / `O` 由应用侧映射覆盖 |
 
 第二轮清理继续删除只服务上述 UI 的传递性代码：
 
@@ -291,6 +291,23 @@ bun run repro:reader-loading      # 诊断探针：仍白屏则 exit 0，已修�
 
 - `src/index.css`：用 `.reader-shell:has(.reader-panel)` 在应用侧面板打开期间覆盖 dock 的 `[data-overlay="false"]` 隐藏样式，让进度条与顶栏一起保持可见；面板关闭后恢复 comimi 原有的隐藏过渡。
 - `e2e/reader-pages.mjs`：打开阅读设置并等待超过自动隐藏时间，断言 dock 仍可见，防止回归。
+
+### 应用侧键盘映射与全屏
+
+阅读器的键盘映射由应用顶栏（`ReaderToolbar`）在 `window` 的捕获阶段统一处理，并 `preventDefault` / `stopPropagation`，避免 comimi 内置的 `F` / `P` / `O` 绑定同时触发：
+
+| 键 | 行为 |
+| --- | --- |
+| `F` | 切换全屏 |
+| `Esc` | 先关闭打开的面板；没有面板时退出阅读器，返回画廊详情 |
+| `M` | 显示 / 隐藏菜单（顶栏控制层）；面板打开时一并关闭 |
+| `C` | 单页 / 跨页 |
+| `P` | 打开 / 关闭页面列表 |
+| `N` / `O` | 已删除：事件被吞掉，不再触发布局或控制层切换 |
+
+输入框、下拉框和 `contenteditable` 中不拦截；带 `Ctrl` / `Meta` / `Alt` 的组合键留给浏览器。
+
+全屏封装在 `src/lib/fullscreen.ts`：兼容标准与 `webkit` / `ms` 前缀 API。进入时对 `.reader-shell`（而非 `documentElement`）请求原生全屏，顶栏因此仍在全屏子树内；浏览器不支持或拒绝时仍切换到 comimi 的 `browserFullscreen` 布局，按钮和 `F` 不会变成空操作。`fullscreenchange` / `webkitfullscreenchange` / `MSFullscreenChange` 都会同步顶栏状态，离开路由时主动退出原生全屏。
 
 ## 环境变量
 

@@ -41,6 +41,8 @@ interface ReaderToolbarProps {
   onBack: () => void;
   onToggleFullscreen: () => void;
   onToggleAutoPageTurn: () => void;
+  /** Show/hide the reader's control layer (top bar + progress dock). */
+  onSetOverlayVisible: (visible: boolean) => void;
   onGoToPage: (pageIndex: number) => void;
   onUpdateSettings: (patch: Partial<ViewerSettings>) => void;
 }
@@ -191,6 +193,7 @@ export function ReaderToolbar({
   onBack,
   onToggleFullscreen,
   onToggleAutoPageTurn,
+  onSetOverlayVisible,
   onGoToPage,
   onUpdateSettings,
 }: ReaderToolbarProps) {
@@ -204,18 +207,90 @@ export function ReaderToolbar({
     setOpenPanel((current) => (current === panel ? null : panel));
   }, []);
 
-  // Escape closes the open panel; keep comimi's Esc-to-inline shortcut from
-  // firing underneath it.
+  // Reader-wide keyboard map. comimi still binds a few keys of its own
+  // (including P for spread), so this handler runs in the capture phase and
+  // stops the event before it reaches the library. Escape leaves the reader;
+  // the other keys are the app's own: F fullscreen, M menu/control layer,
+  // C spread, P page list. N and O used to belong to comimi (standard layout /
+  // overlay) and are deliberately swallowed.
   useEffect(() => {
-    if (!openPanel) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.stopPropagation();
-      setOpenPanel(null);
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("input, select, textarea, [contenteditable='true']")
+      ) {
+        return;
+      }
+      // Leave browser/app shortcuts (Ctrl+F, Cmd+P, …) alone.
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+      const claim = () => {
+        event.preventDefault();
+        event.stopPropagation();
+      };
+
+      if (event.key === "Escape") {
+        claim();
+        if (event.repeat) return;
+        if (openPanel) {
+          setOpenPanel(null);
+          return;
+        }
+        onBack();
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      switch (key) {
+        case "f":
+          claim();
+          if (!event.repeat) onToggleFullscreen();
+          break;
+        case "m":
+          claim();
+          if (event.repeat) break;
+          // The top bar is the reader's menu. M reveals it, or dismisses the
+          // open panel together with it when it is already showing.
+          if (openPanel || overlayVisible) {
+            setOpenPanel(null);
+            onSetOverlayVisible(false);
+          } else {
+            onSetOverlayVisible(true);
+          }
+          break;
+        case "c":
+          claim();
+          if (!event.repeat) {
+            onUpdateSettings({
+              pageTurnMode:
+                viewerSettings?.pageTurnMode === "spread" ? "single" : "spread",
+            });
+          }
+          break;
+        case "p":
+          claim();
+          if (!event.repeat) togglePanel("pages");
+          break;
+        case "n":
+        case "o":
+          // Bindings removed from the reader; keep them away from comimi.
+          claim();
+          break;
+      }
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [openPanel]);
+  }, [
+    openPanel,
+    overlayVisible,
+    onBack,
+    onToggleFullscreen,
+    onSetOverlayVisible,
+    onUpdateSettings,
+    viewerSettings,
+    togglePanel,
+  ]);
 
   const intervalSeconds = viewerSettings
     ? Math.round(viewerSettings.autoPageTurnIntervalMs / 1000)

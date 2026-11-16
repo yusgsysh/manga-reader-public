@@ -42,18 +42,17 @@ const SHORTCUT_SECTIONS: ShortcutSection[] = [
     title: "显示模式",
     wrap: true,
     items: [
-      { keys: ["N"], label: "标准" },
-      { keys: ["F"], label: "全屏" },
-      { keys: ["Esc"], label: "关闭面板 / 退出全屏" },
+      { keys: ["F"], label: "切换全屏" },
+      { keys: ["C"], label: "切换跨页" },
     ],
   },
   {
     title: "通用",
     wrap: true,
     items: [
-      { keys: ["O"], label: "切换控制层" },
-      { keys: ["P"], label: "切换跨页" },
-      { keys: ["C"], label: "切换封面" },
+      { keys: ["M"], label: "菜单" },
+      { keys: ["P"], label: "页面列表" },
+      { keys: ["Esc"], label: "退出阅读器" },
     ],
   },
 ];
