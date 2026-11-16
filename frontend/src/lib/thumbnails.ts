@@ -1,16 +1,17 @@
-// comimi renders every page-list / seek-preview thumbnail eagerly, so a large
-// gallery fires hundreds of `/image-cache/page-thumbnail` requests at once. This
-// module intercepts those images and feeds all of them through a small
-// concurrency-limited queue: every thumbnail is loaded as soon as it appears,
-// never gated on the viewport, but only `concurrency` requests are in flight.
+// Page lists (the app's reader/gallery grids) render every thumbnail eagerly,
+// so a large gallery fires hundreds of `/image-cache/page-thumbnail` requests at
+// once. This module intercepts those images and feeds all of them through a
+// small concurrency-limited queue: every thumbnail is loaded as soon as it
+// appears, never gated on the viewport, but only `concurrency` requests are in
+// flight.
 
 const LAZY_FLAG = "lazyThumb";
 // The original URL is kept on the node so a later run (effect re-run,
 // re-parented node) can adopt images that a previous run already deferred.
 const LAZY_SRC = "lazyThumbSrc";
 
-// Shared cap for /page-thumbnail requests, used by both the reader's eager
-// page-list thumbnails and the gallery detail's paginated grid.
+// Shared cap for /page-thumbnail requests, used by the reader and gallery
+// detail page lists.
 export const THUMBNAIL_CONCURRENCY = 5;
 
 export function isPageThumbnailURL(url: string): boolean {
@@ -24,22 +25,6 @@ export function isPageThumbnailURL(url: string): boolean {
     );
   } catch {
     return false;
-  }
-}
-
-/** Returns the gallery page index of an index-addressed thumbnail URL. */
-export function pageThumbnailIndex(url: string): number | null {
-  try {
-    const base =
-      typeof window !== "undefined" ? window.location.origin : undefined;
-    const parsed = new URL(url, base);
-    if (!parsed.pathname.endsWith("/page-thumbnail")) return null;
-    const raw = parsed.searchParams.get("index");
-    if (raw === null) return null;
-    const value = Number(raw);
-    return Number.isInteger(value) && value >= 0 ? value : null;
-  } catch {
-    return null;
   }
 }
 
@@ -110,57 +95,28 @@ export function createThumbnailQueue(concurrency = 5): ThumbnailQueue {
 
 interface LoadThumbnailsOptions {
   concurrency?: number;
-  /**
-   * When set, only thumbnails with a page index below the returned count are
-   * enqueued; the rest keep their placeholder until a later `refresh()`. Used by
-   * the reader so prefetching never runs ahead of the streamed page list.
-   * Thumbnails without an index (sprite-rectangle form) are always allowed.
-   */
-  getLimit?: () => number;
 }
 
-/** Cleanup for {@link loadThumbnails}; call `refresh` to re-scan for newly
- *  eligible thumbnails after the limit grows. */
-export interface LoadThumbnailsHandle {
-  (): void;
-  refresh: () => void;
-}
+/** Cleanup for {@link loadThumbnails}. */
+export type LoadThumbnailsHandle = () => void;
 
 /**
- * Watches `root` for comimi thumbnails and loads every one of them through a
- * concurrency-limited queue as soon as it appears. Returns a callable cleanup
- * handle with a `refresh` method.
+ * Watches `root` for page thumbnails and loads every one of them through a
+ * concurrency-limited queue as soon as it appears. Returns a cleanup function.
  */
 export function loadThumbnails(
   root: HTMLElement,
-  {
-    concurrency = THUMBNAIL_CONCURRENCY,
-    getLimit,
-  }: LoadThumbnailsOptions = {},
+  { concurrency = THUMBNAIL_CONCURRENCY }: LoadThumbnailsOptions = {},
 ): LoadThumbnailsHandle {
   const queue = createThumbnailQueue(concurrency);
-
-  const allowed = (url: string): boolean => {
-    if (!getLimit) return true;
-    const index = pageThumbnailIndex(url);
-    if (index === null) return true;
-    return index < getLimit();
-  };
 
   const defer = (node: Node) => {
     if (!(node instanceof HTMLImageElement)) return;
     // comimi builds the seek-preview thumbnail on demand (hover over the seek
-    // bar) and sets its src directly. Intercepting it would remove that src and
-    // gate it behind `getLimit` (the streamed-page cap), so hovering an
-    // unstreamed page would show a blank preview. Leave it to load natively.
+    // bar) and sets its src directly. Intercepting it would remove that src
+    // until a queue slot frees up, leaving the hover preview blank. Leave it to
+    // load natively.
     if (node.closest(".comimi-seek-preview")) return;
-    // The app's own top-bar page list (ReaderPageList) runs its own ungated
-    // loadThumbnails on its container. The stream-gated observer (the reader's,
-    // which is the only one passing `getLimit`) must leave those thumbnails to
-    // it: the user opened that list to see every page, so its index-addressed
-    // thumbnails load straight away instead of waiting on the streamed-page cap
-    // that limits comimi's eager menu thumbnails.
-    if (getLimit && node.closest(".reader-page-list")) return;
     const stored = node.dataset[LAZY_SRC];
     const url = stored ?? node.src;
     if (!url || !isPageThumbnailURL(url)) return;
@@ -177,9 +133,6 @@ export function loadThumbnails(
       // Already loading or loaded (possibly by a previous run).
       return;
     }
-    // Still waiting for a slot. Skip if it is beyond the current limit; a
-    // later refresh() re-runs defer and enqueues it once the limit has grown.
-    if (!allowed(url)) return;
     // Queue it now, or re-queue it if an earlier run was cleaned up while it
     // was waiting.
     queue.enqueue({ img: node, url });
@@ -210,10 +163,8 @@ export function loadThumbnails(
 
   scan(root);
 
-  const cleanup = (() => {
+  return () => {
     mutations.disconnect();
     queue.stop();
-  }) as LoadThumbnailsHandle;
-  cleanup.refresh = () => scan(root);
-  return cleanup;
+  };
 }

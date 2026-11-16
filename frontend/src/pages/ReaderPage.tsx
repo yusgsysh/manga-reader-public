@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { useParams, useSearchParams } from "react-router";
 import { Button } from "@cloudflare/kumo";
 import { ArrowLeft } from "@phosphor-icons/react";
@@ -33,41 +32,20 @@ import {
   sameReaderSettings,
   type ReaderSettings,
 } from "../lib/readerSettings";
-import {
-  loadThumbnails,
-  type LoadThumbnailsHandle,
-  THUMBNAIL_CONCURRENCY,
-} from "../lib/thumbnails";
 import { ErrorState } from "../components/common/ErrorState";
 import { LoadingScreen } from "../components/common/LoadingScreen";
 import { ReaderToolbar } from "../components/reader/ReaderToolbar";
-import { ReaderSettingsPreference } from "../components/reader/ReaderSettingsPreference";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { getReaderPreferences } from "../lib/readerPrefs";
-
-// 菜单底部返回入口的文案：补丁只引用 key，库内没有内置。
-const READER_TRANSLATIONS = { "menu.backToGallery": "返回画廊" };
 
 export function ReaderPage() {
   const { id: idParam, token } = useParams<{ id: string; token: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { resolvedMode } = useTheme();
   const viewerRef = useRef<MangaViewerHandle>(null);
-  // The shell mounts only once the reader data is ready, which can happen
-  // after `manga` is already set — keying the thumbnail watcher off the element
-  // itself guarantees it starts with the shell instead of riding data changes
-  // (and avoids restarting it every time `manga` changes identity).
-  const [shellEl, setShellEl] = useState<HTMLDivElement | null>(null);
-  const attachShell = useCallback((el: HTMLDivElement | null) => {
-    setShellEl(el);
-  }, []);
   // Stable for the component's lifetime: page URLs stream in here while comimi
   // keeps a fixed set of page slots (see galleryPageSlotsToManga).
   const [pageUrlStore] = useState(() => new PageUrlStore());
-  // How many pages the live stream has delivered so far; caps thumbnail
-  // prefetch and is bumped without re-rendering the viewer.
-  const receivedRef = useRef(0);
-  const thumbnailsRef = useRef<LoadThumbnailsHandle | null>(null);
   const id = Number(idParam);
   const goBack = useBackNavigation(`/gallery/${id}/${token}`);
   const restart = searchParams.get("restart") === "1";
@@ -92,8 +70,6 @@ export function ReaderPage() {
   // Mirrors the active viewer's overlay state (the auto-hiding progress bar)
   // so the top bar can show and hide together with it.
   const [overlayVisible, setOverlayVisible] = useState(false);
-  // The app-level preference is appended to comimi's own settings sheet.
-  const [settingsHost, setSettingsHost] = useState<HTMLElement | null>(null);
   // Read once: changing the preference later must not yank the current reading
   // session into fullscreen, only the next one that is opened.
   const autoFullscreenOnOpenRef = useRef(
@@ -154,17 +130,13 @@ export function ReaderPage() {
   // empty.
   useEffect(() => {
     pageUrlStore.reset();
-    receivedRef.current = 0;
     return () => pageUrlStore.reset();
   }, [pageUrlStore, id, token]);
 
-  // Hand every newly streamed page URL to the store, then let the thumbnail
-  // queue pick up any that just crossed the received-page limit.
+  // Hand every newly streamed page URL to the store.
   useEffect(() => {
     const list = pagesQuery.data?.pages ?? [];
-    receivedRef.current = list.length;
     for (const page of list) pageUrlStore.set(page.index, page.page_url);
-    thumbnailsRef.current?.refresh();
   }, [pageUrlStore, pagesQuery.data]);
 
   // Once the live list has settled short of the authoritative total, stop
@@ -186,17 +158,11 @@ export function ReaderPage() {
     [recordPage],
   );
 
-  // comimi 菜单里的返回入口：先落盘进度，再按浏览器历史 / 深链回退规则返回。
+  // 顶栏返回：先落盘进度，再按浏览器历史 / 深链回退规则返回。
   const handleBack = useCallback(() => {
     flushProgress();
     goBack();
   }, [flushProgress, goBack]);
-
-  // Close the library's own panel (reachable via its keyboard shortcuts) when
-  // an app panel opens, so the two never overlap.
-  const handleClosePanel = useCallback(() => {
-    viewerRef.current?.setPanel("none");
-  }, []);
 
   const handleGoToPage = useCallback(
     (pageIndex: number) => {
@@ -297,29 +263,6 @@ export function ReaderPage() {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
-  // The app preference appends a row to comimi's settings sheet. The sheet is
-  // created by the library after the viewer mounts, so wait for it instead of
-  // assuming it exists. It is rebuilt whenever the viewer is remounted, which
-  // the mutation observer follows.
-  useEffect(() => {
-    if (!shellEl) return;
-    const findHost = () =>
-      shellEl.querySelector<HTMLElement>(".comimi-settings-panel-inner");
-    const attach = () => {
-      const found = findHost();
-      if (!found) return;
-      observer.disconnect();
-      setSettingsHost(found);
-    };
-    const observer = new MutationObserver(attach);
-    observer.observe(shellEl, { childList: true, subtree: true });
-    const frame = requestAnimationFrame(attach);
-    return () => {
-      observer.disconnect();
-      cancelAnimationFrame(frame);
-    };
-  }, [shellEl]);
-
   // 离开路由时主动退出全屏，不依赖「节点移除浏览器自动退出」的时机
   useEffect(
     () => () => {
@@ -385,23 +328,6 @@ export function ReaderPage() {
   const error =
     galleryQuery.error ?? pagesQuery.error ?? progressQuery.error;
 
-  // Route comimi's page-list / seek-preview thumbnails through a bounded
-  // queue: they load as they appear, but never ahead of the streamed list.
-  // Every URL is still handed to the queue lazily; only concurrency and the
-  // received-page cap apply.
-  useEffect(() => {
-    if (!shellEl) return;
-    const handle = loadThumbnails(shellEl, {
-      concurrency: THUMBNAIL_CONCURRENCY,
-      getLimit: () => receivedRef.current,
-    });
-    thumbnailsRef.current = handle;
-    return () => {
-      thumbnailsRef.current = null;
-      handle();
-    };
-  }, [shellEl]);
-
   useDocumentTitle(gallery?.title);
 
   if (loading) {
@@ -445,7 +371,6 @@ export function ReaderPage() {
 
   return (
     <div
-      ref={attachShell}
       data-fullscreen={isFullscreen}
       className="reader-shell relative flex h-[100dvh] flex-col bg-kumo-base"
     >
@@ -463,11 +388,10 @@ export function ReaderPage() {
         onToggleFullscreen={toggleFullscreen}
         onToggleAutoPageTurn={handleToggleAutoPageTurn}
         onGoToPage={handleGoToPage}
-        onClosePanel={handleClosePanel}
         onUpdateSettings={handleUpdateSettings}
       />
 
-      {/* Reader：返回与全屏入口在上方工具栏，comimi 自己的浮动菜单头行已隐藏 */}
+      {/* Reader：返回、全屏与阅读设置都在上方工具栏，comimi 不再渲染自己的菜单/设置面板 */}
       <div className="min-h-0 flex-1">
         <MangaViewer
           // Remount on gallery change so `initialPageIndex` applies to the new
@@ -477,13 +401,11 @@ export function ReaderPage() {
           manga={manga!}
           initialPageIndex={readerPage}
           locale="zh-CN"
-          translations={READER_TRANSLATIONS}
           storage={{ enabled: false }}
           settings={comimiSettings}
           resolvePageSrc={resolvePageSrc}
           onReady={handleReady}
           onPageChange={handlePageChange}
-          onBack={handleBack}
           onFullscreenRequest={toggleFullscreen}
           onLayoutChange={handleLayoutChange}
           onSettingsChange={handleSettingsChange}
@@ -492,10 +414,6 @@ export function ReaderPage() {
           className="h-full w-full"
         />
       </div>
-
-      {/* App-level reader preference, appended to comimi's settings sheet. */}
-      {settingsHost &&
-        createPortal(<ReaderSettingsPreference />, settingsHost)}
     </div>
   );
 }

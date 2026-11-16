@@ -1,48 +1,1010 @@
 diff --git a/dist/index.js b/dist/index.js
-index 4fd4ab2..de17499 100644
+index 4fd4ab218d1059247f00ef6cad0a07f148e7f2d7..286ec81ba05b3a54cac4022a560de7251eef73c7 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -964,7 +964,9 @@ var xe = {
- 		let e = document.createElement("div");
- 		e.className = "comimi-menu-view comimi-menu-view-menu";
- 		let t = document.createElement("div");
--		return t.className = "comimi-menu-list", t.append(this.renderMenuLink("menu.openPages", () => this.callbacks.setPanel("pages")), this.renderMenuLink("menu.openFavorites", () => this.callbacks.setPanel("favorites")), this.renderMenuLink("menu.openShortcuts", () => this.callbacks.setPanel("shortcuts"), "comimi-menu-link-shortcuts"), this.renderMenuLink("menu.openShare", () => this.callbacks.setPanel("share")), this.renderMenuLink("menu.openAbout", () => this.callbacks.setPanel("about"))), e.append(t), e;
-+		return t.className = "comimi-menu-list", t.append(this.renderMenuLink("menu.openPages", () => this.callbacks.setPanel("pages")), this.renderMenuLink("menu.openShortcuts", () => this.callbacks.setPanel("shortcuts"), "comimi-menu-link-shortcuts"), this.renderMenuLink("menu.openShare", () => this.callbacks.setPanel("share")), this.renderMenuLink("menu.backToGallery", () => {
-+			this.callbacks.setPanel("none"), this.callbacks.requestBack?.();
-+		})), e.append(t), e;
+@@ -466,7 +466,7 @@ var s = {
+ 	t(e, t = {}) {
+ 		return (this.translations[this.locale]?.[e] ?? this.translations.ja[e] ?? e).replace(/\{\{(\w+)\}\}/g, (e, n) => String(t[n] ?? ""));
  	}
- 	renderMenuLink(e, t, n = "") {
- 		let r = document.createElement("button");
-@@ -988,7 +990,6 @@ var xe = {
- 			[["A"], "shortcut.autoPageTurnLabel"]
- 		])), this.options.lockLayoutMode || n.append(this.shortcutSection("shortcut.section.viewMode", [
- 			[["N", "Esc"], "layout.inline"],
+-}, m = "0.26.0", h = "https://github.com/yui540/comimi", g = "https://yui540.com/comimi", _ = "http://www.w3.org/2000/svg", ee = ["M17.43,53.54c-7.74,7.51-12.43,17.29-12.43,27.99,0,4.34.78,8.53,2.21,12.48", "M104.98,94.01c1.43-3.95,2.21-8.14,2.21-12.48,0-10.91-4.87-20.85-12.87-28.42"], te = "M55.79,43.81v-24.02c3.43-9.18,9.81-15.08,20.52-14.52,16.12.84,20.31,15.9,19.35,34.15-.25,4.75-.69,9.25-1.51,13.3", ne = "M55.79,43.62v-24.02c-3.25-9.2-9.34-15.11-19.78-14.56-16.53.87-21.21,15.95-20.25,34.2.26,4.91.67,9.56,1.51,13.72", re = "M80.44,49.41H31.46c-12.97,6.71-21.6,18.57-21.6,32.1,0,5.8,1.59,11.3,4.43,16.21h83.34c2.83-4.92,4.43-10.41,4.43-16.21,0-13.53-8.63-25.4-21.6-32.1Z", ie = [
++}, _ = "http://www.w3.org/2000/svg", ee = ["M17.43,53.54c-7.74,7.51-12.43,17.29-12.43,27.99,0,4.34.78,8.53,2.21,12.48", "M104.98,94.01c1.43-3.95,2.21-8.14,2.21-12.48,0-10.91-4.87-20.85-12.87-28.42"], te = "M55.79,43.81v-24.02c3.43-9.18,9.81-15.08,20.52-14.52,16.12.84,20.31,15.9,19.35,34.15-.25,4.75-.69,9.25-1.51,13.3", ne = "M55.79,43.62v-24.02c-3.25-9.2-9.34-15.11-19.78-14.56-16.53.87-21.21,15.95-20.25,34.2.26,4.91.67,9.56,1.51,13.72", re = "M80.44,49.41H31.46c-12.97,6.71-21.6,18.57-21.6,32.1,0,5.8,1.59,11.3,4.43,16.21h83.34c2.83-4.92,4.43-10.41,4.43-16.21,0-13.53-8.63-25.4-21.6-32.1Z", ie = [
+ 	"M12.53,14.42c-3.15,3.27-3.15,8.45,0,11.6,1.58,1.58,3.6,2.36,5.74,2.36,2.25,0,4.28-.79,5.86-2.36,1.91-1.91,5.18-1.91,7.21,0,1.91,2.03,1.91,5.18,0,7.21-3.49,3.49-8.11,5.29-13.07,5.29s-9.46-1.8-12.95-5.29C-1.77,26.02-1.77,14.42,5.32,7.32,12.53.11,24.13.11,31.34,7.32c1.91,1.91,1.91,5.18,0,7.1-2.03,2.03-5.29,2.03-7.21,0-3.15-3.15-8.45-3.15-11.6,0Z",
+ 	"M76.15,20.27c0,10.02-8.22,18.25-18.36,18.25-4.96,0-9.57-1.8-12.95-5.29-3.49-3.49-5.41-8.11-5.41-12.95,0-10.14,8.22-18.36,18.36-18.36s18.36,8.22,18.36,18.36ZM66.01,20.27c0-4.5-3.72-8.22-8.22-8.22s-8.22,3.72-8.22,8.22c0,2.14.9,4.17,2.36,5.74,1.58,1.58,3.6,2.36,5.86,2.36,4.5,0,8.22-3.6,8.22-8.11Z",
+ 	"M131.42,15.88v17.57c0,2.82-2.25,5.07-5.07,5.07s-5.07-2.25-5.07-5.07V15.88c0-2.36-2.03-4.39-4.51-4.39-1.13,0-2.25.45-3.15,1.24-.79.9-1.24,2.03-1.24,3.15v14.57c0,2.82-2.25,5.07-5.07,5.07s-5.07-2.25-5.07-5.07v-14.57c0-2.36-2.03-4.39-4.5-4.39s-4.39,1.92-4.39,4.39v17.68c0,2.7-2.25,4.96-5.07,4.96s-5.07-2.25-5.07-5.07V15.88c0-8,6.53-14.53,14.53-14.53,3.72,0,6.98,1.35,9.57,3.49,2.59-2.25,5.97-3.49,9.46-3.49,8.11,0,14.64,6.53,14.64,14.53Z",
+@@ -509,201 +509,6 @@ function y() {
+ 	return e.className = "comimi-logo", e.setAttribute("role", "img"), e.setAttribute("aria-label", "comimi"), e.append(ae(), oe()), e;
+ }
+ //#endregion
+-//#region src/components/icons.ts
+-function b(e, t) {
+-	switch (e) {
+-		case "arrow": return x("0 0 20 20", [S("M7.28685 6.64194L10.7742 10.0838L7.3011 13.3098C7.06547 13.5391 6.9336 13.8467 6.9336 14.1669C6.9336 14.4871 7.06547 14.7945 7.3011 15.0239C7.41902 15.1378 7.55971 15.2282 7.7149 15.29C7.87009 15.3517 8.03669 15.3835 8.20498 15.3835C8.37328 15.3835 8.53987 15.3517 8.69506 15.29C8.85025 15.2282 8.99095 15.1378 9.10887 15.0239L13.4787 10.9746C13.7134 10.7475 13.845 10.4422 13.845 10.1243C13.845 9.80629 13.7134 9.50107 13.4787 9.27399L9.10886 4.96826C8.86878 4.74159 8.54377 4.61426 8.20498 4.61426C7.86619 4.61426 7.54118 4.74159 7.3011 4.96826C7.18102 5.08007 7.08568 5.2134 7.02057 5.36056C6.95546 5.50772 6.92188 5.6657 6.92188 5.82528C6.92188 5.98487 6.95546 6.14293 7.02057 6.29009C7.08568 6.43725 7.18102 6.57058 7.3011 6.68239L7.28685 6.64194Z")], t);
+-		case "check": return x("0 0 20 20", [S("M16.2071 5.29289C16.5976 5.68342 16.5976 6.31658 16.2071 6.70711L8.70711 14.2071C8.31658 14.5976 7.68342 14.5976 7.29289 14.2071L3.79289 10.7071C3.40237 10.3166 3.40237 9.68342 3.79289 9.29289C4.18342 8.90237 4.81658 8.90237 5.20711 9.29289L8 12.0858L14.7929 5.29289C15.1834 4.90237 15.8166 4.90237 16.2071 5.29289Z")], t);
+-		case "default": return x("0 0 20 20", [C("1", "4", "18", "12", "3")], t);
+-		case "wide": return x("0 0 20 20", [C("1", "2.5", "18", "15", "3"), S("M5.5719 6.31811C5.88754 6.00907 6.39381 6.01422 6.70294 6.3298C7.01206 6.64539 7.00674 7.15165 6.69124 7.46084L5.06993 9.04896L14.7642 9.16988L13.1761 7.54857C12.867 7.23293 12.8722 6.72667 13.1878 6.41754C13.5034 6.10841 14.0096 6.11374 14.3188 6.42923L17.2579 9.42977C17.5671 9.7454 17.5619 10.2516 17.2462 10.5608L14.2457 13.4999C13.93 13.809 13.4238 13.8038 13.1146 13.4882C12.8055 13.1726 12.8109 12.6664 13.1263 12.3572L14.7477 10.7691L5.0534 10.6481L6.64152 12.2695C6.95055 12.5851 6.94541 13.0914 6.62982 13.4005C6.31424 13.7096 5.80797 13.7043 5.49879 13.3888L2.55967 10.3883C2.2505 10.0726 2.25573 9.5664 2.57136 9.25723L5.5719 6.31811Z")], t);
+-		case "fullscreen": return x("0 0 20 20", [C("1", "1", "18", "18", "3"), S("M8.69922 3.7002C9.14096 3.7003 9.49902 4.05824 9.49902 4.5C9.49902 4.94176 9.14096 5.2997 8.69922 5.2998H6.42969L14.6992 13.5693V11.2998C14.6993 10.8581 15.0573 10.5 15.499 10.5C15.9408 10.5 16.2987 10.8581 16.2988 11.2998V15.5C16.2988 15.9418 15.9409 16.2998 15.499 16.2998H11.2988C10.8571 16.2997 10.499 15.9418 10.499 15.5C10.499 15.0582 10.8571 14.7003 11.2988 14.7002H13.5684L5.29883 6.43066V8.7002C5.29872 9.14193 4.94079 9.5 4.49902 9.5C4.05726 9.5 3.69932 9.14193 3.69922 8.7002V4.5C3.69922 4.05817 4.0572 3.7002 4.49902 3.7002H8.69922Z")], t);
+-		case "one": return x("0 0 20 20", [C("1", "2", "18", "16", "3"), se("6", "4", "8", "12", "1.5")], t);
+-		case "two": return x("0 0 20 20", [
+-			C("1", "2", "18", "16", "3"),
+-			S("M3 5.5C3 4.67157 3.67157 4 4.5 4H9.5V16H4.5C3.67157 16 3 15.3284 3 14.5V5.5Z"),
+-			S("M10.5 4H15.5C16.3284 4 17 4.67157 17 5.5V14.5C17 15.3284 16.3284 16 15.5 16H10.5V4Z")
+-		], t);
+-		case "play": return x("0 0 20 20", [S("M17.0385 7.78428L6.49809 1.19667C4.68077 0.190227 2.5 1.37966 2.5 3.48403V16.5678C2.5 18.5806 4.68077 19.8616 6.49809 18.7636L17.0385 12.176C18.7649 11.1696 18.7649 8.79072 17.0385 7.78428Z")], t);
+-		case "pause": return x("0 0 20 20", [S("M6.14289 18.3332H4.68573C3.47144 18.3332 2.5 17.3332 2.5 16.0832V3.9165C2.5 2.6665 3.47144 1.6665 4.68573 1.6665H6.14289C7.35718 1.6665 8.32862 2.6665 8.32862 3.9165V15.9998C8.40957 17.3332 7.43814 18.3332 6.14289 18.3332Z"), S("M15.3138 18.3332H13.8555C12.6402 18.3332 11.668 17.3332 11.668 16.0832V3.9165C11.668 2.6665 12.6402 1.6665 13.8555 1.6665H15.3138C16.5291 1.6665 17.5013 2.6665 17.5013 3.9165V15.9998C17.5013 17.3332 16.5291 18.3332 15.3138 18.3332Z")], t);
+-		case "settings": return x("0 0 24 24", [S("M10.0144 1.34782C11.2164 0.658798 12.6836 0.658798 13.8856 1.34782C13.8947 1.35299 13.9036 1.35831 13.9125 1.36376L20.1001 5.17383C21.3211 5.88071 22 7.15791 22 8.54376V15.56C22 16.9 21.3552 18.2127 20.1836 18.8369L14.0125 22.6368C14.0036 22.6423 13.9947 22.6476 13.9856 22.6527C12.7836 23.3418 11.3164 23.3418 10.1144 22.6527C10.1053 22.6476 10.0964 22.6423 10.0875 22.6368L3.89984 18.8267C2.67884 18.1198 2 16.8426 2 15.4568V8.54376C2 7.15919 2.6776 5.88306 3.8965 5.17578L9.98139 1.36758C9.99225 1.36078 10.0032 1.35419 10.0144 1.34782ZM11.0006 3.14323L4.91861 6.94964C4.90775 6.95644 4.89675 6.96302 4.88564 6.96939C4.31578 7.29605 4 7.87148 4 8.54376V15.4568C4 16.1291 4.31578 16.7045 4.88564 17.0312C4.89466 17.0364 4.9036 17.0417 4.91246 17.0471L11.0978 20.8558C11.6895 21.1893 12.4105 21.1893 13.0022 20.8558L19.1875 17.0471C19.2088 17.034 19.2306 17.0217 19.2528 17.0103C19.6582 16.8011 20 16.2698 20 15.56V8.54376C20 7.87148 19.6842 7.29605 19.1144 6.96939C19.1053 6.96422 19.0964 6.95891 19.0875 6.95346L12.9022 3.14482C12.3115 2.8118 11.5918 2.81127 11.0006 3.14323ZM12 9.8851C10.8402 9.8851 9.89999 10.8552 9.89999 12.0519C9.89999 13.2486 10.8402 14.2187 12 14.2187C13.1598 14.2187 14.1 13.2486 14.1 12.0519C14.1 10.8552 13.1598 9.8851 12 9.8851ZM7.89999 12.0519C7.89999 9.7155 9.73563 7.8215 12 7.8215C14.2644 7.8215 16.1 9.7155 16.1 12.0519C16.1 14.3883 14.2644 16.2823 12 16.2823C9.73563 16.2823 7.89999 14.3883 7.89999 12.0519Z")], t);
+-		case "heart": return x("0 0 24 25", [S("M16.2857 3.2998C14.5714 3.2998 13.0476 4.05958 12 5.29422C10.9524 4.05958 9.33333 3.2998 7.61905 3.2998C4.57143 3.2998 2 5.86405 2 8.90316C2 9.0931 2 9.28304 2 9.47299C2.38095 14.1266 7.33333 18.0205 10.2857 19.8249C10.7619 20.1099 11.3333 20.2998 12 20.2998C12.5714 20.2998 13.1429 20.1099 13.7143 19.8249C16.6667 17.9255 21.619 14.1266 22 9.47299C22 9.28304 22 9.0931 22 8.90316C22 5.86405 19.4286 3.2998 16.2857 3.2998Z")], t);
+-		case "light": return x("0 0 24 24", [
+-			S("M12 5.19995C8.4 5.19995 5.5 8.09995 5.5 11.7C5.5 15.3 8.4 18.2 12 18.2C15.6 18.2 18.5 15.3 18.5 11.7C18.5 8.09995 15.6 5.19995 12 5.19995ZM12 16.1C9.5 16.1 7.5 14.1 7.5 11.6C7.5 9.09995 9.5 7.09995 12 7.09995C14.5 7.09995 16.5 9.09995 16.5 11.6C16.5 14.1 14.5 16.1 12 16.1Z"),
+-			S("M12 4.6C12.6 4.6 13 4.2 13 3.6V2C13 1.4 12.6 1 12 1C11.4 1 11 1.4 11 2V3.6C11 4.1 11.4 4.6 12 4.6Z"),
+-			S("M5.30002 6.6999C5.50002 6.8999 5.80002 6.9999 6.00002 6.9999C6.20002 6.9999 6.50002 6.8999 6.70002 6.6999C7.10002 6.2999 7.10002 5.6999 6.70002 5.2999L5.60002 4.1999C5.20002 3.7999 4.60002 3.7999 4.20002 4.1999C3.80002 4.5999 3.80002 5.1999 4.20002 5.5999L5.30002 6.6999Z"),
+-			S("M4.6 12C4.6 11.4 4.2 11 3.6 11H2C1.4 11 1 11.4 1 12C1 12.6 1.4 13 2 13H3.6C4.1 13 4.6 12.6 4.6 12Z"),
+-			S("M5.30002 17.3L4.20002 18.4C3.80002 18.8 3.80002 19.4 4.20002 19.8C4.40002 20 4.70002 20.1 4.90002 20.1C5.10002 20.1 5.40002 20 5.60002 19.8L6.70002 18.7C7.10002 18.3 7.10002 17.7 6.70002 17.3C6.30002 16.9 5.70002 16.9 5.30002 17.3Z"),
+-			S("M12 19.3999C11.4 19.3999 11 19.7999 11 20.3999V21.9999C11 22.5999 11.4 22.9999 12 22.9999C12.6 22.9999 13 22.5999 13 21.9999V20.3999C13 19.8999 12.6 19.3999 12 19.3999Z"),
+-			S("M18.7 17.3C18.3 16.9 17.7 16.9 17.3 17.3C16.9 17.7 16.9 18.3 17.3 18.7L18.4 19.8C18.6 20 18.9 20.1 19.1 20.1C19.3 20.1 19.6 20 19.8 19.8C20.2 19.4 20.2 18.8 19.8 18.4L18.7 17.3Z"),
+-			S("M22 11H20.4C19.8 11 19.4 11.4 19.4 12C19.4 12.6 19.8 13 20.4 13H22C22.6 13 23 12.6 23 12C23 11.4 22.6 11 22 11Z"),
+-			S("M18 6.9999C18.3 6.9999 18.5 6.8999 18.7 6.6999L19.8 5.5999C20.2 5.1999 20.2 4.5999 19.8 4.1999C19.4 3.7999 18.8 3.7999 18.4 4.1999L17.3 5.2999C16.9 5.6999 16.9 6.2999 17.3 6.6999C17.5 6.8999 17.7 6.9999 18 6.9999Z")
+-		], t);
+-		case "dark": return x("0 0 24 24", [S("M12.3 22.0001C9.60005 22.0001 7.00005 21.0001 5.00005 19.0001C1.00005 15.0001 1.00005 8.70009 4.90005 4.80009C6.30005 3.30009 8.20005 2.30009 10.3 2.00009C10.7 1.90009 11.1 2.10009 11.3 2.50009C11.5 2.90009 11.5 3.30009 11.2 3.60009C9.00005 6.10009 9.20005 10.0001 11.6 12.4001C14 14.8001 17.8 15.0001 20.3 12.8001C20.6 12.5001 21.1 12.5001 21.4 12.7001C21.8 12.9001 22 13.3001 21.9 13.7001C21.6 15.8001 20.6 17.6001 19.2 19.1001C17.3 21.0001 14.8 22.0001 12.3 22.0001ZM8.20005 4.70009C7.50005 5.10009 6.80005 5.50009 6.20005 6.10009C3.10005 9.20009 3.20005 14.3001 6.30005 17.5001C9.50005 20.7001 14.6 20.7001 17.7 17.6001C18.3 17.0001 18.8 16.4001 19.1 15.6001C16.1 16.8001 12.5 16.1001 10 13.6001C7.80005 11.4001 7.10005 7.80009 8.20005 4.70009Z")], t);
+-		case "menu": return ce(t);
+-		case "close": return le(t);
+-	}
+-}
+-function x(e, t, n) {
+-	let r = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+-	return r.setAttribute("viewBox", e), r.setAttribute("fill", "none"), r.classList.add("comimi-icon"), n && r.classList.add(n), r.append(...t), r;
+-}
+-function S(e) {
+-	let t = document.createElementNS("http://www.w3.org/2000/svg", "path");
+-	return t.setAttribute("d", e), t.classList.add("comimi-icon-fill"), t;
+-}
+-function C(e, t, n, r, i) {
+-	let a = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+-	return a.setAttribute("x", e), a.setAttribute("y", t), a.setAttribute("width", n), a.setAttribute("height", r), a.setAttribute("rx", i), a.classList.add("comimi-icon-stroke"), a;
+-}
+-function se(e, t, n, r, i) {
+-	let a = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+-	return a.setAttribute("x", e), a.setAttribute("y", t), a.setAttribute("width", n), a.setAttribute("height", r), a.setAttribute("rx", i), a.classList.add("comimi-icon-fill"), a;
+-}
+-function ce(e) {
+-	let t = document.createElement("span");
+-	t.className = `comimi-menu-svg ${e ?? ""}`.trim();
+-	for (let e = 0; e < 3; e += 1) t.append(document.createElement("span"));
+-	return t;
+-}
+-function le(e) {
+-	let t = document.createElement("span");
+-	return t.className = `comimi-close-svg ${e ?? ""}`.trim(), t.append(document.createElement("span"), document.createElement("span")), t;
+-}
+-//#endregion
+-//#region src/components/inputs.ts
+-var w = "http://www.w3.org/2000/svg", ue = 11.4, de = 0, fe = class {
+-	root;
+-	input;
+-	label;
+-	constructor(e) {
+-		this.root = document.createElement("label"), this.root.className = "comimi-checkbox", this.root.addEventListener("click", (e) => e.stopPropagation()), this.input = document.createElement("input"), this.input.type = "checkbox", this.input.className = "comimi-checkbox-input", this.input.addEventListener("change", () => e(this.input.checked));
+-		let t = document.createElement("span");
+-		t.className = "comimi-checkbox-box", t.setAttribute("aria-hidden", "true");
+-		let n = document.createElement("span");
+-		n.className = "comimi-checkbox-stroke";
+-		let r = document.createElement("span");
+-		r.className = "comimi-checkbox-bg", t.append(n, r, pe()), this.label = document.createElement("span"), this.label.className = "comimi-checkbox-label", this.root.append(this.input, t, this.label);
+-	}
+-	setLabel(e) {
+-		this.label.textContent = e;
+-	}
+-	setChecked(e) {
+-		this.input.checked = e;
+-	}
+-	isChecked() {
+-		return this.input.checked;
+-	}
+-	getElement() {
+-		return this.root;
+-	}
+-};
+-function pe() {
+-	de += 1;
+-	let e = `comimi-checkbox-mask-${de}`, t = document.createElementNS(w, "svg");
+-	t.setAttribute("viewBox", "0 0 11.04 8.31"), t.setAttribute("class", "comimi-checkbox-check");
+-	let n = document.createElementNS(w, "mask");
+-	n.setAttribute("id", e);
+-	let r = document.createElementNS(w, "polyline");
+-	r.setAttribute("class", "comimi-checkbox-check-line"), r.setAttribute("points", "1.5 4.09 4.26 6.81 9.53 1.5"), r.style.setProperty("--comimi-check-length", String(ue)), n.append(r);
+-	let i = document.createElementNS(w, "path");
+-	return i.setAttribute("class", "comimi-checkbox-check-path"), i.setAttribute("mask", `url(#${e})`), i.setAttribute("d", "m.52,3.08c.59-.59,1.54-.59,2.12,0l1.6,1.6L8.48.44c.59-.59,1.54-.59,2.12,0s.59,1.54,0,2.12l-5.3,5.3c-.28.28-.66.44-1.06.44s-.78-.16-1.06-.44L.52,5.2c-.59-.59-.59-1.54,0-2.12Z"), t.append(n, i), t;
+-}
+-var me = class {
+-	root;
+-	indicator;
+-	buttons = [];
+-	value;
+-	constructor(e, t) {
+-		this.root = document.createElement("div"), this.root.className = "comimi-rolling-switch", this.root.setAttribute("role", "group"), this.root.dataset.position = "first", this.indicator = document.createElement("span"), this.indicator.className = "comimi-rolling-switch-indicator", this.indicator.addEventListener("animationend", () => {
+-			delete this.root.dataset.animation;
+-		}), this.root.append(this.indicator), e.forEach((e, n) => {
+-			let r = document.createElement("button");
+-			r.type = "button", r.className = "comimi-rolling-switch-button", r.setAttribute("aria-label", e.label), r.setAttribute("aria-pressed", "false"), r.append(b(e.icon)), r.addEventListener("click", (r) => {
+-				r.stopPropagation(), e.value !== this.value && (this.root.dataset.animation = n === 0 ? "first" : "second", t(e.value));
+-			}), this.root.append(r), this.buttons.push({
+-				value: e.value,
+-				button: r
+-			});
+-		});
+-	}
+-	setLabels(e) {
+-		this.buttons.forEach(({ button: t }, n) => {
+-			t.setAttribute("aria-label", e[n]);
+-		});
+-	}
+-	setValue(e) {
+-		this.value = e, this.root.dataset.position = e === this.buttons[0]?.value ? "first" : "second";
+-		for (let t of this.buttons) t.button.setAttribute("aria-pressed", String(t.value === e));
+-	}
+-	getElement() {
+-		return this.root;
+-	}
+-}, he = class {
+-	root;
+-	select;
+-	label;
+-	options = [];
+-	constructor(e) {
+-		this.root = document.createElement("div"), this.root.className = "comimi-selectbox";
+-		let t = document.createElement("span");
+-		t.className = "comimi-selectbox-bg", this.select = document.createElement("select"), this.select.className = "comimi-selectbox-select", this.select.addEventListener("change", () => {
+-			let t = this.options.find((e) => String(e.value) === this.select.value);
+-			t && e(t.value);
+-		}), this.label = document.createElement("span"), this.label.className = "comimi-selectbox-label";
+-		let n = b("arrow");
+-		n.classList.add("comimi-selectbox-arrow"), this.root.append(t, this.select, this.label, n);
+-	}
+-	setOptions(e) {
+-		let t = this.select.value;
+-		this.options = e, this.select.replaceChildren();
+-		for (let t of e) {
+-			let e = document.createElement("option");
+-			e.value = String(t.value), e.textContent = t.label, this.select.append(e);
+-		}
+-		t && this.setValue(t);
+-	}
+-	setValue(e) {
+-		this.select.value = String(e);
+-		let t = this.options.find((t) => String(t.value) === String(e));
+-		this.label.textContent = t?.label ?? "";
+-	}
+-	getElement() {
+-		return this.root;
+-	}
+-}, ge = class {
+-	root;
+-	input;
+-	fill;
+-	valueLabel;
+-	unit = "";
+-	min = 0;
+-	max = 100;
+-	constructor(e) {
+-		this.root = document.createElement("div"), this.root.className = "comimi-range-slider";
+-		let t = document.createElement("div");
+-		t.className = "comimi-range-slider-wrap";
+-		let n = document.createElement("div");
+-		n.className = "comimi-range-slider-track", this.fill = document.createElement("div"), this.fill.className = "comimi-range-slider-fill", this.fill.style.width = "0%", n.append(this.fill), this.input = document.createElement("input"), this.input.className = "comimi-range-slider-input", this.input.type = "range", this.input.addEventListener("input", () => e(Number(this.input.value))), t.append(n, this.input), this.valueLabel = document.createElement("span"), this.valueLabel.className = "comimi-range-slider-value", this.root.append(t, this.valueLabel);
+-	}
+-	setRange(e, t, n = 1) {
+-		this.min = e, this.max = t, this.input.min = String(e), this.input.max = String(t), this.input.step = String(n);
+-	}
+-	setUnit(e) {
+-		this.unit = e, this.refreshLabel();
+-	}
+-	setValue(e) {
+-		this.input.value = String(e);
+-		let t = this.max === this.min ? 0 : (e - this.min) / (this.max - this.min) * 100;
+-		this.fill.style.width = `${Math.min(Math.max(t, 0), 100)}%`, this.refreshLabel();
+-	}
+-	refreshLabel() {
+-		this.valueLabel.textContent = `${this.input.value}${this.unit}`;
+-	}
+-	getElement() {
+-		return this.root;
+-	}
+-};
+-//#endregion
+ //#region src/components/mascot.ts
+ function _e(e) {
+ 	return typeof e == "object" && !!e && !("src" in e) && !("render" in e) && !("html" in e);
+@@ -722,492 +527,6 @@ function E(e) {
+ 	return t.src = e.src, t.alt = e.alt ?? "", t.draggable = !1, t;
+ }
+ //#endregion
+-//#region src/components/rabbit-mascot.ts
+-var ve = "<svg viewBox=\"0 0 50 50\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" class=\"comimi-rabbit-svg\">\n  <mask id=\"comimi-rabbit-mask\" style=\"mask-type:alpha\" maskUnits=\"userSpaceOnUse\" x=\"0\" y=\"0\" width=\"50\" height=\"50\">\n    <rect width=\"50\" height=\"50\" fill=\"#D9D9D9\"/>\n  </mask>\n  <g mask=\"url(#comimi-rabbit-mask)\">\n    <path d=\"M3 41V50H47L48 46.5L47.5 41.5L46 36L42.5 32V29.5L43 23L41 14L36 10.5L29 12L25 16.5L21 12L15 10.5L9.5 14L7.5 22L7 33L3 41Z\" class=\"comimi-rabbit-body\"/>\n    <path d=\"M44.4296 30.6958C44.6658 29.2364 44.8262 27.5939 44.9287 25.6301C45.1827 20.7786 44.6212 16.8733 43.2531 14.0123C41.4929 10.3257 38.3601 8.25926 34.1979 8.04056C30.3119 7.84418 27.1881 9.20546 24.9822 12.0396C22.3752 8.56275 18.828 7.87096 16.0027 8.01824C11.5152 8.25479 4.09982 10.8568 4.87077 25.6301C4.98218 27.759 5.1426 29.4372 5.37433 30.9011C1.8984 34.6592 0 39.3143 0 44.1301C0 46.2814 0.374332 48.4103 1.11854 50.4589C1.44831 51.365 2.30392 51.9318 3.21301 51.9318C3.46702 51.9318 3.72103 51.8872 3.97504 51.7979C5.13369 51.3784 5.73084 50.0974 5.31194 48.937C4.74599 47.3793 4.46078 45.7636 4.46078 44.1301C4.46078 40.1534 6.18984 36.2838 9.32709 33.2399C9.87077 32.7087 10.1114 31.9411 9.95989 31.1957C9.65241 29.6827 9.46078 27.8929 9.32709 25.398C9.16667 22.3005 8.67202 12.8742 16.2433 12.477C19.3717 12.3119 21.4349 13.807 22.7139 17.1589V27.4689C22.7139 28.7008 23.7121 29.7005 24.9421 29.7005C26.172 29.7005 27.1702 28.7008 27.1702 27.4689V17.1812C28.5294 13.8204 30.6907 12.3297 33.9706 12.4993C36.5107 12.6332 38.1863 13.7267 39.2424 15.9404C40.2807 18.1185 40.6996 21.2963 40.4857 25.398C40.3699 27.6608 40.1604 29.4952 39.8529 31.0038C39.697 31.7581 39.9465 32.5436 40.5036 33.0703C43.7522 36.1454 45.5392 40.073 45.5392 44.1301C45.5392 45.7592 45.254 47.3793 44.6881 48.937C44.2692 50.0974 44.8663 51.3739 46.025 51.7979C47.1836 52.2174 48.4581 51.6194 48.8815 50.4589C49.6212 48.4103 50 46.2814 50 44.1301C50 39.2161 48.0348 34.4896 44.4385 30.6958H44.4296Z\" class=\"comimi-rabbit-shade\"/>\n    <path d=\"M15.6152 45.4779C17.0919 45.4779 18.289 44.279 18.289 42.8C18.289 41.321 17.0919 40.1221 15.6152 40.1221C14.1385 40.1221 12.9414 41.321 12.9414 42.8C12.9414 44.279 14.1385 45.4779 15.6152 45.4779Z\" class=\"comimi-rabbit-shade\"/>\n    <path d=\"M29.6113 45.4779C31.088 45.4779 32.2851 44.279 32.2851 42.8C32.2851 41.321 31.088 40.1221 29.6113 40.1221C28.1346 40.1221 26.9375 41.321 26.9375 42.8C26.9375 44.279 28.1346 45.4779 29.6113 45.4779Z\" class=\"comimi-rabbit-shade\"/>\n  </g>\n</svg>";
+-function ye(e) {
+-	if (e === !1) return null;
+-	let t = document.createElement("div");
+-	t.className = "comimi-rabbit";
+-	let n = E(e);
+-	return n ? (n instanceof HTMLImageElement && n.classList.add("comimi-rabbit-img"), t.append(n), t) : (t.innerHTML = ve, t);
+-}
+-//#endregion
+-//#region src/components/scroll-fade.ts
+-function D(e) {
+-	e.classList.add("comimi-scrollfade");
+-	let t = () => {
+-		let { scrollTop: t, scrollHeight: n, clientHeight: r } = e;
+-		e.dataset.scrollUp = String(t > 0), e.dataset.scrollDown = String(t + r < n - 1);
+-	};
+-	if (e.addEventListener("scroll", t, { passive: !0 }), typeof ResizeObserver < "u") {
+-		let n = new ResizeObserver(t);
+-		n.observe(e), e.firstElementChild && n.observe(e.firstElementChild);
+-	}
+-	typeof requestAnimationFrame == "function" ? requestAnimationFrame(t) : t();
+-}
+-//#endregion
+-//#region src/components/menu-panel.ts
+-var be = new Set([
+-	"menu",
+-	"pages",
+-	"favorites",
+-	"shortcuts",
+-	"share",
+-	"about"
+-]);
+-function O(e) {
+-	return be.has(e);
+-}
+-var xe = {
+-	pages: "pageList",
+-	favorites: "favorites",
+-	shortcuts: "shortcut",
+-	share: "share",
+-	about: "about"
+-}, Se = {
+-	pageList: "menu.openPages",
+-	favorites: "menu.openFavorites",
+-	shortcut: "menu.openShortcuts",
+-	share: "menu.openShare",
+-	about: "menu.openAbout"
+-}, Ce = class {
+-	callbacks;
+-	i18n;
+-	options;
+-	root;
+-	titleEl;
+-	authorEl;
+-	detailTitleEl;
+-	bottomEl;
+-	viewMenu;
+-	viewShortcut;
+-	viewPageList;
+-	viewFavorites;
+-	favoritesGrid;
+-	favoritesEmpty;
+-	favoritesCacheKey;
+-	pageListItems = /* @__PURE__ */ new Map();
+-	viewShare;
+-	viewAbout;
+-	aboutLogoWrap;
+-	shareUrlInput;
+-	sharePageCheckbox;
+-	pageListInner;
+-	pageListHead;
+-	pageListCacheKey;
+-	coverCacheKey;
+-	currentState;
+-	currentView = "menu";
+-	i18nTexts = [];
+-	constructor(e, t, n = {}) {
+-		this.callbacks = e, this.i18n = t, this.options = n, this.root = document.createElement("div"), this.root.className = "comimi-menu-panel", this.root.setAttribute("role", "dialog"), this.root.dataset.open = "false", this.root.dataset.view = "menu", this.root.dataset.overlay = "false";
+-		let r = document.createElement("div");
+-		r.className = "comimi-menu-bg";
+-		let i = this.buildTop();
+-		[this.titleEl, this.authorEl, this.detailTitleEl] = this.findTitleNodes(i), this.bottomEl = document.createElement("div"), this.bottomEl.className = "comimi-menu-bottom", this.bottomEl.style.height = "0px";
+-		let a = document.createElement("div");
+-		a.className = "comimi-menu-border", this.viewMenu = this.buildMenuView(), this.viewShortcut = this.buildShortcutView(), [this.viewPageList, this.pageListInner, this.pageListHead] = this.buildPageListView(), [this.viewFavorites, this.favoritesGrid, this.favoritesEmpty] = this.buildFavoritesView(), [this.viewShare, this.shareUrlInput] = this.buildShareView(), [this.viewAbout, this.aboutLogoWrap] = this.buildAboutView(), this.bottomEl.append(a, this.viewMenu, this.viewShortcut, this.viewPageList, this.viewFavorites, this.viewShare, this.viewAbout);
+-		let o = ye(this.options.mascot);
+-		this.root.dataset.mascot = String(o !== null);
+-		let s = [r];
+-		o && s.push(o), s.push(i, this.bottomEl), this.root.append(...s);
+-	}
+-	getElement() {
+-		return this.root;
+-	}
+-	bindI18nText(e, t) {
+-		this.bindI18n(t, (t) => {
+-			e.textContent = t;
+-		});
+-	}
+-	bindI18n(e, t) {
+-		t(this.i18n.t(e)), this.i18nTexts.push({
+-			key: e,
+-			apply: t
+-		});
+-	}
+-	refreshI18nTexts() {
+-		for (let { key: e, apply: t } of this.i18nTexts) t(this.i18n.t(e));
+-	}
+-	update(e) {
+-		let t = O(e.panel), n = xe[e.panel] ?? "menu";
+-		this.root.dataset.open = String(t), this.root.dataset.view = n, this.root.dataset.overlay = String(e.overlayVisible), this.titleEl.textContent = e.manga.title, e.manga.author ? (this.authorEl.textContent = `@${e.manga.author}`, this.authorEl.style.display = "") : (this.authorEl.textContent = "", this.authorEl.style.display = "none"), this.refreshI18nTexts(), this.refreshDetailTitle(n), this.refreshPageListHead(e), this.refreshPageList(e), this.refreshFavorites(e), this.refreshShareUrl(e), n === "about" && this.currentView !== "about" && this.replayAboutLogo(), this.applyHeight(t, n), this.currentState = e, this.currentView = n;
+-	}
+-	refreshDetailTitle(e) {
+-		e !== "menu" && (this.detailTitleEl.textContent = this.i18n.t(Se[e]));
+-	}
+-	applyHeight(e, t) {
+-		if (!e) {
+-			this.bottomEl.style.height = "0px";
+-			return;
+-		}
+-		let n = {
+-			menu: this.viewMenu,
+-			shortcut: this.viewShortcut,
+-			pageList: this.viewPageList,
+-			favorites: this.viewFavorites,
+-			share: this.viewShare,
+-			about: this.viewAbout
+-		}[t].offsetHeight;
+-		this.bottomEl.style.height = `${n}px`;
+-	}
+-	replayAboutLogo() {
+-		this.aboutLogoWrap.replaceChildren(y());
+-	}
+-	refreshPageListHead(e) {
+-		let { manga: t } = e, n = this.pageListHead;
+-		n.title.textContent = t.title, n.author.textContent = t.author ? `@${t.author}` : "", n.author.style.display = t.author ? "" : "none", n.count.textContent = this.i18n.t("pageList.count", { count: t.pages.length });
+-		let r = t.pages[0], i = `${t.id}:${r?.id ?? ""}:${r?.type ?? ""}`;
+-		if (this.coverCacheKey !== i && (this.coverCacheKey = i, n.thumb.replaceChildren(), r?.type === "image")) {
+-			let e = document.createElement("img");
+-			e.alt = "", e.draggable = !1, e.src = r.thumbnailSrc ?? r.src, n.thumb.append(e);
+-		}
+-	}
+-	refreshPageList(e) {
+-		let t = `${e.settings.locale}:${e.manga.id}:${e.manga.pages.length}`;
+-		this.pageListCacheKey !== t && (this.pageListCacheKey = t, this.pageListInner.replaceChildren(), this.pageListItems.clear(), e.manga.pages.forEach((e, t) => {
+-			let n = this.buildPageListItem(e, t);
+-			this.pageListItems.set(t, n), this.pageListInner.append(n);
+-		}));
+-	}
+-	buildPageListItem(e, t) {
+-		let n = document.createElement("button");
+-		n.type = "button", n.className = "comimi-page-list-item", n.addEventListener("click", (e) => {
+-			e.stopPropagation(), this.callbacks.goToPage(t), this.callbacks.setPanel("none");
+-		});
+-		let r = document.createElement("span");
+-		r.className = "comimi-page-list-thumb";
+-		let i = document.createElement("span");
+-		i.className = "comimi-page-list-badge", i.textContent = String(t + 1), r.append(i);
+-		let a = document.createElement("span");
+-		if (a.className = "comimi-page-list-heart", a.append(b("heart")), r.append(a), e.type === "image") {
+-			let n = document.createElement("img");
+-			n.alt = e.alt ?? e.label ?? this.i18n.t("seek.previewAlt", { page: t + 1 }), n.draggable = !1, n.src = e.thumbnailSrc ?? e.src, r.append(n);
+-		} else if (e.type === "html") {
+-			let e = document.createElement("span");
+-			e.className = "comimi-page-list-thumb-html", e.textContent = this.i18n.t("pageList.htmlContent"), r.append(e);
+-		}
+-		if (n.append(r), e.label) {
+-			let t = document.createElement("span");
+-			t.className = "comimi-page-list-text", t.textContent = e.label, n.append(t);
+-		}
+-		return n;
+-	}
+-	refreshFavorites(e) {
+-		let t = new Set(e.favoritePageIds);
+-		for (let [n, r] of this.pageListItems) {
+-			let i = e.manga.pages[n];
+-			r.dataset.favorite = String(!!i && t.has(i.id));
+-		}
+-		let n = `${e.settings.locale}:${e.manga.id}:${e.favoritePageIds.join(",")}`;
+-		if (this.favoritesCacheKey === n) return;
+-		this.favoritesCacheKey = n;
+-		let r = new Map(e.manga.pages.map((e, t) => [e.id, t])), i = [...e.favoritePageIds].sort((e, t) => (r.get(e) ?? Infinity) - (r.get(t) ?? Infinity));
+-		this.favoritesGrid.replaceChildren();
+-		for (let t of i) {
+-			let n = r.get(t), i = n === void 0 ? void 0 : e.manga.pages[n];
+-			if (n === void 0 || !i) continue;
+-			let a = document.createElement("div");
+-			a.className = "comimi-favorite-item";
+-			let o = document.createElement("button");
+-			if (o.type = "button", o.className = "comimi-favorite-remove", o.setAttribute("aria-label", this.i18n.t("favorites.remove")), o.addEventListener("click", (e) => {
+-				e.stopPropagation(), this.callbacks.removeFavorite(n);
+-			}), a.append(this.buildPageListItem(i, n), o), this.options.pageQueryParam) {
+-				let e = document.createElement("a");
+-				e.className = "comimi-favorite-open", e.target = "_blank", e.rel = "noopener noreferrer";
+-				let t = document.createElement("span");
+-				t.className = "comimi-favorite-open-bg";
+-				let r = document.createElement("span");
+-				r.className = "comimi-favorite-open-text", r.textContent = this.i18n.t("favorites.openInNewTab"), e.append(t, r), e.href = this.buildPageUrl(n), e.addEventListener("click", (t) => {
+-					t.stopPropagation(), e.href = this.buildPageUrl(n);
+-				}), a.append(e);
+-			}
+-			this.favoritesGrid.append(a);
+-		}
+-		let a = this.favoritesGrid.childElementCount === 0;
+-		this.favoritesGrid.hidden = a, this.favoritesEmpty.hidden = !a;
+-	}
+-	buildTop() {
+-		let e = document.createElement("button");
+-		e.type = "button", e.className = "comimi-menu-top", e.addEventListener("click", (e) => {
+-			e.stopPropagation();
+-			let t = O(this.currentState?.panel ?? "none");
+-			this.callbacks.setPanel(t ? "none" : "menu");
+-		});
+-		let t = document.createElement("span");
+-		t.className = "comimi-menu-button";
+-		let n = document.createElement("span");
+-		n.className = "comimi-menu-button-inner", n.append(b("menu"), b("close")), t.append(n);
+-		let r = document.createElement("span");
+-		r.className = "comimi-menu-title-wrap";
+-		let i = document.createElement("span");
+-		i.className = "comimi-menu-title-inner";
+-		let a = document.createElement("span");
+-		a.className = "comimi-menu-title-main";
+-		let o = document.createElement("span");
+-		o.className = "comimi-menu-title";
+-		let s = document.createElement("span");
+-		s.className = "comimi-menu-author", a.append(o, s);
+-		let c = document.createElement("span");
+-		return c.className = "comimi-menu-title-detail", i.append(a, c), r.append(i), e.append(t, r), e;
+-	}
+-	findTitleNodes(e) {
+-		let t = e.querySelector(".comimi-menu-title"), n = e.querySelector(".comimi-menu-author"), r = e.querySelector(".comimi-menu-title-detail");
+-		if (!t || !n || !r) throw Error("MenuPanel title nodes missing");
+-		return [
+-			t,
+-			n,
+-			r
+-		];
+-	}
+-	buildMenuView() {
+-		let e = document.createElement("div");
+-		e.className = "comimi-menu-view comimi-menu-view-menu";
+-		let t = document.createElement("div");
+-		return t.className = "comimi-menu-list", t.append(this.renderMenuLink("menu.openPages", () => this.callbacks.setPanel("pages")), this.renderMenuLink("menu.openFavorites", () => this.callbacks.setPanel("favorites")), this.renderMenuLink("menu.openShortcuts", () => this.callbacks.setPanel("shortcuts"), "comimi-menu-link-shortcuts"), this.renderMenuLink("menu.openShare", () => this.callbacks.setPanel("share")), this.renderMenuLink("menu.openAbout", () => this.callbacks.setPanel("about"))), e.append(t), e;
+-	}
+-	renderMenuLink(e, t, n = "") {
+-		let r = document.createElement("button");
+-		r.type = "button", r.className = `comimi-menu-link ${n}`.trim(), r.addEventListener("click", (e) => {
+-			e.stopPropagation(), t();
+-		});
+-		let i = document.createElement("span");
+-		i.className = "comimi-menu-link-text", this.bindI18nText(i, e);
+-		let a = document.createElement("span");
+-		return a.className = "comimi-menu-link-arrow", a.append(b("arrow")), r.append(i, a), r;
+-	}
+-	buildShortcutView() {
+-		let e = document.createElement("div");
+-		e.className = "comimi-menu-view comimi-menu-view-shortcut";
+-		let t = document.createElement("div");
+-		t.className = "comimi-shortcut-inner";
+-		let n = document.createElement("div");
+-		return n.className = "comimi-shortcut-grid", t.append(n), D(t), n.append(this.shortcutSection("shortcut.section.page", [
+-			[["←", "Space"], "shortcut.moveLeft"],
+-			[["→", "Space + Shift"], "shortcut.moveRight"],
+-			[["A"], "shortcut.autoPageTurnLabel"]
+-		])), this.options.lockLayoutMode || n.append(this.shortcutSection("shortcut.section.viewMode", [
+-			[["N", "Esc"], "layout.inline"],
 -			[["W"], "layout.wide"],
- 			[["F"], "layout.browserFullscreen"]
- 		], !0)), n.append(this.shortcutSection("shortcut.section.general", [
- 			[["O"], "shortcut.overlayToggle"],
-@@ -1452,11 +1453,6 @@ var ke = class {
- 				"layout.inline",
- 				"default"
- 			],
+-			[["F"], "layout.browserFullscreen"]
+-		], !0)), n.append(this.shortcutSection("shortcut.section.general", [
+-			[["O"], "shortcut.overlayToggle"],
+-			[["M"], "overlay.menu"],
+-			[["P"], "shortcut.pageModeToggle"],
+-			[["C"], "shortcut.coverToggle"],
+-			[["S"], "overlay.settings"]
+-		], !0)), e.append(t, this.renderBackButton()), e;
+-	}
+-	buildPageListView() {
+-		let e = document.createElement("div");
+-		e.className = "comimi-menu-view comimi-menu-view-page-list";
+-		let t = this.buildPageListHead(), n = document.createElement("div");
+-		n.className = "comimi-page-list-inner";
+-		let r = document.createElement("div");
+-		return r.className = "comimi-page-list-grid", n.append(t.root, r), D(n), e.append(n, this.renderBackButton()), [
+-			e,
+-			r,
+-			t
+-		];
+-	}
+-	buildFavoritesView() {
+-		let e = document.createElement("div");
+-		e.className = "comimi-menu-view comimi-menu-view-favorites";
+-		let t = document.createElement("div");
+-		t.className = "comimi-favorites-inner";
+-		let n = document.createElement("p");
+-		n.className = "comimi-favorites-description", this.bindI18nText(n, "favorites.description");
+-		let r = document.createElement("div");
+-		r.className = "comimi-page-list-grid";
+-		let i = document.createElement("div");
+-		i.className = "comimi-favorites-empty", i.append(b("heart"));
+-		let a = document.createElement("span");
+-		return this.bindI18nText(a, "favorites.empty"), i.append(a), t.append(n, r, i), D(t), e.append(t, this.renderBackButton()), [
+-			e,
+-			r,
+-			i
+-		];
+-	}
+-	buildPageListHead() {
+-		let e = document.createElement("div");
+-		e.className = "comimi-page-list-head";
+-		let t = document.createElement("span");
+-		t.className = "comimi-page-list-cover";
+-		let n = document.createElement("span");
+-		n.className = "comimi-page-list-head-body";
+-		let r = document.createElement("span");
+-		r.className = "comimi-page-list-head-title";
+-		let i = document.createElement("span");
+-		i.className = "comimi-page-list-head-author";
+-		let a = document.createElement("span");
+-		return a.className = "comimi-page-list-head-count", n.append(r, i, a), e.append(t, n), {
+-			root: e,
+-			thumb: t,
+-			title: r,
+-			author: i,
+-			count: a
+-		};
+-	}
+-	buildAboutView() {
+-		let e = document.createElement("div");
+-		e.className = "comimi-menu-view comimi-menu-view-about";
+-		let t = document.createElement("div");
+-		t.className = "comimi-about-inner";
+-		let n = document.createElement("div");
+-		n.className = "comimi-about-hero";
+-		let r = document.createElement("div");
+-		r.className = "comimi-about-logo", n.append(r);
+-		let i = document.createElement("div");
+-		i.className = "comimi-about-version";
+-		let a = document.createElement("span");
+-		a.className = "comimi-about-version-label", this.bindI18nText(a, "about.version");
+-		let o = document.createElement("span");
+-		o.className = "comimi-about-version-value", o.textContent = `v${m}`, i.append(a, o);
+-		let s = document.createElement("div");
+-		return s.className = "comimi-about-links", s.append(this.renderAboutLink("about.repository", h), this.renderAboutLink("about.site", g)), t.append(n, i, s), e.append(t, this.renderBackButton()), [e, r];
+-	}
+-	renderAboutLink(e, t) {
+-		let n = document.createElement("a");
+-		n.className = "comimi-about-link", n.href = t, n.target = "_blank", n.rel = "noopener noreferrer", n.addEventListener("click", (e) => e.stopPropagation());
+-		let r = document.createElement("span");
+-		r.className = "comimi-about-link-text";
+-		let i = document.createElement("span");
+-		i.className = "comimi-about-link-label", this.bindI18nText(i, e);
+-		let a = document.createElement("span");
+-		a.className = "comimi-about-link-url", a.textContent = t.replace(/^https?:\/\//, ""), r.append(i, a);
+-		let o = document.createElement("span");
+-		return o.className = "comimi-about-link-arrow", o.append(b("arrow")), n.append(r, o), n;
+-	}
+-	buildShareView() {
+-		let e = document.createElement("div");
+-		e.className = "comimi-menu-view comimi-menu-view-share";
+-		let t = document.createElement("div");
+-		t.className = "comimi-share-inner";
+-		let n = document.createElement("div");
+-		n.className = "comimi-share-field";
+-		let r = document.createElement("input");
+-		r.type = "text", r.className = "comimi-share-url", r.readOnly = !0, r.spellcheck = !1, this.bindI18n("share.url", (e) => r.setAttribute("aria-label", e)), r.addEventListener("focus", () => r.select()), r.addEventListener("click", (e) => {
+-			e.stopPropagation(), r.select();
+-		});
+-		let i = document.createElement("button");
+-		i.type = "button", i.className = "comimi-share-copy";
+-		let a = document.createElement("span");
+-		a.className = "comimi-share-copy-bg";
+-		let o = document.createElement("span");
+-		if (o.className = "comimi-share-copy-text", this.bindI18nText(o, "share.copy"), i.append(a, o), i.addEventListener("click", (e) => {
+-			e.stopPropagation(), this.copyShareUrl();
+-		}), n.append(r, i), t.append(n), this.options.pageQueryParam) {
+-			let e = new fe(() => {
+-				this.currentState && this.refreshShareUrl(this.currentState);
+-			});
+-			this.bindI18n("share.includePage", (t) => e.setLabel(t)), this.sharePageCheckbox = e, t.append(e.getElement());
+-		}
+-		return e.append(t, this.renderBackButton()), [e, r];
+-	}
+-	buildPageUrl(e) {
+-		if (typeof window > "u" || !this.options.pageQueryParam) return "";
+-		let t = new URL(window.location.href);
+-		return t.searchParams.set(this.options.pageQueryParam, String(e + 1)), t.toString();
+-	}
+-	buildShareUrl(e) {
+-		if (typeof window > "u") return "";
+-		let t = new URL(window.location.href), n = this.options.pageQueryParam;
+-		return n && (t.searchParams.delete(n), this.sharePageCheckbox?.isChecked() && t.searchParams.set(n, String(e.currentPageIndex + 1))), t.toString();
+-	}
+-	refreshShareUrl(e) {
+-		let t = this.buildShareUrl(e);
+-		this.shareUrlInput.value !== t && (this.shareUrlInput.value = t);
+-	}
+-	async copyShareUrl() {
+-		let e = this.shareUrlInput.value, t = !1;
+-		try {
+-			await navigator.clipboard.writeText(e), t = !0;
+-		} catch {
+-			this.shareUrlInput.select(), t = document.execCommand("copy");
+-		}
+-		t && this.callbacks.notify(this.i18n.t("share.copied"), "success");
+-	}
+-	shortcutSection(e, t, n = !1) {
+-		let r = document.createElement("div");
+-		r.className = "comimi-shortcut-section";
+-		let i = document.createElement("div");
+-		i.className = "comimi-shortcut-heading", this.bindI18nText(i, e);
+-		let a = document.createElement("div");
+-		a.className = n ? "comimi-shortcut-column" : "comimi-shortcut-list";
+-		for (let [e, n] of t) a.append(this.shortcutItem(e, n));
+-		return r.append(i, a), r;
+-	}
+-	shortcutItem(e, t) {
+-		let n = document.createElement("div");
+-		n.className = "comimi-shortcut-item";
+-		let r = document.createElement("span");
+-		r.className = "comimi-shortcut-badge", e.forEach((e, t) => {
+-			if (t > 0) {
+-				let e = document.createElement("span");
+-				e.className = "comimi-shortcut-or", r.append(e);
+-			}
+-			let n = document.createElement("span");
+-			n.className = "comimi-shortcut-key", n.textContent = e, r.append(n);
+-		});
+-		let i = document.createElement("span");
+-		return i.className = "comimi-shortcut-label", this.bindI18nText(i, t), n.append(r, i), n;
+-	}
+-	renderBackButton() {
+-		let e = document.createElement("button");
+-		e.type = "button", e.className = "comimi-back-button", e.addEventListener("click", (e) => {
+-			e.stopPropagation(), this.callbacks.setPanel("menu");
+-		});
+-		let t = document.createElement("span");
+-		t.className = "comimi-back-inner";
+-		let n = document.createElement("span");
+-		n.className = "comimi-back-bg";
+-		let r = document.createElement("span");
+-		r.className = "comimi-back-text", this.bindI18nText(r, "menu.back");
+-		let i = document.createElement("span");
+-		return i.className = "comimi-back-arrow", i.append(b("arrow")), t.append(n, r, i), e.append(t), e;
+-	}
+-}, we = class {
+-	callbacks;
+-	root;
+-	prevButton;
+-	nextButton;
+-	state;
+-	constructor(e) {
+-		this.callbacks = e, this.root = document.createElement("div"), this.root.className = "comimi-arrows", this.prevButton = this.buildButton("prev", "left"), this.nextButton = this.buildButton("next", "right"), this.root.append(this.prevButton, this.nextButton);
+-	}
+-	getElement() {
+-		return this.root;
+-	}
+-	update(e) {
+-		this.state = e, this.root.dataset.overlay = String(e.overlayVisible), this.root.dataset.autoplay = String(e.autoPageTurnEnabled), this.setDisabled(this.prevButton, !A(e, "left")), this.setDisabled(this.nextButton, !A(e, "right"));
+-	}
+-	setDisabled(e, t) {
+-		t ? e.dataset.disabled = "true" : delete e.dataset.disabled;
+-	}
+-	buildButton(e, t) {
+-		let n = document.createElement("button");
+-		n.type = "button", n.className = `comimi-arrow-button comimi-arrow-${e}`, n.setAttribute("aria-label", e === "next" ? "Next page" : "Previous page"), n.addEventListener("click", (e) => {
+-			e.stopPropagation(), this.state && Te(this.state, this.callbacks, t);
+-		});
+-		let r = document.createElement("span");
+-		r.className = "comimi-arrow-inner";
+-		let i = document.createElement("span");
+-		i.className = "comimi-arrow-bg";
+-		let a = b("arrow");
+-		return a.classList.add("comimi-arrow-icon"), r.append(i, a), n.append(r), n;
+-	}
+-};
+-function Te(e, t, n) {
+-	k(n, e.settings.readingDirection) ? t.nextPage() : t.previousPage();
+-}
+-function k(e, t) {
+-	return t === "rtl" ? e === "left" : e === "right";
+-}
+-function A(e, t) {
+-	let n = k(t, e.settings.readingDirection), { currentPageIndex: r } = e;
+-	return n ? r + a(e.settings, r) < e.manga.pages.length : r > 0;
+-}
+-//#endregion
+ //#region src/components/center-message.ts
+ function Ee(e, t) {
+ 	let n = document.createElement("div");
+@@ -1282,230 +601,10 @@ function Oe(e, t) {
+ 	return e.settings.hasCover ? t % 2 == 1 ? t + 1 : t - 1 : t % 2 == 0 ? t + 1 : t - 1;
+ }
+ //#endregion
+-//#region src/components/settings-panel.ts
+-var ke = class {
++//#region src/components/controls-dock.ts
++var Me = class {
+ 	callbacks;
+ 	i18n;
+-	hidden;
+-	root;
+-	sheet;
+-	panel;
+-	closeButton;
+-	body;
+-	inner;
+-	titleEl;
+-	localeLabel;
+-	coverLabel;
+-	directionLabel;
+-	intervalLabel;
+-	localeSelect;
+-	themeSwitch;
+-	coverCheckbox;
+-	directionSelect;
+-	intervalSlider;
+-	staticValues = {};
+-	constructor(e, t, n = /* @__PURE__ */ new Set()) {
+-		this.callbacks = e, this.i18n = t, this.hidden = n, this.root = document.createElement("div"), this.root.className = "comimi-settings-layer", this.root.dataset.open = "false";
+-		let r = document.createElement("div");
+-		r.className = "comimi-settings-backdrop", r.addEventListener("click", (e) => {
+-			e.stopPropagation(), this.callbacks.setPanel("none");
+-		}), this.sheet = document.createElement("div"), this.sheet.className = "comimi-settings-sheet", this.panel = document.createElement("div"), this.panel.className = "comimi-settings-panel", this.panel.setAttribute("role", "dialog"), this.panel.addEventListener("click", (e) => e.stopPropagation()), this.closeButton = document.createElement("button"), this.closeButton.type = "button", this.closeButton.className = "comimi-settings-close", this.closeButton.addEventListener("click", (e) => {
+-			e.stopPropagation(), this.callbacks.setPanel("none");
+-		}), this.body = document.createElement("div"), this.body.className = "comimi-settings-panel-body", this.inner = document.createElement("div"), this.inner.className = "comimi-settings-panel-inner", this.titleEl = document.createElement("div"), this.titleEl.className = "comimi-settings-panel-title", this.localeSelect = new he((e) => this.callbacks.updateSettings({ locale: String(e) })), this.themeSwitch = new me([{
+-			value: "light",
+-			label: "",
+-			icon: "light"
+-		}, {
+-			value: "dark",
+-			label: "",
+-			icon: "dark"
+-		}], (e) => this.callbacks.updateSettings({ theme: e })), this.coverCheckbox = new fe((e) => this.callbacks.updateSettings({ hasCover: e })), this.directionSelect = new he((e) => this.callbacks.updateSettings({ readingDirection: e })), this.intervalSlider = new ge((e) => this.callbacks.updateSettings({ autoPageTurnIntervalMs: Math.max(1, e) * 1e3 })), this.intervalSlider.setRange(3, 30, 1), this.localeLabel = this.createLabel(), this.coverLabel = this.createLabel(), this.directionLabel = this.createLabel(), this.intervalLabel = this.createLabel(), this.inner.append(this.buildHeader(), this.buildSection("locale", this.localeLabel, this.localeSelect.getElement()), this.buildSection("cover", this.coverLabel, this.coverCheckbox.getElement()), this.buildSection("direction", this.directionLabel, this.directionSelect.getElement()), this.buildSection("interval", this.intervalLabel, this.intervalSlider.getElement()));
+-		let i = document.createElement("span");
+-		i.className = "comimi-settings-grabber", this.bindSheetDrag(i, r), this.body.append(this.inner), this.panel.append(i, this.body), this.sheet.append(this.panel, this.closeButton), this.root.append(r, this.sheet), D(this.body);
+-	}
+-	update(e) {
+-		this.titleEl.textContent = this.i18n.t("settings.title"), this.localeLabel.textContent = "Language", this.coverLabel.textContent = this.i18n.t("settings.cover"), this.coverCheckbox.setLabel(this.i18n.t("settings.cover.enabled")), this.directionLabel.textContent = this.i18n.t("settings.direction"), this.intervalLabel.textContent = this.i18n.t("settings.interval"), this.closeButton.textContent = this.i18n.t("settings.close");
+-		let t = [
+-			{
+-				label: "日本語",
+-				value: "ja"
+-			},
+-			{
+-				label: "English",
+-				value: "en"
+-			},
+-			{
+-				label: "简体中文",
+-				value: "zh-CN"
+-			},
+-			{
+-				label: "한국어",
+-				value: "ko"
+-			},
+-			{
+-				label: "ภาษาไทย",
+-				value: "th"
+-			},
+-			{
+-				label: "Indonesia",
+-				value: "id"
+-			}
+-		], n = [{
+-			label: this.i18n.t("settings.direction.rtl"),
+-			value: "rtl"
+-		}, {
+-			label: this.i18n.t("settings.direction.ltr"),
+-			value: "ltr"
+-		}], r = [{
+-			label: this.i18n.t("settings.theme.light"),
+-			value: "light"
+-		}, {
+-			label: this.i18n.t("settings.theme.dark"),
+-			value: "dark"
+-		}], i = this.i18n.t("settings.interval.unit"), a = Math.round(e.settings.autoPageTurnIntervalMs / 1e3);
+-		this.localeSelect.setOptions(t), this.themeSwitch.setLabels([r[0].label, r[1].label]), this.directionSelect.setOptions(n), this.intervalSlider.setUnit(i), this.localeSelect.setValue(e.settings.locale), this.themeSwitch.setValue(e.settings.theme), this.coverCheckbox.setChecked(e.settings.hasCover), this.directionSelect.setValue(e.settings.readingDirection), this.intervalSlider.setValue(a), this.setStaticValue("locale", this.labelFor(t, e.settings.locale)), this.setStaticValue("theme", this.labelFor(r, e.settings.theme)), this.setStaticValue("cover", e.settings.hasCover ? "ON" : "OFF"), this.setStaticValue("direction", this.labelFor(n, e.settings.readingDirection)), this.setStaticValue("interval", `${a}${i}`);
+-		let o = e.panel === "settings";
+-		o && this.root.dataset.open !== "true" && (this.sheet.style.transform = ""), this.root.dataset.open = String(o), this.scheduleHeightUpdate();
+-	}
+-	getElement() {
+-		return this.root;
+-	}
+-	buildHeader() {
+-		let e = document.createElement("div");
+-		if (e.className = "comimi-settings-header", e.append(this.titleEl), this.hidden.has("theme")) {
+-			let t = document.createElement("div");
+-			t.className = "comimi-settings-static-value", this.staticValues.theme = t, e.append(t);
+-		} else e.append(this.themeSwitch.getElement());
+-		return e;
+-	}
+-	createLabel() {
+-		let e = document.createElement("div");
+-		return e.className = "comimi-settings-label", e;
+-	}
+-	buildSection(e, t, n) {
+-		if (this.hidden.has(e)) {
+-			let n = document.createElement("div");
+-			return n.className = "comimi-settings-static-value", this.staticValues[e] = n, this.section(t, n);
+-		}
+-		return this.section(t, n);
+-	}
+-	setStaticValue(e, t) {
+-		let n = this.staticValues[e];
+-		n && (n.textContent = t);
+-	}
+-	labelFor(e, t) {
+-		return e.find((e) => e.value === t)?.label ?? t;
+-	}
+-	section(e, t) {
+-		let n = document.createElement("div");
+-		return n.className = "comimi-settings-section", n.append(e, t), n;
+-	}
+-	bindSheetDrag(e, t) {
+-		let n, r = 0, i = 0, a = 0, o = 0, s = (e) => {
+-			this.sheet.style.transform = `translateY(${e}px)`;
+-			let n = Math.max(this.sheet.offsetHeight, 1);
+-			t.style.opacity = String(Math.max(0, 1 - e / n));
+-		}, c = () => {
+-			this.sheet.style.transform = "", t.style.opacity = "", delete this.sheet.dataset.dragging, delete t.dataset.dragging;
+-		};
+-		e.addEventListener("pointerdown", (s) => {
+-			n !== void 0 || s.button !== 0 || (s.preventDefault(), s.stopPropagation(), n = s.pointerId, r = i = s.clientY, a = s.timeStamp, o = 0, this.sheet.dataset.dragging = "true", t.dataset.dragging = "true", e.setPointerCapture(s.pointerId));
+-		}), e.addEventListener("pointermove", (e) => {
+-			if (e.pointerId !== n) return;
+-			let t = e.timeStamp - a;
+-			t > 0 && (o = (e.clientY - i) / t), i = e.clientY, a = e.timeStamp, s(Math.max(0, e.clientY - r));
+-		});
+-		let l = (e) => {
+-			if (e.pointerId !== n) return;
+-			n = void 0;
+-			let i = Math.max(0, e.clientY - r);
+-			if (!(i > 72 || o > .5)) {
+-				c();
+-				return;
+-			}
+-			delete this.sheet.dataset.dragging, delete t.dataset.dragging, t.style.opacity = "", this.callbacks.setPanel("none"), requestAnimationFrame(() => {
+-				this.sheet.style.transform = `translateY(${i + 120}px)`;
+-			});
+-		};
+-		this.sheet.addEventListener("transitionend", (e) => {
+-			e.target === this.sheet && e.propertyName === "transform" && this.root.dataset.open !== "true" && (this.sheet.style.transform = "");
+-		}), e.addEventListener("pointerup", l), e.addEventListener("pointercancel", l), e.addEventListener("click", (e) => e.stopPropagation());
+-	}
+-	scheduleHeightUpdate() {
+-		let e = () => {
+-			this.root.style.setProperty("--comimi-settings-height", `${this.body.offsetHeight}px`);
+-		};
+-		typeof requestAnimationFrame == "function" ? requestAnimationFrame(() => requestAnimationFrame(e)) : setTimeout(e, 0);
+-	}
+-}, Ae = 42, je = class {
+-	callbacks;
+-	i18n;
+-	root;
+-	indicator;
+-	entries;
+-	prevMode;
+-	constructor(e, t) {
+-		this.callbacks = e, this.i18n = t, this.root = document.createElement("div"), this.root.className = "comimi-view-switcher", this.indicator = document.createElement("span"), this.indicator.className = "comimi-view-switcher-indicator", this.indicator.style.transform = "translateX(0px)", this.root.append(this.indicator);
+-		let n = [
+-			[
+-				"inline",
+-				"layout.inline",
+-				"default"
+-			],
 -			[
 -				"wide",
 -				"layout.wide",
 -				"wide"
 -			],
- 			[
- 				"browserFullscreen",
- 				"layout.browserFullscreen",
-@@ -1466,7 +1462,7 @@ var ke = class {
- 		this.entries = n.map(([e, n, r]) => {
- 			let i = document.createElement("button");
- 			i.type = "button", i.className = "comimi-view-switcher-button comimi-has-tooltip", i.dataset.selected = "false", i.addEventListener("click", (t) => {
+-			[
+-				"browserFullscreen",
+-				"layout.browserFullscreen",
+-				"fullscreen"
+-			]
+-		];
+-		this.entries = n.map(([e, n, r]) => {
+-			let i = document.createElement("button");
+-			i.type = "button", i.className = "comimi-view-switcher-button comimi-has-tooltip", i.dataset.selected = "false", i.addEventListener("click", (t) => {
 -				t.stopPropagation(), this.callbacks.setLayoutMode(e);
-+				t.stopPropagation(), e === "browserFullscreen" && this.callbacks.requestFullscreen ? this.callbacks.requestFullscreen() : this.callbacks.setLayoutMode(e);
- 			});
- 			let a = document.createElement("span");
- 			a.className = "comimi-view-switcher-icon-wrap";
-@@ -1582,6 +1578,10 @@ var ke = class {
+-			});
+-			let a = document.createElement("span");
+-			a.className = "comimi-view-switcher-icon-wrap";
+-			let o = b(r);
+-			o.classList.add("comimi-view-switcher-icon"), a.append(o);
+-			let s = document.createElement("span");
+-			return s.className = "comimi-tooltip", s.textContent = t.t(n), i.setAttribute("aria-label", t.t(n)), i.append(a, s), this.root.append(i), {
+-				mode: e,
+-				iconName: r,
+-				labelKey: n,
+-				button: i,
+-				iconWrap: a,
+-				tooltip: s
+-			};
+-		});
+-	}
+-	getElement() {
+-		return this.root;
+-	}
+-	update(e) {
+-		let t = Math.max(0, this.entries.findIndex((t) => t.mode === e.layout.mode));
+-		this.indicator.style.transform = `translateX(${t * Ae}px)`;
+-		let n = this.prevMode !== void 0 && this.prevMode !== e.layout.mode;
+-		for (let t of this.entries) {
+-			let r = t.mode === e.layout.mode;
+-			t.button.dataset.selected = String(r), n && r && this.applyPopAnimation(t.iconWrap);
+-			let i = this.i18n.t(t.labelKey);
+-			t.tooltip.textContent = i, t.button.setAttribute("aria-label", i);
+-		}
+-		this.prevMode = e.layout.mode;
+-	}
+-	applyPopAnimation(e) {
+-		e.classList.remove("comimi-pop-animate"), e.getBoundingClientRect(), e.classList.add("comimi-pop-animate");
+-	}
+-}, Me = class {
+-	callbacks;
+-	i18n;
+-	hidden;
+-	lockLayoutMode;
+ 	root;
+ 	seekCurrent;
+ 	seekTotal;
+@@ -1517,56 +616,21 @@ var ke = class {
+ 	seekPreviewLabel;
+ 	seekPreviewKey;
+ 	currentState;
+-	autoplayContainer;
+-	autoplayButton;
+-	autoplaySlider;
+-	autoplayTooltip;
+-	autoplayProgress;
+-	autoplayProgressBar;
+-	side;
+-	pageMode;
+-	pageModeIndicator;
+-	pageModeSingleBtn;
+-	pageModeSpreadBtn;
+-	pageModeSingleIcon;
+-	pageModeSpreadIcon;
+-	pageModeSingleTooltip;
+-	pageModeSpreadTooltip;
+-	settings;
+-	settingsContainer;
+-	settingsButton;
+-	settingsIcon;
+-	settingsTooltip;
+-	viewModeSwitcher;
+-	prevPageTurnMode;
+ 	currentPageIndex = 0;
+-	constructor(e, t, n = /* @__PURE__ */ new Set(), r = !1) {
+-		this.callbacks = e, this.i18n = t, this.hidden = n, this.lockLayoutMode = r, this.root = document.createElement("div"), this.root.className = "comimi-controls-dock", this.root.dataset.overlay = "false", this.root.dataset.autoplay = "false";
+-		let i = document.createElement("div");
+-		i.className = "comimi-controls-bg", this.root.append(i, this.buildSeek(), this.buildRow());
+-	}
+-	getSettingsElement() {
+-		return this.settings.getElement();
++	constructor(e, t) {
++		this.callbacks = e, this.i18n = t, this.root = document.createElement("div"), this.root.className = "comimi-controls-dock", this.root.dataset.overlay = "false", this.root.dataset.autoplay = "false";
++		let n = document.createElement("div");
++		n.className = "comimi-controls-bg", this.root.append(n, this.buildSeek());
+ 	}
+ 	getElement() {
+ 		return this.root;
+ 	}
+-	update(e, t) {
++	update(e) {
+ 		this.currentState = e, this.root.dataset.autoplay = String(e.autoPageTurnEnabled);
+-		let n = e.manga.pages.length, r = Math.max(1, n);
++		let t = e.manga.pages.length, n = Math.max(1, t);
+ 		this.currentPageIndex = e.currentPageIndex;
+-		let i = e.currentPageIndex + 1, a = n <= 1 ? 0 : e.currentPageIndex / (n - 1);
+-		this.seekCurrent.textContent = String(i), this.seekTotal.textContent = ` / ${r}`, this.seekFill.style.width = `${a * 100}%`, this.seekBar.dataset.direction = e.settings.readingDirection, this.seekInput.max = String(Math.max(0, n - 1)), document.activeElement !== this.seekInput && (this.seekInput.value = String(e.currentPageIndex)), this.seekInput.dataset.direction = e.settings.readingDirection, this.seekInput.setAttribute("aria-disabled", String(e.autoPageTurnEnabled)), this.seekInput.tabIndex = e.autoPageTurnEnabled ? -1 : 0, this.autoplaySlider.dataset.active = String(e.autoPageTurnEnabled);
+-		let o = this.i18n.t("overlay.autoPageTurn");
+-		this.autoplayButton.setAttribute("aria-label", o), this.autoplayTooltip.textContent = o, e.autoPageTurnEnabled ? (this.autoplayProgress || (this.autoplayProgress = document.createElement("div"), this.autoplayProgress.className = "comimi-autoplay-progress", this.autoplayProgressBar = document.createElement("span"), this.autoplayProgressBar.className = "comimi-autoplay-progress-bar", this.autoplayProgress.append(this.autoplayProgressBar), this.autoplayContainer.append(this.autoplayProgress)), this.autoplayProgressBar.style.animationDuration = `${e.settings.autoPageTurnIntervalMs}ms`) : this.autoplayProgress && (this.autoplayProgress.remove(), this.autoplayProgress = void 0, this.autoplayProgressBar = void 0);
+-		let s = e.settings.pageTurnMode === "spread";
+-		if (this.pageModeSingleBtn.dataset.selected = String(!s), this.pageModeSpreadBtn.dataset.selected = String(s), this.pageModeIndicator.style.transform = `translateX(${s ? 42 : 0}px)`, this.prevPageTurnMode !== void 0 && this.prevPageTurnMode !== e.settings.pageTurnMode) {
+-			let e = s ? this.pageModeSpreadIcon : this.pageModeSingleIcon;
+-			this.applyPopAnimation(e);
+-		}
+-		this.pageModeSingleTooltip.textContent = this.i18n.t("pageMode.single"), this.pageModeSpreadTooltip.textContent = this.i18n.t("pageMode.spread"), this.hidden.has("pageMode") || (this.pageMode.style.display = t ? "none" : "");
+-		let c = this.i18n.t("overlay.settings");
+-		this.settingsButton.setAttribute("aria-label", c), this.settingsTooltip.textContent = c, this.settingsContainer.dataset.open = String(e.panel === "settings"), this.settings.update(e), this.viewModeSwitcher?.update(e), this.prevPageTurnMode = e.settings.pageTurnMode;
++		let r = e.currentPageIndex + 1, i = t <= 1 ? 0 : e.currentPageIndex / (t - 1);
++		this.seekCurrent.textContent = String(r), this.seekTotal.textContent = ` / ${n}`, this.seekFill.style.width = `${i * 100}%`, this.seekBar.dataset.direction = e.settings.readingDirection, this.seekInput.max = String(Math.max(0, t - 1)), document.activeElement !== this.seekInput && (this.seekInput.value = String(e.currentPageIndex)), this.seekInput.dataset.direction = e.settings.readingDirection, this.seekInput.setAttribute("aria-disabled", String(e.autoPageTurnEnabled)), this.seekInput.tabIndex = e.autoPageTurnEnabled ? -1 : 0;
+ 	}
+ 	buildSeek() {
+ 		let e = document.createElement("div");
+@@ -1582,6 +646,10 @@ var ke = class {
  			this.callbacks.goToPage(Number(this.seekInput.value));
  		}), this.seekPreview = document.createElement("div"), this.seekPreview.className = "comimi-seek-preview", this.seekPreview.dataset.show = "false", this.seekPreviewThumbs = document.createElement("div"), this.seekPreviewThumbs.className = "comimi-seek-preview-thumbs", this.seekPreviewLabel = document.createElement("div"), this.seekPreviewLabel.className = "comimi-seek-preview-label", this.seekPreview.append(this.seekPreviewThumbs, this.seekPreviewLabel), this.seekBar.addEventListener("mousemove", (e) => this.updateSeekPreview(e)), this.seekBar.addEventListener("mouseleave", () => {
  			this.seekPreview.dataset.show = "false";
@@ -53,7 +1015,7 @@ index 4fd4ab2..de17499 100644
  		}), this.seekBar.append(n, this.seekInput, this.seekPreview), e.append(t, this.seekBar), e;
  	}
  	updateSeekPreview(e) {
-@@ -1591,7 +1591,13 @@ var ke = class {
+@@ -1591,7 +659,13 @@ var ke = class {
  		if (n === 0) return;
  		let r = this.seekBar.getBoundingClientRect();
  		if (r.width === 0) return;
@@ -68,7 +1030,78 @@ index 4fd4ab2..de17499 100644
  		this.refreshSeekPreviewThumbs(s, c);
  		let l = [...s].sort((e, t) => e - t);
  		this.seekPreviewLabel.textContent = l.length > 1 ? `${l[0] + 1} - ${l[l.length - 1] + 1}` : String(l[0] + 1), this.seekPreview.style.left = `${i}px`, this.seekPreview.dataset.show = "true";
-@@ -1807,10 +1813,16 @@ var Le = class {
+@@ -1613,70 +687,6 @@ var ke = class {
+ 			}
+ 		}
+ 	}
+-	buildRow() {
+-		let e = document.createElement("div");
+-		e.className = "comimi-controls-row";
+-		let t = this.buildAutoplay();
+-		return this.hidden.has("autoplay") && (t.dataset.comimiHidden = "true"), e.append(t, this.buildCenter(), this.buildSide()), e;
+-	}
+-	buildCenter() {
+-		let e = document.createElement("div");
+-		return e.className = "comimi-controls-center", e;
+-	}
+-	buildAutoplay() {
+-		this.autoplayContainer = document.createElement("div"), this.autoplayContainer.className = "comimi-autoplay", this.autoplayButton = document.createElement("button"), this.autoplayButton.type = "button", this.autoplayButton.className = "comimi-autoplay-button comimi-has-tooltip", this.autoplayButton.addEventListener("click", (e) => {
+-			e.stopPropagation(), this.callbacks.toggleAutoPageTurn();
+-		});
+-		let e = document.createElement("span");
+-		e.className = "comimi-autoplay-window", this.autoplaySlider = document.createElement("span"), this.autoplaySlider.className = "comimi-autoplay-slider", this.autoplaySlider.dataset.active = "false";
+-		let t = b("play");
+-		t.classList.add("comimi-autoplay-icon", "comimi-autoplay-icon-play");
+-		let n = b("pause");
+-		return n.classList.add("comimi-autoplay-icon", "comimi-autoplay-icon-pause"), this.autoplaySlider.append(t, n), e.append(this.autoplaySlider), this.autoplayTooltip = document.createElement("span"), this.autoplayTooltip.className = "comimi-tooltip", this.autoplayButton.append(e, this.autoplayTooltip), this.autoplayContainer.append(this.autoplayButton), this.autoplayContainer;
+-	}
+-	buildSide() {
+-		this.side = document.createElement("div"), this.side.className = "comimi-controls-side", this.pageMode = document.createElement("div"), this.pageMode.className = "comimi-page-mode";
+-		let e = document.createElement("div");
+-		e.className = "comimi-page-mode-wrapper", this.pageModeIndicator = document.createElement("span"), this.pageModeIndicator.className = "comimi-page-mode-indicator", this.pageModeIndicator.style.transform = "translateX(0px)", e.append(this.pageModeIndicator), [this.pageModeSingleBtn, this.pageModeSingleIcon, this.pageModeSingleTooltip] = this.buildPageModeButton("single", "one"), [this.pageModeSpreadBtn, this.pageModeSpreadIcon, this.pageModeSpreadTooltip] = this.buildPageModeButton("spread", "two"), e.append(this.pageModeSingleBtn, this.pageModeSpreadBtn), this.pageMode.append(e), this.hidden.has("pageMode") && (this.pageMode.dataset.comimiHidden = "true"), [this.settingsContainer, this.settingsButton, this.settingsIcon, this.settingsTooltip] = this.buildSettings(), this.settings = new ke(this.callbacks, this.i18n, this.hidden);
+-		let t = [this.pageMode];
+-		return !this.lockLayoutMode && !this.hidden.has("viewMode") && (this.viewModeSwitcher = new je(this.callbacks, this.i18n), t.push(this.viewModeSwitcher.getElement())), t.push(this.settingsContainer), this.side.append(...t), this.side;
+-	}
+-	buildPageModeButton(e, t) {
+-		let n = document.createElement("button");
+-		n.type = "button", n.className = "comimi-page-mode-button comimi-has-tooltip", n.dataset.selected = "false", n.addEventListener("click", (t) => {
+-			t.stopPropagation(), this.callbacks.updateSettings({ pageTurnMode: e });
+-		});
+-		let r = b(t);
+-		r.classList.add("comimi-page-mode-icon");
+-		let i = document.createElement("span");
+-		return i.className = "comimi-tooltip", n.append(r, i), [
+-			n,
+-			r,
+-			i
+-		];
+-	}
+-	buildSettings() {
+-		let e = document.createElement("div");
+-		e.className = "comimi-settings", e.dataset.open = "false";
+-		let t = document.createElement("button");
+-		t.type = "button", t.className = "comimi-settings-button comimi-has-tooltip", t.addEventListener("click", (t) => {
+-			t.stopPropagation();
+-			let n = e.dataset.open === "true";
+-			this.callbacks.setPanel(n ? "none" : "settings");
+-		});
+-		let n = b("settings");
+-		n.classList.add("comimi-settings-icon");
+-		let r = document.createElement("span");
+-		return r.className = "comimi-tooltip", t.append(n, r), e.append(t), [
+-			e,
+-			t,
+-			n,
+-			r
+-		];
+-	}
+-	applyPopAnimation(e) {
+-		e.classList.remove("comimi-pop-animate"), e.getBoundingClientRect(), e.classList.add("comimi-pop-animate");
+-	}
+ };
+ //#endregion
+ //#region src/components/move-direction-guide.ts
+@@ -1807,10 +817,16 @@ var Le = class {
  			i.replaceChildren(R(this.options.i18n, n + 1, this.options.errorMascot)), this.options.onPageLoadError?.(n);
  		}), a.addEventListener("contextmenu", (e) => e.preventDefault()), i.append(a);
  		let o = `${e.manga.id}:${t.id}`, s = this.imageSources.get(o);
@@ -89,7 +1122,85 @@ index 4fd4ab2..de17499 100644
  		let c = Ie(this.options.i18n, this.options.loadingMascot);
  		return i.append(c), a.style.visibility = "hidden", this.resolveSource(e, t, n, r).then((e) => {
  			a.addEventListener("load", () => {
-@@ -2161,7 +2173,7 @@ var ht = 180, gt = 500, _t = 10, vt = .01, yt = 16, bt = 400, xt = 1400, St = [
+@@ -1961,11 +977,7 @@ function mt() {
+ //#endregion
+ //#region src/renderer/viewer-renderer.ts
+ var ht = 180, gt = 500, _t = 10, vt = .01, yt = 16, bt = 400, xt = 1400, St = [
+-	".comimi-arrow-button",
+-	".comimi-view-switcher",
+ 	".comimi-controls-dock",
+-	".comimi-menu-panel",
+-	".comimi-settings-layer",
+ 	"button",
+ 	"input",
+ 	"select",
+@@ -1990,9 +1002,7 @@ var ht = 180, gt = 500, _t = 10, vt = .01, yt = 16, bt = 400, xt = 1400, St = [
+ 	prevCenterMessageVisible = !1;
+ 	prevMoveGuideVisible = !1;
+ 	overlayApplyRaf;
+-	menuPanel;
+ 	controlsDock;
+-	arrowButtons;
+ 	resizeHandle;
+ 	viewSizeObserver;
+ 	autoplayProgress;
+@@ -2000,15 +1010,12 @@ var ht = 180, gt = 500, _t = 10, vt = .01, yt = 16, bt = 400, xt = 1400, St = [
+ 	destroyed = !1;
+ 	callbacks;
+ 	i18n;
+-	lockLayoutMode;
+ 	mascot;
+-	hidden;
+-	pageQueryParam;
+ 	handleVisibilityChange = () => {
+ 		this.destroyed || document.visibilityState !== "visible" || (this.overlayApplyRaf !== void 0 && (cancelAnimationFrame(this.overlayApplyRaf), this.overlayApplyRaf = void 0), this.applyOverlayVisibility(this.prevOverlayVisible), this.applyCenterMessageVisibility(this.prevCenterMessageVisible), this.applyMoveGuideVisibility(this.prevMoveGuideVisible));
+ 	};
+ 	constructor(e, t) {
+-		this.container = e, this.callbacks = t.callbacks, this.i18n = t.i18n, this.lockLayoutMode = t.lockLayoutMode ?? !1, this.mascot = t.mascot, this.hidden = t.hidden ?? /* @__PURE__ */ new Set(), this.pageQueryParam = t.pageQueryParam, mt(), this.pageStage = new Le({
++		this.container = e, this.callbacks = t.callbacks, this.i18n = t.i18n, this.mascot = t.mascot, mt(), this.pageStage = new Le({
+ 			assetLoader: t.assetLoader,
+ 			i18n: this.i18n,
+ 			isMobileViewport: () => this.isMobileViewport(),
+@@ -2027,23 +1034,14 @@ var ht = 180, gt = 500, _t = 10, vt = .01, yt = 16, bt = 400, xt = 1400, St = [
+ 	update(e) {
+ 		if (this.destroyed || this.isPageTurnAnimating) return;
+ 		this.cleanup.forEach((e) => e()), this.cleanup = [], this.i18n.setLocale(e.settings.locale), this.root.dataset.layout = e.layout.mode, this.root.dataset.bg = e.settings.backgroundColor, this.root.dataset.theme = e.settings.theme, e.layout.mode === "wide" && e.layout.wideHeightPx ? this.root.style.height = `${e.layout.wideHeightPx}px` : this.root.style.height = "";
+-		let t = this.prevOverlayVisible !== e.overlayVisible, n = e.overlayVisible && e.moveGuideVisible, r = e.overlayVisible && !e.moveGuideVisible, i = this.prevMoveGuideVisible !== n, a = this.prevCenterMessageVisible !== r, o = t ? {
+-			...e,
+-			overlayVisible: this.prevOverlayVisible
+-		} : e, s = i ? this.prevMoveGuideVisible : n, c = a ? this.prevCenterMessageVisible : r;
+-		this.menuPanel ||= new Ce(this.callbacks, this.i18n, {
+-			lockLayoutMode: this.lockLayoutMode,
+-			mascot: T(this.mascot, "menu"),
+-			pageQueryParam: this.pageQueryParam
+-		}), this.controlsDock ||= new Me(this.callbacks, this.i18n, this.hidden, this.lockLayoutMode), this.notifications ||= new ze(), this.arrowButtons ||= new we(this.callbacks);
+-		let l = this.pageStage.getElement(), u = this.menuPanel.getElement(), d = this.controlsDock.getElement(), f = this.controlsDock.getSettingsElement(), p = this.notifications.getElement(), m = this.arrowButtons.getElement();
++		let t = this.prevOverlayVisible !== e.overlayVisible, n = e.overlayVisible && e.moveGuideVisible, r = e.overlayVisible && !e.moveGuideVisible, i = this.prevMoveGuideVisible !== n, a = this.prevCenterMessageVisible !== r, s = i ? this.prevMoveGuideVisible : n, c = a ? this.prevCenterMessageVisible : r;
++		this.controlsDock ||= new Me(this.callbacks, this.i18n), this.notifications ||= new ze();
++		let l = this.pageStage.getElement(), d = this.controlsDock.getElement(), p = this.notifications.getElement();
+ 		Array.from(this.root.children).forEach((e) => {
+-			e !== l && e !== u && e !== d && e !== f && e !== this.splash && e !== this.autoplayProgress?.root && e !== p && e !== m && !e.classList.contains("comimi-favorite-burst") && e.remove();
+-		}), l.parentNode !== this.root && this.root.prepend(l), this.pageStage.update(e, this.isMobileViewport()), this.pageStage.snapTransform(), this.arrowButtons.update(o);
++			e !== l && e !== d && e !== this.splash && e !== this.autoplayProgress?.root && e !== p && !e.classList.contains("comimi-favorite-burst") && e.remove();
++		}), l.parentNode !== this.root && this.root.prepend(l), this.pageStage.update(e, this.isMobileViewport()), this.pageStage.snapTransform();
+ 		let h = [Ee(c, this.i18n), Ne(e.settings.readingDirection, s, this.i18n)];
+-		this.syncResizeHandle(e.layout.mode === "wide");
+-		let g = u.parentNode === this.root ? u : null;
+-		if (g ? (m.parentNode !== this.root && this.root.insertBefore(m, g), h.forEach((e) => this.root.insertBefore(e, m))) : (h.forEach((e) => this.root.appendChild(e)), m.parentNode !== this.root && this.root.appendChild(m), this.root.appendChild(u)), d.parentNode !== this.root && this.root.appendChild(d), f.parentNode !== this.root && this.root.appendChild(f), p.parentNode !== this.root && this.root.appendChild(p), this.menuPanel.update(o), this.controlsDock.update(o, this.isMobileViewport()), this.notifications.update(e), this.syncAutoplayOverlayProgress(e), this.splash && this.splash.parentNode !== this.root && this.root.append(this.splash), this.bindGestures(e), this.overlayApplyRaf !== void 0 && (cancelAnimationFrame(this.overlayApplyRaf), this.overlayApplyRaf = void 0), t || a || i) {
++		this.syncResizeHandle(e.layout.mode === "wide"), h.forEach((e) => this.root.appendChild(e)), d.parentNode !== this.root && this.root.appendChild(d), p.parentNode !== this.root && this.root.appendChild(p), this.controlsDock.update(e), this.notifications.update(e), this.syncAutoplayOverlayProgress(e), this.splash && this.splash.parentNode !== this.root && this.root.append(this.splash), this.bindGestures(e), this.overlayApplyRaf !== void 0 && (cancelAnimationFrame(this.overlayApplyRaf), this.overlayApplyRaf = void 0); if (t || a || i) {
+ 			let o = e.overlayVisible, s = r, c = n;
+ 			this.root.offsetWidth, this.overlayApplyRaf = requestAnimationFrame(() => {
+ 				this.overlayApplyRaf = void 0, t && this.applyOverlayVisibility(o), a && this.applyCenterMessageVisibility(s), i && this.applyMoveGuideVisibility(c);
+@@ -2065,7 +1063,7 @@ var ht = 180, gt = 500, _t = 10, vt = .01, yt = 16, bt = 400, xt = 1400, St = [
+ 	}
+ 	applyOverlayVisibility(e) {
+ 		let t = String(e);
+-		this.root.querySelectorAll(".comimi-arrows, .comimi-menu-panel, .comimi-view-switcher, .comimi-controls-dock, .comimi-stage").forEach((e) => {
++		this.root.querySelectorAll(".comimi-controls-dock, .comimi-stage").forEach((e) => {
+ 			e.dataset.overlay = t;
+ 		});
+ 	}
+@@ -2161,7 +1159,7 @@ var ht = 180, gt = 500, _t = 10, vt = .01, yt = 16, bt = 400, xt = 1400, St = [
  			let c = this.root.getBoundingClientRect(), l = t.clientX - (c.left + c.width / 2), u = t.clientY - (c.top + c.height / 2), d = s / n, f = i * d + l * (1 - d), p = a * d + u * (1 - d), m = this.clampPan(f, p, s);
  			this.callbacks.setZoom(s, m.x, m.y);
  		}, i = (t) => {
@@ -98,7 +1209,7 @@ index 4fd4ab2..de17499 100644
  				x: t.clientX,
  				y: t.clientY,
  				panX: e.panX,
-@@ -2184,7 +2196,7 @@ var ht = 180, gt = 500, _t = 10, vt = .01, yt = 16, bt = 400, xt = 1400, St = [
+@@ -2184,7 +1182,7 @@ var ht = 180, gt = 500, _t = 10, vt = .01, yt = 16, bt = 400, xt = 1400, St = [
  			}
  			if (this.isSwipeBlockingTarget(t.target)) return;
  			let n = t.touches[0];
@@ -107,7 +1218,27 @@ index 4fd4ab2..de17499 100644
  				x: n.clientX,
  				y: n.clientY,
  				panX: e.panX,
-@@ -2621,6 +2633,10 @@ var At = class {
+@@ -2210,10 +1208,6 @@ var ht = 180, gt = 500, _t = 10, vt = .01, yt = 16, bt = 400, xt = 1400, St = [
+ 			}
+ 			let r = n.clientX - this.touchStart.x, i = n.clientY - this.touchStart.y;
+ 			this.handleSwipeEnd(r, i, e), this.touchStart = void 0;
+-		}, u = (t) => {
+-			if (this.suppressNextClick || this.isPageTurnAnimating || e.panel !== "settings") return;
+-			let n = t.target;
+-			n instanceof Element && (n.closest(".comimi-settings, .comimi-settings-layer") || this.callbacks.setPanel("none"));
+ 		}, d = (e) => {
+ 			this.isSwipeBlockingTarget(e.target) || e.preventDefault();
+ 		}, f = (e) => {
+@@ -2229,7 +1223,7 @@ var ht = 180, gt = 500, _t = 10, vt = .01, yt = 16, bt = 400, xt = 1400, St = [
+ 			capture: !0,
+ 			passive: !1
+ 		}), this.cleanup.push(() => this.root.removeEventListener(e, f, !0));
+-		window.addEventListener("mouseup", f, !0), this.cleanup.push(() => window.removeEventListener("mouseup", f, !0)), this.root.addEventListener("click", u, !0), this.root.addEventListener("click", t), this.root.addEventListener("wheel", n, { passive: !1 }), this.root.addEventListener("mousedown", i), window.addEventListener("mousemove", a), window.addEventListener("mouseup", o), this.root.addEventListener("touchstart", s, { passive: !1 }), this.root.addEventListener("touchmove", c, { passive: !1 }), this.root.addEventListener("touchend", l), this.root.addEventListener("touchcancel", l), this.root.addEventListener("dragstart", d), this.cleanup.push(() => this.root.removeEventListener("click", u, !0), () => this.root.removeEventListener("click", t), () => this.root.removeEventListener("wheel", n), () => this.root.removeEventListener("mousedown", i), () => window.removeEventListener("mousemove", a), () => window.removeEventListener("mouseup", o), () => this.root.removeEventListener("touchstart", s), () => this.root.removeEventListener("touchmove", c), () => this.root.removeEventListener("touchend", l), () => this.root.removeEventListener("touchcancel", l), () => this.root.removeEventListener("dragstart", d));
++		window.addEventListener("mouseup", f, !0), this.cleanup.push(() => window.removeEventListener("mouseup", f, !0)), this.root.addEventListener("click", t), this.root.addEventListener("wheel", n, { passive: !1 }), this.root.addEventListener("mousedown", i), window.addEventListener("mousemove", a), window.addEventListener("mouseup", o), this.root.addEventListener("touchstart", s, { passive: !1 }), this.root.addEventListener("touchmove", c, { passive: !1 }), this.root.addEventListener("touchend", l), this.root.addEventListener("touchcancel", l), this.root.addEventListener("dragstart", d), this.cleanup.push(() => this.root.removeEventListener("click", t), () => this.root.removeEventListener("wheel", n), () => this.root.removeEventListener("mousedown", i), () => window.removeEventListener("mousemove", a), () => window.removeEventListener("mouseup", o), () => this.root.removeEventListener("touchstart", s), () => this.root.removeEventListener("touchmove", c), () => this.root.removeEventListener("touchend", l), () => this.root.removeEventListener("touchcancel", l), () => this.root.removeEventListener("dragstart", d));
+ 	}
+ 	startLongPress(e, t, n, r) {
+ 		this.cancelLongPress();
+@@ -2621,6 +1615,10 @@ var At = class {
  			n.delete(t);
  		};
  	}
@@ -118,20 +1249,29 @@ index 4fd4ab2..de17499 100644
  	emit(e, t) {
  		let n = this.handlers.get(e);
  		if (n) for (let e of n) try {
-@@ -2744,6 +2760,12 @@ var Rt = class {
+@@ -2744,6 +1742,9 @@ var Rt = class {
  					pageIndex: e,
  					page: t
  				});
-+			},
-+			requestBack: () => {
-+				this.events.emit("back", void 0);
 +			},
 +			requestFullscreen: () => {
 +				this.events.has("fullscreenRequest") ? this.events.emit("fullscreenRequest", void 0) : this.setLayoutMode("browserFullscreen");
  			}
  		};
  		this.renderer = new wt(this.container, {
-@@ -2923,10 +2945,12 @@ var Rt = class {
+@@ -2752,10 +1753,7 @@ var Rt = class {
+ 			i18n: this.i18n,
+ 			className: i.className,
+ 			resolvePageSrc: i.resolvePageSrc,
+-			lockLayoutMode: this.lockLayoutMode,
+-			mascot: i.mascot,
+-			hidden: new Set(i.hiddenSettings ?? []),
+-			pageQueryParam: i.initialPageQueryParam
++			mascot: i.mascot
+ 		});
+ 		for (let [e, t] of Object.entries(i.events ?? {})) this.on(e, t);
+ 		this.unsubscribers.push(this.store.subscribe((e, t) => {
+@@ -2923,10 +1921,12 @@ var Rt = class {
  		}
  	}
  	nextPage() {
@@ -146,24 +1286,58 @@ index 4fd4ab2..de17499 100644
  	}
  	commitNextPage() {
  		if (this.renderer.isMobileViewport()) {
-@@ -3073,15 +3097,10 @@ var Rt = class {
- 						panel: "none"
- 					}), this.lockLayoutMode || this.setLayoutMode("inline");
+@@ -3068,31 +2068,13 @@ var Rt = class {
+ 					e.preventDefault(), this.setLayoutMode("inline");
  					break;
+ 				case "Escape":
+-					e.preventDefault(), this.store.dispatch({
+-						type: "setPanel",
+-						panel: "none"
+-					}), this.lockLayoutMode || this.setLayoutMode("inline");
+-					break;
 -				case "w":
 -				case "W":
 -					if (this.lockLayoutMode) break;
 -					e.preventDefault(), this.setLayoutMode("wide");
--					break;
++					e.preventDefault(), this.lockLayoutMode || this.setLayoutMode("inline");
+ 					break;
  				case "f":
  				case "F":
  					if (this.lockLayoutMode) break;
 -					e.preventDefault(), this.setLayoutMode("browserFullscreen");
+-					break;
+-				case "m":
+-				case "M": {
+-					e.preventDefault();
+-					let t = O(this.store.getState().panel);
+-					this.store.dispatch({
+-						type: "setPanel",
+-						panel: t ? "none" : "menu"
+-					});
 +					e.preventDefault(), this.events.has("fullscreenRequest") ? this.events.emit("fullscreenRequest", void 0) : this.setLayoutMode("browserFullscreen");
  					break;
- 				case "m":
- 				case "M": {
-@@ -3192,7 +3211,7 @@ var Rt = class {
+-				}
+ 				case "p":
+ 				case "P":
+ 					e.preventDefault(), this.updateSettings({ pageTurnMode: this.store.getState().settings.pageTurnMode === "spread" ? "single" : "spread" });
+@@ -3105,16 +2087,6 @@ var Rt = class {
+ 				case "O":
+ 					e.preventDefault(), this.toggleOverlay();
+ 					break;
+-				case "s":
+-				case "S": {
+-					e.preventDefault();
+-					let t = this.store.getState().panel === "settings";
+-					this.store.dispatch({
+-						type: "setPanel",
+-						panel: t ? "none" : "settings"
+-					});
+-					break;
+-				}
+ 			}
+ 		};
+ 		window.addEventListener("keydown", e), this.unsubscribers.push(() => window.removeEventListener("keydown", e));
+@@ -3192,7 +2164,7 @@ var Rt = class {
  				this.toggleAutoPageTurn();
  				return;
  			}
@@ -173,15 +1347,13 @@ index 4fd4ab2..de17499 100644
  	}
  	isAtLastPage() {
 diff --git a/dist/types.d.ts b/dist/types.d.ts
-index 873f647..bbfeb1e 100644
+index 873f6474b43b8a777fdeaccc9036931739c35468..84dd7c5033231061382e7822f5d0f30b3777bab8 100644
 --- a/dist/types.d.ts
 +++ b/dist/types.d.ts
-@@ -253,6 +253,10 @@ export interface ViewerEventMap {
+@@ -253,6 +253,8 @@ export interface ViewerEventMap {
          page: MangaPage;
      };
      destroy: void;
-+    /** メニューの「戻る」項目が押されたとき。 */
-+    back: void;
 +    /** 全画面の切替が要求されたとき（アプリ側の Fullscreen API 併用向け）。 */
 +    fullscreenRequest: void;
  }

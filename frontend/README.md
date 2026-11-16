@@ -58,7 +58,7 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
 
 ## comimi / comimi-react 补丁
 
-本仓库对 `@yui540/comimi` 维护四处补丁，均由同一个 `patches/@yui540%2Fcomimi@0.26.0.patch` 承载：**预加载页白屏**、**触屏进度条缩略图**、**阅读器返回/全屏入口迁入 comimi（并移除宽屏选项）**与**平移翻页动画入口统一**。另有 `patches/@yui540%2Fcomimi-react@0.3.0.patch`，把新增事件加入运行时事件白名单，使 `onBack` / `onFullscreenRequest` 能作为 props 透传。
+本仓库对 `@yui540/comimi` 维护四处补丁，均由同一个 `patches/@yui540%2Fcomimi@0.26.0.patch` 承载：**预加载页白屏**、**触屏进度条缩略图**、**全屏入口与移除被应用顶栏替代的原生 UI**、**平移翻页动画入口统一**。另有 `patches/@yui540%2Fcomimi-react@0.3.0.patch`，把新增的 `fullscreenRequest` 事件加入运行时事件白名单，使 `onFullscreenRequest` 能作为 props 透传。
 
 ### 补丁一：预加载页白屏
 
@@ -142,18 +142,18 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
 }
 ```
 
-### 补丁三：阅读器返回/全屏入口迁入 comimi（移除宽屏）
+### 补丁三：全屏入口与移除被应用顶栏替代的原生 UI
 
 #### 背景
 
-阅读器原本自绘一条 `.reader-topbar`：返回、页码、离线徽标、全屏切换。进入 comimi 的全屏布局后，库把 `.comimi-root` 设为 `position: fixed; inset: 0`，会盖住顶栏，返回与退出全屏都变得不可达。现在把返回与全屏入口收进 comimi 自身 UI，并移除顶部栏（页码与「离线数据」徽标一并移除）。
+阅读器的返回、全屏、阅读设置、页面列表和快捷键面板都由应用顶栏（`ReaderToolbar`）提供。comimi 自带的菜单胶囊、菜单面板、设置层、左右箭头和 dock 按钮此前只是被 `src/index.css` 隐藏，代码仍会被构建、实例化并占用键盘（`M` / `S`）。现在直接删除这些原生 UI 的构建代码与接线，只保留应用实际使用的进度条 dock。
 
 #### comimi 侧补丁
 
-- **事件**：`dist/types.d.ts` 的 `ViewerEventMap` 新增 `back` / `fullscreenRequest`；`dist/index.js` 的核心回调新增 `requestBack` / `requestFullscreen` 并分别 `emit`。`requestFullscreen` 在没有监听者时回退到 `setLayoutMode("browserFullscreen")`。
-- **返回入口**：`buildMenuView` 在「关于 comimi」下方追加 `menu.backToGallery` 条目，点击关闭菜单并派发 `back`。
-- **全屏入口**：dock 视图切换器的全屏按钮与 `F` 键改为派发 `fullscreenRequest`，由应用侧统一处理（保持原来的 `browserFullscreen` + 原生 `requestFullscreen` + `fullscreenchange` 同步）。
-- **移除宽屏**：视图切换器 `entries` 去掉 `wide`；内置 CSS `repeat(3, 42px)` / `126px` 改为 `repeat(2, 42px)` / `84px`；快捷键列表去掉 `W`；键盘 `W` 分支删除。
+- **事件**：`dist/types.d.ts` 的 `ViewerEventMap` 只新增 `fullscreenRequest`（`back` 事件链随菜单一起删除）；`dist/index.js` 的核心回调新增 `requestFullscreen` 并 `emit`，没有监听者时回退到 `setLayoutMode("browserFullscreen")`。
+- **全屏入口**：`F` 键改为派发 `fullscreenRequest`（应用顶栏的全屏按钮直接调用同一个 `toggleFullscreen`），由应用侧统一处理（保持原来的 `browserFullscreen` + 原生 `requestFullscreen` + `fullscreenchange` 同步）。
+- **删除被顶栏替代的 UI**：菜单面板 `Ce`（菜单/页面列表/收藏/快捷键/分享/关于视图与菜单兔）、设置层 `ke`、左右箭头 `we`、视图切换器 `je`，以及 dock 的 `comimi-controls-row`（autoplay / page-mode / settings 按钮）。renderer 不再创建或插入它们，`applyOverlayVisibility` 与点击吞掉选择器也移除了对应类名。
+- **移除宽屏 UI**：快捷键列表与键盘 `W` 分支删除；视图切换器随 `je` 整体删除。`LayoutMode` 类型与 `setLayoutMode("wide")` 仍保留给 API 使用，但不再有 UI 入口。
 
 ```diff
 +	has(e) {
@@ -169,34 +169,55 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
  				page: t
  			});
 +		},
-+		requestBack: () => {
-+			this.events.emit("back", void 0);
-+		},
 +		requestFullscreen: () => {
 +			this.events.has("fullscreenRequest") ? this.events.emit("fullscreenRequest", void 0) : this.setLayoutMode("browserFullscreen");
  		}
  	};
 ```
 
-`menu.backToGallery` 的文案不放进库内 locale，而是由 `ReaderPage` 通过 `translations` 传入（见下）。
-
 #### comimi-react 侧补丁
 
-`dist/index.js` 的事件白名单 `V` 增加 `"back"` / `"fullscreenRequest"`。comimi-react 的 `on<EventName>` props 类型由 comimi 的 `ViewerEventMap` 推导，运行时却由这份硬编码白名单决定，因此两处必须同时加上，`onBack` / `onFullscreenRequest` 才会真正生效；它也会把这两个 prop 从透传到 DOM 的 rest props 中剔除。
+`dist/index.js` 的事件白名单 `V` 增加 `"fullscreenRequest"`。comimi-react 的 `on<EventName>` props 类型由 comimi 的 `ViewerEventMap` 推导，运行时却由这份硬编码白名单决定，因此两处必须同时加上，`onFullscreenRequest` 才会真正生效；它也会把这个 prop 从透传到 DOM 的 rest props 中剔除。
 
 #### 应用侧
 
-`ReaderPage` 删除 `.reader-topbar`，改用 `<MangaViewer onBack={...} onFullscreenRequest={...} />`：`onBack` 执行 `flushProgress()` + `goBack()`（沿用 `useBackNavigation` 的浏览器历史 / 深链回退规则）；`settings.layoutMode` 默认 `inline`（标准），用户可点 dock 的全屏按钮进入全屏。
+`ReaderPage` 使用应用顶栏提供返回（`flushProgress()` + `goBack()`，沿用 `useBackNavigation` 的浏览器历史 / 深链回退规则）与全屏按钮，`<MangaViewer onFullscreenRequest={...} />` 只接收 comimi 的 `F` 键全屏请求；`settings.layoutMode` 默认 `inline`（标准）。
 
 ### 补丁四：平移翻页动画入口统一
 
 #### 背景
 
-comimi 原生的平移翻页只在触摸滑动结束时的「惯性翻页」路径触发；点击屏幕左右两侧、左右箭头按钮和键盘翻页都是即时跳转、没有任何过渡。
+comimi 原生的平移翻页只在触摸滑动结束时的「惯性翻页」路径触发；点击屏幕左右两侧和键盘翻页都是即时跳转、没有任何过渡。
 
 #### 补丁
 
-核心 `nextPage` / `previousPage` 原来直接 `commitNextPage` / `commitPreviousPage`（点击、箭头、键盘都走这里），改为先走 `renderer.requestPageTurn(state, direction)`（即 `animatePageTurn`），仅在无法动画（已是边界、正在动画中）时回退到直接提交；动画期间 `isPageTurnAnimating` 挡住重复触发。自动播放也改走 `nextPage()`，因此与手动翻页使用同一条平移动画。
+核心 `nextPage` / `previousPage` 原来直接 `commitNextPage` / `commitPreviousPage`（点击、键盘都走这里），改为先走 `renderer.requestPageTurn(state, direction)`（即 `animatePageTurn`），仅在无法动画（已是边界、正在动画中）时回退到直接提交；动画期间 `isPageTurnAnimating` 挡住重复触发。自动播放也改走 `nextPage()`，因此与手动翻页使用同一条平移动画。
+
+### 已删除被应用顶栏替代的 comimi 原生 UI 与控制键
+
+下次升级重打补丁时，以下内容应继续删除，否则它们会被构建出来但被 CSS 隐藏，或占用键盘：
+
+| comimi 原生 UI | 原类/入口 | 处理 |
+| --- | --- | --- |
+| 浮动菜单胶囊、菜单面板（页面/收藏/快捷键/分享/关于、菜单兔、返回入口） | `Ce` / `.comimi-menu-panel` / `.comimi-menu-top` | 删除 |
+| 设置层（语言/主题/封面/方向/间隔） | `ke` / `.comimi-settings-layer` | 删除（应用设置面板已覆盖） |
+| 左右侧箭头 | `we` / `.comimi-arrows` | 删除（点击区域、按键和进度条已覆盖翻页） |
+| dock 的自动播放、单页/双页、视图切换、设置按钮 | `Me.buildRow` / `.comimi-controls-row` / `je` / `.comimi-autoplay` / `.comimi-page-mode` / `.comimi-view-switcher` / `.comimi-settings` | 删除（顶栏与设置面板已覆盖） |
+| dock 进度条与触摸预览 | `Me.buildSeek` / `.comimi-seek*` | **保留** |
+| 键盘 `M`（菜单）与 `S`（设置） | `bindKeyboard` | 删除（无对应面板） |
+| 键盘 `Esc` 关闭面板 | `bindKeyboard` | 只保留「回到 inline」，不再 `setPanel("none")` |
+| 键盘 `←` / `→` / `Space` / `A` / `N` / `F` / `P` / `C` / `O` | `bindKeyboard` | **保留**（分别翻页、自动播放、标准布局、全屏请求、跨页、封面、控制层） |
+
+第二轮清理继续删除只服务上述 UI 的传递性代码：
+
+- 设置面板专用 inputs：checkbox（`fe` / `pe`）、rolling switch（`me`）、selectbox（`he`）、range slider（`ge`），以及它们的 SVG 命名空间/常量。
+- 完整 icons 区块（`b` / `x` / `S` / `C` / `se` / `ce` / `le`）：删除后已无调用方。
+- 菜单兔 SVG 与工厂（`ve` / `ye`）以及菜单滚动渐隐 `D`。
+- about 视图专用的版本/链接常量（`m` / `h` / `g`）。
+
+**保留**默认 logo 与 splash：`y` / `ae` / `oe` / `v` / `_` / `ee` / `te` / `ne` / `re` / `ie` 仍被 splash 的默认 logo 使用，不能随 about 视图一起删除。
+
+库内 i18n 文案、`hiddenSettings` / `forceSettings` / `ViewerState.panel` / `setPanel()` 等公共 API 仍保留（comimi-react 类型依赖它们），但当前 UI 已没有消费者；如上游后续清理可一并简化。bundle 内联 CSS 中已删组件的样式规则（菜单/设置/箭头/view-switcher/autoplay 等）也仍保留，属于可选的体积清理。
 
 ### 回归测试
 
@@ -226,8 +247,9 @@ bun run repro:reader-loading      # 诊断探针：仍白屏则 exit 0，已修�
 
    ```bash
    bun patch @yui540/comimi@x.y.z
-   # 按「补丁一 / 补丁二 / 补丁三」的 diff 修改
+   # 按本文各补丁的 diff 修改
    # node_modules/@yui540/comimi/dist/index.js 与 dist/types.d.ts
+   # 同时确认「已删除被应用顶栏替代的 comimi 原生 UI」表中的类/键位仍未出现
    bun patch --commit 'node_modules/@yui540/comimi'
    ```
 
@@ -238,24 +260,24 @@ bun run repro:reader-loading      # 诊断探针：仍白屏则 exit 0，已修�
    ```bash
    bun patch @yui540/comimi-react@x.y.z
    # 确认 node_modules/@yui540/comimi-react/dist/index.js 的事件白名单 V 中
-   # 仍包含 "back" / "fullscreenRequest"
+   # 仍包含 "fullscreenRequest"（"back" 已随菜单删除）
    bun patch --commit 'node_modules/@yui540/comimi-react'
    ```
 
 4. 验证：`bun run lint && bun run build && bun run test && bun run test:e2e`。
 
-5. 建议同时向上游提 issue/PR（合并两条渲染分支、补齐触摸事件、暴露 back/全屏事件与隐藏宽屏选项），最终移除补丁。
+5. 建议同时向上游提 issue/PR（合并两条渲染分支、补齐触摸事件、暴露 fullscreen 事件、允许应用接管/移除原生菜单与设置面板），最终移除补丁。
 
 ### 应用侧自绘面板动画
 
-阅读器顶栏的「阅读设置 / 键盘快捷键 / 页面列表」面板使用项目自己的 `ReaderToolbar.Panel` 实现，没有沿用 comimi 的菜单/设置面板。为了让这些弹出面板也有和 comimi 内置面板一致的展开动效，参考 comimi 菜单面板的进入动画给 `Panel` 加了入场动画：
+阅读器顶栏的「阅读设置 / 键盘快捷键 / 页面列表」面板使用项目自己的 `ReaderToolbar.Panel` 实现；comimi 内置的菜单/设置面板已随补丁删除。为了让这些弹出面板有统一的展开动效，给 `Panel` 加了入场动画：
 
 - `src/components/reader/ReaderToolbar.tsx`：给 `Panel` 容器加上 `reader-panel-enter` 类，在 `onAnimationEnd` 时清理类名。
 - `src/index.css`：新增 `reader-panel-enter` 关键帧，面板从 `translateY(-12px)` 与 `opacity: 0` 垂直下落到正常位置与完全不透明，使用 `--reader-spring` 曲线；`prefers-reduced-motion: reduce` 时关闭动画。
 
 ### 应用侧自绘分段切换器动画
 
-阅读设置面板里的「阅读方向 / 翻页模式」分段切换器原本用静态背景色表示选中项。为了与 comimi 内置的 `comimi-view-switcher` / `comimi-page-mode-indicator` 滑动指示器保持一致，改为由 `SegmentGroup` 单独渲染一个 `reader-segment-indicator` 背景元素：
+阅读设置面板里的「阅读方向 / 翻页模式」分段切换器原本用静态背景色表示选中项。为了让切换有平滑跟随的滑动指示器，改为由 `SegmentGroup` 单独渲染一个 `reader-segment-indicator` 背景元素：
 
 - `src/components/reader/ReaderToolbar.tsx`：新增 `SegmentGroup` 组件，在 `useLayoutEffect` 里根据当前选中项计算对应按钮的 `offsetLeft` / `offsetWidth`，并设置到指示器上；切换时指示器通过 CSS `transform` 与 `width` 过渡平滑滑到新的位置。
 - `src/index.css`：新增 `.reader-segment-indicator` 过渡样式，使用短平快的 `ease-out` 曲线，避免过冲；`prefers-reduced-motion: reduce` 时关闭动画。

@@ -478,8 +478,6 @@ body {
  * `object-fit: contain` over a white panel background. When a page's crop is
  * not exactly that ratio this shows as a white border. Fill the frame instead.
  */
-.reader-shell .comimi-page-list-thumb img,
-.reader-shell .comimi-page-list-cover img,
 .reader-shell .comimi-seek-preview-thumb img {
   object-fit: cover;
 }
@@ -534,37 +532,10 @@ body {
 }
 
 /*
- * Reader chrome lives in the app's top bar (see ReaderToolbar): hide comimi's
- * own floating menu pill and the mascot that decorates its top-right corner so
- * the same controls are not shown twice. The library's own panels stay, but are
- * only reachable through comimi's keyboard shortcuts (`m`/`s`); the top bar
- * opens its own app-owned panels instead.
+ * Reader chrome lives in the app's top bar (see ReaderToolbar): comimi's own
+ * menu/arrows/settings UI is removed in the patch, and its dock keeps only the
+ * progress bar (the app top bar owns autoplay/settings/page mode).
  */
-.reader-shell .comimi-menu-top,
-.reader-shell .comimi-menu-panel > .comimi-rabbit {
-  display: none;
-}
-
-/*
- * The reader uses comimi's dock, reduced to its progress bar (the app top bar
- * owns autoplay/settings/page mode). Side arrows stay hidden: page turns come
- * from the click zones, keys and the seek bar.
- */
-.reader-shell .comimi-arrows {
-  display: none;
-}
-
-.reader-shell .comimi-controls-dock .comimi-autoplay,
-.reader-shell .comimi-controls-dock .comimi-page-mode,
-.reader-shell .comimi-controls-dock .comimi-view-switcher,
-.reader-shell .comimi-controls-dock .comimi-settings {
-  display: none;
-}
-
-.reader-shell .comimi-controls-dock .comimi-controls-row {
-  display: none;
-}
-
 .reader-shell .comimi-controls-dock .comimi-seek {
   margin-bottom: 0;
 }
@@ -582,23 +553,6 @@ body {
   transition:
     transform 0.6s var(--reader-spring),
     opacity 0.3s linear;
-}
-
-/*
- * comimi's keyboard-opened menu panel unfolds below the app's floating top bar.
- */
-.reader-shell .comimi-root .comimi-menu-panel {
-  top: 84px;
-  left: 24px;
-  width: min(500px, calc(100% - 48px));
-}
-
-@media (max-width: 767px) {
-  .reader-shell .comimi-root .comimi-menu-panel {
-    top: calc(60px + env(safe-area-inset-top, 0px));
-    left: 8px;
-    width: calc(100% - 16px);
-  }
 }
 
 /*

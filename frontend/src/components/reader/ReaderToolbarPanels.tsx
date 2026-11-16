@@ -5,11 +5,9 @@ import { loadThumbnails, THUMBNAIL_CONCURRENCY } from "../../lib/thumbnails";
 /*
  * App-owned reader panels, rendered from the reader top bar.
  *
- * comimi ships its own menu/shortcuts/pages/about views, but those live inside
- * the library's floating menu panel and are opened through `viewer.setPanel`.
- * The app's top bar (ReaderToolbar) replaces them with these native panels so
- * they appear anchored to the top-right buttons instead of comimi's top-left
- * menu, and are fully under app control.
+ * comimi no longer renders a menu or settings panel here: its hidden native
+ * chrome was removed in the patch, so these app-owned panels are the only ones.
+ * The top bar (ReaderToolbar) anchors them to the top-right buttons.
  */
 
 /* ------------------------------------------------------------------ */
@@ -54,10 +52,8 @@ const SHORTCUT_SECTIONS: ShortcutSection[] = [
     wrap: true,
     items: [
       { keys: ["O"], label: "切换控制层" },
-      { keys: ["M"], label: "菜单" },
       { keys: ["P"], label: "切换跨页" },
       { keys: ["C"], label: "切换封面" },
-      { keys: ["S"], label: "设置" },
     ],
   },
 ];
@@ -199,10 +195,7 @@ export function ReaderPageList({
   const listRef = useRef<HTMLDivElement>(null);
 
   // The top-bar page list is a user-opened view of every page, so its
-  // index-addressed thumbnails load through their own concurrency-limited queue
-  // — un-gated by the streamed-page limit (`getLimit`) that caps comimi's eager
-  // menu thumbnails. The reader's shell-wide loadThumbnails skips this container
-  // (`.reader-page-list`) to avoid double-queueing.
+  // index-addressed thumbnails load through their own concurrency-limited queue.
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;

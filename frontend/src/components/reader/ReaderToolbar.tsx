@@ -42,7 +42,6 @@ interface ReaderToolbarProps {
   onToggleFullscreen: () => void;
   onToggleAutoPageTurn: () => void;
   onGoToPage: (pageIndex: number) => void;
-  onClosePanel: () => void;
   onUpdateSettings: (patch: Partial<ViewerSettings>) => void;
 }
 
@@ -177,8 +176,7 @@ function Panel({
 
 /**
  * Komga-style reader chrome: back and title on the left, reader actions on the
- * right. Each action opens an app-owned panel anchored to the button — the
- * library's own menu/pages/shortcuts/about panels are no longer used here.
+ * right. Each action opens an app-owned panel anchored to the button.
  */
 export function ReaderToolbar({
   title,
@@ -194,7 +192,6 @@ export function ReaderToolbar({
   onToggleFullscreen,
   onToggleAutoPageTurn,
   onGoToPage,
-  onClosePanel,
   onUpdateSettings,
 }: ReaderToolbarProps) {
   const [openPanel, setOpenPanel] = useState<ToolbarPanel | null>(null);
@@ -203,15 +200,9 @@ export function ReaderToolbar({
 
   const closePanel = useCallback(() => setOpenPanel(null), []);
 
-  const togglePanel = useCallback(
-    (panel: ToolbarPanel) => {
-      // Close the library's own panel (reachable via its keyboard shortcuts)
-      // whenever an app panel opens, so the two never overlap.
-      if (openPanel !== panel) onClosePanel();
-      setOpenPanel((current) => (current === panel ? null : panel));
-    },
-    [openPanel, onClosePanel],
-  );
+  const togglePanel = useCallback((panel: ToolbarPanel) => {
+    setOpenPanel((current) => (current === panel ? null : panel));
+  }, []);
 
   // Escape closes the open panel; keep comimi's Esc-to-inline shortcut from
   // firing underneath it.
