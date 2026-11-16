@@ -474,54 +474,6 @@ body {
 }
 
 /*
- * Auto page turn progress: a 5px gray line along the bottom edge, matching
- * comimi's own overlay progress bar and animation. comimi draws it for slide
- * mode; book mode mounts this app copy so both viewers show the same bar.
- */
-.reader-shell .reader-autoplay-progress {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 5px;
-  z-index: 50;
-  overflow: hidden;
-  pointer-events: none;
-  background: rgba(0, 0, 0, 0.06);
-  opacity: 0;
-  transition: opacity 0.16s linear;
-}
-
-[data-mode="dark"] .reader-shell .reader-autoplay-progress {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.reader-shell .reader-autoplay-progress[data-visible="true"] {
-  opacity: 1;
-}
-
-.reader-shell .reader-autoplay-progress-bar {
-  display: block;
-  position: absolute;
-  inset: 0;
-  background: #666;
-  animation: reader-autoplay-progress 3s linear 0s infinite;
-}
-
-[data-mode="dark"] .reader-shell .reader-autoplay-progress-bar {
-  background: #b3b3b3;
-}
-
-@keyframes reader-autoplay-progress {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-/*
  * Page thumbnails: comimi frames them at a fixed 100/141 ratio with
  * `object-fit: contain` over a white panel background. When a page's crop is
  * not exactly that ratio this shows as a white border. Fill the frame instead.
@@ -594,9 +546,9 @@ body {
 }
 
 /*
- * Slide mode uses comimi's dock, reduced to its progress bar (the app top bar
+ * The reader uses comimi's dock, reduced to its progress bar (the app top bar
  * owns autoplay/settings/page mode). Side arrows stay hidden: page turns come
- * from the click zones, keys and the seek bar in both modes.
+ * from the click zones, keys and the seek bar.
  */
 .reader-shell .comimi-arrows {
   display: none;
@@ -615,28 +567,6 @@ body {
 
 .reader-shell .comimi-controls-dock .comimi-seek {
   margin-bottom: 0;
-}
-
-/*
- * Book mode has no comimi instance, so ReaderControlsBar renders the same dock
- * markup there. These are the theme variables comimi normally provides from
- * `.comimi-root`; keep them in sync so both seekers look identical.
- */
-.reader-shell .reader-book-dock {
-  --comimi-fg: #333;
-  --comimi-soft: #999;
-  --comimi-line: #e0e0e0;
-  --comimi-muted: #666;
-  --comimi-glass: var(--reader-glass);
-  --comimi-shadow: var(--reader-shadow);
-  --comimi-spring: var(--reader-spring);
-}
-
-[data-mode="dark"] .reader-shell .reader-book-dock {
-  --comimi-fg: #ededed;
-  --comimi-soft: #7e7e82;
-  --comimi-line: #3f3f43;
-  --comimi-muted: #b3b3b3;
 }
 
 /*
@@ -665,105 +595,6 @@ body {
 @media (hover: none) {
   .reader-shell .comimi-seek-preview {
     display: flex;
-  }
-}
-
-/*
- * GrabFold book view for the "书本" page-turn animation.
- *
- * The book is its own viewer (see components/reader/BookFlipViewer.tsx), not
- * comimi's stage: grabfold draws the paper, folds and shadows, and the WebGL
- * renderer curls the turning leaf. Only the paper colours and the page image
- * box are styled here, so the book sits in the reader theme without touching
- * any other reading mode.
- */
-.reader-book {
-  --grabfold-paper: var(--color-kumo-base, #fbf8f1);
-  --grabfold-lift: #ffffff;
-  --grabfold-edge: var(--color-kumo-base, #fbf8f1);
-}
-
-[data-mode="dark"] .reader-book {
-  --grabfold-paper: var(--color-kumo-base, #18181b);
-  --grabfold-lift: #2a2a2e;
-}
-
-.reader-book .grabfold:focus {
-  outline: none;
-}
-
-/*
- * In a two-page spread, paint only the spine hairline dark. The page cells
- * cover the rest of the book, so this never shows as a black band; the line
- * sits behind the turning sheet and hides the paper gap during a turn.
- */
-.reader-book[data-two-pages="true"] .grabfold {
-  background: linear-gradient(
-    to right,
-    transparent calc(50% - 1px),
-    #000 calc(50% - 1px),
-    #000 calc(50% + 1px),
-    transparent calc(50% + 1px)
-  );
-}
-
-/*
- * One page of the book. The cell has the page's aspect ratio; every image is
- * contained, so a page whose image is a different shape shows paper margins
- * and is never cropped or stretched.
- */
-.book-flip-page {
-  display: grid;
-  width: 100%;
-  height: 100%;
-  place-items: center;
-  background: var(--grabfold-paper);
-}
-
-.book-flip-image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  -webkit-user-drag: none;
-}
-
-.book-flip-blank {
-  width: 100%;
-  height: 100%;
-  background: var(--grabfold-paper);
-}
-
-.book-flip-page-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 12px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--color-kumo-default, #3f3f46);
-  text-align: center;
-}
-
-.book-flip-spinner {
-  width: 22px;
-  height: 22px;
-  border: 2px solid color-mix(in oklab, currentColor 25%, transparent);
-  border-top-color: currentColor;
-  border-radius: 999px;
-  animation: book-flip-spin 0.9s linear infinite;
-}
-
-@keyframes book-flip-spin {
-  to {
-    transform: rotate(1turn);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .book-flip-spinner {
-    animation: none;
   }
 }
 

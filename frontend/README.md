@@ -58,7 +58,7 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
 
 ## comimi / comimi-react 补丁
 
-本仓库对 `@yui540/comimi` 维护四处补丁，均由同一个 `patches/@yui540%2Fcomimi@0.26.0.patch` 承载：**预加载页白屏**、**触屏进度条缩略图**、**阅读器返回/全屏入口迁入 comimi（并移除宽屏选项）**与**翻页动画（平移/书本）**。另有 `patches/@yui540%2Fcomimi-react@0.3.0.patch`，把新增事件加入运行时事件白名单，使 `onBack` / `onFullscreenRequest` 能作为 props 透传。
+本仓库对 `@yui540/comimi` 维护四处补丁，均由同一个 `patches/@yui540%2Fcomimi@0.26.0.patch` 承载：**预加载页白屏**、**触屏进度条缩略图**、**阅读器返回/全屏入口迁入 comimi（并移除宽屏选项）**与**平移翻页动画入口统一**。另有 `patches/@yui540%2Fcomimi-react@0.3.0.patch`，把新增事件加入运行时事件白名单，使 `onBack` / `onFullscreenRequest` 能作为 props 透传。
 
 ### 补丁一：预加载页白屏
 
@@ -188,49 +188,15 @@ bun run test:e2e           # 以 e2e 模式构建（同源 API）并运行
 
 `ReaderPage` 删除 `.reader-topbar`，改用 `<MangaViewer onBack={...} onFullscreenRequest={...} />`：`onBack` 执行 `flushProgress()` + `goBack()`（沿用 `useBackNavigation` 的浏览器历史 / 深链回退规则）；`settings.layoutMode` 默认 `inline`（标准），用户可点 dock 的全屏按钮进入全屏。
 
-### 补丁四：翻页动画（平移 / 书本）
+### 补丁四：平移翻页动画入口统一
 
 #### 背景
 
-comimi 原生的翻页只有一种整块舞台的横向平移，而且只在触摸滑动结束时的「惯性翻页」路径触发；点击屏幕左右两侧、左右箭头按钮和键盘翻页都是即时跳转、没有任何过渡。要让阅读器支持「平移」和「书本」两种可切换的翻页动画，需要在 comimi 里新增一个设置项，并把所有单步翻页路径统一收口到动画入口。
+comimi 原生的平移翻页只在触摸滑动结束时的「惯性翻页」路径触发；点击屏幕左右两侧、左右箭头按钮和键盘翻页都是即时跳转、没有任何过渡。
 
-书本翻页最初由 comimi 补丁用 CSS `rotateY` 实现，之后又在应用侧把 grabfold 的 `FoldingSheet` 叠加到 comimi 舞台上。这两种做法都只是在 comimi 的单页舞台外面套一层动画：页面被克隆、背面留空、无法做双页映射，也没有 WebGL 卷曲。现在「书本」是一个独立的阅读器实现（`BookFlipViewer`），使用 grabfold 官方的 React 适配器与 WebGL 渲染器；comimi 只负责「平移」等其余模式。
+#### 补丁
 
-#### comimi 侧补丁
-
-- **设置项**：`dist/types.d.ts` 新增 `PageTurnAnimation = "slide" | "book"`，`ViewerSettings` 增加 `pageTurnAnimation` 字段；`dist/index.js` 的默认值对象补 `pageTurnAnimation: "slide"`。
-- **渲染器状态**：`ViewerRenderer.update` 把 `pageTurnAnimation` 写到根节点的 `data-page-turn-animation` 属性，供 CSS 切换 `perspective` / 过渡。
-- **动画入口统一**：核心 `nextPage` / `previousPage` 原来直接 `commitNextPage` / `commitPreviousPage`（点击、箭头、键盘都走这里），改为先走 `renderer.requestPageTurn(state, direction)`（即 `animatePageTurn`），仅在无法动画（已是边界、正在动画中）时回退到直接提交；动画期间 `isPageTurnAnimating` 挡住重复触发。
-- **书本实现**：`PageStage` 新增 `beginBookFlip(direction, settings)` / `endBookFlip()`。`animatePageTurn` 在 `pageTurnAnimation === "book"` 且未放大（`zoomScale <= 1`，放大时页面组带内联 transform，不能叠加旋转）时走书本，否则沿用原来的整块平移。
-  - `beginBookFlip` 先把舞台复位（`snapTransform`），给「当前页」组打上 `data-spine`（根据阅读方向与翻页方向算出书脊在左还是右），把「目标页」组的 transform 改为 `translateX(0%)`（靠 CSS 过渡滑入），并在舞台上标记 `data-flipping`。
-  - 180ms 后 `endBookFlip` 清除标记，再由回调提交页面（提交是同步的，会立刻重建舞台，因此不会闪一帧「翻回来的过渡」）。
-- **CSS**：在 `.comimi-stage` 的样式串尾部追加书本翻页基础样式——舞台 `perspective`、书脊侧阴影等。
-- **现状**：应用在「书本」模式下不再挂载 comimi，因此补丁里的 `beginBookFlip` / 书本 CSS 不会被触发；`pageTurnAnimation` 设置本身仍由补丁提供类型与默认值，应用用它来选择 `BookFlipViewer`。保留补丁的这部分实现，是为了不破坏 comimi 自身的其它宿主用法。
-
-#### 应用侧
-
-`ReaderPage` 的 `settings` 增加 `pageTurnAnimation: "slide"` 默认值；`ReaderToolbar` 的「阅读设置」面板新增「翻页动画」分段控件（平移 / 书本），点击调用 `updateSettings({ pageTurnAnimation })`。该偏好与其他阅读设置一样随会话有效、不持久化（comimi 的 `storage` 已关闭）。
-
-#### GrabFold 书本阅读器
-
-「书本」模式现在由 [grabfold](https://github.com/javocsoft/grabfold)（[npm](https://www.npmjs.com/package/grabfold)，MIT License © JavocSoft）驱动，封装为独立的 `BookFlipViewer`：
-
-- **按模式分发**：`ReaderPage` 根据 `pageTurnAnimation` 在 `MangaViewer`（平移）与 `BookFlipViewer`（书本）之间切换。`BookFlipViewer` 通过 `React.lazy` 动态加载（构建产物里是独立的 `BookFlipViewer-*.js` chunk），平移模式不会加载 grabfold 的运行时。
-- **使用官方适配器**：`grabfold/react` 的 `GrabfoldBook` 负责书本、翻页、拖动、flick、peek、整叠抓页与生命周期；`grabfold/webgl` 的 `webglFold` 把翻起的纸张映射到圆柱面并在 GPU 上渲染折痕、卷曲、透视与动态光照；DOM 折叠（grabfold 默认渲染器）是自动回退方案。
-- **页面映射**（`src/lib/bookPages.ts`）：漫画页始终是 0-based，grabfold 的 position 只由漫画页推导，从不写入后端。
-  - 双页：`Sheet n` 的正面是第 `2n` 页、背面是第 `2n+1` 页；显示封面时第 0 页单独占右侧首屏，之后成对 `(1,2)`、`(3,4)`…；隐藏封面时首屏就是 `(0,1)`（Sheet 0 的正面是空白的环衬）。
-  - 单页：单页布局只显示纸张正面，所以每张 Sheet 只承载一张漫画页（`Sheet n` 正面 = 第 `n` 页）；翻页时纸张背面显示同一张图的镜像作为纸背图案，不再是空白灰纸。背面由折页的翻折变换自然镜像。
-  - 布局或封面开关变化时，按当前漫画页重新计算 Sheet 数量与 position，并重建书本，因此切换前后停留的是同一张漫画页。
-- **阅读方向**：`binding` 由阅读方向决定（RTL → `"right"`，LTR → `"left"`）；页面内容不做镜像。方向切换只改变装订与翻页方向，position 保持不变。
-- **交互**：拖动、触摸、flick、peek、整叠抓页由 grabfold 直接处理；点击左右 30% 区域、方向键、PageUp/PageDown、Home/End、空格、`A`/`F`/`O`/`P`/`C` 与底部页码进度条都通过同一个组件句柄驱动，工具栏与页码列表也走 `goToPage`，不存在第二套页码状态。底部进度条在平移模式直接使用 comimi 的 dock（只保留 seek 条，隐藏 autoplay / page-mode / settings 与左右箭头）；书本模式由 `ReaderControlsBar` 渲染同样的 comimi dock 标记与 `.comimi-seek` 样式，两种模式显示一致的页码 + 进度条控件。控制条的显示/隐藏沿用 comimi 的规则（出现 3 秒后自动隐藏，点击中间区域切换），顶部工具栏随浮层一起显示。自动播放时，书本模式在控制条隐藏后显示与 comimi 相同的底部灰色进度线（`ReaderAutoplayProgress`，动画时长跟随自动翻页间隔）。
-- **图片与纹理**（`src/lib/pageImages.ts`）：页面 URL 仍由现有的 `/api/image-cache/page` 接口解析（`PageUrlStore` 流式注入），每张图只解析、解码一次；同一份 `HTMLImageElement` 既交给 WebGL 纹理，也用于页面 `<img>`（同一 URL，浏览器缓存复用）。缓存按字节数和张数封顶（桌面 112MB / 10 张，移动端 48MB / 6 张），预加载/保留当前页前后各一到两个跨页，翻页前已解码；离开视窗的页面被 LRU 淘汰。单页解码失败时页内显示「重试」。
-- **生命周期**：grabfold 实例与 `GrabfoldBook` 组件绑定，卸载时 `destroy()` 销毁 WebGL 上下文与纹理；WebGL 上下文只在书本视图存活期间存在，切换模式即释放。StrictMode 的双次挂载/卸载已验证只保留一个实例、一个 canvas。`prefers-reduced-motion` 交给 grabfold 处理（瞬时翻页）。
-- **WebGL 回退**：先用一次性探测 canvas 检查 `webgl2`/`webgl`（探测后立即 `loseContext`），不可用时不创建 `webglFold`；即使上下文创建或着色器链接失败，`webglFold` 自身也会退回 DOM 折叠，阅读器不会因此不可用。
-- **阅读进度**：只在翻页落定（`onPositionChange`）时把锚点漫画页交给 `useReadingProgressSync` 的 debounce 保存；拖动中途松手回弹不会写入；退出阅读器时照常 flush。重新进入时可从后端进度恢复到同一页。
-- **视觉参数**：`pageRatio` 取第一张成功加载的漫画页比例（避免把跨页大图当成书本比例）；`duration=620`、`commitAt=0.38`、`dragThreshold=8`、`thickness=0`（不绘制书页堆叠边）、`shadow=0.32`、`gutter=0.24`、`lift=40`；WebGL `radius=0.12`、`segments=48`、`maxPixelRatio=min(devicePixelRatio, 2)`、纹理缓存 6 张。页面图片始终用 `contain` 完整显示，不裁剪、不拉伸；比例与书页不一致时显示纸色留白。双页布局中留白推到页面外侧，接缝一侧贴齐（正面页靠左、背面页靠右），避免白边落在书脊。WebGL 纹理送入 GPU 前也按 `contain` 合成，透明留白由着色器填成纸色。纸色/提亮色通过 `--grabfold-paper` / `--grabfold-lift` 跟随亮暗主题（见 `src/index.css`）。
-- **布局**：书本使用 `fit: "contain"` 在阅读区域内居中，容器带 `env(safe-area-inset-bottom)` 内边距；grabfold 用 `ResizeObserver` 跟随窗口、全屏与旋转。页面按原始比例显示（`object-fit: contain`），不会拉伸。
-
-单元测试：`src/lib/bookPages.test.ts`（1/2/3/奇数/偶数页、首末页、单双页切换、封面开关、RTL/LTR、position 与漫画页互转、预加载窗口）与 `src/lib/pageImages.test.ts`（去重、并发上限、LRU/字节预算、失败重试、销毁）。e2e（`e2e/reader-pages.mjs`）覆盖：书本模式挂载与 comimi 卸载、WebGL canvas、点击/键盘/拖动/flick/回弹取消翻页、页码列表跳转、双页映射、方向切换保页、返回平移模式保页，以及在禁用 WebGL 的上下文里回退到 DOM 折叠。
+核心 `nextPage` / `previousPage` 原来直接 `commitNextPage` / `commitPreviousPage`（点击、箭头、键盘都走这里），改为先走 `renderer.requestPageTurn(state, direction)`（即 `animatePageTurn`），仅在无法动画（已是边界、正在动画中）时回退到直接提交；动画期间 `isPageTurnAnimating` 挡住重复触发。自动播放也改走 `nextPage()`，因此与手动翻页使用同一条平移动画。
 
 ### 回归测试
 
@@ -289,7 +255,7 @@ bun run repro:reader-loading      # 诊断探针：仍白屏则 exit 0，已修�
 
 ### 应用侧自绘分段切换器动画
 
-阅读设置面板里的「阅读方向 / 翻页动画 / 翻页模式」分段切换器原本用静态背景色表示选中项。为了与 comimi 内置的 `comimi-view-switcher` / `comimi-page-mode-indicator` 滑动指示器保持一致，改为由 `SegmentGroup` 单独渲染一个 `reader-segment-indicator` 背景元素：
+阅读设置面板里的「阅读方向 / 翻页模式」分段切换器原本用静态背景色表示选中项。为了与 comimi 内置的 `comimi-view-switcher` / `comimi-page-mode-indicator` 滑动指示器保持一致，改为由 `SegmentGroup` 单独渲染一个 `reader-segment-indicator` 背景元素：
 
 - `src/components/reader/ReaderToolbar.tsx`：新增 `SegmentGroup` 组件，在 `useLayoutEffect` 里根据当前选中项计算对应按钮的 `offsetLeft` / `offsetWidth`，并设置到指示器上；切换时指示器通过 CSS `transform` 与 `width` 过渡平滑滑到新的位置。
 - `src/index.css`：新增 `.reader-segment-indicator` 过渡样式，使用短平快的 `ease-out` 曲线，避免过冲；`prefers-reduced-motion: reduce` 时关闭动画。

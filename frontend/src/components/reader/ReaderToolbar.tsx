@@ -359,24 +359,6 @@ export function ReaderToolbar({
 
             <div>
               <div className="mb-1.5 text-xs font-medium text-kumo-subtle">
-                翻页动画
-              </div>
-              <SegmentGroup
-                value={viewerSettings?.pageTurnAnimation ?? "slide"}
-                onChange={(value) =>
-                  onUpdateSettings({
-                    pageTurnAnimation: value as "slide" | "book",
-                  })
-                }
-                options={[
-                  { value: "slide", label: "平移" },
-                  { value: "book", label: "书本" },
-                ]}
-              />
-            </div>
-
-            <div>
-              <div className="mb-1.5 text-xs font-medium text-kumo-subtle">
                 翻页模式
               </div>
               <SegmentGroup

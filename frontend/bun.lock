@@ -11,7 +11,6 @@
         "@tanstack/react-query": "^5.107.1",
         "@yui540/comimi": "^0.26.0",
         "@yui540/comimi-react": "^0.3.0",
-        "grabfold": "^0.1.0",
         "motion": "^13.5.1",
         "react": "^19.3.1",
         "react-colorful": "^5.8.1",
@@ -346,8 +345,6 @@
     "framer-motion": ["framer-motion@13.5.1", "", { "dependencies": { "motion-dom": "13.5.1", "motion-utils": "13.5.0", "tslib": "^2.4.0" }, "peerDependencies": { "react": "^18.0.0 || ^19.0.0", "react-dom": "^18.0.0 || ^19.0.0" }, "optionalPeers": ["react", "react-dom"] }, "sha512-HeWOaeHD3kyTSIEMT6+nw7fBn4saIfxxabZyAITbycAl4xr1kzGJKIvGt/OWghSlvIA9qTnZ1zTGelHAe6S8DA=="],
 
     "fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
-
-    "grabfold": ["grabfold@0.1.0", "", { "peerDependencies": { "react": ">=18", "react-dom": ">=18", "vue": ">=3.3" }, "optionalPeers": ["react", "react-dom", "vue"] }, "sha512-Hhea2jLxbqrZYtFsbYIkFAlCZw0QP4ABQ4L8y7EB0IogoPa+x6McT2hQP8bxwF4fGsfzv4MhRj80Z1QdlLC50Q=="],
 
     "graceful-fs": ["graceful-fs@4.2.11", "", {}, "sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ=="],
 

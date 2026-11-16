@@ -101,8 +101,8 @@ export function galleryPageSlotsToManga(
 }
 
 /**
- * Resolves a 0-based comic page index to the reader image URL. Shared by
- * comimi's page slots and the grabfold book view.
+ * Resolves a 0-based comic page index to the reader image URL, used by
+ * comimi's page slots.
  */
 export function pageIndexSrcResolver(
   store: PageUrlStore,
