@@ -570,6 +570,21 @@ body {
 }
 
 /*
+ * Keep the progress bar up while an app-owned panel is open. comimi's overlay
+ * auto-hides the dock after a few seconds without activity even though the top
+ * bar and its panel stay visible (the panel lives outside comimi's root), so
+ * hiding only the dock leaves the reader chrome half-visible. Pair the dock
+ * with the panel's presence instead of its own auto-hide timer.
+ */
+.reader-shell:has(.reader-panel) .comimi-controls-dock[data-overlay="false"] {
+  transform: none;
+  opacity: 1;
+  transition:
+    transform 0.6s var(--reader-spring),
+    opacity 0.3s linear;
+}
+
+/*
  * comimi's keyboard-opened menu panel unfolds below the app's floating top bar.
  */
 .reader-shell .comimi-root .comimi-menu-panel {

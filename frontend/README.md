@@ -263,6 +263,13 @@ bun run repro:reader-loading      # 诊断探针：仍白屏则 exit 0，已修�
 
 这样阅读器设置面板的分段切换器在切换时会有平滑跟随的滑动指示器，但打开面板时不会从远处滑入或产生弹性过冲。
 
+### 面板打开时保持底部进度条
+
+底部进度条是 comimi 的 controls dock，由库内的 overlay 自动隐藏计时器控制（约 3 秒无操作后隐藏）。应用侧面板渲染在 comimi 根节点之外，不会刷新该计时器，因此面板还开着时进度条会先消失，而顶栏和面板仍然可见。
+
+- `src/index.css`：用 `.reader-shell:has(.reader-panel)` 在应用侧面板打开期间覆盖 dock 的 `[data-overlay="false"]` 隐藏样式，让进度条与顶栏一起保持可见；面板关闭后恢复 comimi 原有的隐藏过渡。
+- `e2e/reader-pages.mjs`：打开阅读设置并等待超过自动隐藏时间，断言 dock 仍可见，防止回归。
+
 ## 环境变量
 
 复制 `.env.example` 为 `.env` 并按需修改：

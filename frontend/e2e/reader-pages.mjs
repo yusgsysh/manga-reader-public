@@ -106,6 +106,31 @@ try {
     await page.close();
   }
 
+  console.log("reader: progress bar stays visible while a toolbar panel is open");
+  {
+    const { page } = await openReader(browser, 1001);
+    // comimi shows its overlay shortly after mount and auto-hides it 3s later.
+    await page.waitForSelector('.comimi-controls-dock[data-overlay="true"]', {
+      timeout: 10000,
+    });
+    await page
+      .locator("header")
+      .getByRole("button", { name: "阅读设置" })
+      .click();
+    await page.waitForSelector(".reader-panel", { timeout: 10000 });
+    // Outlive comimi's 3s overlay auto-hide, then check the dock is still up.
+    await sleep(3500);
+    const opacity = await page
+      .locator(".comimi-controls-dock")
+      .evaluate((el) => Number.parseFloat(getComputedStyle(el).opacity));
+    check(
+      "progress bar stays visible while the settings panel is open",
+      opacity > 0.9,
+      `opacity=${opacity}`,
+    );
+    await page.close();
+  }
+
   console.log("scenario 1003: cache present, upstream down");
   {
     const { page, livePages, mountedMs } = await openReader(browser, 1003);
