@@ -11,6 +11,10 @@ export interface AuthUser {
   avatar_url: string | null;
   role: string;
   status: string;
+  /** "kinde" once the access token carries roles; "local" for legacy tokens. */
+  rbac_source?: "kinde" | "local";
+  roles?: string[];
+  permissions?: string[];
 }
 
 /** Current local account for the verified Kinde access token. */

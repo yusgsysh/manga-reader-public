@@ -27,6 +27,7 @@ function UserRow({ user }: { user: AdminUser }) {
   const toast = useToast();
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth();
+  const rbacManaged = currentUser?.rbac_source === "kinde";
 
   const toggle = useMutation({
     mutationFn: () =>
@@ -93,14 +94,20 @@ function UserRow({ user }: { user: AdminUser }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => roleMutation.mutate()}
-            disabled={roleMutation.isPending}
-          >
-            {user.role === "admin" ? "降为普通用户" : "设为管理员"}
-          </Button>
+          {rbacManaged ? (
+            <span className="self-center text-xs text-kumo-subtle">
+              角色由 Kinde 管理
+            </span>
+          ) : (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => roleMutation.mutate()}
+              disabled={roleMutation.isPending}
+            >
+              {user.role === "admin" ? "降为普通用户" : "设为管理员"}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="secondary"
@@ -136,7 +143,7 @@ export function UserManagementSection() {
   return (
     <Section
       title="用户管理"
-      description="账号在首次登录时自动创建。这里只管理本地角色与启用状态；每个账号拥有独立的 Cookie、设置、书架和下载任务。"
+      description="账号在首次登录时自动创建。角色由 Kinde RBAC 决定时，这里只管理本地启用状态；每个账号拥有独立的 Cookie、设置、书架和下载任务。"
     >
       <div className="space-y-3">
         <h3 className="text-xs font-medium text-kumo-subtle">用户列表</h3>

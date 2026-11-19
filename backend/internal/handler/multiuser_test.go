@@ -345,3 +345,17 @@ func TestMultiUserAdminIsolation(t *testing.T) {
 		t.Fatalf("create user = %d, want 404", got.Code)
 	}
 }
+
+func TestAdminCannotChangeRolesWhenKindeRBACOwnsThem(t *testing.T) {
+	f := newMUFixture(t)
+	token := f.issuer.Sign(t, authtest.Claims{
+		Subject: f.admin.UserID,
+		Roles:   []string{"admin"},
+	})
+	w := f.do(t, http.MethodPut, "/api/admin/users/"+f.userA.ID.String(), map[string]string{
+		"role": "admin",
+	}, token)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("role update under Kinde RBAC = %d %s, want 409", w.Code, w.Body.String())
+	}
+}

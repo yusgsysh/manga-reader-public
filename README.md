@@ -162,7 +162,9 @@ React (Kinde SDK) ──Bearer Access Token──> Go (JWKS / iss / aud / exp)
 - **身份来源**：只信任经过验证的 JWT `sub`，写入 `users.user_id`（唯一）。本地主键仍是 UUID `id`；邮箱只是资料字段，不是身份唯一键。客户端传入的 `user_id` 一律忽略。
 - **首次登录**：本地用户不存在时自动创建；并发首次登录依赖 `users.user_id` 唯一约束，冲突时回读已有行，不做「先查再插」。
 - **用户状态**：本地 `status=disabled` 时，即使 Kinde Access Token 仍未过期也返回 `403 {"error":"forbidden"}`。有效但无权限与无效身份（401）分开处理。
-- **角色**：JWT 不携带业务角色或权限。`users.role` 决定本地 `admin` / `user`；`KINDE_ADMIN_EMAILS` 只用于首次部署引导，权限仍以数据库为准，为后续 RBAC 留出空间。
+- **角色 / RBAC**：Kinde 开启 RBAC 并在 Access Token 的 Token customization 中加入 `roles` 后，后端以 Kinde `roles` 为准：`admin` 优先，其次 `user`；有 roles claim 但不含允许角色时返回 `403`。识别到的角色会同步到本地 `users.role`，保证管理接口和 UI 一致。
+- **本地角色回退**：如果 Access Token 没有 `roles` claim，后端继续使用本地 `users.role`，避免升级瞬间锁死现有部署。此时 `KINDE_ADMIN_EMAILS` / `KINDE_ADMIN_SUBJECTS` 只影响首次建号。
+- **本地禁用仍优先**：即使 Kinde 角色有效，本地 `users.status=disabled` 也会拒绝访问（403）。管理员在「用户管理」中仍可禁用账号；当 RBAC 生效时，角色按钮隐藏并提示由 Kinde 管理。
 - **浏览器媒体 Cookie**：`<img>`、EventSource 和下载链接无法设置 `Authorization` 头。后端在每次 Bearer 请求时把**同一个** Kinde Access Token 写入 `HttpOnly; SameSite=Lax; Path=/api` 的短期 Cookie，仅允许 `/api/image*`、`/api/events/changes`、`/api/prefill/:id/zip`、种子下载这些原生 GET 路由使用；业务与写接口仍然只接受 `Authorization: Bearer`。前端不自行持久化或刷新 Token。
 - **登出**：前端调用 `POST /api/auth/logout` 清理媒体 Cookie 并递增 `token_version`，随后由 Kinde SDK 执行登出跳转。禁用用户由每次请求的本地状态检查立即生效。
 - **公开 API**：只有 `/api/sync/push`、`/api/sync/events`（用户级同步 Key 中间件）、`/healthz`、`/readyz`、`/metrics` 与前端静态资源无需用户 JWT。其余 `/api/*` 默认需要认证。
@@ -302,7 +304,7 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `ZIP_PRESIGN_EXPIRY` | 否 | `15m` | 签名下载 URL 有效期（1s–168h） |
 | `KINDE_ISSUER` | 是 | - | Kinde 租户域名，例如 `https://<tenant>.kinde.com`；与 JWT `iss` 严格一致 |
 | `KINDE_API_AUDIENCE` | 是 | - | Kinde API Audience，例如 `https://api.manga.example.com`；与 Access Token `aud` 严格一致 |
-| `KINDE_ADMIN_EMAILS` | 否 | - | 逗号分隔的已验证邮箱；首次创建本地用户时授予 `admin` 角色（引导用） |
+| `KINDE_ADMIN_EMAILS` | 否 | - | 逗号分隔的已验证邮箱；仅在 Access Token 没有 `roles` claim 时用于首次建号引导 |
 | `KINDE_ADMIN_SUBJECTS` | 否 | - | 逗号分隔的 Kinde `sub`；不依赖 email claim 的管理员引导方式 |
 | `JWT_SECRET` | 否 | - | 仅用于派生每个用户 ExHentai Cookie 的 AES-256-GCM 密钥；留空时首次启动自动生成并入库。显式设置时至少 32 字节随机值 |
 | `MANGA_READER_AUTH_COOKIE_SECURE` | 否 | `auto` | 浏览器媒体 Cookie 的 `Secure`：`auto`（TLS 或 `X-Forwarded-Proto=https` 时开启）/`true`/`false` |

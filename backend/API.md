@@ -114,7 +114,7 @@ Server configuration:
 - `KINDE_ISSUER` — tenant domain (for example `https://<tenant>.kinde.com`).
 - `KINDE_API_AUDIENCE` — API audience (for example `https://api.manga.example.com`), not the React application client id.
 - `JWT_SECRET` — optional; used only to derive the AES-256-GCM key for per-user ExHentai cookies. When unset it is generated and persisted in `app_setting` (`auth.jwt_secret`) on first boot.
-- `KINDE_ADMIN_EMAILS` / `KINDE_ADMIN_SUBJECTS` — optional comma-separated verified emails or Kinde subjects that receive the local `admin` role when their account is first created (bootstrap; authorization still comes from `users.role`).
+- `KINDE_ADMIN_EMAILS` / `KINDE_ADMIN_SUBJECTS` — optional bootstrap allowlists for tokens without a `roles` claim; when Kinde RBAC roles are present they take precedence.
 
 Verification uses `github.com/coreos/go-oidc/v3/oidc`: discovery, cached JWKS, RS256-only, exact `iss` and `aud`, `exp` and `nbf`. An unknown `kid` triggers one JWKS refresh for key rotation. Any failure returns `401 {"error":"unauthorized"}` without leaking verifier details.
 
@@ -130,7 +130,9 @@ The verified `sub` is stored in `users.user_id` (unique). The local primary key 
 
 First login creates the local row. Concurrent first logins rely on the unique index and re-read the winning row instead of racing with a check-then-insert. Profile fields (`email`, `name`, `avatar_url`) are refreshed only from verified token claims. `email` is never an identity key.
 
-`status=disabled` returns `403 {"error":"forbidden"}` even while the Kinde token is still valid. JWT claims never carry application roles; `users.role` (`admin` / `user`) is the local RBAC boundary.
+`status=disabled` returns `403 {"error":"forbidden"}` even while the Kinde token is still valid.
+
+Application roles can come from Kinde RBAC. When the access token contains a `roles` claim (configured in Kinde token customization), the API maps `admin` / `user` to the local role, with `admin` winning if both are present, and synchronizes `users.role`. A token that carries roles but none of the allowed values returns `403`. Tokens without a roles claim continue to use the existing local `users.role` (fallback for deployments that have not enabled token customization). In Kinde-RBAC mode the local role cannot be changed through `/api/admin/users` (409); local `status` management remains available.
 
 ### Browser media cookie
 

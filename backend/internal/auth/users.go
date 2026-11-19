@@ -18,12 +18,26 @@ import (
 // 403 instead of 401.
 var ErrUserDisabled = errors.New("user disabled")
 
+// ErrNoAccess signals a token with a roles claim that contains none of the
+// roles this application allows. It is a valid identity without application
+// access (403), not an invalid token (401).
+var ErrNoAccess = errors.New("no application role")
+
 // principalFromClaims maps a verified Kinde identity onto the local user row.
 // The first successful login creates the row atomically (relying on the unique
 // index on user_id, not a read-then-insert race), later logins refresh
 // only profile fields that Kinde owns.
 func (s *Service) principalFromClaims(ctx context.Context, claims *Claims) (Principal, error) {
-	u, err := s.upsertUser(ctx, claims)
+	role, hasKindeRoles, allowed := kindeRole(claims)
+	// A roles claim is authoritative: deny identities whose token carries
+	// roles but none this application accepts. Without a roles claim the
+	// tenant has not enabled token-based RBAC, so the local role remains the
+	// fallback for backward compatibility.
+	if hasKindeRoles && !allowed {
+		return Principal{}, ErrNoAccess
+	}
+
+	u, err := s.upsertUser(ctx, claims, role, hasKindeRoles)
 	if err != nil {
 		return Principal{}, err
 	}
@@ -31,33 +45,63 @@ func (s *Service) principalFromClaims(ctx context.Context, claims *Claims) (Prin
 		return Principal{}, ErrUserDisabled
 	}
 	return Principal{
-		ID:        u.ID,
-		UserID:    u.UserID,
-		Username:  u.Username,
-		Email:     u.Email,
-		Name:      u.Name,
-		AvatarURL: u.AvatarURL,
-		Role:      u.Role,
-		Status:    u.Status,
+		ID:          u.ID,
+		UserID:      u.UserID,
+		Username:    u.Username,
+		Email:       u.Email,
+		Name:        u.Name,
+		AvatarURL:   u.AvatarURL,
+		Role:        u.Role,
+		Status:      u.Status,
+		RBAC:        hasKindeRoles,
+		Roles:       claims.Roles,
+		Permissions: claims.Permissions,
 	}, nil
 }
 
-func (s *Service) upsertUser(ctx context.Context, claims *Claims) (*ent.User, error) {
+// kindeRole maps Kinde role names onto the application's two roles. It reports
+// whether the token actually carried a roles claim, so a legacy token without
+// RBAC customization keeps using the local role instead of being denied.
+func kindeRole(claims *Claims) (role string, hasRoles, allowed bool) {
+	if !claims.RolesClaim {
+		return "", false, false
+	}
+	for _, value := range claims.Roles {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case config.RoleAdmin:
+			return config.RoleAdmin, true, true
+		case config.RoleUser:
+			// Keep looking: admin wins if both are present.
+		}
+	}
+	for _, value := range claims.Roles {
+		if strings.EqualFold(value, config.RoleUser) {
+			return config.RoleUser, true, true
+		}
+	}
+	return "", true, false
+}
+
+func (s *Service) upsertUser(ctx context.Context, claims *Claims, role string, hasKindeRoles bool) (*ent.User, error) {
 	u, err := s.db.User.Query().
 		Where(user.UserID(claims.Subject)).
 		Only(ctx)
 	if err != nil && !ent.IsNotFound(err) {
 		return nil, fmt.Errorf("read user by Kinde subject: %w", err)
 	}
+	initialRole := s.initialRole(claims)
+	if hasKindeRoles {
+		initialRole = role
+	}
 	if err == nil {
-		return s.refreshProfile(ctx, u, claims)
+		return s.refreshProfile(ctx, u, claims, role, hasKindeRoles)
 	}
 
 	create := s.db.User.Create().
 		SetUserID(claims.Subject).
 		SetUsername(usernameForSubject(claims.Subject)).
 		SetStatus(config.StatusActive).
-		SetRole(s.initialRole(claims))
+		SetRole(initialRole)
 	applyProfile(create, claims)
 
 	created, err := create.Save(ctx)
@@ -76,10 +120,10 @@ func (s *Service) upsertUser(ctx context.Context, claims *Claims) (*ent.User, er
 	if err != nil {
 		return nil, fmt.Errorf("read concurrently created user: %w", err)
 	}
-	return s.refreshProfile(ctx, u, claims)
+	return s.refreshProfile(ctx, u, claims, role, hasKindeRoles)
 }
 
-func (s *Service) refreshProfile(ctx context.Context, u *ent.User, claims *Claims) (*ent.User, error) {
+func (s *Service) refreshProfile(ctx context.Context, u *ent.User, claims *Claims, role string, hasKindeRoles bool) (*ent.User, error) {
 	update := s.db.User.UpdateOneID(u.ID)
 	changed := false
 
@@ -93,6 +137,12 @@ func (s *Service) refreshProfile(ctx context.Context, u *ent.User, claims *Claim
 	}
 	if claims.AvatarURL != "" && claims.AvatarURL != u.AvatarURL {
 		update.SetAvatarURL(claims.AvatarURL)
+		changed = true
+	}
+	if hasKindeRoles && role != "" && role != u.Role {
+		// Kinde RBAC is authoritative once the token carries roles. Sync the
+		// local column so admin checks and the UI see the same role.
+		update.SetRole(role)
 		changed = true
 	}
 	if !changed {

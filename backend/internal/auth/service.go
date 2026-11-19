@@ -45,6 +45,12 @@ type Principal struct {
 	AvatarURL string
 	Role      string
 	Status    string
+	// RBAC is true when the access token carried a roles claim. In that mode
+	// Role was taken from Kinde (and synchronized into users.role); otherwise
+	// it is the pre-existing local role.
+	RBAC        bool
+	Roles       []string
+	Permissions []string
 }
 
 // Service owns token verification, local user synchronization and the
@@ -118,7 +124,7 @@ func (s *Service) Middleware() gin.HandlerFunc {
 		}
 		principal, err := s.principalFromClaims(c.Request.Context(), claims)
 		if err != nil {
-			if errors.Is(err, ErrUserDisabled) {
+			if errors.Is(err, ErrUserDisabled) || errors.Is(err, ErrNoAccess) {
 				web.AbortWithStatusJSON(c, http.StatusForbidden, gin.H{"error": "forbidden"})
 				return
 			}
@@ -201,20 +207,27 @@ func noStore(c *gin.Context) {
 	c.Next()
 }
 
-func userResponse(u *ent.User) gin.H {
+func userResponse(u *ent.User, principal Principal) gin.H {
 	avatar := any(nil)
 	if u.AvatarURL != "" {
 		avatar = u.AvatarURL
 	}
+	source := "local"
+	if principal.RBAC {
+		source = "kinde"
+	}
 	return gin.H{
-		"id":         u.ID,
-		"user_id":    u.UserID,
-		"username":   u.Username,
-		"email":      u.Email,
-		"name":       u.Name,
-		"avatar_url": avatar,
-		"role":       u.Role,
-		"status":     u.Status,
+		"id":          u.ID,
+		"user_id":     u.UserID,
+		"username":    u.Username,
+		"email":       u.Email,
+		"name":        u.Name,
+		"avatar_url":  avatar,
+		"role":        u.Role,
+		"status":      u.Status,
+		"rbac_source": source,
+		"roles":       principal.Roles,
+		"permissions": principal.Permissions,
 	}
 }
 
@@ -231,7 +244,7 @@ func (s *Service) handleMe(c *gin.Context) {
 		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	web.JSON(c, http.StatusOK, userResponse(u))
+	web.JSON(c, http.StatusOK, userResponse(u, principal))
 }
 
 func (s *Service) handleLogout(c *gin.Context) {

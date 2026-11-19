@@ -153,6 +153,10 @@ func (s *Server) handleAdminUserUpdate(c *gin.Context) {
 		update.SetUsername(name)
 	}
 	if body.Role != nil {
+		if principal, ok := auth.PrincipalFrom(c); ok && principal.RBAC {
+			web.JSON(c, http.StatusConflict, gin.H{"error": "roles are managed by Kinde RBAC"})
+			return
+		}
 		if !validRole(*body.Role) {
 			web.JSON(c, http.StatusBadRequest, gin.H{"error": "role must be admin or user"})
 			return

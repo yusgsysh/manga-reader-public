@@ -405,3 +405,101 @@ func TestMeIgnoresClientSuppliedUserID(t *testing.T) {
 		t.Fatalf("user_id = %q, want kp_owner", me.UserID)
 	}
 }
+
+func TestKindeRolesDriveLocalRole(t *testing.T) {
+	svc, client, iss := newTestService(t)
+	r := newTestRouter(svc)
+
+	adminToken := iss.Sign(t, authtest.Claims{
+		Subject: "kp_rbac_admin",
+		Roles:   []string{"admin"},
+	})
+	w := doRequest(r, http.MethodGet, "/api/auth/me", adminToken)
+	if w.Code != http.StatusOK {
+		t.Fatalf("admin me = %d %s", w.Code, w.Body.String())
+	}
+	var me struct {
+		Role  string   `json:"role"`
+		RBAC  string   `json:"rbac_source"`
+		Roles []string `json:"roles"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &me); err != nil {
+		t.Fatalf("decode me: %v", err)
+	}
+	if me.Role != config.RoleAdmin || me.RBAC != "kinde" || len(me.Roles) != 1 {
+		t.Fatalf("admin identity = %+v", me)
+	}
+	u, err := client.User.Query().Where(user.UserIDEQ("kp_rbac_admin")).Only(t.Context())
+	if err != nil || u.Role != config.RoleAdmin {
+		t.Fatalf("local admin role = %+v err=%v", u, err)
+	}
+
+	// A Kinde "user" role demotes an existing local admin on the next request.
+	userToken := iss.Sign(t, authtest.Claims{
+		Subject: "kp_rbac_admin",
+		Roles:   []string{"user"},
+	})
+	if w := doRequest(r, http.MethodGet, "/api/bookshelf", userToken); w.Code != http.StatusOK {
+		t.Fatalf("user token = %d %s", w.Code, w.Body.String())
+	}
+	u, _ = client.User.Query().Where(user.UserIDEQ("kp_rbac_admin")).Only(t.Context())
+	if u.Role != config.RoleUser {
+		t.Fatalf("role after demotion = %q, want user", u.Role)
+	}
+}
+
+func TestKindeUnknownRoleIsForbidden(t *testing.T) {
+	svc, client, iss := newTestService(t)
+	r := newTestRouter(svc)
+	token := iss.Sign(t, authtest.Claims{
+		Subject: "kp_no_role",
+		Roles:   []string{"reader"},
+	})
+
+	w := doRequest(r, http.MethodGet, "/api/bookshelf", token)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("unknown role = %d, want 403 (%s)", w.Code, w.Body.String())
+	}
+	count, _ := client.User.Query().Count(t.Context())
+	if count != 0 {
+		t.Fatalf("users = %d, want no local account for denied role", count)
+	}
+}
+
+func TestClaimListAcceptsKindeShapes(t *testing.T) {
+	cases := map[string][]string{
+		`["admin","user"]`:                  {"admin", "user"},
+		`[{"key":"admin"},{"name":"user"}]`: {"admin", "user"},
+		`"admin"`:                           {"admin"},
+		`null`:                              nil,
+	}
+	for raw, want := range cases {
+		got := claimList([]byte(raw))
+		if len(got) != len(want) {
+			t.Fatalf("claimList(%s) = %v, want %v", raw, got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("claimList(%s) = %v, want %v", raw, got, want)
+			}
+		}
+	}
+}
+
+func TestEmptyRolesClaimIsForbidden(t *testing.T) {
+	svc, client, iss := newTestService(t)
+	r := newTestRouter(svc)
+	token := iss.Sign(t, authtest.Claims{
+		Subject:    "kp_empty_roles",
+		Roles:      []string{},
+		RolesClaim: true,
+	})
+	w := doRequest(r, http.MethodGet, "/api/bookshelf", token)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("empty roles = %d, want 403 (%s)", w.Code, w.Body.String())
+	}
+	count, _ := client.User.Query().Count(t.Context())
+	if count != 0 {
+		t.Fatalf("users = %d, want 0", count)
+	}
+}

@@ -79,6 +79,9 @@ type Claims struct {
 	EmailVerified bool
 	Name          string
 	Picture       string
+	Roles         []string
+	Permissions   []string
+	RolesClaim    bool
 	// Method overrides the signing method (used for negative tests).
 	Method jwt.SigningMethod
 	// NoExpiry omits exp entirely.
@@ -135,6 +138,12 @@ func (i *Issuer) Sign(t *testing.T, c Claims) string {
 	}
 	if c.Picture != "" {
 		claims["picture"] = c.Picture
+	}
+	if c.RolesClaim || len(c.Roles) > 0 {
+		claims["roles"] = c.Roles
+	}
+	if len(c.Permissions) > 0 {
+		claims["permissions"] = c.Permissions
 	}
 
 	token := jwt.NewWithClaims(method, claims)

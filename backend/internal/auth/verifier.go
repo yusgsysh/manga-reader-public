@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -98,21 +99,94 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (*Claims, error) {
 		EmailVerified: payload.EmailVerified,
 		Name:          name,
 		AvatarURL:     strings.TrimSpace(payload.Picture),
+		Roles:         mergeClaimList(payload.Roles, payload.HasuraRoles),
+		Permissions:   mergeClaimList(payload.Permissions, payload.HasuraPermissions),
+		RolesClaim:    hasClaim(payload.Roles) || hasClaim(payload.HasuraRoles),
 		ExpiresAt:     token.Expiry,
 		IssuedAt:      token.IssuedAt,
 	}, nil
+}
+
+// roleClaim is one role object as Kinde may serialize it in a customized
+// access token ({"key":"admin","name":"Admin"}).
+type roleClaim struct {
+	Key  string `json:"key"`
+	Name string `json:"name"`
+}
+
+// claimList accepts the shapes used by Kinde/Hasura token customization:
+// ["admin"], [{"key":"admin"}], or a single string.
+func claimList(raw json.RawMessage) []string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var stringsList []string
+	if err := json.Unmarshal(raw, &stringsList); err == nil {
+		return cleanList(stringsList)
+	}
+	var objects []roleClaim
+	if err := json.Unmarshal(raw, &objects); err == nil {
+		out := make([]string, 0, len(objects))
+		for _, object := range objects {
+			if object.Key != "" {
+				out = append(out, object.Key)
+			} else if object.Name != "" {
+				out = append(out, object.Name)
+			}
+		}
+		return cleanList(out)
+	}
+	var single string
+	if err := json.Unmarshal(raw, &single); err == nil {
+		return cleanList([]string{single})
+	}
+	return nil
+}
+
+func hasClaim(raw json.RawMessage) bool {
+	return len(raw) > 0 && string(raw) != "null"
+}
+
+func mergeClaimList(groups ...json.RawMessage) []string {
+	seen := make(map[string]struct{})
+	var out []string
+	for _, raw := range groups {
+		for _, value := range claimList(raw) {
+			key := strings.ToLower(value)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func cleanList(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 // tokenClaims is the subset of Kinde access-token claims we trust after
 // verification. Any of the profile fields may be absent; only "sub" is
 // guaranteed by OIDC.
 type tokenClaims struct {
-	Email         string `json:"email"`
-	EmailVerified bool   `json:"email_verified"`
-	Name          string `json:"name"`
-	GivenName     string `json:"given_name"`
-	FamilyName    string `json:"family_name"`
-	Picture       string `json:"picture"`
+	Email             string          `json:"email"`
+	EmailVerified     bool            `json:"email_verified"`
+	Name              string          `json:"name"`
+	GivenName         string          `json:"given_name"`
+	FamilyName        string          `json:"family_name"`
+	Picture           string          `json:"picture"`
+	Roles             json.RawMessage `json:"roles"`
+	HasuraRoles       json.RawMessage `json:"x-hasura-roles"`
+	Permissions       json.RawMessage `json:"permissions"`
+	HasuraPermissions json.RawMessage `json:"x-hasura-permissions"`
 }
 
 // Claims is the verified identity extracted from a Kinde access token.
@@ -122,6 +196,14 @@ type Claims struct {
 	EmailVerified bool
 	Name          string
 	AvatarURL     string
-	ExpiresAt     time.Time
-	IssuedAt      time.Time
+	// Roles and Permissions come from the token customization configured in
+	// Kinde. They are empty when the application has not added those claims.
+	Roles       []string
+	Permissions []string
+	// RolesClaim is true when the access token carried roles (even an empty
+	// array). It distinguishes "RBAC not configured" from "configured but no
+	// roles", which must be denied.
+	RolesClaim bool
+	ExpiresAt  time.Time
+	IssuedAt   time.Time
 }
