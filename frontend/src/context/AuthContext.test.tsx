@@ -128,14 +128,14 @@ describe("AuthProvider", () => {
     expect(screen.getByText("loading")).toBeTruthy();
   });
 
-  it("stays signed out without calling /api/auth/me when Kinde has no session", async () => {
+  it("probes /api/auth/me once and stays signed out on 401", async () => {
     resetKinde();
-    const calls = mockFetch(() => json({}, 404));
+    const calls = mockFetch(() => json({ error: "unauthorized" }, 401));
     renderAuth();
 
     expect(await screen.findByText("anon")).toBeTruthy();
     expect(screen.getByTestId("authed").textContent).toBe("false");
-    expect(calls.some((call) => call.url.endsWith("/api/auth/me"))).toBe(false);
+    expect(calls.filter((call) => call.url.endsWith("/api/auth/me"))).toHaveLength(1);
   });
 
   it("restores the local identity from /api/auth/me after a Kinde refresh", async () => {
@@ -175,7 +175,7 @@ describe("AuthProvider", () => {
 
   it("remembers the destination and starts the Kinde login redirect", async () => {
     resetKinde();
-    mockFetch(() => json({}, 404));
+    mockFetch(() => json({ error: "unauthorized" }, 401));
     renderAuth();
     await screen.findByText("anon");
 

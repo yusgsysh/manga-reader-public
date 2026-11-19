@@ -66,9 +66,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (e2e) return;
     setAccessTokenProvider(async () => {
+      // Prefer the SDK's current access token even when the SDK has not yet
+      // flipped isAuthenticated (the token is the authoritative credential;
+      // /api/auth/me decides whether the local account is usable).
       const current = await kinde.getAccessToken();
       if (current) return current;
-      if (!kindeConfig) return null;
+      if (!kinde.isAuthenticated || !kindeConfig) return null;
       const refreshed = await kinde.refreshToken({
         domain: kindeConfig.domain,
         clientId: kindeConfig.clientId,
@@ -84,19 +87,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const sessionQuery = useQuery({
     queryKey: AUTH_QUERY_KEY,
     queryFn: loadCurrentUser,
-    enabled: !e2e && !kinde.isLoading && kinde.isAuthenticated,
+    // Probe /api/auth/me once the SDK has finished initializing. Do not gate
+    // on isAuthenticated: some SDK states briefly report false after a
+    // successful code exchange, and the backend is the source of truth for
+    // whether a token maps to a usable local account.
+    enabled: !e2e && !kinde.isLoading,
     retry: false,
     staleTime: Infinity,
     gcTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-
-  useEffect(() => {
-    if (e2e || !kinde.isAuthenticated) {
-      queryClient.setQueryData(AUTH_QUERY_KEY, null);
-    }
-  }, [e2e, kinde.isAuthenticated, queryClient]);
 
   // A 401 from any API call invalidates the local identity once; RequireAuth
   // performs the single redirect to /login.
@@ -168,16 +169,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(() => {
     const user = e2e ? E2E_USER : (sessionQuery.data ?? null);
     const role = user?.role ?? null;
-    const loading = e2e
-      ? false
-      : kinde.isLoading ||
-        (kinde.isAuthenticated && sessionQuery.isPending);
+    const loading = e2e ? false : kinde.isLoading || sessionQuery.isPending;
     const error =
       sessionQuery.error instanceof Error ? sessionQuery.error : null;
     return {
       user,
       role,
-      isAuthenticated: e2e || (kinde.isAuthenticated && user !== null),
+      isAuthenticated: e2e || user !== null,
       isAdmin: role === "admin",
       isLoading: loading,
       error,
@@ -192,7 +190,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [
     e2e,
     kinde.isLoading,
-    kinde.isAuthenticated,
     sessionQuery.data,
     sessionQuery.isPending,
     sessionQuery.error,
