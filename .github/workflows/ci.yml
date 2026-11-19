@@ -11,6 +11,12 @@ on:
       - main
 
   workflow_dispatch:
+    inputs:
+      image_suffix:
+        description: "Optional image tag suffix, e.g. kinde"
+        required: false
+        default: ""
+        type: string
 
 # One run per branch/PR: a new push cancels the superseded run instead of
 # letting both compete for the same cache keys and runner minutes.
@@ -216,6 +222,8 @@ jobs:
             type=ref,event=branch
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ inputs.image_suffix }},enable=${{ inputs.image_suffix != '' }}
+            type=raw,value=${{ inputs.image_suffix }}-{{sha}},enable=${{ inputs.image_suffix != '' }}
 
       - name: Build and push
         uses: docker/build-push-action@v7
