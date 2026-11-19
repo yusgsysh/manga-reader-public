@@ -30,6 +30,7 @@ export function LoginPage() {
     register,
     isLoggingIn,
     isRegistering,
+    registrationEnabled,
   } = useAuth();
   const location = useLocation();
   const returnTo =
@@ -88,7 +89,9 @@ export function LoginPage() {
                 登录 Manga Reader
               </h1>
               <p className="mt-3 text-[0.875rem] leading-5 text-kumo-subtle">
-                使用 Kinde 账号登录。首次使用请先注册，注册后会自动返回此应用。
+                {registrationEnabled
+                  ? "使用 Kinde 账号登录。首次使用请先注册，注册后会自动返回此应用。"
+                  : "使用 Kinde 账号登录。"}
               </p>
             </div>
 
@@ -111,22 +114,24 @@ export function LoginPage() {
                   "登录"
                 )}
               </button>
-              <button
-                type="button"
-                onClick={() => void start("register")}
-                className="flex h-12 w-full items-center justify-center rounded-xl border border-kumo-hairline text-[0.9375rem] font-medium text-kumo-default transition-colors hover:bg-kumo-tint disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={busy}
-                aria-busy={busy && pending === "register"}
-              >
-                {pending === "register" ? (
-                  <>
-                    <CircleNotch className="mr-2 size-4 animate-spin" />
-                    正在跳转…
-                  </>
-                ) : (
-                  "注册新账号"
-                )}
-              </button>
+              {registrationEnabled && (
+                <button
+                  type="button"
+                  onClick={() => void start("register")}
+                  className="flex h-12 w-full items-center justify-center rounded-xl border border-kumo-hairline text-[0.9375rem] font-medium text-kumo-default transition-colors hover:bg-kumo-tint disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={busy}
+                  aria-busy={busy && pending === "register"}
+                >
+                  {pending === "register" ? (
+                    <>
+                      <CircleNotch className="mr-2 size-4 animate-spin" />
+                      正在跳转…
+                    </>
+                  ) : (
+                    "注册新账号"
+                  )}
+                </button>
+              )}
             </div>
 
             <p className="mt-6 text-center text-xs leading-5 text-kumo-subtle">

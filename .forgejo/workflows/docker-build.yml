@@ -206,6 +206,7 @@ jobs:
             VITE_KINDE_REDIRECT_URI=${{ vars.VITE_KINDE_REDIRECT_URI }}
             VITE_KINDE_LOGOUT_URI=${{ vars.VITE_KINDE_LOGOUT_URI }}
             VITE_KINDE_AUDIENCE=${{ vars.VITE_KINDE_AUDIENCE }}
+            VITE_KINDE_REGISTRATION_ENABLED=${{ vars.VITE_KINDE_REGISTRATION_ENABLED }}
 
   # ------------------------------------------------------------
   # Deploy

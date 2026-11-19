@@ -18,7 +18,11 @@ import {
   setAccessTokenProvider,
   setUnauthorizedHandler,
 } from "../api/client";
-import { isE2EAuth, readKindeConfig } from "../auth/kinde";
+import {
+  isE2EAuth,
+  isRegistrationEnabled,
+  readKindeConfig,
+} from "../auth/kinde";
 import {
   AUTH_QUERY_KEY,
   AuthContext,
@@ -58,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const kinde = useKindeAuth();
   const e2e = isE2EAuth();
   const kindeConfig = useMemo(() => readKindeConfig(), []);
+  const registrationEnabled = useMemo(() => isRegistrationEnabled(), []);
   const [pendingAction, setPendingAction] = useState<"login" | "register" | null>(null);
 
   // The SDK is the only owner of the access token. The API client asks it for
@@ -127,6 +132,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(
     async (returnTo?: string) => {
+      if (!registrationEnabled) {
+        throw new Error("registration is disabled");
+      }
       rememberReturnPath(returnTo);
       setPendingAction("register");
       try {
@@ -135,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setPendingAction(null);
       }
     },
-    [kinde],
+    [kinde, registrationEnabled],
   );
 
   const logoutMutation = useMutation({
@@ -182,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoggingIn: pendingAction === "login",
       isLoggingOut: logoutMutation.isPending,
       isRegistering: pendingAction === "register",
+      registrationEnabled,
       login,
       register,
       logout,
@@ -196,6 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionQuery.refetch,
     pendingAction,
     logoutMutation.isPending,
+    registrationEnabled,
     login,
     register,
     logout,

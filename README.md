@@ -98,6 +98,7 @@ backend/
    VITE_KINDE_REDIRECT_URI=http://localhost:5173
    VITE_KINDE_LOGOUT_URI=http://localhost:5173/login
    VITE_KINDE_AUDIENCE=https://api.manga.example.com
+   VITE_KINDE_REGISTRATION_ENABLED=true
    VITE_API_BASE_URL=http://localhost:8080
    ```
 

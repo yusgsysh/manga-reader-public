@@ -35,6 +35,7 @@ function authValue(overrides: Partial<AuthContextValue> = {}): AuthContextValue 
     isLoggingIn: false,
     isLoggingOut: false,
     isRegistering: false,
+    registrationEnabled: true,
     login: vi.fn(),
     register: vi.fn(),
     logout: vi.fn(),
@@ -187,6 +188,14 @@ describe("LoginPage", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "登录" }));
     expect(login).toHaveBeenCalledWith("/");
+  });
+
+  it("hides the registration entry point when registration is disabled", () => {
+    renderLogin(authValue({ registrationEnabled: false }));
+    expect(
+      screen.queryByRole("button", { name: "注册新账号" }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "登录" })).toBeTruthy();
   });
 
   it("explains a Kinde callback error", () => {

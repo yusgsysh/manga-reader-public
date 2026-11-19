@@ -43,3 +43,11 @@ export function readKindeConfig(): KindeConfig | null {
 export function isE2EAuth(): boolean {
   return import.meta.env.VITE_E2E_AUTH === "true";
 }
+
+/**
+ * Registration must also be disabled in Kinde; this flag only hides the
+ * sign-up entry point so the UI does not offer a flow Kinde will reject.
+ */
+export function isRegistrationEnabled(): boolean {
+  return import.meta.env.VITE_KINDE_REGISTRATION_ENABLED !== "false";
+}

@@ -120,6 +120,7 @@ jobs:
           VITE_KINDE_REDIRECT_URI: ${{ vars.VITE_KINDE_REDIRECT_URI }}
           VITE_KINDE_LOGOUT_URI: ${{ vars.VITE_KINDE_LOGOUT_URI }}
           VITE_KINDE_AUDIENCE: ${{ vars.VITE_KINDE_AUDIENCE }}
+          VITE_KINDE_REGISTRATION_ENABLED: ${{ vars.VITE_KINDE_REGISTRATION_ENABLED }}
 
   # ------------------------------------------------------------
   # Image build on pull requests and non-main branch pushes.
@@ -162,6 +163,7 @@ jobs:
             VITE_KINDE_REDIRECT_URI=${{ vars.VITE_KINDE_REDIRECT_URI }}
             VITE_KINDE_LOGOUT_URI=${{ vars.VITE_KINDE_LOGOUT_URI }}
             VITE_KINDE_AUDIENCE=${{ vars.VITE_KINDE_AUDIENCE }}
+            VITE_KINDE_REGISTRATION_ENABLED=${{ vars.VITE_KINDE_REGISTRATION_ENABLED }}
 
   # ------------------------------------------------------------
   # Image publish on main / manual runs.
@@ -242,6 +244,7 @@ jobs:
             VITE_KINDE_REDIRECT_URI=${{ vars.VITE_KINDE_REDIRECT_URI }}
             VITE_KINDE_LOGOUT_URI=${{ vars.VITE_KINDE_LOGOUT_URI }}
             VITE_KINDE_AUDIENCE=${{ vars.VITE_KINDE_AUDIENCE }}
+            VITE_KINDE_REGISTRATION_ENABLED=${{ vars.VITE_KINDE_REGISTRATION_ENABLED }}
 
   # ------------------------------------------------------------
   # Job summary — commit metadata, per-job results, image tags.
