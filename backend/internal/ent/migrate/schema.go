@@ -78,6 +78,40 @@ var (
 		Columns:    GalleryCacheColumns,
 		PrimaryKey: []*schema.Column{GalleryCacheColumns[0], GalleryCacheColumns[1]},
 	}
+	// PasskeyColumns holds the columns for the "passkey" table.
+	PasskeyColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
+		{Name: "user_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
+		{Name: "credential_id", Type: field.TypeBytes, Unique: true},
+		{Name: "public_key", Type: field.TypeBytes},
+		{Name: "attestation_type", Type: field.TypeString, Default: ""},
+		{Name: "attestation_format", Type: field.TypeString, Default: ""},
+		{Name: "transports", Type: field.TypeJSON, Nullable: true},
+		{Name: "aaguid", Type: field.TypeBytes, Nullable: true},
+		{Name: "sign_count", Type: field.TypeInt64, Default: 0},
+		{Name: "clone_warning", Type: field.TypeBool, Default: false},
+		{Name: "backup_eligible", Type: field.TypeBool, Default: false},
+		{Name: "backup_state", Type: field.TypeBool, Default: false},
+		{Name: "user_present", Type: field.TypeBool, Default: false},
+		{Name: "user_verified", Type: field.TypeBool, Default: false},
+		{Name: "name", Type: field.TypeString, Default: ""},
+		{Name: "credential_json", Type: field.TypeBytes},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "last_used_at", Type: field.TypeTime, Nullable: true},
+	}
+	// PasskeyTable holds the schema information for the "passkey" table.
+	PasskeyTable = &schema.Table{
+		Name:       "passkey",
+		Columns:    PasskeyColumns,
+		PrimaryKey: []*schema.Column{PasskeyColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "passkey_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{PasskeyColumns[1]},
+			},
+		},
+	}
 	// PrefillJobColumns holds the columns for the "prefill_job" table.
 	PrefillJobColumns = []*schema.Column{
 		{Name: "job_id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
@@ -287,6 +321,7 @@ var (
 		AppSettingTable,
 		BookshelfTable,
 		GalleryCacheTable,
+		PasskeyTable,
 		PrefillJobTable,
 		ReadingProgressTable,
 		SyncChangeTable,
@@ -308,6 +343,9 @@ func init() {
 	}
 	GalleryCacheTable.Annotation = &entsql.Annotation{
 		Table: "gallery_cache",
+	}
+	PasskeyTable.Annotation = &entsql.Annotation{
+		Table: "passkey",
 	}
 	PrefillJobTable.Annotation = &entsql.Annotation{
 		Table: "prefill_job",

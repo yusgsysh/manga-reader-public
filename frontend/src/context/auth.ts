@@ -12,9 +12,11 @@ export interface AuthContextValue {
   isLoading: boolean;
   error: Error | null;
   isLoggingIn: boolean;
+  isLoggingInWithPasskey: boolean;
   isLoggingOut: boolean;
   isRegistering: boolean;
   login: (username: string, password: string) => Promise<void>;
+  loginWithPasskey: () => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<unknown>;

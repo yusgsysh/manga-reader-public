@@ -22,6 +22,7 @@
 - 每用户独立 ExHentai Cookie：AES-256-GCM 加密存储、独立 Cookie Jar/HTTP Client、单独验证状态，绝不跨账号共享
 - 每用户 ExHentai 设置：站点偏好与加密 Cookie 集中保存在 `user_setting`
 - JWT 登录页（Argon2id 密码哈希、HttpOnly Cookie、服务端登出撤销）
+- 通行密钥（WebAuthn / Passkeys）：设置页添加 / 重命名 / 删除，登录页免密码登录；凭据仅保存在用户设备，支持跨设备同步的 passkey
 - 同步使用数据库管理的用户级同步 Key（SHA-256 哈希、可删除/轮换，一把 Key 只同步一个账号），与用户 JWT 完全分离
 
 ## 目录结构
@@ -56,7 +57,7 @@ backend/
 │   │   ├── prefilljob/           # PrefillJob 字段常量与查询辅助
 │   │   ├── gallerycache/         # GalleryCache 字段常量与查询辅助
 │   │   └── migrate/              # 数据库迁移逻辑
-│   ├── auth/                     # JWT 登录（Argon2id / HS256 / Gin 中间件）
+│   ├── auth/                     # JWT 登录与通行密钥（WebAuthn / HS256 / Gin 中间件）
 │   ├── usercookie/               # 每用户 ExHentai Cookie 加密存储与客户端池
 │   ├── synckey/                  # 用户级同步 Key 认证
 │   ├── exhentai/                 # ExHentai API / 页面抓取（含 10 秒请求去重）
@@ -171,15 +172,24 @@ MANGA_READER_AUTH_COOKIE_SECURE=auto
 
   命令会递增 `token_version` 撤销旧 Token，并把用户状态恢复为 `active`。
 - **登录接口**：`POST /api/auth/login` 只需要 `username` + `password`。成功后返回 `access_token` / `token_type` / `expires_in` 以及当前用户 `user`，同时写入 `HttpOnly; SameSite=Lax; Secure(auto)` Cookie；JWT 的 `sub` 与 `user_id` 都是当前用户 ID。前端不把 Token 放进 `localStorage`，页面刷新后由 Cookie + `GET /api/auth/status` 恢复登录态。
+- **通行密钥（Passkeys / WebAuthn）**：登录页提供「使用通行密钥登录」，设置 → 通行密钥可添加、重命名、删除（每账号最多 20 个）。服务端只保存公钥与签名计数器，私钥永不离开设备；登录使用 discoverable credential，无需先输入用户名。浏览器要求安全上下文，即 HTTPS 或 `localhost`。RP 默认按请求 `Origin`/`Host` 推导；反向代理改写 Host 时设置：
+
+  ```env
+  MANGA_READER_WEBAUTHN_RP_ID=manga.example.com
+  MANGA_READER_WEBAUTHN_RP_NAME=Manga Reader
+  MANGA_READER_WEBAUTHN_RP_ORIGINS=https://manga.example.com
+  ```
+
+  通行密钥与密码并存：删除全部通行密钥后仍可用密码登录。
 - **角色**：`admin` 管理实例级用户和系统同步配置；`user` 只能使用业务功能和个人设置。普通用户的 JWT 调用 `/api/admin/*`、`/api/sync/config`、`/api/sync/status`、`/api/dev/*` 会得到 403。
-- **数据隔离**：`bookshelf`、`reading_progress`、`prefill_job`、`tag_preference`、`tag_sync_baseline`、`sync_change` 全部带 `user_id`，所有查询/创建/更新/删除都从 JWT 取用户 ID 并附加谓词。客户端传入的 `user_id`（路径、查询、Header、Body）一律被忽略。`gallery_cache`、缩略图等公共上游元数据继续全局共享。
+- **数据隔离**：`bookshelf`、`reading_progress`、`prefill_job`、`tag_preference`、`tag_sync_baseline`、`sync_change`、`passkey` 全部带 `user_id`，所有查询/创建/更新/删除都从 JWT 取用户 ID 并附加谓词。客户端传入的 `user_id`（路径、查询、Header、Body）一律被忽略。`gallery_cache`、缩略图等公共上游元数据继续全局共享。
 - **Cookie 与个人设置**：`user_setting` 每个用户一行，`cookie_ciphertext` 使用由 `JWT_SECRET` 派生的 AES-256-GCM 密钥加密；接口只返回是否配置、验证状态、站点等非敏感摘要。每个用户使用独立 HTTP Client / Cookie Jar（会话 Cookie 同时写入 exhentai.org 与 e-hentai.org 两个域），日志只记录长度不记录值。每用户可选浏览站点（`e-hentai` 默认 / `exhentai`）：默认使用 e-hentai.org 且 Cookie 可为空，未配置 Cookie 时匿名浏览公开画廊；选择 exhentai 时必须配置 Cookie。搜索、列表、画廊页与种子页按所选站点抓取（两站 gallery id/token 通用）；标签同步固定走 exhentai（`s.exhentai.org` 变更 API 无 e-hentai 对应端点）。
 - **系统级接口**：`/api/sync/push`、`/api/sync/events` 只接受用户级同步 Key；Metrics 接受独立 Token；用户 JWT 不能调用这些系统接口。
-- **主键为 UUID（非自增）**：`users`、`bookshelf`、`reading_progress`、`user_setting`、`user_sync_key`、`prefill_job` 的主键都是 UUID（UUIDv7，SQLite 以 16 字节 BLOB 存储、PostgreSQL 以 bytea 存储），`gallery_cache` / `tag_preference` / `tag_sync_baseline` / `app_setting` / `sync_state` 使用自然复合键或字符串键。自增整数主键只在 `sync_change` 保留（其 `id` 同时是复制游标，需要单调递增）。
+- **主键为 UUID（非自增）**：`users`、`bookshelf`、`reading_progress`、`user_setting`、`user_sync_key`、`prefill_job`、`passkey` 的主键都是 UUID（UUIDv7，SQLite 以 16 字节 BLOB 存储、PostgreSQL 以 bytea 存储），`gallery_cache` / `tag_preference` / `tag_sync_baseline` / `app_setting` / `sync_state` 使用自然复合键或字符串键。自增整数主键只在 `sync_change` 保留（其 `id` 同时是复制游标，需要单调递增）。
 - **CSRF**：Cookie 仅用于同源请求；`csrfGuard` 会拒绝跨站 `Origin` / `Sec-Fetch-Site` 的写请求。反向代理必须透传 `Origin` / `Sec-Fetch-Site`，并保持应用与前端同源；HTTPS 终止在反代时还要设置 `X-Forwarded-Proto: https`，否则 `auto` 模式不会给 Cookie 加 `Secure`。
 - **登出**：`POST /api/auth/logout` 会递增 `users.token_version` 并清除 Cookie，所有已签发 Token 立即失效。
 - **Token 校验**：只接受 `Authorization: Bearer <JWT>`（或同源 Cookie），严格校验 HS256 签名、`iss`、`iat`、`exp`、`user_id` 与 `token_version`；缺失/无效/过期/签名错误统一返回 `401`。
-- **公开 API**：只有 `/api/auth/login`、`/api/auth/register`、`/api/auth/status` 和同步端点无需用户 JWT。搜索、画廊、图片代理（`<img>`/EventSource 会携带同源 HttpOnly Cookie）也需要登录，因为它们必须使用当前用户的 ExHentai Cookie。
+- **公开 API**：只有 `/api/auth/login`、`/api/auth/register`、`/api/auth/status`、`/api/auth/passkey/login/*` 和同步端点无需用户 JWT。搜索、画廊、图片代理（`<img>`/EventSource 会携带同源 HttpOnly Cookie）也需要登录，因为它们必须使用当前用户的 ExHentai Cookie。
 - **管理 API**：`/api/admin/users*` 仅管理员可用；用户只能修改自己的数据。
 
 ### 用户级同步 Key

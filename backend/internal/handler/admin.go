@@ -12,6 +12,7 @@ import (
 	"manga-reader/internal/config"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/bookshelf"
+	"manga-reader/internal/ent/passkey"
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/readingprogress"
 	"manga-reader/internal/ent/syncchange"
@@ -331,6 +332,10 @@ func (s *Server) handleAdminUserDelete(c *gin.Context) {
 		return
 	}
 	if _, err := tx.ReadingProgress.Delete().Where(readingprogress.UserIDEQ(userID)).Exec(ctx); err != nil {
+		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
+		return
+	}
+	if _, err := tx.Passkey.Delete().Where(passkey.UserIDEQ(userID)).Exec(ctx); err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
 		return
 	}

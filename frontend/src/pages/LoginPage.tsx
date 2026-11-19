@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
 import { Input } from "@cloudflare/kumo";
-import { CircleNotch, Eye, EyeSlash } from "@phosphor-icons/react";
+import { CircleNotch, Eye, EyeSlash, Fingerprint } from "@phosphor-icons/react";
 import { ApiRequestError } from "../api/client";
 import { ErrorBanner } from "../components/common/ErrorBanner";
 import { LoadingScreen } from "../components/common/LoadingScreen";
 import { Logo } from "../components/ui";
 import { useAuth } from "../context/auth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { isPasskeySupported } from "../lib/webauthn";
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiRequestError) {
@@ -17,7 +18,20 @@ function errorMessage(error: unknown): string {
     if (error.status >= 500) return "服务器暂时无法处理请求，请稍后再试";
     return error.message;
   }
+  if (error instanceof DOMException) {
+    if (error.name === "NotAllowedError") return "已取消通行密钥登录";
+    if (error.name === "SecurityError")
+      return "当前页面不是安全上下文，通行密钥需要 HTTPS 或 localhost";
+  }
+  if (error instanceof Error && error.message) return error.message;
   return "无法连接服务器，请检查网络或后端服务是否已启动";
+}
+
+function passkeyErrorMessage(error: unknown): string {
+  if (error instanceof ApiRequestError && error.status === 401) {
+    return "通行密钥验证失败，请重试或改用密码登录";
+  }
+  return errorMessage(error);
 }
 
 /** Only allow same-origin paths as the post-login destination. */
@@ -34,7 +48,15 @@ function safeReturnPath(value: unknown): string {
 }
 
 export function LoginPage() {
-  const { session, isAuthenticated, isLoading, login, isLoggingIn } = useAuth();
+  const {
+    session,
+    isAuthenticated,
+    isLoading,
+    login,
+    loginWithPasskey,
+    isLoggingIn,
+    isLoggingInWithPasskey,
+  } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const returnTo = safeReturnPath(
@@ -45,6 +67,8 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const passkeysAvailable = isPasskeySupported();
+  const busy = isLoggingIn || isLoggingInWithPasskey;
 
   useDocumentTitle("登录");
 
@@ -57,7 +81,7 @@ export function LoginPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (isLoggingIn) return;
+    if (busy) return;
     if (!username.trim() || !password) {
       setError("请输入用户名和密码");
       return;
@@ -69,6 +93,17 @@ export function LoginPage() {
       navigate(returnTo, { replace: true });
     } catch (cause) {
       setError(errorMessage(cause));
+    }
+  };
+
+  const handlePasskeyLogin = async () => {
+    if (busy) return;
+    setError(null);
+    try {
+      await loginWithPasskey();
+      navigate(returnTo, { replace: true });
+    } catch (cause) {
+      setError(passkeyErrorMessage(cause));
     }
   };
 
@@ -104,7 +139,7 @@ export function LoginPage() {
                   className="h-12 w-full rounded-xl px-4 text-[0.9375rem] focus:!ring-[var(--app-accent)] disabled:text-kumo-default"
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
-                  disabled={isLoggingIn}
+                  disabled={busy}
                 />
               </div>
 
@@ -123,7 +158,7 @@ export function LoginPage() {
                   className="h-12 w-full rounded-xl pr-12 pl-4 text-[0.9375rem] focus:!ring-[var(--app-accent)] disabled:text-kumo-default"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  disabled={isLoggingIn}
+                  disabled={busy}
                 />
                 <button
                   type="button"
@@ -146,7 +181,7 @@ export function LoginPage() {
             <button
               type="submit"
               className="auth-submit mt-4 flex h-12 w-full items-center justify-center rounded-xl text-[0.9375rem] font-medium disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isLoggingIn}
+              disabled={busy}
               aria-busy={isLoggingIn}
             >
               {isLoggingIn ? (
@@ -158,6 +193,35 @@ export function LoginPage() {
                 "登录"
               )}
             </button>
+
+            {passkeysAvailable && (
+              <>
+                <div className="mt-5 flex items-center gap-3 text-xs text-kumo-subtle">
+                  <span className="h-px flex-1 bg-kumo-tint" />
+                  或
+                  <span className="h-px flex-1 bg-kumo-tint" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handlePasskeyLogin()}
+                  disabled={busy}
+                  aria-busy={isLoggingInWithPasskey}
+                  className="mt-3 flex h-12 w-full items-center justify-center rounded-xl border border-kumo-tint bg-kumo-base text-[0.9375rem] font-medium text-kumo-default transition-colors hover:bg-kumo-tint disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)]"
+                >
+                  {isLoggingInWithPasskey ? (
+                    <>
+                      <CircleNotch className="mr-2 size-4 animate-spin" />
+                      等待通行密钥…
+                    </>
+                  ) : (
+                    <>
+                      <Fingerprint className="mr-2 size-4" weight="bold" />
+                      使用通行密钥登录
+                    </>
+                  )}
+                </button>
+              </>
+            )}
           </form>
         </div>
       </main>

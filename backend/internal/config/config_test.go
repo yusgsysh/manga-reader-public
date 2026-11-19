@@ -16,6 +16,9 @@ func setTestEnv(t *testing.T) {
 		"ADMIN_USERNAME",
 		"ADMIN_PASSWORD",
 		"MANGA_READER_AUTH_COOKIE_SECURE",
+		"MANGA_READER_WEBAUTHN_RP_ID",
+		"MANGA_READER_WEBAUTHN_RP_NAME",
+		"MANGA_READER_WEBAUTHN_RP_ORIGINS",
 		"MANGA_READER_METRICS_ENABLED",
 		"MANGA_READER_METRICS_TOKEN",
 		"MANGA_READER_SYNC_ENABLED",
@@ -103,6 +106,53 @@ func TestLoad_AdminPasswordWithoutSecretStillStarts(t *testing.T) {
 	}
 	if cfg.Auth.JWTSecret != "" {
 		t.Fatal("JWTSecret = non-empty, want empty when JWT_SECRET is unset")
+	}
+}
+
+func TestLoad_WebAuthnConfig(t *testing.T) {
+	setTestEnv(t)
+	t.Setenv("MANGA_READER_WEBAUTHN_RP_ID", "example.com")
+	t.Setenv("MANGA_READER_WEBAUTHN_RP_NAME", "Manga Reader Test")
+	t.Setenv("MANGA_READER_WEBAUTHN_RP_ORIGINS", "https://example.com, https://app.example.com/")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Auth.WebAuthn.RPID != "example.com" {
+		t.Fatalf("RPID = %q", cfg.Auth.WebAuthn.RPID)
+	}
+	if cfg.Auth.WebAuthn.RPDisplayName != "Manga Reader Test" {
+		t.Fatalf("RPDisplayName = %q", cfg.Auth.WebAuthn.RPDisplayName)
+	}
+	want := []string{"https://example.com", "https://app.example.com"}
+	if len(cfg.Auth.WebAuthn.RPOrigins) != len(want) {
+		t.Fatalf("RPOrigins = %#v", cfg.Auth.WebAuthn.RPOrigins)
+	}
+	for i := range want {
+		if cfg.Auth.WebAuthn.RPOrigins[i] != want[i] {
+			t.Fatalf("RPOrigins[%d] = %q, want %q", i, cfg.Auth.WebAuthn.RPOrigins[i], want[i])
+		}
+	}
+}
+
+func TestLoad_WebAuthnRejectsInvalidSettings(t *testing.T) {
+	cases := []struct {
+		key   string
+		value string
+	}{
+		{"MANGA_READER_WEBAUTHN_RP_ID", "https://example.com"},
+		{"MANGA_READER_WEBAUTHN_RP_ORIGINS", "example.com"},
+		{"MANGA_READER_WEBAUTHN_RP_ORIGINS", "https://example.com/app"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.key+"="+tc.value, func(t *testing.T) {
+			setTestEnv(t)
+			t.Setenv(tc.key, tc.value)
+			if _, err := Load(); err == nil {
+				t.Fatalf("expected error for %s=%s", tc.key, tc.value)
+			}
+		})
 	}
 }
 

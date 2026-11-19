@@ -1,4 +1,5 @@
 import { apiGet, apiPostJson, setAccessToken } from "./client";
+import { loginWithPasskey as passkeyLoginRequest } from "./passkey";
 
 export interface AuthUser {
   id: string;
@@ -79,6 +80,18 @@ export async function login(
   setAccessToken(result.access_token);
   // The identity rides along with the token, so there is no follow-up /me
   // request that could fail and leave a half-applied login.
+  return { user: toAuthUser(result.user) };
+}
+
+/**
+ * Passwordless login: discoverable WebAuthn credential -> session.
+ *
+ * Unlike `login`, this never sends a username: the authenticator selects the
+ * credential and the server resolves its owner from the credential id.
+ */
+export async function loginWithPasskey(): Promise<AuthIdentity> {
+  const result = await passkeyLoginRequest();
+  setAccessToken(result.access_token);
   return { user: toAuthUser(result.user) };
 }
 

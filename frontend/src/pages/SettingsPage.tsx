@@ -45,6 +45,7 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 import { TagRulesSection } from "../components/settings/TagRulesSection";
 import { UserManagementSection } from "../components/settings/UserManagementSection";
 import { ApiKeySection } from "../components/settings/ApiKeySection";
+import { PasskeySection } from "../components/settings/PasskeySection";
 import { SettingsSidebar } from "../components/settings/SettingsSidebar";
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
@@ -849,6 +850,13 @@ const SECTION_DEFS: SectionDef[] = [
     group: "general",
     show: "always",
     element: <CookieSection />,
+  },
+  {
+    id: "passkeys",
+    label: "通行密钥",
+    group: "general",
+    show: "always",
+    element: <PasskeySection />,
   },
   {
     id: "tag-rules",

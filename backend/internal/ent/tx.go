@@ -18,6 +18,8 @@ type Tx struct {
 	Bookshelf *BookshelfClient
 	// GalleryCache is the client for interacting with the GalleryCache builders.
 	GalleryCache *GalleryCacheClient
+	// Passkey is the client for interacting with the Passkey builders.
+	Passkey *PasskeyClient
 	// PrefillJob is the client for interacting with the PrefillJob builders.
 	PrefillJob *PrefillJobClient
 	// ReadingProgress is the client for interacting with the ReadingProgress builders.
@@ -170,6 +172,7 @@ func (tx *Tx) init() {
 	tx.AppSetting = NewAppSettingClient(tx.config)
 	tx.Bookshelf = NewBookshelfClient(tx.config)
 	tx.GalleryCache = NewGalleryCacheClient(tx.config)
+	tx.Passkey = NewPasskeyClient(tx.config)
 	tx.PrefillJob = NewPrefillJobClient(tx.config)
 	tx.ReadingProgress = NewReadingProgressClient(tx.config)
 	tx.SyncChange = NewSyncChangeClient(tx.config)

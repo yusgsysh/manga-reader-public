@@ -6,6 +6,7 @@ import (
 	"manga-reader/internal/ent/appsetting"
 	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/gallerycache"
+	"manga-reader/internal/ent/passkey"
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/readingprogress"
 	"manga-reader/internal/ent/schema"
@@ -128,6 +129,64 @@ func init() {
 	gallerycache.DefaultUpdatedAt = gallerycacheDescUpdatedAt.Default.(func() time.Time)
 	// gallerycache.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	gallerycache.UpdateDefaultUpdatedAt = gallerycacheDescUpdatedAt.UpdateDefault.(func() time.Time)
+	passkeyFields := schema.Passkey{}.Fields()
+	_ = passkeyFields
+	// passkeyDescCredentialID is the schema descriptor for credential_id field.
+	passkeyDescCredentialID := passkeyFields[2].Descriptor()
+	// passkey.CredentialIDValidator is a validator for the "credential_id" field. It is called by the builders before save.
+	passkey.CredentialIDValidator = passkeyDescCredentialID.Validators[0].(func([]byte) error)
+	// passkeyDescPublicKey is the schema descriptor for public_key field.
+	passkeyDescPublicKey := passkeyFields[3].Descriptor()
+	// passkey.PublicKeyValidator is a validator for the "public_key" field. It is called by the builders before save.
+	passkey.PublicKeyValidator = passkeyDescPublicKey.Validators[0].(func([]byte) error)
+	// passkeyDescAttestationType is the schema descriptor for attestation_type field.
+	passkeyDescAttestationType := passkeyFields[4].Descriptor()
+	// passkey.DefaultAttestationType holds the default value on creation for the attestation_type field.
+	passkey.DefaultAttestationType = passkeyDescAttestationType.Default.(string)
+	// passkeyDescAttestationFormat is the schema descriptor for attestation_format field.
+	passkeyDescAttestationFormat := passkeyFields[5].Descriptor()
+	// passkey.DefaultAttestationFormat holds the default value on creation for the attestation_format field.
+	passkey.DefaultAttestationFormat = passkeyDescAttestationFormat.Default.(string)
+	// passkeyDescSignCount is the schema descriptor for sign_count field.
+	passkeyDescSignCount := passkeyFields[8].Descriptor()
+	// passkey.DefaultSignCount holds the default value on creation for the sign_count field.
+	passkey.DefaultSignCount = passkeyDescSignCount.Default.(int64)
+	// passkeyDescCloneWarning is the schema descriptor for clone_warning field.
+	passkeyDescCloneWarning := passkeyFields[9].Descriptor()
+	// passkey.DefaultCloneWarning holds the default value on creation for the clone_warning field.
+	passkey.DefaultCloneWarning = passkeyDescCloneWarning.Default.(bool)
+	// passkeyDescBackupEligible is the schema descriptor for backup_eligible field.
+	passkeyDescBackupEligible := passkeyFields[10].Descriptor()
+	// passkey.DefaultBackupEligible holds the default value on creation for the backup_eligible field.
+	passkey.DefaultBackupEligible = passkeyDescBackupEligible.Default.(bool)
+	// passkeyDescBackupState is the schema descriptor for backup_state field.
+	passkeyDescBackupState := passkeyFields[11].Descriptor()
+	// passkey.DefaultBackupState holds the default value on creation for the backup_state field.
+	passkey.DefaultBackupState = passkeyDescBackupState.Default.(bool)
+	// passkeyDescUserPresent is the schema descriptor for user_present field.
+	passkeyDescUserPresent := passkeyFields[12].Descriptor()
+	// passkey.DefaultUserPresent holds the default value on creation for the user_present field.
+	passkey.DefaultUserPresent = passkeyDescUserPresent.Default.(bool)
+	// passkeyDescUserVerified is the schema descriptor for user_verified field.
+	passkeyDescUserVerified := passkeyFields[13].Descriptor()
+	// passkey.DefaultUserVerified holds the default value on creation for the user_verified field.
+	passkey.DefaultUserVerified = passkeyDescUserVerified.Default.(bool)
+	// passkeyDescName is the schema descriptor for name field.
+	passkeyDescName := passkeyFields[14].Descriptor()
+	// passkey.DefaultName holds the default value on creation for the name field.
+	passkey.DefaultName = passkeyDescName.Default.(string)
+	// passkeyDescCredentialJSON is the schema descriptor for credential_json field.
+	passkeyDescCredentialJSON := passkeyFields[15].Descriptor()
+	// passkey.CredentialJSONValidator is a validator for the "credential_json" field. It is called by the builders before save.
+	passkey.CredentialJSONValidator = passkeyDescCredentialJSON.Validators[0].(func([]byte) error)
+	// passkeyDescCreatedAt is the schema descriptor for created_at field.
+	passkeyDescCreatedAt := passkeyFields[16].Descriptor()
+	// passkey.DefaultCreatedAt holds the default value on creation for the created_at field.
+	passkey.DefaultCreatedAt = passkeyDescCreatedAt.Default.(func() time.Time)
+	// passkeyDescID is the schema descriptor for id field.
+	passkeyDescID := passkeyFields[0].Descriptor()
+	// passkey.DefaultID holds the default value on creation for the id field.
+	passkey.DefaultID = passkeyDescID.Default.(func() ident.UUID)
 	prefilljobFields := schema.PrefillJob{}.Fields()
 	_ = prefilljobFields
 	// prefilljobDescUserID is the schema descriptor for user_id field.

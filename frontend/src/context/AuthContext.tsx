@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchAuthSession,
   login as loginRequest,
+  loginWithPasskey as loginWithPasskeyRequest,
   register as registerRequest,
   logout as logoutRequest,
   type AuthSession,
@@ -37,6 +38,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username: string;
       password: string;
     }) => loginRequest(username, password),
+    onSuccess: (identity) => {
+      queryClient.setQueryData<AuthSession>(AUTH_QUERY_KEY, {
+        initialized: true,
+        user: identity.user,
+      });
+    },
+  });
+
+  const passkeyLoginMutation = useMutation({
+    mutationFn: loginWithPasskeyRequest,
     onSuccess: (identity) => {
       queryClient.setQueryData<AuthSession>(AUTH_QUERY_KEY, {
         initialized: true,
@@ -104,6 +115,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [registerMutation],
   );
 
+  const loginWithPasskey = useCallback(async () => {
+    await passkeyLoginMutation.mutateAsync();
+  }, [passkeyLoginMutation]);
+
   const logout = useCallback(async () => {
     await logoutMutation.mutateAsync();
   }, [logoutMutation]);
@@ -121,9 +136,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading: sessionQuery.isPending,
       error: sessionQuery.error instanceof Error ? sessionQuery.error : null,
       isLoggingIn: loginMutation.isPending,
+      isLoggingInWithPasskey: passkeyLoginMutation.isPending,
       isLoggingOut: logoutMutation.isPending,
       isRegistering: registerMutation.isPending,
       login,
+      loginWithPasskey,
       register,
       logout,
       refresh: sessionQuery.refetch,
@@ -134,9 +151,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionQuery.error,
     sessionQuery.refetch,
     loginMutation.isPending,
+    passkeyLoginMutation.isPending,
     logoutMutation.isPending,
     registerMutation.isPending,
     login,
+    loginWithPasskey,
     register,
     logout,
   ]);

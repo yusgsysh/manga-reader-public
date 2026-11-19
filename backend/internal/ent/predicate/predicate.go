@@ -15,6 +15,9 @@ type Bookshelf func(*sql.Selector)
 // GalleryCache is the predicate function for gallerycache builders.
 type GalleryCache func(*sql.Selector)
 
+// Passkey is the predicate function for passkey builders.
+type Passkey func(*sql.Selector)
+
 // PrefillJob is the predicate function for prefilljob builders.
 type PrefillJob func(*sql.Selector)
 

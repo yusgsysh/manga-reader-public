@@ -61,6 +61,12 @@ type Service struct {
 	// setupMu serializes first-boot admin registration so two concurrent
 	// requests cannot both observe an empty users table and create admins.
 	setupMu sync.Mutex
+
+	// passkeyMu guards the short-lived WebAuthn ceremonies kept between the
+	// begin and finish requests. Server-side state (not a client cookie) holds
+	// the challenge, so a browser cannot tamper with or replay it.
+	passkeyMu         sync.Mutex
+	passkeyCeremonies map[string]*passkeyCeremony
 }
 
 type loginBucket struct {
@@ -71,11 +77,15 @@ type loginBucket struct {
 // New builds the auth service. Authentication is always on: the SPA login page
 // and the default-deny middleware are the only entry points to user data.
 func New(db *ent.Client, cfg config.AuthConfig) *Service {
+	if cfg.WebAuthn.RPDisplayName == "" {
+		cfg.WebAuthn.RPDisplayName = "Manga Reader"
+	}
 	return &Service{
-		db:           db,
-		cfg:          cfg,
-		tokens:       newTokenManager(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTExpiresIn),
-		loginClients: make(map[string]*loginBucket),
+		db:                db,
+		cfg:               cfg,
+		tokens:            newTokenManager(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTExpiresIn),
+		loginClients:      make(map[string]*loginBucket),
+		passkeyCeremonies: make(map[string]*passkeyCeremony),
 	}
 }
 
@@ -148,6 +158,12 @@ var publicAPIs = map[string]struct{}{
 	"/api/auth/login":    {},
 	"/api/auth/register": {},
 	"/api/auth/status":   {},
+
+	// Passkey login is passwordless: the browser must be able to start and
+	// finish a discoverable ceremony while signed out. Registration and
+	// passkey management stay behind the normal JWT middleware.
+	"/api/auth/passkey/login/begin":  {},
+	"/api/auth/passkey/login/finish": {},
 
 	// Peer sync is authenticated by sync-key middleware in the sync service.
 	"/api/sync/push":   {},
@@ -255,6 +271,16 @@ func (s *Service) RegisterRoutes(r gin.IRouter) {
 	r.POST("/api/auth/register", noStore, s.handleRegister)
 	r.GET("/api/auth/status", noStore, s.handleStatus)
 	r.POST("/api/auth/logout", noStore, s.handleLogout)
+
+	// Passkeys. The two login routes are public; the rest require the normal
+	// session and only ever touch the authenticated principal's credentials.
+	r.POST("/api/auth/passkey/login/begin", noStore, s.handlePasskeyLoginBegin)
+	r.POST("/api/auth/passkey/login/finish", noStore, s.handlePasskeyLoginFinish)
+	r.GET("/api/auth/passkeys", noStore, s.handlePasskeyList)
+	r.POST("/api/auth/passkeys/register/begin", noStore, s.handlePasskeyRegisterBegin)
+	r.POST("/api/auth/passkeys/register/finish", noStore, s.handlePasskeyRegisterFinish)
+	r.PATCH("/api/auth/passkeys/:id", noStore, s.handlePasskeyRename)
+	r.DELETE("/api/auth/passkeys/:id", noStore, s.handlePasskeyDelete)
 }
 
 func noStore(c *gin.Context) {
@@ -271,6 +297,18 @@ func userJSON(id ident.UUID, username, role string) gin.H {
 		"user_id":  id,
 		"username": username,
 		"role":     role,
+	}
+}
+
+// sessionResponse is the login/register/passkey payload. Keeping it in one
+// place means a passkey login is indistinguishable to the SPA from a password
+// login: same token, cookie and identity.
+func (s *Service) sessionResponse(token string, u *ent.User) gin.H {
+	return gin.H{
+		"access_token": token,
+		"token_type":   "Bearer",
+		"expires_in":   s.cfg.ExpiresInSeconds(),
+		"user":         userJSON(u.ID, u.Username, u.Role),
 	}
 }
 
@@ -371,12 +409,7 @@ func (s *Service) handleRegister(c *gin.Context) {
 		"request_id", requestid.From(c),
 		"username", u.Username,
 	)
-	web.JSON(c, http.StatusOK, gin.H{
-		"access_token": token,
-		"token_type":   "Bearer",
-		"expires_in":   s.cfg.ExpiresInSeconds(),
-		"user":         userJSON(u.ID, u.Username, u.Role),
-	})
+	web.JSON(c, http.StatusOK, s.sessionResponse(token, u))
 }
 
 func (s *Service) handleLogin(c *gin.Context) {
@@ -440,12 +473,7 @@ func (s *Service) handleLogin(c *gin.Context) {
 	}
 	s.setCookie(c, token, expires)
 	loginResult = "success"
-	web.JSON(c, http.StatusOK, gin.H{
-		"access_token": token,
-		"token_type":   "Bearer",
-		"expires_in":   s.cfg.ExpiresInSeconds(),
-		"user":         userJSON(u.ID, u.Username, u.Role),
-	})
+	web.JSON(c, http.StatusOK, s.sessionResponse(token, u))
 }
 
 func (s *Service) handleLogout(c *gin.Context) {
@@ -469,16 +497,12 @@ func (s *Service) handleLogout(c *gin.Context) {
 }
 
 func (s *Service) setCookie(c *gin.Context, token string, expires time.Time) {
-	secure := s.cfg.CookieSecure
-	if s.cfg.CookieSecureAuto {
-		secure = c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
-	}
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     CookieName,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   secure,
+		Secure:   s.cookieSecure(c),
 		// Lax keeps the cookie on top-level navigations/refresh while
 		// blocking cross-site subrequests; csrfGuard independently rejects
 		// cross-origin state-changing requests.
@@ -489,20 +513,26 @@ func (s *Service) setCookie(c *gin.Context, token string, expires time.Time) {
 }
 
 func (s *Service) clearCookie(c *gin.Context) {
-	secure := s.cfg.CookieSecure
-	if s.cfg.CookieSecureAuto {
-		secure = c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
-	}
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     CookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   secure,
+		Secure:   s.cookieSecure(c),
 		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Unix(1, 0),
 		MaxAge:   -1,
 	})
+}
+
+// cookieSecure resolves the Secure flag for auth-related cookies. Auto follows
+// the actual request: TLS at the Go listener, or a trusted proxy reporting
+// X-Forwarded-Proto=https.
+func (s *Service) cookieSecure(c *gin.Context) bool {
+	if !s.cfg.CookieSecureAuto {
+		return s.cfg.CookieSecure
+	}
+	return c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
 }
 
 func (s *Service) allowLogin(key string) bool {

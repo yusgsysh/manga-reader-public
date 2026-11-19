@@ -111,13 +111,13 @@ Multi-user mode is always on. `JWT_SECRET` is optional: when unset the API gener
 
 ### Public vs protected
 
-Public (no user JWT): `/api/auth/login`, `/api/auth/register` (first-admin setup only), `/api/auth/status`. Peer sync endpoints `/api/sync/push` and `/api/sync/events` require a user sync key instead (separate middleware).
+Public (no user JWT): `/api/auth/login`, `/api/auth/register` (first-admin setup only), `/api/auth/status`, `/api/auth/passkey/login/begin`, `/api/auth/passkey/login/finish`. Peer sync endpoints `/api/sync/push` and `/api/sync/events` require a user sync key instead (separate middleware).
 
-Every other `/api/*` route requires a valid user JWT: search, galleries, image proxies (the browser sends the same-origin HttpOnly cookie), `/api/auth/logout`, `/api/bookshelf*`, `/api/progress*`, `/api/recently-read`, `/api/reading-progress/cleanup`, `/api/tag-settings*`, `/api/prefill*`, `/api/settings*`, `/api/sync/config`, `/api/sync/status`, `/api/dev/*`, `/api/admin/*`. The middleware is default-deny.
+Every other `/api/*` route requires a valid user JWT: search, galleries, image proxies (the browser sends the same-origin HttpOnly cookie), `/api/auth/logout`, `/api/auth/passkeys*`, `/api/bookshelf*`, `/api/progress*`, `/api/recently-read`, `/api/reading-progress/cleanup`, `/api/tag-settings*`, `/api/prefill*`, `/api/settings*`, `/api/sync/config`, `/api/sync/status`, `/api/dev/*`, `/api/admin/*`. The middleware is default-deny.
 
 ### User isolation
 
-Every private row carries `user_id`: `bookshelf`, `reading_progress`, `prefill_job`, `tag_preference`, `tag_sync_baseline`, `sync_change`, `user_setting`. Every query/create/update/delete takes the user ID from the verified JWT and includes it in the predicate. `user_id` in a path, query, header or body is ignored.
+Every private row carries `user_id`: `bookshelf`, `reading_progress`, `prefill_job`, `tag_preference`, `tag_sync_baseline`, `sync_change`, `user_setting`, `passkey`. Every query/create/update/delete takes the user ID from the verified JWT and includes it in the predicate. `user_id` in a path, query, header or body is ignored.
 
 `gallery_cache` and public image/thumbnail caches remain instance-wide because they are upstream metadata rather than user data.
 
@@ -196,7 +196,25 @@ Increments `users.token_version` and clears the auth cookie. All tokens issued b
 { "success": true }
 ```
 
-### 0.5 ExHentai Cookie and site preference
+### 0.5 Passkeys (WebAuthn)
+
+Passkeys are an additional passwordless login method. A credential's private key stays on the user's device/authenticator; the server stores only the public key, flags and signature counter. Registration requires a session; login does not. The browser requires a secure context (HTTPS or `localhost`).
+
+Ceremonies are two requests. The begin call stores the challenge server-side and sets the HttpOnly `manga_reader_passkey` cookie (5 minutes); the finish call must send that cookie and the WebAuthn JSON collected by `navigator.credentials.*`. A ceremony is consumed once, so a failed finish cannot be replayed.
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/auth/passkey/login/begin` | public | Start discoverable login; returns `{publicKey:{challenge,…}}` |
+| POST | `/api/auth/passkey/login/finish` | public | Verify assertion; returns the same token payload as password login |
+| GET | `/api/auth/passkeys` | JWT | List the caller's passkeys |
+| POST | `/api/auth/passkeys/register/begin` | JWT | Start registration; returns `{publicKey:{…}}` |
+| POST | `/api/auth/passkeys/register/finish?name=…` | JWT | Verify attestation; returns `201 {passkey:{…}}` |
+| PATCH | `/api/auth/passkeys/:id` | JWT | Rename (`{"name":"Laptop"}`, max 64 chars) |
+| DELETE | `/api/auth/passkeys/:id` | JWT | Delete the credential |
+
+Relying-party defaults follow the request `Origin` (RP ID = its hostname). Behind a reverse proxy that rewrites `Host`, pin them with `MANGA_READER_WEBAUTHN_RP_ID` and `MANGA_READER_WEBAUTHN_RP_ORIGINS`. Each account may hold at most 20 passkeys.
+
+### 0.6 ExHentai Cookie and site preference
 
 All routes are scoped to the JWT user.
 
@@ -234,7 +252,7 @@ Cookie responses contain only a non-secret summary:
 - The per-user `site` picks the browsing host: `e-hentai` (default) scrapes e-hentai.org, `exhentai` scrapes exhentai.org (search, listings, gallery pages, torrents; gallery ids/tokens are valid on both). The session cookie jar authenticates both hosts; with no cookie stored, e-hentai browsing is anonymous and exhentai endpoints answer `412` (precondition failed). Tag synchronisation always uses exhentai — the `s.exhentai.org` mutation API has no e-hentai equivalent.
 - `status` is `unset`, `unverified`, `valid` or `invalid`; `verify` performs one authenticated upstream request.
 
-### 0.6 User administration (admin)
+### 0.7 User administration (admin)
 
 | Method | Path | Body |
 |--------|------|------|
@@ -249,7 +267,7 @@ Cookie responses contain only a non-secret summary:
 - The last active administrator cannot be demoted, disabled or deleted; an administrator cannot delete their own account.
 - Deleting a user removes their private rows (bookshelf, progress, prefill jobs, tag preferences/baseline, outbox, settings) in one transaction.
 
-### 0.7 System-level endpoints
+### 0.8 System-level endpoints
 
 - `/api/sync/config` and `/api/sync/status` are instance-wide: administrator JWT required.
 - `/api/dev/*` is administrator-only (and only registered when `MANGA_READER_DEV_TOOLS=true`).

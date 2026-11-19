@@ -46,6 +46,9 @@ Environment=MANGA_READER_DB_PATH=/app/data/manga-reader.db
 #Environment=ADMIN_USERNAME=admin
 #Environment=ADMIN_PASSWORD=change-me-strong-password
 #Environment=MANGA_READER_AUTH_COOKIE_SECURE=auto
+# 通行密钥（WebAuthn）需要 HTTPS 或 localhost；反代改写 Host 时显式设置 RP：
+#Environment=MANGA_READER_WEBAUTHN_RP_ID=manga.example.com
+#Environment=MANGA_READER_WEBAUTHN_RP_ORIGINS=https://manga.example.com
 
 # Metrics 独立 Token（未设置时 /metrics 仅回环访问）
 #Environment=MANGA_READER_METRICS_ENABLED=true

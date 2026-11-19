@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -56,6 +57,25 @@ type AuthConfig struct {
 	// trusted proxy reported X-Forwarded-Proto=https.
 	CookieSecure     bool
 	CookieSecureAuto bool
+
+	// WebAuthn configures passkey registration and login.
+	WebAuthn WebAuthnConfig
+}
+
+// WebAuthnConfig configures the passkey relying party. RPID and RPOrigins are
+// optional: when empty they are derived from the incoming request (the Origin
+// header, or the request scheme/host), which is correct for a same-origin
+// deployment. Behind a reverse proxy that rewrites Host, set both explicitly.
+type WebAuthnConfig struct {
+	// RPID is the relying party ID, i.e. the effective domain without scheme
+	// or port ("example.com"). Leaving it empty derives it per request.
+	RPID string
+	// RPDisplayName is the name shown by the platform passkey UI.
+	RPDisplayName string
+	// RPOrigins lists the allowed fully-qualified origins
+	// ("https://example.com"). Leaving it empty accepts the request origin
+	// when its hostname matches the request host.
+	RPOrigins []string
 }
 
 // ExpiresInSeconds is the token lifetime in whole seconds for the login
@@ -357,6 +377,11 @@ func loadAuth() (AuthConfig, error) {
 		return AuthConfig{}, fmt.Errorf("ADMIN_USERNAME must not be empty")
 	}
 
+	webAuthn, err := loadWebAuthn()
+	if err != nil {
+		return AuthConfig{}, err
+	}
+
 	secureMode := strings.ToLower(strings.TrimSpace(getEnv("MANGA_READER_AUTH_COOKIE_SECURE", "auto")))
 	cfg := AuthConfig{
 		JWTSecret:     secret,
@@ -364,6 +389,7 @@ func loadAuth() (AuthConfig, error) {
 		JWTExpiresIn:  expires,
 		AdminUsername: username,
 		AdminPassword: adminPassword,
+		WebAuthn:      webAuthn,
 	}
 	switch secureMode {
 	case "", "auto":
@@ -376,6 +402,41 @@ func loadAuth() (AuthConfig, error) {
 		return AuthConfig{}, fmt.Errorf("invalid MANGA_READER_AUTH_COOKIE_SECURE value (want auto/true/false)")
 	}
 
+	return cfg, nil
+}
+
+// loadWebAuthn reads the optional passkey relying-party settings. Empty values
+// are valid: the request host/origin is used per ceremony. An explicit value is
+// validated so a typo cannot silently produce ceremonies every browser
+// rejects.
+func loadWebAuthn() (WebAuthnConfig, error) {
+	cfg := WebAuthnConfig{
+		RPID:          strings.TrimSpace(getEnv("MANGA_READER_WEBAUTHN_RP_ID", "")),
+		RPDisplayName: strings.TrimSpace(getEnv("MANGA_READER_WEBAUTHN_RP_NAME", "Manga Reader")),
+	}
+	if cfg.RPDisplayName == "" {
+		cfg.RPDisplayName = "Manga Reader"
+	}
+	if cfg.RPID != "" {
+		if strings.ContainsAny(cfg.RPID, ":/?#") || strings.Contains(cfg.RPID, " ") {
+			return WebAuthnConfig{}, fmt.Errorf("MANGA_READER_WEBAUTHN_RP_ID must be a bare domain such as example.com")
+		}
+	}
+
+	for _, raw := range strings.Split(getEnv("MANGA_READER_WEBAUTHN_RP_ORIGINS", ""), ",") {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		u, err := url.Parse(raw)
+		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+			return WebAuthnConfig{}, fmt.Errorf("MANGA_READER_WEBAUTHN_RP_ORIGINS contains an invalid origin %q (want https://example.com)", raw)
+		}
+		if u.Path != "" && u.Path != "/" {
+			return WebAuthnConfig{}, fmt.Errorf("MANGA_READER_WEBAUTHN_RP_ORIGINS must not contain paths: %q", raw)
+		}
+		cfg.RPOrigins = append(cfg.RPOrigins, u.Scheme+"://"+u.Host)
+	}
 	return cfg, nil
 }
 

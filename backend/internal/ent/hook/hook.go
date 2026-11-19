@@ -44,6 +44,18 @@ func (f GalleryCacheFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GalleryCacheMutation", m)
 }
 
+// The PasskeyFunc type is an adapter to allow the use of ordinary
+// function as Passkey mutator.
+type PasskeyFunc func(context.Context, *ent.PasskeyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f PasskeyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.PasskeyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PasskeyMutation", m)
+}
+
 // The PrefillJobFunc type is an adapter to allow the use of ordinary
 // function as PrefillJob mutator.
 type PrefillJobFunc func(context.Context, *ent.PrefillJobMutation) (ent.Value, error)

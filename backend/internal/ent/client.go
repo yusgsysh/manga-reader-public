@@ -14,6 +14,7 @@ import (
 
 	"manga-reader/internal/ent/appsetting"
 	"manga-reader/internal/ent/bookshelf"
+	"manga-reader/internal/ent/passkey"
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/ent/readingprogress"
 	"manga-reader/internal/ent/syncchange"
@@ -38,6 +39,8 @@ type Client struct {
 	Bookshelf *BookshelfClient
 	// GalleryCache is the client for interacting with the GalleryCache builders.
 	GalleryCache *GalleryCacheClient
+	// Passkey is the client for interacting with the Passkey builders.
+	Passkey *PasskeyClient
 	// PrefillJob is the client for interacting with the PrefillJob builders.
 	PrefillJob *PrefillJobClient
 	// ReadingProgress is the client for interacting with the ReadingProgress builders.
@@ -70,6 +73,7 @@ func (c *Client) init() {
 	c.AppSetting = NewAppSettingClient(c.config)
 	c.Bookshelf = NewBookshelfClient(c.config)
 	c.GalleryCache = NewGalleryCacheClient(c.config)
+	c.Passkey = NewPasskeyClient(c.config)
 	c.PrefillJob = NewPrefillJobClient(c.config)
 	c.ReadingProgress = NewReadingProgressClient(c.config)
 	c.SyncChange = NewSyncChangeClient(c.config)
@@ -174,6 +178,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		AppSetting:      NewAppSettingClient(cfg),
 		Bookshelf:       NewBookshelfClient(cfg),
 		GalleryCache:    NewGalleryCacheClient(cfg),
+		Passkey:         NewPasskeyClient(cfg),
 		PrefillJob:      NewPrefillJobClient(cfg),
 		ReadingProgress: NewReadingProgressClient(cfg),
 		SyncChange:      NewSyncChangeClient(cfg),
@@ -205,6 +210,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		AppSetting:      NewAppSettingClient(cfg),
 		Bookshelf:       NewBookshelfClient(cfg),
 		GalleryCache:    NewGalleryCacheClient(cfg),
+		Passkey:         NewPasskeyClient(cfg),
 		PrefillJob:      NewPrefillJobClient(cfg),
 		ReadingProgress: NewReadingProgressClient(cfg),
 		SyncChange:      NewSyncChangeClient(cfg),
@@ -243,9 +249,9 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.AppSetting, c.Bookshelf, c.GalleryCache, c.PrefillJob, c.ReadingProgress,
-		c.SyncChange, c.SyncState, c.TagPreference, c.TagSyncBaseline, c.User,
-		c.UserSetting, c.UserSyncKey,
+		c.AppSetting, c.Bookshelf, c.GalleryCache, c.Passkey, c.PrefillJob,
+		c.ReadingProgress, c.SyncChange, c.SyncState, c.TagPreference,
+		c.TagSyncBaseline, c.User, c.UserSetting, c.UserSyncKey,
 	} {
 		n.Use(hooks...)
 	}
@@ -255,9 +261,9 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.AppSetting, c.Bookshelf, c.GalleryCache, c.PrefillJob, c.ReadingProgress,
-		c.SyncChange, c.SyncState, c.TagPreference, c.TagSyncBaseline, c.User,
-		c.UserSetting, c.UserSyncKey,
+		c.AppSetting, c.Bookshelf, c.GalleryCache, c.Passkey, c.PrefillJob,
+		c.ReadingProgress, c.SyncChange, c.SyncState, c.TagPreference,
+		c.TagSyncBaseline, c.User, c.UserSetting, c.UserSyncKey,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -272,6 +278,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Bookshelf.mutate(ctx, m)
 	case *GalleryCacheMutation:
 		return c.GalleryCache.mutate(ctx, m)
+	case *PasskeyMutation:
+		return c.Passkey.mutate(ctx, m)
 	case *PrefillJobMutation:
 		return c.PrefillJob.mutate(ctx, m)
 	case *ReadingProgressMutation:
@@ -660,6 +668,139 @@ func (c *GalleryCacheClient) mutate(ctx context.Context, m *GalleryCacheMutation
 		return (&GalleryCacheDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GalleryCache mutation op: %q", m.Op())
+	}
+}
+
+// PasskeyClient is a client for the Passkey schema.
+type PasskeyClient struct {
+	config
+}
+
+// NewPasskeyClient returns a client for the Passkey from the given config.
+func NewPasskeyClient(c config) *PasskeyClient {
+	return &PasskeyClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `passkey.Hooks(f(g(h())))`.
+func (c *PasskeyClient) Use(hooks ...Hook) {
+	c.hooks.Passkey = append(c.hooks.Passkey, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `passkey.Intercept(f(g(h())))`.
+func (c *PasskeyClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Passkey = append(c.inters.Passkey, interceptors...)
+}
+
+// Create returns a builder for creating a Passkey entity.
+func (c *PasskeyClient) Create() *PasskeyCreate {
+	mutation := newPasskeyMutation(c.config, OpCreate)
+	return &PasskeyCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Passkey entities.
+func (c *PasskeyClient) CreateBulk(builders ...*PasskeyCreate) *PasskeyCreateBulk {
+	return &PasskeyCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PasskeyClient) MapCreateBulk(slice any, setFunc func(*PasskeyCreate, int)) *PasskeyCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PasskeyCreateBulk{err: fmt.Errorf("calling to PasskeyClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PasskeyCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PasskeyCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Passkey.
+func (c *PasskeyClient) Update() *PasskeyUpdate {
+	mutation := newPasskeyMutation(c.config, OpUpdate)
+	return &PasskeyUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PasskeyClient) UpdateOne(_m *Passkey) *PasskeyUpdateOne {
+	mutation := newPasskeyMutation(c.config, OpUpdateOne, withPasskey(_m))
+	return &PasskeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PasskeyClient) UpdateOneID(id ident.UUID) *PasskeyUpdateOne {
+	mutation := newPasskeyMutation(c.config, OpUpdateOne, withPasskeyID(id))
+	return &PasskeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Passkey.
+func (c *PasskeyClient) Delete() *PasskeyDelete {
+	mutation := newPasskeyMutation(c.config, OpDelete)
+	return &PasskeyDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PasskeyClient) DeleteOne(_m *Passkey) *PasskeyDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PasskeyClient) DeleteOneID(id ident.UUID) *PasskeyDeleteOne {
+	builder := c.Delete().Where(passkey.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PasskeyDeleteOne{builder}
+}
+
+// Query returns a query builder for Passkey.
+func (c *PasskeyClient) Query() *PasskeyQuery {
+	return &PasskeyQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePasskey},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Passkey entity by its id.
+func (c *PasskeyClient) Get(ctx context.Context, id ident.UUID) (*Passkey, error) {
+	return c.Query().Where(passkey.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PasskeyClient) GetX(ctx context.Context, id ident.UUID) *Passkey {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *PasskeyClient) Hooks() []Hook {
+	return c.hooks.Passkey
+}
+
+// Interceptors returns the client interceptors.
+func (c *PasskeyClient) Interceptors() []Interceptor {
+	return c.inters.Passkey
+}
+
+func (c *PasskeyClient) mutate(ctx context.Context, m *PasskeyMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PasskeyCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PasskeyUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PasskeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PasskeyDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Passkey mutation op: %q", m.Op())
 	}
 }
 
@@ -1801,13 +1942,13 @@ func (c *UserSyncKeyClient) mutate(ctx context.Context, m *UserSyncKeyMutation) 
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		AppSetting, Bookshelf, GalleryCache, PrefillJob, ReadingProgress, SyncChange,
-		SyncState, TagPreference, TagSyncBaseline, User, UserSetting,
+		AppSetting, Bookshelf, GalleryCache, Passkey, PrefillJob, ReadingProgress,
+		SyncChange, SyncState, TagPreference, TagSyncBaseline, User, UserSetting,
 		UserSyncKey []ent.Hook
 	}
 	inters struct {
-		AppSetting, Bookshelf, GalleryCache, PrefillJob, ReadingProgress, SyncChange,
-		SyncState, TagPreference, TagSyncBaseline, User, UserSetting,
+		AppSetting, Bookshelf, GalleryCache, Passkey, PrefillJob, ReadingProgress,
+		SyncChange, SyncState, TagPreference, TagSyncBaseline, User, UserSetting,
 		UserSyncKey []ent.Interceptor
 	}
 )
