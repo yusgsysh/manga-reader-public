@@ -9,17 +9,23 @@ import {
   useLocation,
 } from "react-router";
 import { ThemeProvider } from "../../lib/theme";
-import {
-  AuthContext,
-  type AuthContextValue,
-} from "../../context/auth";
-import { ApiRequestError } from "../../api/client";
+import { AuthContext, type AuthContextValue } from "../../context/auth";
 import { RequireAuth } from "./RequireAuth";
 import { LoginPage } from "../../pages/LoginPage";
 
+const user = {
+  id: "00000000-0000-7000-8000-000000000001",
+  user_id: "kp_alice",
+  username: "kinde_1234567890abcdef",
+  email: "alice@example.com",
+  name: "Alice",
+  avatar_url: null,
+  role: "user",
+  status: "active",
+};
+
 function authValue(overrides: Partial<AuthContextValue> = {}): AuthContextValue {
   return {
-    session: null,
     user: null,
     role: null,
     isAuthenticated: false,
@@ -49,10 +55,6 @@ function LoginProbe() {
   );
 }
 
-function SetupProbe() {
-  return <span>setup-page</span>;
-}
-
 function renderGuard(value: AuthContextValue, initialPath: string) {
   return render(
     <AuthContext.Provider value={value}>
@@ -66,9 +68,9 @@ function renderGuard(value: AuthContextValue, initialPath: string) {
               </RequireAuth>
             }
           />
+          <Route path="/bookshelf" element={<div>bookshelf-marker</div>} />
           <Route path="/" element={<div>home-marker</div>} />
           <Route path="/login" element={<LoginProbe />} />
-          <Route path="/setup" element={<SetupProbe />} />
         </Routes>
       </MemoryRouter>
     </AuthContext.Provider>,
@@ -76,6 +78,10 @@ function renderGuard(value: AuthContextValue, initialPath: string) {
 }
 
 describe("RequireAuth", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
   it("redirects an unauthenticated visitor to /login and preserves the destination", () => {
     renderGuard(authValue(), "/private?tab=all");
     expect(screen.getByText("login-page")).toBeTruthy();
@@ -84,50 +90,47 @@ describe("RequireAuth", () => {
   });
 
   it("renders the page when authenticated", () => {
-    renderGuard(
-      authValue({
-        isAuthenticated: true,
-        user: { id: "00000000-0000-0000-0000-000000000001", user_id: "00000000-0000-0000-0000-000000000001", username: "alice", role: "user" },
-      }),
-      "/private",
-    );
+    renderGuard(authValue({ isAuthenticated: true, user }), "/private");
     expect(screen.getByText("private-content")).toBeTruthy();
   });
 
   it("shows a retryable error instead of redirecting on a session error", () => {
     const refresh = vi.fn();
-    renderGuard(
-      authValue({ error: new Error("offline"), refresh }),
-      "/private",
-    );
-    expect(screen.getByText(/无法连接服务器/)).toBeTruthy();
+    renderGuard(authValue({ error: new Error("offline"), refresh }), "/private");
+    expect(screen.getByText(/offline/)).toBeTruthy();
     screen.getByRole("button").click();
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("redirects to the setup page when the instance is uninitialized", () => {
-    renderGuard(
-      authValue({ session: { initialized: false, user: null } }),
-      "/private",
-    );
-    expect(screen.getByText("setup-page")).toBeTruthy();
-    expect(screen.queryByText("private-content")).toBeNull();
+  it("restores the destination saved before the Kinde redirect", () => {
+    sessionStorage.setItem("manga-reader:return-to", "/bookshelf");
+    renderGuard(authValue({ isAuthenticated: true, user }), "/private");
+    expect(screen.getByText("bookshelf-marker")).toBeTruthy();
   });
 });
 
 function renderLogin(
   value: AuthContextValue,
-  initialEntry: { pathname: string; state?: unknown } = { pathname: "/login" },
+  initialEntry: { pathname: string; state?: unknown; search?: string } = {
+    pathname: "/login",
+  },
 ) {
   return render(
     <AuthContext.Provider value={value}>
       <ThemeProvider>
-        <MemoryRouter initialEntries={[initialEntry]}>
+        <MemoryRouter
+          initialEntries={[
+            {
+              pathname: initialEntry.pathname,
+              search: initialEntry.search,
+              state: initialEntry.state,
+            },
+          ]}
+        >
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/" element={<div>home-marker</div>} />
             <Route path="/bookshelf" element={<div>bookshelf-marker</div>} />
-            <Route path="/setup" element={<SetupProbe />} />
           </Routes>
         </MemoryRouter>
       </ThemeProvider>
@@ -138,6 +141,7 @@ function renderLogin(
 describe("LoginPage", () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -153,30 +157,25 @@ describe("LoginPage", () => {
     });
   });
 
-  it("rejects an empty username or password before calling the API", async () => {
-    const login = vi.fn();
-    renderLogin(authValue({ login }));
-    await userEvent.click(screen.getByRole("button", { name: "登录" }));
-
-    expect(screen.getByRole("alert").textContent).toContain(
-      "请输入用户名和密码",
-    );
-    expect(login).not.toHaveBeenCalled();
-  });
-
-  it("trims credentials, logs in, and returns to the original page", async () => {
+  it("starts the Kinde login flow with the original destination", async () => {
     const login = vi.fn().mockResolvedValue(undefined);
     renderLogin(authValue({ login }), {
       pathname: "/login",
       state: { from: "/bookshelf" },
     });
 
-    await userEvent.type(screen.getByLabelText("用户名"), "  alice  ");
-    await userEvent.type(screen.getByLabelText("密码"), "secret-pass");
     await userEvent.click(screen.getByRole("button", { name: "登录" }));
+    expect(login).toHaveBeenCalledWith("/bookshelf");
+  });
 
-    expect(login).toHaveBeenCalledWith("alice", "secret-pass");
-    expect(await screen.findByText("bookshelf-marker")).toBeTruthy();
+  it("offers registration for first-time users", async () => {
+    const register = vi.fn().mockResolvedValue(undefined);
+    renderLogin(authValue({ register }));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "注册新账号" }),
+    );
+    expect(register).toHaveBeenCalledWith("/");
   });
 
   it("does not redirect to an external return path", async () => {
@@ -186,41 +185,20 @@ describe("LoginPage", () => {
       state: { from: "//evil.example/steal" },
     });
 
-    await userEvent.type(screen.getByLabelText("用户名"), "alice");
-    await userEvent.type(screen.getByLabelText("密码"), "secret-pass");
     await userEvent.click(screen.getByRole("button", { name: "登录" }));
-
-    expect(await screen.findByText("home-marker")).toBeTruthy();
+    expect(login).toHaveBeenCalledWith("/");
   });
 
-  it("explains invalid credentials and rate limiting", async () => {
-    const login = vi
-      .fn()
-      .mockRejectedValueOnce(new ApiRequestError(401, "unauthorized"))
-      .mockRejectedValueOnce(new ApiRequestError(429, "too many"));
-    renderLogin(authValue({ login }));
-
-    await userEvent.type(screen.getByLabelText("用户名"), "alice");
-    await userEvent.type(screen.getByLabelText("密码"), "wrong");
-    await userEvent.click(screen.getByRole("button", { name: "登录" }));
-    expect(screen.getByRole("alert").textContent).toContain("用户名或密码错误");
-
-    await userEvent.click(screen.getByRole("button", { name: "登录" }));
-    expect(screen.getByRole("alert").textContent).toContain("尝试次数过多");
+  it("explains a Kinde callback error", () => {
+    renderLogin(authValue(), {
+      pathname: "/login",
+      search: "?error=access_denied&error_description=User+cancelled",
+    });
+    expect(screen.getByRole("alert").textContent).toContain("User cancelled");
   });
 
   it("skips the form when the user is already logged in", () => {
-    renderLogin(
-      authValue({
-        isAuthenticated: true,
-        user: { id: "00000000-0000-0000-0000-000000000001", user_id: "00000000-0000-0000-0000-000000000001", username: "alice", role: "user" },
-      }),
-    );
+    renderLogin(authValue({ isAuthenticated: true, user }));
     expect(screen.getByText("home-marker")).toBeTruthy();
-  });
-
-  it("redirects to the setup page when the instance is uninitialized", () => {
-    renderLogin(authValue({ session: { initialized: false, user: null } }));
-    expect(screen.getByText("setup-page")).toBeTruthy();
   });
 });

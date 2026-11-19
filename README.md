@@ -17,12 +17,12 @@
 - 离线下载任务（Prefill）：后台排队预填充图片缓存、下载管理页、流式 ZIP 下载
 - 缩略图源站代理与 MinIO 缓存
 - 页面图片 MinIO 缓存（可选）
-- 多用户：实例级账号体系，JWT 中的 `user_id` 是唯一数据归属；管理员 / 普通用户两级角色
+- 多用户：实例级账号体系，本地 `users.id` 是唯一数据归属；Kinde `sub` 存于 `users.user_id`；管理员 / 普通用户两级角色
 - 严格数据隔离：书架、阅读进度、标签规则、Prefill 任务、同步 outbox 全部带 `user_id`，查询/更新/删除均附加当前用户谓词
 - 每用户独立 ExHentai Cookie：AES-256-GCM 加密存储、独立 Cookie Jar/HTTP Client、单独验证状态，绝不跨账号共享
 - 每用户 ExHentai 设置：站点偏好与加密 Cookie 集中保存在 `user_setting`
-- JWT 登录页（Argon2id 密码哈希、HttpOnly Cookie、服务端登出撤销）
-- 同步使用数据库管理的用户级同步 Key（SHA-256 哈希、可删除/轮换，一把 Key 只同步一个账号），与用户 JWT 完全分离
+- Kinde OIDC 登录 / 注册（React SDK 发起，Go 验证 Access Token）
+- 同步使用数据库管理的用户级同步 Key（SHA-256 哈希、可删除/轮换，一把 Key 只同步一个账号），与用户登录凭证完全分离
 
 ## 目录结构
 
@@ -56,7 +56,7 @@ backend/
 │   │   ├── prefilljob/           # PrefillJob 字段常量与查询辅助
 │   │   ├── gallerycache/         # GalleryCache 字段常量与查询辅助
 │   │   └── migrate/              # 数据库迁移逻辑
-│   ├── auth/                     # JWT 登录（Argon2id / HS256 / Gin 中间件）
+│   ├── auth/                     # Kinde Access Token 验证、本地用户同步、Gin 中间件
 │   ├── usercookie/               # 每用户 ExHentai Cookie 加密存储与客户端池
 │   ├── synckey/                  # 用户级同步 Key 认证
 │   ├── exhentai/                 # ExHentai API / 页面抓取（含 10 秒请求去重）
@@ -81,19 +81,30 @@ backend/
    cp .env.example .env
    ```
 
-   管理员账户有两种初始化方式（任选其一）：
-
-   - **Web 端初始化（推荐）**：`ADMIN_PASSWORD` 留空，启动后打开页面会自动进入「创建管理员账户」页面，首次访问者填写用户名与密码即可完成初始化。
-   - **环境变量初始化**：设置 `ADMIN_USERNAME` + `ADMIN_PASSWORD`，后端在首次启动（users 表为空）时创建管理员。`JWT_SECRET` 可留空（后端首次启动自动生成并存入数据库，重启后继续复用）：
+   在 Kinde Dashboard 创建 Application（Front-end and mobile）与 API，然后把公开配置写入 `frontend/.env`（构建期生效），服务端配置写入 `.env`：
 
    ```env
-   JWT_SECRET=<可选，openssl rand -hex 32>
-   ADMIN_USERNAME=admin
-   ADMIN_PASSWORD=change-me-strong-password
+   # 服务端 .env
+   KINDE_ISSUER=https://<tenant>.kinde.com
+   KINDE_API_AUDIENCE=https://api.manga.example.com
+   # 可选：首次部署时把指定已验证邮箱提升为本地管理员
+   KINDE_ADMIN_EMAILS=admin@example.com
+   # 或：KINDE_ADMIN_SUBJECTS=kp_xxxxxxxxxxxxxxxx
+   JWT_SECRET=<可选，openssl rand -hex 32；仅用于加密 ExHentai Cookie>
+
+   # frontend/.env（构建期）
+   VITE_KINDE_DOMAIN=https://<tenant>.kinde.com
+   VITE_KINDE_CLIENT_ID=<Application Client ID>
+   VITE_KINDE_REDIRECT_URI=http://localhost:5173
+   VITE_KINDE_LOGOUT_URI=http://localhost:5173/login
+   VITE_KINDE_AUDIENCE=https://api.manga.example.com
+   VITE_API_BASE_URL=http://localhost:8080
    ```
 
-   启动后登录，在「设置 → 账号」为每个账号分别填写 Cookie。
-   服务端加密存储并按用户隔离；Cookie 不再通过环境变量配置。
+   首次启动后打开页面会跳转 Kinde 登录/注册；首次登录成功时后端按 JWT 的
+   `sub` 创建本地用户。`KINDE_ADMIN_EMAILS` 命中的已验证邮箱会获得本地
+   `admin` 角色（也可随后在「用户管理」调整）。登录后在「设置 → 账号」为
+   每个账号分别填写 ExHentai Cookie；服务端加密存储并按用户隔离。
 
 2. 启动服务（单镜像：Gin API + 内嵌前端由 GitHub Actions 构建推送到 `ghcr.io/yusgsysh/manga-reader`，compose 直接拉取，仓库内无 `build:` 配置）。GHCR 包为私有时先登录（PAT 需 `read:packages`）：
 
@@ -126,61 +137,44 @@ backend/
 
 | 接口类型 | 认证机制 |
 |----------|----------|
-| 用户业务 API（登录、书架、进度、Prefill、个人设置、用户管理） | `Authorization: Bearer <JWT>` |
+| 用户业务 API（书架、进度、Prefill、个人设置、用户管理、`/api/auth/me`） | `Authorization: Bearer <Kinde Access Token>` |
 | 同步 API（`/api/sync/push`、`/api/sync/events`） | `Authorization: Bearer <用户级同步 Key>` |
 | Metrics 内部接口 | 回环限制，或独立 `MANGA_READER_METRICS_TOKEN` |
 | Health / Readiness | 最小信息公开：`/healthz`、`/readyz` |
 
-- **HTTPS 必须在认证之前**：JWT 的 HttpOnly Cookie 和同步 Key 都必须走 TLS。TLS 由前置层（云负载均衡 / Caddy / 前置 nginx）提供，同时负责 HTTP :80 → HTTPS :443 跳转；HSTS 也由该层配置。
+- **HTTPS 必须在认证之前**：Kinde Access Token 的媒体 Cookie 和同步 Key 都必须走 TLS。TLS 由前置层（云负载均衡 / Caddy / 前置 nginx）提供，同时负责 HTTP :80 → HTTPS :443 跳转；HSTS 也由该层配置。
 - **应用端口不暴露公网**：容器 `:8080`、PostgreSQL `:5432`、MinIO `:9000/:9001` 不发布到公网；compose 与 quadlet 默认发布到 `127.0.0.1:5173:8080`，公网只经过带 TLS 的前置反代。确实需要局域网直连时才改成 `0.0.0.0:5173:8080`。
 - **Basic Auth 已完全移除**：后端、前端、compose/quadlet、observability 和文档都不再接受或配置 HTTP Basic Authentication。
 
-### JWT 登录认证与多用户
+### Kinde 身份认证与多用户
 
-多用户模式始终启用。`JWT_SECRET` 可留空：后端在首次启动时自动生成一个 32 字节随机密钥并存入数据库（`app_setting` 表），之后重启复用同一密钥，会话与加密 Cookie 不受影响，无需手动设置。需要固定密钥（如多实例共享同一数据库）时显式设置随机值（至少 32 字节），环境变量优先于数据库：
+用户登录、注册、身份与 Access Token 全部由 **Kinde** 托管；Go 只做 Access Token 验证与本地用户同步，不接触用户密码。
 
-```bash
-openssl rand -hex 32
+```text
+React (Kinde SDK) ──Bearer Access Token──> Go (JWKS / iss / aud / exp)
+                                              │
+                                              └── users(user_id = JWT sub)
 ```
 
-```env
-JWT_SECRET=<可选，粘贴上一步输出>
-JWT_ISSUER=manga-reader
-JWT_EXPIRES_IN=1h
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=change-me-strong-password   # 可选；留空则通过 Web 端 /setup 页面初始化管理员
-MANGA_READER_AUTH_COOKIE_SECURE=auto
-```
+- **前端**：`@kinde-oss/kinde-auth-react` 的 `KindeProvider` 负责登录、注册、登出、会话恢复与 Token 刷新。`VITE_KINDE_*` 只放公开配置，**禁止放入 Client Secret**。
+- **后端验证**：`KINDE_ISSUER`（租户域名）与 `KINDE_API_AUDIENCE`（API Audience）必须同时配置。使用 `github.com/coreos/go-oidc/v3/oidc` 自动获取并缓存 JWKS；验证 RS256 签名、`iss`、`aud`、`exp`、`nbf`。未知 `kid` 会触发一次 JWKS 刷新以支持密钥轮换。
+- **身份来源**：只信任经过验证的 JWT `sub`，写入 `users.user_id`（唯一）。本地主键仍是 UUID `id`；邮箱只是资料字段，不是身份唯一键。客户端传入的 `user_id` 一律忽略。
+- **首次登录**：本地用户不存在时自动创建；并发首次登录依赖 `users.user_id` 唯一约束，冲突时回读已有行，不做「先查再插」。
+- **用户状态**：本地 `status=disabled` 时，即使 Kinde Access Token 仍未过期也返回 `403 {"error":"forbidden"}`。有效但无权限与无效身份（401）分开处理。
+- **角色**：JWT 不携带业务角色或权限。`users.role` 决定本地 `admin` / `user`；`KINDE_ADMIN_EMAILS` 只用于首次部署引导，权限仍以数据库为准，为后续 RBAC 留出空间。
+- **浏览器媒体 Cookie**：`<img>`、EventSource 和下载链接无法设置 `Authorization` 头。后端在每次 Bearer 请求时把**同一个** Kinde Access Token 写入 `HttpOnly; SameSite=Lax; Path=/api` 的短期 Cookie，仅允许 `/api/image*`、`/api/events/changes`、`/api/prefill/:id/zip`、种子下载这些原生 GET 路由使用；业务与写接口仍然只接受 `Authorization: Bearer`。前端不自行持久化或刷新 Token。
+- **登出**：前端调用 `POST /api/auth/logout` 清理媒体 Cookie 并递增 `token_version`，随后由 Kinde SDK 执行登出跳转。禁用用户由每次请求的本地状态检查立即生效。
+- **公开 API**：只有 `/api/sync/push`、`/api/sync/events`（用户级同步 Key 中间件）、`/healthz`、`/readyz`、`/metrics` 与前端静态资源无需用户 JWT。其余 `/api/*` 默认需要认证。
+- **管理 API**：`/api/admin/users*` 仅本地 `admin` 可用；账号由 Kinde 首次登录自动创建，管理员只调整本地角色与启用状态。
+- **多用户隔离**：`bookshelf`、`reading_progress`、`prefill_job`、`tag_preference`、`tag_sync_baseline`、`sync_change` 全部带 `user_id`（本地 UUID），所有查询/创建/更新/删除都从验证后的 Principal 取本地 ID 并附加谓词。
+- **本地密钥**：`JWT_SECRET` 不再用于用户登录，只用于派生每个用户 ExHentai Cookie 的 AES-256-GCM 加密密钥。留空时首次启动自动生成并写入 `app_setting`（键 `auth.jwt_secret`），重启复用。
 
-> 密钥解析顺序：`JWT_SECRET` 环境变量 → 数据库 `app_setting`（键 `auth.jwt_secret`）→ 首次启动生成并写库。清空环境变量后回落到数据库中的密钥，不会重新生成。
-
-- **首个管理员**：两种方式。① 首次启动时通过 Web 端「创建管理员账户」页面（`/setup`，`POST /api/auth/register`）创建，仅在 users 表为空时可用，创建后自动登录；② 设置 `ADMIN_USERNAME` + `ADMIN_PASSWORD`，后端在 users 表为空时创建。密码以 Argon2id PHC 哈希写入数据库，之后启动**不会覆盖**已有密码，可清空 `ADMIN_PASSWORD`。
-- **忘记管理员密码**：不要通过改 `.env` 的 `ADMIN_PASSWORD` 来重置。镜像内置 `reset-admin`（密码从 stdin 读取，不出现在进程列表）：
-
-  ```bash
-  printf '%s\n' 'new-strong-password' | \
-    docker compose exec -T backend /app/reset-admin -username admin
+- **管理员恢复**：`KINDE_ADMIN_EMAILS` / `KINDE_ADMIN_SUBJECTS` 只在该账号首次创建本地用户时生效，之后以 `users.role` 为准。若实例没有可用的本地管理员，直接改数据库即可（Kinde 密码不归本应用管理）：
+  ```sql
+  UPDATE users SET role = 'admin', status = 'active', token_version = token_version + 1
+  WHERE user_id = 'kp_...';
   ```
-
-  从源码运行：
-
-  ```bash
-  cd backend
-  printf '%s\n' 'new-strong-password' | go run ./cmd/reset-admin -username admin
-  ```
-
-  命令会递增 `token_version` 撤销旧 Token，并把用户状态恢复为 `active`。
-- **登录接口**：`POST /api/auth/login` 只需要 `username` + `password`。成功后返回 `access_token` / `token_type` / `expires_in` 以及当前用户 `user`，同时写入 `HttpOnly; SameSite=Lax; Secure(auto)` Cookie；JWT 的 `sub` 与 `user_id` 都是当前用户 ID。前端不把 Token 放进 `localStorage`，页面刷新后由 Cookie + `GET /api/auth/status` 恢复登录态。
-- **角色**：`admin` 管理实例级用户和系统同步配置；`user` 只能使用业务功能和个人设置。普通用户的 JWT 调用 `/api/admin/*`、`/api/sync/config`、`/api/sync/status`、`/api/dev/*` 会得到 403。
-- **数据隔离**：`bookshelf`、`reading_progress`、`prefill_job`、`tag_preference`、`tag_sync_baseline`、`sync_change` 全部带 `user_id`，所有查询/创建/更新/删除都从 JWT 取用户 ID 并附加谓词。客户端传入的 `user_id`（路径、查询、Header、Body）一律被忽略。`gallery_cache`、缩略图等公共上游元数据继续全局共享。
-- **Cookie 与个人设置**：`user_setting` 每个用户一行，`cookie_ciphertext` 使用由 `JWT_SECRET` 派生的 AES-256-GCM 密钥加密；接口只返回是否配置、验证状态、站点等非敏感摘要。每个用户使用独立 HTTP Client / Cookie Jar（会话 Cookie 同时写入 exhentai.org 与 e-hentai.org 两个域），日志只记录长度不记录值。每用户可选浏览站点（`e-hentai` 默认 / `exhentai`）：默认使用 e-hentai.org 且 Cookie 可为空，未配置 Cookie 时匿名浏览公开画廊；选择 exhentai 时必须配置 Cookie。搜索、列表、画廊页与种子页按所选站点抓取（两站 gallery id/token 通用）；标签同步固定走 exhentai（`s.exhentai.org` 变更 API 无 e-hentai 对应端点）。
-- **系统级接口**：`/api/sync/push`、`/api/sync/events` 只接受用户级同步 Key；Metrics 接受独立 Token；用户 JWT 不能调用这些系统接口。
-- **主键为 UUID（非自增）**：`users`、`bookshelf`、`reading_progress`、`user_setting`、`user_sync_key`、`prefill_job` 的主键都是 UUID（UUIDv7，SQLite 以 16 字节 BLOB 存储、PostgreSQL 以 bytea 存储），`gallery_cache` / `tag_preference` / `tag_sync_baseline` / `app_setting` / `sync_state` 使用自然复合键或字符串键。自增整数主键只在 `sync_change` 保留（其 `id` 同时是复制游标，需要单调递增）。
-- **CSRF**：Cookie 仅用于同源请求；`csrfGuard` 会拒绝跨站 `Origin` / `Sec-Fetch-Site` 的写请求。反向代理必须透传 `Origin` / `Sec-Fetch-Site`，并保持应用与前端同源；HTTPS 终止在反代时还要设置 `X-Forwarded-Proto: https`，否则 `auto` 模式不会给 Cookie 加 `Secure`。
-- **登出**：`POST /api/auth/logout` 会递增 `users.token_version` 并清除 Cookie，所有已签发 Token 立即失效。
-- **Token 校验**：只接受 `Authorization: Bearer <JWT>`（或同源 Cookie），严格校验 HS256 签名、`iss`、`iat`、`exp`、`user_id` 与 `token_version`；缺失/无效/过期/签名错误统一返回 `401`。
-- **公开 API**：只有 `/api/auth/login`、`/api/auth/register`、`/api/auth/status` 和同步端点无需用户 JWT。搜索、画廊、图片代理（`<img>`/EventSource 会携带同源 HttpOnly Cookie）也需要登录，因为它们必须使用当前用户的 ExHentai Cookie。
-- **管理 API**：`/api/admin/users*` 仅管理员可用；用户只能修改自己的数据。
+- **从旧密码版本迁移**：旧账号的 `users.user_id` 为空，不会自动按 email 匹配 Kinde 身份（email 不是唯一键）。若要保留旧账号的书架/进度等数据，请在该用户登录**之前**把旧行的 `user_id` 设为它的 Kinde `sub`：`UPDATE users SET user_id = 'kp_...' WHERE id = '<旧 UUID>';`。登录后后端会复用该行并补齐资料。不要用 email 做批量绑定，否则同邮箱的多个身份会冲突。
 
 ### 用户级同步 Key
 
@@ -210,7 +204,7 @@ go test ./internal/auth/ ./internal/synckey/ ./internal/metrics/ ./internal/sync
 cd ../frontend && bun run test
 ```
 
-覆盖：JWT 登录/失效/篡改、用户级同步 Key 认证/删除/轮换/过期/禁用、同步按用户归属与隔离、Metrics 回环与独立 Token、跨用户书架/进度/Prefill/标签/设置/Cookie 隔离、管理员权限。
+覆盖：JWT 签名/issuer/audience/过期/未生效/未知 kid、首次登录与并发建号、禁用用户 403、媒体 Cookie 路由限制、用户级同步 Key 认证/删除/轮换/过期/禁用、同步按用户归属与隔离、Metrics 回环与独立 Token、跨用户书架/进度/Prefill/标签/设置/Cookie 隔离、管理员权限。
 
 ## CI 与部署
 
@@ -238,8 +232,16 @@ Dockerfile 侧的缓存策略：manifest/lockfile 先于源码复制，`bun inst
 本地构建同名镜像（覆盖 compose 引用的镜像，便于不依赖 CI 调试）：
 
 ```bash
-docker build -t ghcr.io/yusgsysh/manga-reader:latest .
+docker build -t ghcr.io/yusgsysh/manga-reader:latest \
+  --build-arg VITE_KINDE_DOMAIN=https://<tenant>.kinde.com \
+  --build-arg VITE_KINDE_CLIENT_ID=<client-id> \
+  --build-arg VITE_KINDE_REDIRECT_URI=https://manga.example.com \
+  --build-arg VITE_KINDE_LOGOUT_URI=https://manga.example.com/login \
+  --build-arg VITE_KINDE_AUDIENCE=https://api.manga.example.com \
+  .
 ```
+
+生产镜像的前端配置在**构建期**烘焙；CI 从仓库变量（GitHub/Forgejo `vars.VITE_KINDE_*`）注入，运行时无需、也无法通过容器环境变量修改。
 
 ## 自部署监控（Prometheus + Grafana）
 
@@ -297,12 +299,12 @@ Dashboard 覆盖：HTTP QPS（按路由，过滤 `/metrics` 与 `/healthz`）/ 5
 | `ZIP_PART_SIZE` | 否 | `0` | 分片上传分片大小（字节，≥5 MiB；`0` 用 SDK 默认 16 MiB） |
 | `ZIP_PRESIGN_DOWNLOAD` | 否 | `false` | 归档下载改为 302 跳转到对象存储的签名 URL（不经过后端中转；需存储端点对浏览器可达） |
 | `ZIP_PRESIGN_EXPIRY` | 否 | `15m` | 签名下载 URL 有效期（1s–168h） |
-| `JWT_SECRET` | 否 | - | JWT 签名与用户 Cookie 加密密钥的派生来源；留空时后端首次启动自动生成随机密钥并存入数据库（`app_setting`），重启后复用。显式设置时至少 32 字节随机值（`openssl rand -hex 32`），且优先于数据库 |
-| `JWT_ISSUER` | 否 | `manga-reader` | JWT 的 `iss`，校验时必须一致 |
-| `JWT_EXPIRES_IN` | 否 | `1h` | Token 有效期（Go duration，范围 1m–720h） |
-| `ADMIN_USERNAME` | 否 | `admin` | 首次初始化（users 表为空）的管理员用户名（环境变量方式） |
-| `ADMIN_PASSWORD` | 否 | - | 首次初始化管理员密码（至少 8 位）；仅在 users 表为空时使用，不覆盖已有密码。留空则不启动期创建管理员，改为通过 Web 端 `/setup` 页面初始化 |
-| `MANGA_READER_AUTH_COOKIE_SECURE` | 否 | `auto` | 认证 Cookie 的 `Secure`：`auto`（TLS 或 `X-Forwarded-Proto=https` 时开启）/`true`/`false` |
+| `KINDE_ISSUER` | 是 | - | Kinde 租户域名，例如 `https://<tenant>.kinde.com`；与 JWT `iss` 严格一致 |
+| `KINDE_API_AUDIENCE` | 是 | - | Kinde API Audience，例如 `https://api.manga.example.com`；与 Access Token `aud` 严格一致 |
+| `KINDE_ADMIN_EMAILS` | 否 | - | 逗号分隔的已验证邮箱；首次创建本地用户时授予 `admin` 角色（引导用） |
+| `KINDE_ADMIN_SUBJECTS` | 否 | - | 逗号分隔的 Kinde `sub`；不依赖 email claim 的管理员引导方式 |
+| `JWT_SECRET` | 否 | - | 仅用于派生每个用户 ExHentai Cookie 的 AES-256-GCM 密钥；留空时首次启动自动生成并入库。显式设置时至少 32 字节随机值 |
+| `MANGA_READER_AUTH_COOKIE_SECURE` | 否 | `auto` | 浏览器媒体 Cookie 的 `Secure`：`auto`（TLS 或 `X-Forwarded-Proto=https` 时开启）/`true`/`false` |
 | `MANGA_READER_METRICS_ENABLED` | 否 | `true` | 启用 `/metrics`；未配置 Token 时仅回环可访问 |
 | `MANGA_READER_METRICS_TOKEN` | 否 | - | 可选独立 Metrics Token（至少 32 字符）；与 JWT、同步 Key 不共用 |
 | `MANGA_READER_SYNC_ENABLED` | 否 | `true` | 启用同步宿主端点；用户级同步 Key 在「设置 → API Key」创建、数据库管理 |

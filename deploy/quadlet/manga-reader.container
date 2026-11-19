@@ -35,16 +35,15 @@ Environment=HTTPS_PROXY=socks5://127.0.0.1:1080
 Environment=EHENTAI_PORT=:8080
 Environment=MANGA_READER_DB_PATH=/app/data/manga-reader.db
 
-# JWT 登录认证（推荐；生产置于 HTTPS 之后）。管理员账户有两种初始化方式：
-# 留空 ADMIN_PASSWORD 时，首次启动后由 Web 端「创建管理员账户」页面（/setup）完成初始化；
-# 或显式设置 ADMIN_USERNAME + ADMIN_PASSWORD，由后端在首次启动（users 表为空）创建。
-# 密码之后保存在数据库的 Argon2id 哈希中，不会覆盖已有密码。
+# Kinde OIDC（必填；生产置于 HTTPS 之后）。Issuer 与 Audience 不能混用。
+#Environment=KINDE_ISSUER=https://<tenant>.kinde.com
+#Environment=KINDE_API_AUDIENCE=https://api.manga.example.com
+# 可选：首次登录时按已验证邮箱或 Kinde sub 引导本地管理员。
+#Environment=KINDE_ADMIN_EMAILS=admin@example.com
+#Environment=KINDE_ADMIN_SUBJECTS=kp_xxxxxxxxxxxxxxxx
+# 本地密钥：仅用于加密每个用户的 ExHentai Cookie。留空则首次启动自动生成并入库。
 # 生成密钥：openssl rand -hex 32
 #Environment=JWT_SECRET=<paste output of: openssl rand -hex 32>
-#Environment=JWT_ISSUER=manga-reader
-#Environment=JWT_EXPIRES_IN=1h
-#Environment=ADMIN_USERNAME=admin
-#Environment=ADMIN_PASSWORD=change-me-strong-password
 #Environment=MANGA_READER_AUTH_COOKIE_SECURE=auto
 
 # Metrics 独立 Token（未设置时 /metrics 仅回环访问）

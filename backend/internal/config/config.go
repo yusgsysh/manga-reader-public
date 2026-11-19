@@ -28,40 +28,39 @@ type Config struct {
 	DevTools bool
 	// Metrics configures the internal Prometheus endpoint.
 	Metrics MetricsConfig
-	// Auth is the JWT authentication setup used by the SPA login page. Every
-	// request that touches user data is authenticated.
+	// Auth holds the local secret used to encrypt per-user ExHentai cookies
+	// and the browser session-cookie attributes. User login itself is handled
+	// by Kinde (see Kinde).
 	Auth AuthConfig
+	// Kinde configures OIDC access-token verification for every business API.
+	Kinde KindeConfig
 }
 
-// AuthConfig configures the JWT login flow. The administrator row itself is
-// stored in the database; ADMIN_USERNAME/ADMIN_PASSWORD are only used once,
-// when the users table is empty, so changing the environment later never
-// overwrites an existing password.
+// AuthConfig holds local secrets that are NOT part of the user login flow.
+// JWTSecret derives the AES-256-GCM key that seals each user's ExHentai
+// cookie; it may be empty at load time and is then resolved from the database
+// (generated and persisted on first boot) via auth.ResolveSecret.
 type AuthConfig struct {
-	// JWTSecret signs HS256 tokens. It may be empty at load time: main.go then
-	// resolves it from the database (a generated secret persisted on first
-	// boot) via auth.ResolveSecret, or from the environment when set. The same
-	// secret derives the AES-GCM key that seals per-user ExHentai cookies in
-	// the database.
 	JWTSecret string
-	JWTIssuer string
-	// JWTExpiresIn is embedded in exp/iat and returned as expires_in.
-	JWTExpiresIn time.Duration
-	// AdminUsername / AdminPassword seed the first administrator. The
-	// password is hashed with Argon2id before it reaches the database.
-	AdminUsername string
-	AdminPassword string
-	// CookieSecure selects the Secure flag for the HttpOnly auth cookie.
-	// Auto (the default) sets it when the request arrived over TLS or a
-	// trusted proxy reported X-Forwarded-Proto=https.
+	// CookieSecure selects the Secure flag for the HttpOnly media session
+	// cookie. Auto (the default) sets it when the request arrived over TLS or
+	// a trusted proxy reported X-Forwarded-Proto=https.
 	CookieSecure     bool
 	CookieSecureAuto bool
 }
 
-// ExpiresInSeconds is the token lifetime in whole seconds for the login
-// response (expires_in).
-func (c AuthConfig) ExpiresInSeconds() int {
-	return int(c.JWTExpiresIn / time.Second)
+// KindeConfig identifies the Kinde tenant and the API audience that access
+// tokens must be minted for. Issuer and audience are intentionally separate:
+// the issuer is the tenant domain, the audience is the API resource.
+type KindeConfig struct {
+	Issuer   string
+	Audience string
+	// AdminEmails/AdminSubjects are optional operator allowlists. A user
+	// whose verified email or Kinde subject matches gets the local "admin"
+	// role (bootstrap for a fresh instance). They are not authentication
+	// mechanisms; authorization still comes from users.role.
+	AdminEmails   []string
+	AdminSubjects []string
 }
 
 // MetricsConfig controls the internal metrics/readiness surface. When Token
@@ -204,6 +203,7 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg.Auth = authCfg
+	cfg.Kinde = loadKinde()
 
 	zipArchive, err := loadZipArchive()
 	if err != nil {
@@ -313,13 +313,11 @@ func loadZipArchive() (StorageConfig, error) {
 	return c, nil
 }
 
-// loadAuth reads the JWT/admin settings. Authentication is mandatory: every
-// user-private API needs an identity. JWT_SECRET may be empty here — main.go
-// then resolves the signing key from the database (or generates and persists
-// one on first boot) via auth.ResolveSecret.
+// loadAuth reads the local secret and cookie settings. Authentication is
+// mandatory but delegated to Kinde; JWT_SECRET is still required because the
+// same secret derives the encryption key for per-user ExHentai cookies.
 func loadAuth() (AuthConfig, error) {
 	secret := strings.TrimSpace(getEnv("JWT_SECRET", ""))
-	adminPassword := getEnv("ADMIN_PASSWORD", "")
 
 	// HMAC-SHA256 keys shorter than the 32-byte output weaken the signature.
 	// Requiring 32 bytes also rejects placeholder values such as "change-me".
@@ -328,43 +326,8 @@ func loadAuth() (AuthConfig, error) {
 		return AuthConfig{}, fmt.Errorf("JWT_SECRET must be at least 32 bytes of random data (for example: openssl rand -hex 32)")
 	}
 
-	issuer := strings.TrimSpace(getEnv("JWT_ISSUER", "manga-reader"))
-	if issuer == "" {
-		return AuthConfig{}, fmt.Errorf("JWT_ISSUER must not be empty")
-	}
-
-	expires := time.Hour
-	if raw := strings.TrimSpace(getEnv("JWT_EXPIRES_IN", "")); raw != "" {
-		parsed, err := time.ParseDuration(raw)
-		if err != nil {
-			// Also accept a bare integer number of seconds (3600).
-			if seconds, convErr := strconv.Atoi(raw); convErr == nil {
-				parsed = time.Duration(seconds) * time.Second
-				err = nil
-			}
-		}
-		if err != nil {
-			return AuthConfig{}, fmt.Errorf("invalid JWT_EXPIRES_IN %q: use a duration such as 1h or 30m", raw)
-		}
-		if parsed < time.Minute || parsed > 30*24*time.Hour {
-			return AuthConfig{}, fmt.Errorf("JWT_EXPIRES_IN must be between 1m and 720h")
-		}
-		expires = parsed
-	}
-
-	username := strings.TrimSpace(getEnv("ADMIN_USERNAME", "admin"))
-	if username == "" {
-		return AuthConfig{}, fmt.Errorf("ADMIN_USERNAME must not be empty")
-	}
-
 	secureMode := strings.ToLower(strings.TrimSpace(getEnv("MANGA_READER_AUTH_COOKIE_SECURE", "auto")))
-	cfg := AuthConfig{
-		JWTSecret:     secret,
-		JWTIssuer:     issuer,
-		JWTExpiresIn:  expires,
-		AdminUsername: username,
-		AdminPassword: adminPassword,
-	}
+	cfg := AuthConfig{JWTSecret: secret}
 	switch secureMode {
 	case "", "auto":
 		cfg.CookieSecureAuto = true
@@ -377,6 +340,35 @@ func loadAuth() (AuthConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+// loadKinde reads the OIDC tenant configuration. Empty values are allowed at
+// load time so tooling that only inspects the config (tests, maintenance
+// commands) keeps working; main refuses to start without them because every
+// business API is protected by Kinde verification.
+func loadKinde() KindeConfig {
+	issuer := strings.TrimRight(strings.TrimSpace(getEnv("KINDE_ISSUER", "")), "/")
+	audience := strings.TrimSpace(getEnv("KINDE_API_AUDIENCE", ""))
+
+	var admins []string
+	for _, email := range strings.Split(getEnv("KINDE_ADMIN_EMAILS", ""), ",") {
+		if email = strings.ToLower(strings.TrimSpace(email)); email != "" {
+			admins = append(admins, email)
+		}
+	}
+	var subjects []string
+	for _, subject := range strings.Split(getEnv("KINDE_ADMIN_SUBJECTS", ""), ",") {
+		if subject = strings.TrimSpace(subject); subject != "" {
+			subjects = append(subjects, subject)
+		}
+	}
+
+	return KindeConfig{
+		Issuer:        issuer,
+		Audience:      audience,
+		AdminEmails:   admins,
+		AdminSubjects: subjects,
+	}
 }
 
 func getEnv(key, defaultVal string) string {

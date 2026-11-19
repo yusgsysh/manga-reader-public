@@ -41,8 +41,11 @@ func audit(c *gin.Context, action string, attrs ...any) {
 
 type userJSON struct {
 	ID        ident.UUID `json:"id"`
-	UserID    ident.UUID `json:"user_id"`
+	UserID    string     `json:"user_id"`
 	Username  string     `json:"username"`
+	Email     string     `json:"email"`
+	Name      string     `json:"name"`
+	AvatarURL *string    `json:"avatar_url"`
 	Role      string     `json:"role"`
 	Status    string     `json:"status"`
 	CreatedAt string     `json:"created_at"`
@@ -50,10 +53,18 @@ type userJSON struct {
 }
 
 func userResponse(u *ent.User) userJSON {
+	var avatar *string
+	if u.AvatarURL != "" {
+		value := u.AvatarURL
+		avatar = &value
+	}
 	return userJSON{
 		ID:        u.ID,
-		UserID:    u.ID,
+		UserID:    u.UserID,
 		Username:  u.Username,
+		Email:     u.Email,
+		Name:      u.Name,
+		AvatarURL: avatar,
 		Role:      u.Role,
 		Status:    u.Status,
 		CreatedAt: u.CreatedAt.UTC().Format(timeLayout),
@@ -107,63 +118,6 @@ func (s *Server) handleAdminUserGet(c *gin.Context) {
 	web.JSON(c, http.StatusOK, userResponse(u))
 }
 
-func (s *Server) handleAdminUserCreate(c *gin.Context) {
-	if !s.requireAdmin(c) {
-		return
-	}
-	limitRequestBody(c, 64<<10)
-	var body struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-		Role     string `json:"role"`
-		Status   string `json:"status"`
-	}
-	if err := web.BindJSON(c, &body); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
-		return
-	}
-	body.Username = strings.TrimSpace(body.Username)
-	if body.Username == "" || len(body.Password) < 8 {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "username and a password of at least 8 characters are required"})
-		return
-	}
-	if body.Role == "" {
-		body.Role = config.RoleUser
-	}
-	if !validRole(body.Role) {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "role must be admin or user"})
-		return
-	}
-	if body.Status == "" {
-		body.Status = config.StatusActive
-	}
-	if !validUserStatus(body.Status) {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "status must be active or disabled"})
-		return
-	}
-	hash, err := auth.HashPassword(body.Password)
-	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "password hashing failed"})
-		return
-	}
-	created, err := s.DB.Client.User.Create().
-		SetUsername(body.Username).
-		SetPasswordHash(hash).
-		SetRole(body.Role).
-		SetStatus(body.Status).
-		Save(c.Request.Context())
-	if err != nil {
-		if ent.IsConstraintError(err) {
-			web.JSON(c, http.StatusConflict, gin.H{"error": "username already exists"})
-			return
-		}
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create user failed"})
-		return
-	}
-	audit(c, "user.create", "target_user_id", created.ID, "role", created.Role)
-	web.JSON(c, http.StatusCreated, userResponse(created))
-}
-
 func (s *Server) handleAdminUserUpdate(c *gin.Context) {
 	if !s.requireAdmin(c) {
 		return
@@ -175,7 +129,6 @@ func (s *Server) handleAdminUserUpdate(c *gin.Context) {
 	limitRequestBody(c, 64<<10)
 	var body struct {
 		Username *string `json:"username"`
-		Password *string `json:"password"`
 		Role     *string `json:"role"`
 		Status   *string `json:"status"`
 	}
@@ -198,19 +151,6 @@ func (s *Server) handleAdminUserUpdate(c *gin.Context) {
 			return
 		}
 		update.SetUsername(name)
-	}
-	if body.Password != nil {
-		if len(*body.Password) < 8 {
-			web.JSON(c, http.StatusBadRequest, gin.H{"error": "password must be at least 8 characters"})
-			return
-		}
-		hash, err := auth.HashPassword(*body.Password)
-		if err != nil {
-			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "password hashing failed"})
-			return
-		}
-		update.SetPasswordHash(hash)
-		revoke = true
 	}
 	if body.Role != nil {
 		if !validRole(*body.Role) {

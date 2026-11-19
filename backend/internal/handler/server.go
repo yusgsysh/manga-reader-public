@@ -120,9 +120,9 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 	r.DELETE("/api/settings/cookie", s.handleCookieDelete)
 	r.POST("/api/settings/cookie/verify", s.handleCookieVerify)
 
-	// Account administration (admin only).
+	// Account administration (admin only). Accounts are provisioned by Kinde
+	// on first login; admins manage the local role and status here.
 	r.GET("/api/admin/users", s.handleAdminUserList)
-	r.POST("/api/admin/users", s.handleAdminUserCreate)
 	r.GET("/api/admin/users/:id", s.handleAdminUserGet)
 	r.PUT("/api/admin/users/:id", s.handleAdminUserUpdate)
 	r.PATCH("/api/admin/users/:id/status", s.handleAdminUserStatus)

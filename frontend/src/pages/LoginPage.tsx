@@ -1,50 +1,43 @@
-import { useState, type FormEvent } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router";
-import { Input } from "@cloudflare/kumo";
-import { CircleNotch, Eye, EyeSlash } from "@phosphor-icons/react";
-import { ApiRequestError } from "../api/client";
+import { useState } from "react";
+import { Navigate, useLocation } from "react-router";
+import { CircleNotch } from "@phosphor-icons/react";
 import { ErrorBanner } from "../components/common/ErrorBanner";
 import { LoadingScreen } from "../components/common/LoadingScreen";
 import { Logo } from "../components/ui";
-import { useAuth } from "../context/auth";
+import {
+  readReturnPath,
+  safeReturnPath,
+  useAuth,
+} from "../context/auth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiRequestError) {
-    if (error.status === 401) return "用户名或密码错误";
-    if (error.status === 429) return "尝试次数过多，请稍后再试";
-    if (error.status === 400) return error.message;
-    if (error.status >= 500) return "服务器暂时无法处理请求，请稍后再试";
-    return error.message;
-  }
-  return "无法连接服务器，请检查网络或后端服务是否已启动";
-}
-
-/** Only allow same-origin paths as the post-login destination. */
-function safeReturnPath(value: unknown): string {
-  if (
-    typeof value === "string" &&
-    value.startsWith("/") &&
-    !value.startsWith("//") &&
-    !value.startsWith("/login")
-  ) {
-    return value;
-  }
-  return "/";
+function sdkErrorMessage(search: string): string | null {
+  const params = new URLSearchParams(search);
+  const error = params.get("error");
+  if (!error) return null;
+  const description = params.get("error_description");
+  return description
+    ? `登录失败：${description}`
+    : `登录失败（${error}），请重试。`;
 }
 
 export function LoginPage() {
-  const { session, isAuthenticated, isLoading, login, isLoggingIn } = useAuth();
-  const navigate = useNavigate();
+  const {
+    isAuthenticated,
+    isLoading,
+    error,
+    login,
+    register,
+    isLoggingIn,
+    isRegistering,
+  } = useAuth();
   const location = useLocation();
-  const returnTo = safeReturnPath(
-    (location.state as { from?: unknown } | null)?.from,
-  );
+  const returnTo =
+    readReturnPath() ??
+    safeReturnPath((location.state as { from?: unknown } | null)?.from);
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [pending, setPending] = useState<"login" | "register" | null>(null);
 
   useDocumentTitle("登录");
 
@@ -52,113 +45,94 @@ export function LoginPage() {
     return <LoadingScreen />;
   }
 
-  if (session && !session.initialized) return <Navigate to="/setup" replace />;
-  if (isAuthenticated) return <Navigate to={returnTo} replace />;
+  if (isAuthenticated) {
+    return <Navigate to={returnTo} replace />;
+  }
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (isLoggingIn) return;
-    if (!username.trim() || !password) {
-      setError("请输入用户名和密码");
-      return;
-    }
+  const message =
+    actionError ??
+    (error ? error.message : null) ??
+    sdkErrorMessage(location.search);
 
-    setError(null);
+  const start = async (kind: "login" | "register") => {
+    if (pending) return;
+    setPending(kind);
+    setActionError(null);
     try {
-      await login(username.trim(), password);
-      navigate(returnTo, { replace: true });
+      if (kind === "login") {
+        await login(returnTo);
+      } else {
+        await register(returnTo);
+      }
     } catch (cause) {
-      setError(errorMessage(cause));
+      setActionError(
+        cause instanceof Error
+          ? `无法启动认证：${cause.message}`
+          : "无法启动认证，请稍后再试。",
+      );
+    } finally {
+      setPending(null);
     }
   };
+
+  const busy = pending !== null || isLoggingIn || isRegistering;
 
   return (
     <div className="login-backdrop relative flex min-h-dvh flex-col text-kumo-default">
       <main className="page-enter relative flex flex-1 items-center justify-center px-4 py-16">
         <div className="w-full max-w-[24rem]">
-          <form
-            noValidate
-            onSubmit={handleSubmit}
-            className="auth-panel flex flex-col p-6 sm:p-8"
-          >
+          <div className="auth-panel flex flex-col p-6 sm:p-8">
             <div className="flex flex-col items-center text-center">
               <Logo className="[&_svg]:size-9" />
               <h1 className="mt-5 text-[1.75rem] leading-[1.15] font-semibold tracking-[-0.02em] sm:text-[2rem]">
                 登录 Manga Reader
               </h1>
+              <p className="mt-3 text-[0.875rem] leading-5 text-kumo-subtle">
+                使用 Kinde 账号登录。首次使用请先注册，注册后会自动返回此应用。
+              </p>
             </div>
 
-            <div className="mt-8 space-y-3">
-              <div className="relative">
-                <label htmlFor="username" className="sr-only">
-                  用户名
-                </label>
-                <Input
-                  id="username"
-                  name="username"
-                  autoComplete="username"
-                  spellCheck={false}
-                  size="lg"
-                  placeholder="用户名"
-                  aria-label="用户名"
-                  className="h-12 w-full rounded-xl px-4 text-[0.9375rem] focus:!ring-[var(--app-accent)] disabled:text-kumo-default"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  disabled={isLoggingIn}
-                />
-              </div>
+            {message && <ErrorBanner message={message} className="mt-6" />}
 
-              <div className="relative">
-                <label htmlFor="password" className="sr-only">
-                  密码
-                </label>
-                <Input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  size="lg"
-                  placeholder="密码"
-                  aria-label="密码"
-                  className="h-12 w-full rounded-xl pr-12 pl-4 text-[0.9375rem] focus:!ring-[var(--app-accent)] disabled:text-kumo-default"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  disabled={isLoggingIn}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((visible) => !visible)}
-                  aria-label={showPassword ? "隐藏密码" : "显示密码"}
-                  title={showPassword ? "隐藏密码" : "显示密码"}
-                  className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-kumo-subtle transition-colors hover:text-kumo-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)]"
-                >
-                  {showPassword ? (
-                    <EyeSlash className="size-4" />
-                  ) : (
-                    <Eye className="size-4" />
-                  )}
-                </button>
-              </div>
-
-              {error && <ErrorBanner message={error} className="mt-1" />}
+            <div className="mt-7 space-y-3">
+              <button
+                type="button"
+                onClick={() => void start("login")}
+                className="auth-submit flex h-12 w-full items-center justify-center rounded-xl text-[0.9375rem] font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={busy}
+                aria-busy={busy && pending === "login"}
+              >
+                {pending === "login" ? (
+                  <>
+                    <CircleNotch className="mr-2 size-4 animate-spin" />
+                    正在跳转…
+                  </>
+                ) : (
+                  "登录"
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => void start("register")}
+                className="flex h-12 w-full items-center justify-center rounded-xl border border-kumo-hairline text-[0.9375rem] font-medium text-kumo-default transition-colors hover:bg-kumo-tint disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={busy}
+                aria-busy={busy && pending === "register"}
+              >
+                {pending === "register" ? (
+                  <>
+                    <CircleNotch className="mr-2 size-4 animate-spin" />
+                    正在跳转…
+                  </>
+                ) : (
+                  "注册新账号"
+                )}
+              </button>
             </div>
 
-            <button
-              type="submit"
-              className="auth-submit mt-4 flex h-12 w-full items-center justify-center rounded-xl text-[0.9375rem] font-medium disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isLoggingIn}
-              aria-busy={isLoggingIn}
-            >
-              {isLoggingIn ? (
-                <>
-                  <CircleNotch className="mr-2 size-4 animate-spin" />
-                  正在登录…
-                </>
-              ) : (
-                "登录"
-              )}
-            </button>
-          </form>
+            <p className="mt-6 text-center text-xs leading-5 text-kumo-subtle">
+              登录与注册由 Kinde 托管；本应用不会接触或保存你的密码。
+            </p>
+          </div>
         </div>
       </main>
     </div>

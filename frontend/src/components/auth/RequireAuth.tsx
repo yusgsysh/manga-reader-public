@@ -1,16 +1,29 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router";
-import { useAuth } from "../../context/auth";
+import {
+  clearReturnPath,
+  readReturnPath,
+  useAuth,
+} from "../../context/auth";
 import { ErrorState } from "../common/ErrorState";
 import { LoadingScreen } from "../common/LoadingScreen";
 
 /**
  * Route guard for all application pages. An unauthenticated visitor is sent to
- * /login with the original destination in location state.
+ * /login with the original destination in location state. After a Kinde
+ * callback, the destination saved before the redirect is restored once.
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { session, isAuthenticated, isLoading, error, refresh } = useAuth();
+  const { isAuthenticated, isLoading, error, refresh } = useAuth();
   const location = useLocation();
+  const current = `${location.pathname}${location.search}${location.hash}`;
+  const pending = isAuthenticated ? readReturnPath() : null;
+
+  useEffect(() => {
+    if (isAuthenticated && pending === current) {
+      clearReturnPath();
+    }
+  }, [isAuthenticated, pending, current]);
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -20,17 +33,11 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-kumo-base px-4">
         <ErrorState
-          message="无法连接服务器，请检查后端是否已启动。"
+          message={error.message || "无法连接服务器，请检查后端是否已启动。"}
           onRetry={() => void refresh()}
         />
       </div>
     );
-  }
-
-  // First-run: no account exists yet, so send the visitor to the admin setup
-  // page instead of the login form.
-  if (session && !session.initialized) {
-    return <Navigate to="/setup" replace />;
   }
 
   if (!isAuthenticated) {
@@ -38,11 +45,13 @@ export function RequireAuth({ children }: { children: ReactNode }) {
       <Navigate
         to="/login"
         replace
-        state={{
-          from: `${location.pathname}${location.search}${location.hash}`,
-        }}
+        state={{ from: current }}
       />
     );
+  }
+
+  if (pending && pending !== current) {
+    return <Navigate to={pending} replace />;
   }
 
   return <>{children}</>;

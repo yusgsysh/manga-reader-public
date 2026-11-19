@@ -3,7 +3,7 @@
 # Build (context must be the repository root):
 #   docker build -t manga-reader .
 #
-# Run (bind to loopback; JWT login is opt-in via JWT_SECRET):
+# Run (bind to loopback; Kinde env vars are required at runtime):
 #   docker run -d -p 127.0.0.1:5173:8080 --env-file .env manga-reader
 #
 # Stages:
@@ -38,8 +38,19 @@ RUN --mount=type=cache,id=manga-bun-install,target=/root/.bun/install/cache,shar
 COPY frontend/ .
 RUN bun run db:update
 
-# Empty base URL → same-origin /api/*, independent of any local .env
-ENV VITE_API_BASE_URL=""
+# Empty base URL → same-origin /api/*, independent of any local .env.
+# Kinde values are public and baked into the browser bundle at build time.
+ARG VITE_KINDE_DOMAIN=""
+ARG VITE_KINDE_CLIENT_ID=""
+ARG VITE_KINDE_REDIRECT_URI=""
+ARG VITE_KINDE_LOGOUT_URI=""
+ARG VITE_KINDE_AUDIENCE=""
+ENV VITE_API_BASE_URL="" \
+    VITE_KINDE_DOMAIN=${VITE_KINDE_DOMAIN} \
+    VITE_KINDE_CLIENT_ID=${VITE_KINDE_CLIENT_ID} \
+    VITE_KINDE_REDIRECT_URI=${VITE_KINDE_REDIRECT_URI} \
+    VITE_KINDE_LOGOUT_URI=${VITE_KINDE_LOGOUT_URI} \
+    VITE_KINDE_AUDIENCE=${VITE_KINDE_AUDIENCE}
 RUN bun run build
 
 # ---- Backend build ----
@@ -66,8 +77,7 @@ COPY --from=frontend /app/dist ./internal/web/dist
 # default sharing=shared — locked would serialize parallel builds that share
 # one builder.
 RUN --mount=type=cache,id=manga-go-build,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/manga-reader . \
-    && CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/reset-admin ./cmd/reset-admin
+    CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/manga-reader .
 
 # ---- Runtime stage ----
 FROM alpine:latest
@@ -78,7 +88,6 @@ RUN apk add --no-cache ca-certificates tzdata \
 
 WORKDIR /app
 COPY --from=builder /out/manga-reader /app/manga-reader
-COPY --from=builder /out/reset-admin /app/reset-admin
 
 RUN mkdir -p /app/data && chown -R appuser:appuser /app
 

@@ -105,92 +105,63 @@ Search / Homepage / Watched 支持上游 ExHentai 的 Jump/Seek 定位，通过�
 
 ---
 
-## Authentication (JWT)
+## Authentication (Kinde OIDC)
 
-Multi-user mode is always on. `JWT_SECRET` is optional: when unset the API generates a 32-byte random secret on first boot and persists it in the database (`app_setting`, key `auth.jwt_secret`), reusing it on later restarts so sessions and at-rest encrypted cookies survive. Set it explicitly (at least 32 random bytes) for a fixed key — e.g. multiple instances sharing one database — which takes precedence over the stored value. HTTP Basic Authentication is not supported anywhere.
+User login, registration, identity and access-token issuance are owned by Kinde. The API verifies Kinde **access tokens** on every business route; it never accepts a client-supplied user id and never offers password or Basic authentication.
+
+Server configuration:
+
+- `KINDE_ISSUER` — tenant domain (for example `https://<tenant>.kinde.com`).
+- `KINDE_API_AUDIENCE` — API audience (for example `https://api.manga.example.com`), not the React application client id.
+- `JWT_SECRET` — optional; used only to derive the AES-256-GCM key for per-user ExHentai cookies. When unset it is generated and persisted in `app_setting` (`auth.jwt_secret`) on first boot.
+- `KINDE_ADMIN_EMAILS` / `KINDE_ADMIN_SUBJECTS` — optional comma-separated verified emails or Kinde subjects that receive the local `admin` role when their account is first created (bootstrap; authorization still comes from `users.role`).
+
+Verification uses `github.com/coreos/go-oidc/v3/oidc`: discovery, cached JWKS, RS256-only, exact `iss` and `aud`, `exp` and `nbf`. An unknown `kid` triggers one JWKS refresh for key rotation. Any failure returns `401 {"error":"unauthorized"}` without leaking verifier details.
 
 ### Public vs protected
 
-Public (no user JWT): `/api/auth/login`, `/api/auth/register` (first-admin setup only), `/api/auth/status`. Peer sync endpoints `/api/sync/push` and `/api/sync/events` require a user sync key instead (separate middleware).
+Public: `/healthz`, `/readyz`, `/metrics`, the embedded frontend, and peer sync endpoints `/api/sync/push` / `/api/sync/events` (which use a separate user sync key middleware).
 
-Every other `/api/*` route requires a valid user JWT: search, galleries, image proxies (the browser sends the same-origin HttpOnly cookie), `/api/auth/logout`, `/api/bookshelf*`, `/api/progress*`, `/api/recently-read`, `/api/reading-progress/cleanup`, `/api/tag-settings*`, `/api/prefill*`, `/api/settings*`, `/api/sync/config`, `/api/sync/status`, `/api/dev/*`, `/api/admin/*`. The middleware is default-deny.
+Every other `/api/*` route requires `Authorization: Bearer <Kinde access token>`: `/api/auth/me`, `/api/auth/logout`, search, galleries, bookshelf, progress, prefill, settings, admin and dev routes. The middleware is default-deny.
 
-### User isolation
+### Local identity and isolation
 
-Every private row carries `user_id`: `bookshelf`, `reading_progress`, `prefill_job`, `tag_preference`, `tag_sync_baseline`, `sync_change`, `user_setting`. Every query/create/update/delete takes the user ID from the verified JWT and includes it in the predicate. `user_id` in a path, query, header or body is ignored.
+The verified `sub` is stored in `users.user_id` (unique). The local primary key is the UUID `users.id`; every private row (`bookshelf`, `reading_progress`, `prefill_job`, `tag_preference`, `tag_sync_baseline`, `sync_change`, `user_setting`) carries that local UUID and queries always add it from the verified principal. Any `user_id` in a path, query, header or body is ignored.
 
-`gallery_cache` and public image/thumbnail caches remain instance-wide because they are upstream metadata rather than user data.
+First login creates the local row. Concurrent first logins rely on the unique index and re-read the winning row instead of racing with a check-then-insert. Profile fields (`email`, `name`, `avatar_url`) are refreshed only from verified token claims. `email` is never an identity key.
 
-### JWT claims
+`status=disabled` returns `403 {"error":"forbidden"}` even while the Kinde token is still valid. JWT claims never carry application roles; `users.role` (`admin` / `user`) is the local RBAC boundary.
 
-The JWT carries `sub` (user id), `user_id`, `username`, `role`, `iss`, `iat`, `exp`, `jti` and `ver` (logout generation). `sub` and `user_id` must match. Roles are `admin` and `user`.
+### Browser media cookie
 
-Send the token as `Authorization: Bearer <access_token>`. Browsers may use the `manga_reader_auth` HttpOnly cookie set by login instead; this covers page refreshes, `<img>`/EventSource and direct ZIP download links.
+`<img>`, EventSource and download links cannot set an `Authorization` header. On every authenticated Bearer request the API also sets `manga_reader_access`, an `HttpOnly; SameSite=Lax; Path=/api; Secure(auto)` cookie containing the same short-lived access token. It is accepted **only** on native GET routes (`/api/image*`, `/api/image-cache*`, `/api/events/changes`, `/api/prefill/:id/zip`, torrent download). Cookie-authenticated state-changing, admin and normal business requests are rejected with 401. The SPA does not persist or refresh tokens itself.
 
-### 0.1 Login
+### 0.1 Current user
 
-`POST /api/auth/login`
+`GET /api/auth/me` (Bearer required)
 
-```json
-{ "username": "admin", "password": "password" }
-```
-
-Success `200`:
+Returns only the local account matching the verified token. There is no user-id parameter.
 
 ```json
 {
-  "access_token": "<JWT>",
-  "token_type": "Bearer",
-  "expires_in": 3600,
-  "user": { "id": "7a6c…", "user_id": "7a6c…", "username": "admin", "role": "admin" }
+  "id": "7a6c…",
+  "user_id": "kp_…",
+  "username": "kinde_…",
+  "email": "user@example.com",
+  "name": "User",
+  "avatar_url": null,
+  "role": "user",
+  "status": "active"
 }
 ```
 
-Failure `401` uses one message for unknown user and wrong password: `{"error":"invalid username or password"}`. Excessive attempts return `429`.
+`id` is the local UUID; `user_id` is the Kinde subject.
 
-### 0.2 Register first administrator (public)
+### 0.2 Logout
 
-`POST /api/auth/register`
+`POST /api/auth/logout` (Bearer required)
 
-Only available while the instance is uninitialized (the `users` table is empty). It creates the first `admin` account and logs it in immediately, so the first visitor can finish setup in one step.
-
-```json
-{ "username": "admin", "password": "password" }
-```
-
-Success `200`:
-
-```json
-{
-  "access_token": "<JWT>",
-  "token_type": "Bearer",
-  "expires_in": 3600,
-  "user": { "id": "7a6c…", "user_id": "7a6c…", "username": "admin", "role": "admin" }
-}
-```
-
-Failure `409 {"error":"already initialized"}` once any account exists; `400` for a missing username or a password shorter than 8 characters; `429` after excessive attempts. The endpoint cannot be used to mint additional administrators.
-
-### 0.3 Status (public)
-
-`GET /api/auth/status`
-
-The SPA's boot probe. It is public so a signed-out visitor can discover first-run state; when the request carries a valid session (cookie or bearer token) the identity is included as well, so a page refresh restores the session in one round-trip. Login and register return the same `user` object, which is why there is no separate `/api/auth/me`.
-
-```json
-{
-  "initialized": true,
-  "user": { "id": "7a6c…", "user_id": "7a6c…", "username": "admin", "role": "admin" }
-}
-```
-
-Signed out (or with an invalid/revoked token) `user` is `null`. A stale token never makes the probe itself fail; the protected routes still answer `401` and clear the cookie.
-
-### 0.4 Logout
-
-`POST /api/auth/logout` (requires JWT)
-
-Increments `users.token_version` and clears the auth cookie. All tokens issued before logout return `401` immediately.
+Clears the media cookie and increments `users.token_version`. Kinde session logout is a browser redirect performed by the React SDK.
 
 ```json
 { "success": true }

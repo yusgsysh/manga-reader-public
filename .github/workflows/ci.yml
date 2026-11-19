@@ -143,6 +143,12 @@ jobs:
           cache-to: type=gha,scope=manga-reader,mode=max
           provenance: false
           sbom: false
+          build-args: |
+            VITE_KINDE_DOMAIN=${{ vars.VITE_KINDE_DOMAIN }}
+            VITE_KINDE_CLIENT_ID=${{ vars.VITE_KINDE_CLIENT_ID }}
+            VITE_KINDE_REDIRECT_URI=${{ vars.VITE_KINDE_REDIRECT_URI }}
+            VITE_KINDE_LOGOUT_URI=${{ vars.VITE_KINDE_LOGOUT_URI }}
+            VITE_KINDE_AUDIENCE=${{ vars.VITE_KINDE_AUDIENCE }}
 
   # ------------------------------------------------------------
   # Image publish on main / manual runs.
@@ -213,6 +219,12 @@ jobs:
           cache-to: type=gha,scope=manga-reader,mode=max
           provenance: false
           sbom: false
+          build-args: |
+            VITE_KINDE_DOMAIN=${{ vars.VITE_KINDE_DOMAIN }}
+            VITE_KINDE_CLIENT_ID=${{ vars.VITE_KINDE_CLIENT_ID }}
+            VITE_KINDE_REDIRECT_URI=${{ vars.VITE_KINDE_REDIRECT_URI }}
+            VITE_KINDE_LOGOUT_URI=${{ vars.VITE_KINDE_LOGOUT_URI }}
+            VITE_KINDE_AUDIENCE=${{ vars.VITE_KINDE_AUDIENCE }}
 
   # ------------------------------------------------------------
   # Job summary — commit metadata, per-job results, image tags.

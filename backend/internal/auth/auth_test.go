@@ -1,12 +1,12 @@
 package auth
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,9 +15,13 @@ import (
 
 	entsql "entgo.io/ent/dialect/sql"
 
+	"manga-reader/internal/authtest"
 	"manga-reader/internal/config"
 	"manga-reader/internal/ent"
+	"manga-reader/internal/ent/user"
 )
+
+const testAudience = "https://api.manga.example.com"
 
 func newTestClient(t *testing.T) *ent.Client {
 	t.Helper()
@@ -37,24 +41,15 @@ func newTestClient(t *testing.T) *ent.Client {
 	return client
 }
 
-func testConfig(secret string) config.AuthConfig {
-	return config.AuthConfig{
-		JWTSecret:     secret,
-		JWTIssuer:     "manga-reader-test",
-		JWTExpiresIn:  time.Hour,
-		AdminUsername: "admin",
-		AdminPassword: "password123",
-	}
-}
-
-func newTestService(t *testing.T) (*Service, *ent.Client) {
+func newTestService(t *testing.T, adminEmails ...string) (*Service, *ent.Client, *authtest.Issuer) {
 	t.Helper()
 	client := newTestClient(t)
-	svc := New(client, testConfig(strings.Repeat("k", 32)))
-	if _, err := svc.EnsureAdmin(t.Context()); err != nil {
-		t.Fatalf("EnsureAdmin: %v", err)
+	iss := authtest.NewIssuer(t, testAudience)
+	verifier, err := NewVerifier(t.Context(), iss.URL, testAudience)
+	if err != nil {
+		t.Fatalf("NewVerifier: %v", err)
 	}
-	return svc, client
+	return New(client, config.AuthConfig{}, verifier, adminEmails, nil), client, iss
 }
 
 func newTestRouter(svc *Service) *gin.Engine {
@@ -62,425 +57,351 @@ func newTestRouter(svc *Service) *gin.Engine {
 	r := gin.New()
 	r.Use(svc.Middleware())
 	svc.RegisterRoutes(r)
-	r.GET("/api/search", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"public": true}) })
-	r.GET("/api/bookshelf", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"protected": true}) })
+	r.GET("/healthz", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
+	r.GET("/api/bookshelf", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
+	r.POST("/api/sync/push", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"sync": true}) })
+	r.GET("/api/image/page", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"image": true}) })
+	r.GET("/api/events/changes", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"events": true}) })
 	return r
 }
 
-func doJSON(r http.Handler, method, path, body, token string) *httptest.ResponseRecorder {
-	var reader *bytes.Reader
-	if body == "" {
-		reader = bytes.NewReader(nil)
-	} else {
-		reader = bytes.NewReader([]byte(body))
-	}
-	req := httptest.NewRequest(method, path, reader)
-	if body != "" {
-		req.Header.Set("Content-Type", "application/json")
-	}
+func doRequest(r http.Handler, method, path, token string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, nil)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
 	}
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	return w
 }
 
-func login(t *testing.T, r http.Handler, username, password string) (string, *httptest.ResponseRecorder) {
-	t.Helper()
-	body, _ := json.Marshal(map[string]string{"username": username, "password": password})
-	w := doJSON(r, http.MethodPost, "/api/auth/login", string(body), "")
-	if w.Code != http.StatusOK {
-		return "", w
-	}
-	var res struct {
-		AccessToken string `json:"access_token"`
-		TokenType   string `json:"token_type"`
-		ExpiresIn   int    `json:"expires_in"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
-		t.Fatalf("decode login: %v", err)
-	}
-	if res.TokenType != "Bearer" || res.AccessToken == "" || res.ExpiresIn <= 0 {
-		t.Fatalf("unexpected login response: %s", w.Body.String())
-	}
-	return res.AccessToken, w
-}
-
-func TestHashPasswordAndVerify(t *testing.T) {
-	hash, err := HashPassword("correct horse battery staple")
-	if err != nil {
-		t.Fatalf("HashPassword: %v", err)
-	}
-	if !strings.HasPrefix(hash, "$argon2id$v=19$") {
-		t.Fatalf("hash = %q, want argon2id PHC", hash)
-	}
-	if strings.Contains(hash, "correct horse") {
-		t.Fatal("hash contains the plaintext password")
-	}
-	if !VerifyPassword(hash, "correct horse battery staple") {
-		t.Fatal("correct password did not verify")
-	}
-	if VerifyPassword(hash, "wrong") {
-		t.Fatal("wrong password verified")
-	}
-	if VerifyPassword("not-a-hash", "anything") {
-		t.Fatal("malformed hash verified")
-	}
-}
-
-func TestLoginSuccessAndProtectedRoutes(t *testing.T) {
-	svc, _ := newTestService(t)
+func TestMiddlewareRejectsMissingAndMalformedAuthorization(t *testing.T) {
+	svc, _, _ := newTestService(t)
 	r := newTestRouter(svc)
 
-	token, w := login(t, r, "admin", "password123")
-	if token == "" {
-		t.Fatalf("login failed: %d %s", w.Code, w.Body.String())
-	}
-	cookies := w.Result().Cookies()
-	if len(cookies) == 0 || cookies[0].Name != CookieName || !cookies[0].HttpOnly {
-		t.Fatalf("login did not set an HttpOnly cookie: %+v", cookies)
-	}
-	var loginRes struct {
-		User *struct {
-			Username string `json:"username"`
-			Role     string `json:"role"`
-		} `json:"user"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &loginRes); err != nil {
-		t.Fatalf("decode login: %v", err)
-	}
-	// The SPA gets the identity from the login response (there is no /me).
-	if loginRes.User == nil || loginRes.User.Username != "admin" || loginRes.User.Role != config.RoleAdmin {
-		t.Fatalf("login response user = %+v, want the admin identity", loginRes.User)
-	}
-	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", token); got.Code != http.StatusOK {
-		t.Fatalf("protected route with token = %d, want 200", got.Code)
-	}
-	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", ""); got.Code != http.StatusUnauthorized {
-		t.Fatalf("protected route without token = %d, want 401", got.Code)
-	}
-	if got := doJSON(r, http.MethodGet, "/api/auth/status", "", ""); got.Code != http.StatusOK {
-		t.Fatalf("public route = %d, want 200", got.Code)
-	}
-	if got := doJSON(r, http.MethodGet, "/api/search", "", ""); got.Code != http.StatusUnauthorized {
-		t.Fatalf("user-private route without token = %d, want 401", got.Code)
-	}
-}
-
-func TestLoginWrongPasswordAndUnknownUser(t *testing.T) {
-	svc, _ := newTestService(t)
-	r := newTestRouter(svc)
-
-	for _, tc := range []struct{ user, pass string }{
-		{"admin", "wrong-password"},
-		{"nobody", "password123"},
-	} {
-		body, _ := json.Marshal(map[string]string{"username": tc.user, "password": tc.pass})
-		w := doJSON(r, http.MethodPost, "/api/auth/login", string(body), "")
-		if w.Code != http.StatusUnauthorized {
-			t.Fatalf("%s: status = %d, want 401", tc.user, w.Code)
-		}
-		if !strings.Contains(w.Body.String(), "invalid username or password") {
-			t.Fatalf("%s: body = %s, want unified error", tc.user, w.Body.String())
-		}
-	}
-}
-
-// TestMiddlewareRejectsInvalidTokens covers every credential failure mode at
-// the HTTP boundary: malformed, wrong signature, expired, wrong issuer and
-// algorithm confusion. The valid case is the control so a failed setup cannot
-// make the whole table pass.
-func TestMiddlewareRejectsInvalidTokens(t *testing.T) {
-	svc, _ := newTestService(t)
-	r := newTestRouter(svc)
-	u, err := svc.db.User.Query().Only(t.Context())
-	if err != nil {
-		t.Fatalf("load user: %v", err)
-	}
-
-	valid, _ := login(t, r, "admin", "password123")
-	if valid == "" {
-		t.Fatal("control login failed")
-	}
-
-	wrongSigManager := newTokenManager(strings.Repeat("x", 32), svc.cfg.JWTIssuer, time.Hour)
-	wrongSig, _, err := wrongSigManager.issue(u.ID, u.Username, u.Role, u.TokenVersion)
-	if err != nil {
-		t.Fatalf("issue wrong-signature token: %v", err)
-	}
-	expiredManager := newTokenManager(svc.cfg.JWTSecret, svc.cfg.JWTIssuer, time.Minute)
-	expiredManager.now = func() time.Time { return time.Now().Add(-2 * time.Hour) }
-	expired, _, err := expiredManager.issue(u.ID, u.Username, u.Role, u.TokenVersion)
-	if err != nil {
-		t.Fatalf("issue expired token: %v", err)
-	}
-	wrongIssuerManager := newTokenManager(svc.cfg.JWTSecret, "someone-else", time.Hour)
-	wrongIssuer, _, err := wrongIssuerManager.issue(u.ID, u.Username, u.Role, u.TokenVersion)
-	if err != nil {
-		t.Fatalf("issue wrong-issuer token: %v", err)
-	}
-
-	tests := []struct {
-		name  string
-		token string
+	cases := []struct {
+		name   string
+		header string
 	}{
 		{"missing", ""},
-		{"not a jwt", "not-a-jwt"},
-		{"wrong signature", wrongSig},
-		{"expired", expired},
-		{"wrong issuer", wrongIssuer},
-		// Explicit non-HS256 variant signed with the same secret
-		// (algorithm confusion / "none").
-		{"alg none", "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJpc3MiOiJtYW5nYS1yZWFkZXItdGVzdCIsInN1YiI6IjEiLCJleHAiOjk5OTk5OTk5OTl9."},
+		{"wrong scheme", "Basic dXNlcjpwYXNz"},
+		{"empty bearer", "Bearer "},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", tt.token); got.Code != http.StatusUnauthorized {
-				t.Fatalf("token = %d, want 401 (%s)", got.Code, got.Body.String())
-			}
-		})
-	}
-
-	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", valid); got.Code != http.StatusOK {
-		t.Fatalf("valid token = %d, want 200", got.Code)
-	}
-}
-
-func TestLogoutRevokesOutstandingTokens(t *testing.T) {
-	svc, _ := newTestService(t)
-	r := newTestRouter(svc)
-
-	token, _ := login(t, r, "admin", "password123")
-	if got := doJSON(r, http.MethodPost, "/api/auth/logout", "", token); got.Code != http.StatusOK {
-		t.Fatalf("logout = %d, want 200 (%s)", got.Code, got.Body.String())
-	}
-	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", token); got.Code != http.StatusUnauthorized {
-		t.Fatalf("token after logout = %d, want 401", got.Code)
-	}
-
-	// A fresh login carries the incremented token_version and works again.
-	newToken, _ := login(t, r, "admin", "password123")
-	if newToken == "" {
-		t.Fatal("login after logout failed")
-	}
-	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", newToken); got.Code != http.StatusOK {
-		t.Fatalf("new token = %d, want 200", got.Code)
-	}
-}
-
-func TestEnsureAdminSkipsWhenNoPasswordConfigured(t *testing.T) {
-	client := newTestClient(t)
-	cfg := testConfig(strings.Repeat("k", 32))
-	cfg.AdminPassword = ""
-	svc := New(client, cfg)
-
-	created, err := svc.EnsureAdmin(t.Context())
-	if err != nil {
-		t.Fatalf("EnsureAdmin: %v", err)
-	}
-	if created {
-		t.Fatal("EnsureAdmin created an administrator without ADMIN_PASSWORD")
-	}
-	count, err := client.User.Query().Count(t.Context())
-	if err != nil {
-		t.Fatalf("count users: %v", err)
-	}
-	if count != 0 {
-		t.Fatalf("users = %d, want 0 (instance left uninitialized)", count)
-	}
-}
-
-func TestRegisterCreatesFirstAdmin(t *testing.T) {
-	client := newTestClient(t)
-	svc := New(client, testConfig(strings.Repeat("k", 32)))
-	r := newTestRouter(svc)
-
-	w := doJSON(r, http.MethodGet, "/api/auth/status", "", "")
-	var status struct {
-		Initialized bool `json:"initialized"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &status); err != nil {
-		t.Fatalf("decode status: %v", err)
-	}
-	if status.Initialized {
-		t.Fatal("status = initialized, want uninitialized")
-	}
-
-	body, _ := json.Marshal(map[string]string{"username": "root", "password": "correct horse battery"})
-	w = doJSON(r, http.MethodPost, "/api/auth/register", string(body), "")
-	if w.Code != http.StatusOK {
-		t.Fatalf("register = %d, want 200 (%s)", w.Code, w.Body.String())
-	}
-	var res struct {
-		AccessToken string `json:"access_token"`
-		User        *struct {
-			Username string `json:"username"`
-			Role     string `json:"role"`
-		} `json:"user"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil || res.AccessToken == "" {
-		t.Fatalf("register response missing access_token: %s", w.Body.String())
-	}
-	// The identity travels with the token so the SPA does not need a follow-up
-	// request to know who just registered.
-	if res.User == nil || res.User.Username != "root" || res.User.Role != config.RoleAdmin {
-		t.Fatalf("register response user = %+v, want the new admin", res.User)
-	}
-
-	u, err := client.User.Query().Only(t.Context())
-	if err != nil {
-		t.Fatalf("query user: %v", err)
-	}
-	if u.Username != "root" || u.Role != config.RoleAdmin || u.Status != config.StatusActive {
-		t.Fatalf("unexpected admin: username=%q role=%q status=%q", u.Username, u.Role, u.Status)
-	}
-	if !VerifyPassword(u.PasswordHash, "correct horse battery") {
-		t.Fatal("registered password does not verify")
-	}
-
-	// The new admin's token authenticates immediately.
-	if got := doJSON(r, http.MethodGet, "/api/bookshelf", "", res.AccessToken); got.Code != http.StatusOK {
-		t.Fatalf("bookshelf with registration token = %d, want 200", got.Code)
-	}
-
-	// A second registration is rejected once initialized.
-	body2, _ := json.Marshal(map[string]string{"username": "other", "password": "another strong pass"})
-	if got := doJSON(r, http.MethodPost, "/api/auth/register", string(body2), ""); got.Code != http.StatusConflict {
-		t.Fatalf("second register = %d, want 409 (%s)", got.Code, got.Body.String())
-	}
-}
-
-func TestRegisterValidatesInput(t *testing.T) {
-	client := newTestClient(t)
-	svc := New(client, testConfig(strings.Repeat("k", 32)))
-	r := newTestRouter(svc)
-
-	for _, tc := range []struct {
-		name string
-		body map[string]string
-	}{
-		{"empty username", map[string]string{"username": "  ", "password": "correct horse battery"}},
-		{"short password", map[string]string{"username": "root", "password": "short"}},
-	} {
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			payload, _ := json.Marshal(tc.body)
-			if got := doJSON(r, http.MethodPost, "/api/auth/register", string(payload), ""); got.Code != http.StatusBadRequest {
-				t.Fatalf("register = %d, want 400 (%s)", got.Code, got.Body.String())
+			req := httptest.NewRequest(http.MethodGet, "/api/bookshelf", nil)
+			if tc.header != "" {
+				req.Header.Set("Authorization", tc.header)
+			}
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401", w.Code)
+			}
+			if !strings.Contains(w.Body.String(), `"error":"unauthorized"`) {
+				t.Fatalf("body = %s", w.Body.String())
 			}
 		})
 	}
+}
 
+func TestVerifierRejectsInvalidTokens(t *testing.T) {
+	svc, _, iss := newTestService(t)
+	r := newTestRouter(svc)
+
+	otherKey := authtest.NewIssuer(t, testAudience)
+
+	cases := []struct {
+		name  string
+		token func(t *testing.T) string
+	}{
+		{"garbage", func(t *testing.T) string { return "not.a.jwt" }},
+		{"wrong signature", func(t *testing.T) string {
+			return iss.Sign(t, authtest.Claims{Key: otherKey.Key})
+		}},
+		{"unknown key id", func(t *testing.T) string {
+			return iss.Sign(t, authtest.Claims{KeyID: "missing-key"})
+		}},
+		{"wrong issuer", func(t *testing.T) string {
+			return iss.Sign(t, authtest.Claims{Issuer: "https://evil.example.com"})
+		}},
+		{"wrong audience", func(t *testing.T) string {
+			return iss.Sign(t, authtest.Claims{Audience: "https://other-api.example.com"})
+		}},
+		{"expired", func(t *testing.T) string {
+			return iss.Sign(t, authtest.Claims{
+				IssuedAt:  time.Now().Add(-2 * time.Hour),
+				ExpiresAt: time.Now().Add(-time.Hour),
+			})
+		}},
+		{"not yet valid", func(t *testing.T) string {
+			return iss.Sign(t, authtest.Claims{
+				NotBefore: time.Now().Add(time.Hour),
+				ExpiresAt: time.Now().Add(2 * time.Hour),
+			})
+		}},
+		{"missing expiry", func(t *testing.T) string {
+			return iss.Sign(t, authtest.Claims{NoExpiry: true})
+		}},
+		{"unsigned", func(t *testing.T) string {
+			return iss.Sign(t, authtest.Claims{Method: methodNoneForTest()})
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := doRequest(r, http.MethodGet, "/api/bookshelf", tc.token(t))
+			if w.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401 (%s)", w.Code, w.Body.String())
+			}
+			if strings.Contains(w.Body.String(), "kid") || strings.Contains(w.Body.String(), "signature") {
+				t.Fatalf("verification internals leaked: %s", w.Body.String())
+			}
+		})
+	}
+}
+
+func TestFirstLoginCreatesLocalUserAndMeReturnsIt(t *testing.T) {
+	svc, client, iss := newTestService(t)
+	r := newTestRouter(svc)
+
+	token := iss.Sign(t, authtest.Claims{
+		Subject:       "kp_alice",
+		Email:         "alice@example.com",
+		EmailVerified: true,
+		Name:          "Alice",
+		Picture:       "https://cdn.example.com/alice.png",
+	})
+
+	w := doRequest(r, http.MethodGet, "/api/auth/me", token)
+	if w.Code != http.StatusOK {
+		t.Fatalf("me = %d %s", w.Code, w.Body.String())
+	}
+	var me struct {
+		ID        string  `json:"id"`
+		UserID    string  `json:"user_id"`
+		Email     string  `json:"email"`
+		Name      string  `json:"name"`
+		AvatarURL *string `json:"avatar_url"`
+		Status    string  `json:"status"`
+		Role      string  `json:"role"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &me); err != nil {
+		t.Fatalf("decode me: %v", err)
+	}
+	if me.ID == "" || me.UserID != "kp_alice" {
+		t.Fatalf("identity = %+v, want local id and user_id=kp_alice", me)
+	}
+	if me.Email != "alice@example.com" || me.Name != "Alice" || me.AvatarURL == nil {
+		t.Fatalf("profile = %+v", me)
+	}
+	if me.Status != config.StatusActive || me.Role != config.RoleUser {
+		t.Fatalf("status/role = %q/%q", me.Status, me.Role)
+	}
+
+	rows, err := client.User.Query().Where(user.UserIDEQ("kp_alice")).All(t.Context())
+	if err != nil {
+		t.Fatalf("query users: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("users = %d, want 1", len(rows))
+	}
+
+	// A second login must reuse the row, not create another.
+	doRequest(r, http.MethodGet, "/api/auth/me", token)
+	count, _ := client.User.Query().Count(t.Context())
+	if count != 1 {
+		t.Fatalf("users after second login = %d, want 1", count)
+	}
+}
+
+func TestConcurrentFirstLoginCreatesOneUser(t *testing.T) {
+	svc, client, iss := newTestService(t)
+	r := newTestRouter(svc)
+	token := iss.Sign(t, authtest.Claims{Subject: "kp_concurrent"})
+
+	const requests = 12
+	var wg sync.WaitGroup
+	codes := make([]int, requests)
+	for i := 0; i < requests; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			codes[index] = doRequest(r, http.MethodGet, "/api/auth/me", token).Code
+		}(i)
+	}
+	wg.Wait()
+
+	for _, code := range codes {
+		if code != http.StatusOK {
+			t.Fatalf("concurrent login status = %d, want 200", code)
+		}
+	}
 	count, err := client.User.Query().Count(t.Context())
 	if err != nil {
 		t.Fatalf("count users: %v", err)
 	}
-	if count != 0 {
-		t.Fatalf("users = %d, want 0 after rejected registrations", count)
+	if count != 1 {
+		t.Fatalf("users = %d, want 1", count)
 	}
 }
 
-func TestEnsureAdminDoesNotOverwriteExistingPassword(t *testing.T) {
-	svc, client := newTestService(t)
+func TestDisabledUserGetsForbidden(t *testing.T) {
+	svc, client, iss := newTestService(t)
+	r := newTestRouter(svc)
+	token := iss.Sign(t, authtest.Claims{Subject: "kp_disabled"})
 
-	changed := New(client, func() config.AuthConfig {
-		cfg := testConfig(strings.Repeat("k", 32))
-		cfg.AdminPassword = "another-password"
-		return cfg
-	}())
-	created, err := changed.EnsureAdmin(t.Context())
-	if err != nil {
-		t.Fatalf("EnsureAdmin: %v", err)
+	if w := doRequest(r, http.MethodGet, "/api/bookshelf", token); w.Code != http.StatusOK {
+		t.Fatalf("initial login = %d %s", w.Code, w.Body.String())
 	}
-	if created {
-		t.Fatal("EnsureAdmin created a second administrator")
+	if _, err := client.User.Update().
+		Where(user.UserIDEQ("kp_disabled")).
+		SetStatus(config.StatusDisabled).
+		Save(t.Context()); err != nil {
+		t.Fatalf("disable user: %v", err)
 	}
-	u, err := client.User.Query().Only(t.Context())
+
+	w := doRequest(r, http.MethodGet, "/api/bookshelf", token)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("disabled status = %d, want 403 (%s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"error":"forbidden"`) {
+		t.Fatalf("body = %s", w.Body.String())
+	}
+}
+
+func TestPublicRoutesNeedNoToken(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	r := newTestRouter(svc)
+
+	if w := doRequest(r, http.MethodGet, "/healthz", ""); w.Code != http.StatusOK {
+		t.Fatalf("healthz = %d", w.Code)
+	}
+	if w := doRequest(r, http.MethodPost, "/api/sync/push", ""); w.Code != http.StatusOK {
+		t.Fatalf("sync push = %d", w.Code)
+	}
+}
+
+func TestMediaCookieIsLimitedToNativeGetRoutes(t *testing.T) {
+	svc, _, iss := newTestService(t)
+	r := newTestRouter(svc)
+	token := iss.Sign(t, authtest.Claims{Subject: "kp_cookie"})
+
+	// A normal bearer call sets the bridge cookie.
+	w := doRequest(r, http.MethodGet, "/api/bookshelf", token)
+	if w.Code != http.StatusOK {
+		t.Fatalf("bearer call = %d", w.Code)
+	}
+	found := false
+	for _, cookie := range w.Result().Cookies() {
+		if cookie.Name == CookieName && cookie.Value == token {
+			found = true
+			if !cookie.HttpOnly {
+				t.Fatal("bridge cookie is not HttpOnly")
+			}
+			if cookie.Path != "/api" {
+				t.Fatalf("cookie path = %q, want /api", cookie.Path)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("bearer call did not set the bridge cookie")
+	}
+	cookie := &http.Cookie{Name: CookieName, Value: token}
+
+	// Native image and SSE routes accept the cookie.
+	if got := doRequest(r, http.MethodGet, "/api/image/page", "", cookie).Code; got != http.StatusOK {
+		t.Fatalf("image via cookie = %d", got)
+	}
+	if got := doRequest(r, http.MethodGet, "/api/events/changes", "", cookie).Code; got != http.StatusOK {
+		t.Fatalf("events via cookie = %d", got)
+	}
+	// Business and state-changing routes never accept the cookie.
+	if got := doRequest(r, http.MethodGet, "/api/bookshelf", "", cookie).Code; got != http.StatusUnauthorized {
+		t.Fatalf("bookshelf via cookie = %d, want 401", got)
+	}
+	if got := doRequest(r, http.MethodPost, "/api/auth/logout", "", cookie).Code; got != http.StatusUnauthorized {
+		t.Fatalf("logout via cookie = %d, want 401", got)
+	}
+}
+
+func TestLogoutBumpsTokenVersionAndClearsCookie(t *testing.T) {
+	svc, client, iss := newTestService(t)
+	r := newTestRouter(svc)
+	token := iss.Sign(t, authtest.Claims{Subject: "kp_logout"})
+
+	if w := doRequest(r, http.MethodGet, "/api/bookshelf", token); w.Code != http.StatusOK {
+		t.Fatalf("login = %d", w.Code)
+	}
+	w := doRequest(r, http.MethodPost, "/api/auth/logout", token)
+	if w.Code != http.StatusOK {
+		t.Fatalf("logout = %d %s", w.Code, w.Body.String())
+	}
+	cleared := false
+	for _, cookie := range w.Result().Cookies() {
+		if cookie.Name == CookieName && cookie.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Fatal("logout did not clear the bridge cookie")
+	}
+	u, err := client.User.Query().Where(user.UserIDEQ("kp_logout")).Only(t.Context())
 	if err != nil {
 		t.Fatalf("query user: %v", err)
 	}
-	if !VerifyPassword(u.PasswordHash, "password123") {
-		t.Fatal("existing password was overwritten")
+	if u.TokenVersion != 1 {
+		t.Fatalf("token_version = %d, want 1", u.TokenVersion)
 	}
-	if VerifyPassword(u.PasswordHash, "another-password") {
-		t.Fatal("new environment password replaced the stored hash")
-	}
-	_ = svc
 }
 
-func TestStatusIsPublicAndReportsInitialized(t *testing.T) {
-	svc, _ := newTestService(t)
+func TestAdminAllowlistPromotesVerifiedEmailOnly(t *testing.T) {
+	svc, client, iss := newTestService(t, "boss@example.com")
 	r := newTestRouter(svc)
 
-	w := doJSON(r, http.MethodGet, "/api/auth/status", "", "")
+	verified := iss.Sign(t, authtest.Claims{
+		Subject:       "kp_boss",
+		Email:         "boss@example.com",
+		EmailVerified: true,
+	})
+	if w := doRequest(r, http.MethodGet, "/api/bookshelf", verified); w.Code != http.StatusOK {
+		t.Fatalf("verified admin login = %d %s", w.Code, w.Body.String())
+	}
+	u, _ := client.User.Query().Where(user.UserIDEQ("kp_boss")).Only(t.Context())
+	if u.Role != config.RoleAdmin {
+		t.Fatalf("role = %q, want admin", u.Role)
+	}
+
+	unverified := iss.Sign(t, authtest.Claims{
+		Subject:       "kp_unverified",
+		Email:         "boss@example.com",
+		EmailVerified: false,
+	})
+	if w := doRequest(r, http.MethodGet, "/api/bookshelf", unverified); w.Code != http.StatusOK {
+		t.Fatalf("unverified login = %d %s", w.Code, w.Body.String())
+	}
+	u2, _ := client.User.Query().Where(user.UserIDEQ("kp_unverified")).Only(t.Context())
+	if u2.Role != config.RoleUser {
+		t.Fatalf("unverified role = %q, want user", u2.Role)
+	}
+}
+
+func TestMeIgnoresClientSuppliedUserID(t *testing.T) {
+	svc, _, iss := newTestService(t)
+	r := newTestRouter(svc)
+	token := iss.Sign(t, authtest.Claims{Subject: "kp_owner"})
+
+	w := doRequest(r, http.MethodGet, "/api/auth/me?user_id=kp_someone_else", token)
 	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", w.Code)
+		t.Fatalf("me = %d", w.Code)
 	}
-	var res struct {
-		Initialized bool `json:"initialized"`
-		User        *struct {
-			Username string `json:"username"`
-		} `json:"user"`
+	var me struct {
+		UserID string `json:"user_id"`
 	}
-	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
-		t.Fatalf("decode status: %v", err)
-	}
-	if !res.Initialized {
-		t.Fatalf("status = %+v, want initialized", res)
-	}
-	if res.User != nil {
-		t.Fatalf("anonymous status included a user: %+v", res.User)
-	}
-}
-
-// The SPA restores a refresh with a single /api/auth/status call, so that
-// probe must return the signed-in identity instead of forcing a second /me
-// round-trip.
-func TestStatusIncludesUserForValidToken(t *testing.T) {
-	svc, _ := newTestService(t)
-	r := newTestRouter(svc)
-
-	token, w := login(t, r, "admin", "password123")
-	if token == "" {
-		t.Fatalf("login failed: %d %s", w.Code, w.Body.String())
-	}
-
-	w = doJSON(r, http.MethodGet, "/api/auth/status", "", token)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (%s)", w.Code, w.Body.String())
-	}
-	var res struct {
-		Initialized bool `json:"initialized"`
-		User        *struct {
-			ID       string `json:"id"`
-			UserID   string `json:"user_id"`
-			Username string `json:"username"`
-			Role     string `json:"role"`
-		} `json:"user"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
-		t.Fatalf("decode status: %v", err)
-	}
-	if res.User == nil {
-		t.Fatalf("status without user for a valid token: %s", w.Body.String())
-	}
-	if res.User.Username != "admin" || res.User.Role != config.RoleAdmin {
-		t.Fatalf("status user = %+v, want the admin identity", res.User)
-	}
-	if res.User.ID == "" || res.User.ID != res.User.UserID {
-		t.Fatalf("status user ids = %q/%q, want one shared id", res.User.ID, res.User.UserID)
-	}
-}
-
-func TestBasicAuthHeaderIsNotAccepted(t *testing.T) {
-	svc, _ := newTestService(t)
-	r := newTestRouter(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/bookshelf", nil)
-	req.SetBasicAuth("admin", "password123")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("Basic auth header = %d, want 401", w.Code)
+	_ = json.Unmarshal(w.Body.Bytes(), &me)
+	if me.UserID != "kp_owner" {
+		t.Fatalf("user_id = %q, want kp_owner", me.UserID)
 	}
 }

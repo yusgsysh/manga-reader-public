@@ -12,13 +12,14 @@ import (
 	"entgo.io/ent/schema/index"
 )
 
-// User is an account of the installation. Usernames are unique across the
-// whole instance: a user is no longer scoped to a tenant.
+// User is a local account of the installation. Identity is delegated to
+// Kinde: UserID stores the verified JWT "sub" and is the only external
+// identity key. Email is profile data, never an identity key.
 //
-// Passwords are stored as Argon2id PHC strings (never plaintext). TokenVersion
-// is embedded in every JWT as the "ver" claim; logout increments it so all
-// previously issued tokens are rejected by the middleware without keeping a
-// list of revoked token IDs.
+// PasswordHash is retained for legacy rows only; interactive password login is
+// no longer offered (Kinde owns login/register).
+// TokenVersion is bumped on logout/disable so any derived browser session
+// (the media cookie) is rejected immediately.
 //
 // Every private row (bookshelf, reading progress, prefill jobs, tag rules,
 // sync outbox, personal settings and ExHentai cookie) carries this user's ID
@@ -40,16 +41,35 @@ func (User) Fields() []ent.Field {
 		field.UUID("id", ident.UUID{}).
 			Default(uuidV7).
 			SchemaType(uuidSchemaType),
+		// user_id is the verified Kinde subject ("sub"). Optional so legacy
+		// rows can coexist; unique so concurrent first logins cannot create
+		// two local accounts for one Kinde identity. The local primary key is
+		// the UUID "id" above; user_id is an external identity, never a
+		// client-supplied user id.
+		field.String("user_id").
+			Optional().
+			Unique(),
+		// username remains a unique local display handle for legacy rows and
+		// the admin UI. New Kinde users get a deterministic handle derived
+		// from their subject; email is stored separately and is not unique.
 		field.String("username").
 			NotEmpty().
 			Unique(),
 		field.String("password_hash").
-			NotEmpty().
+			Optional().
 			Sensitive(),
+		field.String("email").
+			Optional(),
+		field.String("name").
+			Optional(),
+		field.String("avatar_url").
+			Optional(),
 		// admin: manages users, nodes and instance-wide settings.
 		// user: owns business data and personal settings only.
 		field.String("role").
 			Default("user"),
+		// active or disabled. disabled is enforced on every request, even
+		// while the Kinde access token is still valid.
 		field.String("status").
 			Default("active"),
 		field.Int("token_version").

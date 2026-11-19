@@ -11,11 +11,14 @@ import (
 	"manga-reader/internal/ent/appsetting"
 )
 
-// jwtSecretKey is the app_setting key under which the generated JWT secret is
-// persisted when JWT_SECRET is not set in the environment.
+// jwtSecretKey is the app_setting key under which the generated local secret
+// is persisted when JWT_SECRET is not set in the environment. The key name is
+// kept for backwards compatibility; the secret no longer signs user sessions,
+// it derives the AES-GCM key for per-user ExHentai cookies.
 const jwtSecretKey = "auth.jwt_secret"
 
-// ResolveSecret returns the JWT secret to use for this process.
+// ResolveSecret returns the local secret used to derive the ExHentai cookie
+// encryption key for this process.
 //
 // An explicit JWT_SECRET always wins (callers validate its length before
 // reaching here). Otherwise the secret is read from the app_setting table; on

@@ -5,11 +5,23 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./AuthContext";
 import { useAuth } from "./auth";
-import {
-  fetchChecked,
-  getAccessToken,
-  setAccessToken,
-} from "../api/client";
+import { fetchChecked, setAccessToken } from "../api/client";
+
+const kinde = vi.hoisted(() => ({
+  current: {
+    isLoading: false,
+    isAuthenticated: false,
+    getAccessToken: vi.fn(async () => "signed.jwt.token"),
+    refreshToken: vi.fn(async () => ({ success: true })),
+    login: vi.fn(async () => undefined),
+    register: vi.fn(async () => undefined),
+    logout: vi.fn(async () => undefined),
+  },
+}));
+
+vi.mock("@kinde-oss/kinde-auth-react", () => ({
+  useKindeAuth: () => kinde.current,
+}));
 
 interface RecordedCall {
   url: string;
@@ -38,37 +50,38 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-const meResponse = {
-  id: 1,
-  user_id: 1,
-  username: "alice",
+const me = {
+  id: "00000000-0000-7000-8000-000000000001",
+  user_id: "kp_alice",
+  username: "kinde_1234567890abcdef",
+  email: "alice@example.com",
+  name: "Alice",
+  avatar_url: null,
   role: "admin",
+  status: "active",
 };
 
 function Probe() {
-  const { user, isLoading, error, login, logout, isAdmin, isAuthenticated } =
-    useAuth();
+  const {
+    user,
+    isLoading,
+    error,
+    login,
+    logout,
+    isAdmin,
+    isAuthenticated,
+  } = useAuth();
   if (isLoading) return <div>loading</div>;
   return (
     <div>
-      <span data-testid="username">{user?.username ?? "anon"}</span>
+      <span data-testid="username">{user?.name ?? "anon"}</span>
       <span data-testid="admin">{String(isAdmin)}</span>
       <span data-testid="authed">{String(isAuthenticated)}</span>
       {error && <span data-testid="error">{error.message}</span>}
-      <button
-        onClick={() => {
-          void login("alice", "secret-pass").catch(() => {});
-        }}
-      >
+      <button onClick={() => void login("/bookshelf").catch(() => {})}>
         login
       </button>
-      <button
-        onClick={() => {
-          void logout();
-        }}
-      >
-        logout
-      </button>
+      <button onClick={() => void logout()}>logout</button>
     </div>
   );
 }
@@ -87,80 +100,103 @@ function renderAuth() {
   return queryClient;
 }
 
+function resetKinde() {
+  kinde.current = {
+    isLoading: false,
+    isAuthenticated: false,
+    getAccessToken: vi.fn(async () => "signed.jwt.token"),
+    refreshToken: vi.fn(async () => ({ success: true })),
+    login: vi.fn(async () => undefined),
+    register: vi.fn(async () => undefined),
+    logout: vi.fn(async () => undefined),
+  };
+  sessionStorage.clear();
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   setAccessToken(null);
+  resetKinde();
 });
 
 describe("AuthProvider", () => {
-  it("restores the session from the HttpOnly cookie with one probe", async () => {
-    const calls = mockFetch((url) => {
-      if (url.endsWith("/api/auth/status")) {
-        return json({ initialized: true, user: meResponse });
-      }
+  it("shows the loading state while the SDK restores a session", () => {
+    resetKinde();
+    kinde.current.isLoading = true;
+    mockFetch(() => json({}, 500));
+    renderAuth();
+    expect(screen.getByText("loading")).toBeTruthy();
+  });
+
+  it("stays signed out without calling /api/auth/me when Kinde has no session", async () => {
+    resetKinde();
+    const calls = mockFetch(() => json({}, 404));
+    renderAuth();
+
+    expect(await screen.findByText("anon")).toBeTruthy();
+    expect(screen.getByTestId("authed").textContent).toBe("false");
+    expect(calls.some((call) => call.url.endsWith("/api/auth/me"))).toBe(false);
+  });
+
+  it("restores the local identity from /api/auth/me after a Kinde refresh", async () => {
+    resetKinde();
+    kinde.current.isAuthenticated = true;
+    mockFetch((url) => {
+      if (url.endsWith("/api/auth/me")) return json(me);
       return json({ error: "not found" }, 404);
     });
 
     renderAuth();
 
-    expect(await screen.findByText("alice")).toBeTruthy();
+    expect(await screen.findByText("Alice")).toBeTruthy();
     expect(screen.getByTestId("admin").textContent).toBe("true");
     expect(screen.getByTestId("authed").textContent).toBe("true");
-    expect(calls.some((call) => call.url.endsWith("/api/auth/me"))).toBe(false);
   });
 
-  it("exposes a terminal error when the session cannot be loaded", async () => {
-    mockFetch((url) => {
-      if (url.endsWith("/api/auth/status")) return json({ error: "boom" }, 500);
-      return json({}, 500);
-    });
+  it("treats a 401 from /me as signed out, not as an error", async () => {
+    resetKinde();
+    kinde.current.isAuthenticated = true;
+    mockFetch(() => json({ error: "unauthorized" }, 401));
+    renderAuth();
 
+    expect(await screen.findByText("anon")).toBeTruthy();
+    expect(screen.queryByTestId("error")).toBeNull();
+  });
+
+  it("surfaces a disabled local account instead of redirecting", async () => {
+    resetKinde();
+    kinde.current.isAuthenticated = true;
+    mockFetch(() => json({ error: "forbidden" }, 403));
     renderAuth();
 
     expect(await screen.findByTestId("error")).toBeTruthy();
-    expect(screen.getByTestId("username").textContent).toBe("anon");
+    expect(screen.getByTestId("error").textContent).toContain("账号已被禁用");
   });
 
-  it("updates the session from the login response", async () => {
-    const calls = mockFetch((url) => {
-      if (url.endsWith("/api/auth/status")) {
-        return json({ initialized: true, user: null });
-      }
-      if (url.endsWith("/api/auth/login")) {
-        return json({
-          access_token: "signed.jwt.token",
-          token_type: "Bearer",
-          expires_in: 3600,
-          user: meResponse,
-        });
-      }
-      return json({ error: "not found" }, 404);
-    });
-
+  it("remembers the destination and starts the Kinde login redirect", async () => {
+    resetKinde();
+    mockFetch(() => json({}, 404));
     renderAuth();
-    expect(await screen.findByText("anon")).toBeTruthy();
+    await screen.findByText("anon");
 
     await userEvent.click(screen.getByRole("button", { name: "login" }));
 
-    expect(await screen.findByText("alice")).toBeTruthy();
-    expect(screen.getByTestId("authed").textContent).toBe("true");
-    // No follow-up identity request on the login path either.
-    expect(calls.some((call) => call.url.endsWith("/api/auth/me"))).toBe(false);
+    expect(kinde.current.login).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem("manga-reader:return-to")).toBe("/bookshelf");
   });
 
-  it("clears user data, cached queries, and the in-memory token on logout", async () => {
-    const calls = mockFetch((url) => {
-      if (url.endsWith("/api/auth/status")) {
-        return json({ initialized: true, user: meResponse });
-      }
+  it("revokes local state and calls the SDK logout", async () => {
+    resetKinde();
+    kinde.current.isAuthenticated = true;
+    mockFetch((url) => {
+      if (url.endsWith("/api/auth/me")) return json(me);
       if (url.endsWith("/api/auth/logout")) return json({ success: true });
       return json({ error: "not found" }, 404);
     });
 
     const queryClient = renderAuth();
-    expect(await screen.findByText("alice")).toBeTruthy();
+    expect(await screen.findByText("Alice")).toBeTruthy();
     queryClient.setQueryData(["bookshelf", 1], { total: 1 });
-    setAccessToken("signed.jwt.token");
 
     await userEvent.click(screen.getByRole("button", { name: "logout" }));
 
@@ -168,34 +204,47 @@ describe("AuthProvider", () => {
       expect(screen.getByTestId("username").textContent).toBe("anon");
     });
     expect(queryClient.getQueryData(["bookshelf", 1])).toBeUndefined();
-    expect(getAccessToken()).toBeNull();
-    const logoutCall = calls.find((call) => call.url.endsWith("/api/auth/logout"));
-    expect(new Headers(logoutCall?.init?.headers).get("Authorization")).toBe(
+    expect(kinde.current.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it("attaches the SDK access token to API requests", async () => {
+    resetKinde();
+    kinde.current.isAuthenticated = true;
+    const calls = mockFetch((url) => {
+      if (url.endsWith("/api/auth/me")) return json(me);
+      return json({ ok: true });
+    });
+    renderAuth();
+    await screen.findByText("Alice");
+
+    await act(async () => {
+      await fetchChecked("/api/bookshelf");
+    });
+
+    const call = calls.find((entry) => entry.url.endsWith("/api/bookshelf"));
+    expect(new Headers(call?.init?.headers).get("Authorization")).toBe(
       "Bearer signed.jwt.token",
     );
   });
 
-  it("resets the session and caches on a 401 from any API call", async () => {
+  it("clears the identity and caches on a 401 from a business API", async () => {
+    resetKinde();
+    kinde.current.isAuthenticated = true;
     mockFetch((url) => {
-      if (url.endsWith("/api/auth/status")) {
-        return json({ initialized: true, user: meResponse });
-      }
-      if (url.endsWith("/api/bookshelf")) return json({ error: "unauthorized" }, 401);
-      return json({ error: "not found" }, 404);
+      if (url.endsWith("/api/auth/me")) return json(me);
+      return json({ error: "unauthorized" }, 401);
     });
-
     const queryClient = renderAuth();
-    expect(await screen.findByText("alice")).toBeTruthy();
+    await screen.findByText("Alice");
     queryClient.setQueryData(["bookshelf", 1], { total: 1 });
 
     await act(async () => {
-      await expect(fetchChecked("http://localhost/api/bookshelf")).rejects.toThrow();
+      await expect(fetchChecked("/api/bookshelf")).rejects.toThrow();
     });
 
     await waitFor(() => {
       expect(screen.getByTestId("username").textContent).toBe("anon");
     });
     expect(queryClient.getQueryData(["bookshelf", 1])).toBeUndefined();
-    expect(getAccessToken()).toBeNull();
   });
 });

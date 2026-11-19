@@ -6,9 +6,29 @@ ExHentai Web 漫画客户端的前端。
 
 ## 登录与认证
 
-后端始终启用多用户 JWT。未登录访问受保护页面时会跳转至 `/login`；登录表单只需要用户名和密码。登录成功后 JWT 由后端写入 `HttpOnly; SameSite=Lax` Cookie（前端只保留内存副本用于同标签页的 `Authorization` 头），登录响应同时带回当前用户，刷新页面则通过 `/api/auth/status` 恢复用户和角色。任何 API 返回 `401` 都会统一清理认证状态并跳回登录页。
+登录、注册与身份由 **Kinde** 托管。`KindeProvider` 在最外层初始化，`AuthProvider` 只负责：
 
-「设置」页集中了个人设置（外观、ExHentai Cookie、标签规则、标签翻译数据库、数据同步）与管理员功能（用户管理、API Key）；管理员登录后才会看到「用户管理」与「API Key」两个区块，后端也会独立校验角色。每个用户的 ExHentai Cookie 与个人设置在「设置」页独立维护。
+- 从 SDK 获取 Access Token（按需 `refreshToken`），供 `api/client.ts` 自动加 `Authorization: Bearer`；
+- 登录 / 注册 / 退出跳转；
+- 调用 `GET /api/auth/me` 恢复本地用户、角色与启用状态；
+- 401 清理本地会话；403 显示「账号已被禁用」，不会当成未登录反复跳转。
+
+页面刷新后由 SDK 恢复 Kinde 会话，再向后端拉取 `/api/auth/me`；不把 Token 写入 `localStorage`。`<img>`、EventSource 与下载链接使用后端下发的 `HttpOnly` 媒体 Cookie（只对原生 GET 路由有效），业务 API 始终使用 Bearer Token。
+
+前端需要以下公开环境变量（见 `.env.example`）：
+
+```env
+VITE_KINDE_DOMAIN=https://<tenant>.kinde.com
+VITE_KINDE_CLIENT_ID=<Application Client ID>
+VITE_KINDE_REDIRECT_URI=http://localhost:5173
+VITE_KINDE_LOGOUT_URI=http://localhost:5173/login
+VITE_KINDE_AUDIENCE=https://api.manga.example.com
+VITE_API_BASE_URL=http://localhost:8080
+```
+
+这些值会烘焙进生产构建；Docker 构建时通过 `--build-arg` 传入，**不要**把 Client Secret 放进任何 `VITE_*` 变量。
+
+「设置」页集中了个人设置（外观、ExHentai Cookie、标签规则、标签翻译数据库、数据同步）与管理员功能（用户管理、API Key）；管理员登录后才会看到「用户管理」与「API Key」两个区块，后端也会独立校验角色。账号由 Kinde 首次登录自动创建，管理员只调整本地角色与启用状态。每个用户的 ExHentai Cookie 与个人设置在「设置」页独立维护。
 
 ## 技术栈
 

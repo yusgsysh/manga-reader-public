@@ -43,9 +43,6 @@ export const SettingsPage = lazy(() =>
 export const LoginPage = lazy(() =>
   import("../pages/LoginPage").then((m) => ({ default: m.LoginPage })),
 );
-export const SetupPage = lazy(() =>
-  import("../pages/SetupPage").then((m) => ({ default: m.SetupPage })),
-);
 
 export function LazyPage({ children }: { children: ReactNode }) {
   return <Suspense fallback={<LoadingScreen />}>{children}</Suspense>;

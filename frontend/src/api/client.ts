@@ -5,11 +5,13 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
   (import.meta.env.DEV ? "http://localhost:8080" : "");
 
-// The JWT returned by /api/auth/login is primarily stored by the browser in an
-// HttpOnly cookie (set server-side). This in-memory copy lets same-tab calls
-// send the standard Authorization header without exposing the token to
-// localStorage/XSS. A refresh restores the session through the cookie.
+// Access tokens are owned by the Kinde SDK (refresh, storage and rotation).
+// The client asks this provider for a token on every request instead of
+// keeping a second copy in application state. `setAccessToken` remains for
+// tests and non-Kinde callers that explicitly manage a single token.
 let accessToken: string | null = null;
+let accessTokenProvider: (() => Promise<string | null | undefined>) | null =
+  null;
 
 export function setAccessToken(token: string | null): void {
   accessToken = token;
@@ -17,6 +19,25 @@ export function setAccessToken(token: string | null): void {
 
 export function getAccessToken(): string | null {
   return accessToken;
+}
+
+/** Installs the single source of access tokens (normally Kinde). */
+export function setAccessTokenProvider(
+  provider: (() => Promise<string | null | undefined>) | null,
+): void {
+  accessTokenProvider = provider;
+}
+
+async function currentAccessToken(): Promise<string | null> {
+  if (accessToken) return accessToken;
+  if (!accessTokenProvider) return null;
+  try {
+    return (await accessTokenProvider()) ?? null;
+  } catch {
+    // A refresh failure must not turn every API call into an exception; the
+    // request proceeds without a token and the server's 401 drives the UI.
+    return null;
+  }
 }
 
 let unauthorizedHandler: (() => void) | null = null;
@@ -67,19 +88,20 @@ export function buildApiUrl(
 }
 
 export async function fetchChecked(path: string, init?: RequestInit): Promise<Response> {
-  // Same-origin requests send the HttpOnly cookie by default. In the Vite
-  // dev setup the API is cross-origin (5173 -> 8080) and needs an explicit
-  // credentials mode. Keep the original init object otherwise so existing
-  // callers/tests see an unchanged fetch contract.
+  // Same-origin requests are authenticated only by the explicit Bearer header;
+  // the backend's media cookie is reserved for <img>/SSE/download requests.
+  // In the Vite dev setup the API is cross-origin (5173 -> 8080) and needs an
+  // explicit credentials mode.
   const crossOrigin =
     typeof window !== "undefined" &&
     new URL(path, window.location.origin).origin !== window.location.origin;
+  const token = await currentAccessToken();
 
   let nextInit = init;
-  if (accessToken || crossOrigin) {
+  if (token || crossOrigin) {
     const headers = new Headers(init?.headers);
-    if (accessToken && !headers.has("Authorization")) {
-      headers.set("Authorization", `Bearer ${accessToken}`);
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
     }
     nextInit = {
       ...init,
@@ -97,8 +119,10 @@ export async function fetchChecked(path: string, init?: RequestInit): Promise<Re
     } catch {
       // ignore parse error
     }
-    // A failed login is an expected credential error, not a session expiry.
-    if (res.status === 401 && !path.includes("/api/auth/login")) {
+    // 401 means the Kinde session or its refresh is no longer usable. 403 is a
+    // valid identity without application access (e.g. a locally disabled
+    // user) and must not clear the session.
+    if (res.status === 401) {
       notifyUnauthorized();
     }
     throw new ApiRequestError(res.status, message);

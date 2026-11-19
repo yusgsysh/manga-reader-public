@@ -1,18 +1,17 @@
-import {
-  apiDelete,
-  apiGet,
-  apiPatchJson,
-  apiPostJson,
-  apiPut,
-} from "./client";
+import { apiDelete, apiGet, apiPatchJson, apiPut } from "./client";
 
 type UserStatus = "active" | "disabled";
 export type UserRole = "admin" | "user";
 
 export interface AdminUser {
+  /** Local user id (UUID). */
   id: string;
+  /** Verified Kinde subject. */
   user_id: string;
   username: string;
+  email: string;
+  name: string;
+  avatar_url: string | null;
   role: UserRole;
   status: UserStatus;
   created_at: string;
@@ -23,20 +22,8 @@ export function fetchUsers(): Promise<{ users: AdminUser[] }> {
   return apiGet<{ users: AdminUser[] }>("/api/admin/users");
 }
 
-interface CreateUserInput {
-  username: string;
-  password: string;
-  role?: UserRole;
-  status?: UserStatus;
-}
-
-export function createUser(input: CreateUserInput): Promise<AdminUser> {
-  return apiPostJson<AdminUser>("/api/admin/users", input);
-}
-
 interface UpdateUserInput {
   username?: string;
-  password?: string;
   role?: UserRole;
   status?: UserStatus;
 }

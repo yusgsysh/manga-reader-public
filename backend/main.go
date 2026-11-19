@@ -209,36 +209,41 @@ func run() error {
 	}
 	defer db.Close()
 
-	// Resolve the JWT signing key. JWT_SECRET in the environment wins; without
-	// it the key is loaded from the database (generated and persisted on the
-	// very first boot), so sessions and encrypted ExHentai cookies survive
-	// restarts with no operator configuration.
+	// Resolve the local secret. It encrypts per-user ExHentai cookies; user
+	// authentication itself is delegated to Kinde. JWT_SECRET in the
+	// environment wins; without it the value is loaded from the database
+	// (generated and persisted on the very first boot).
 	secret, secretGenerated, err := auth.ResolveSecret(context.Background(), db.Client, cfg.Auth.JWTSecret)
 	if err != nil {
-		logger.Error("resolve JWT secret failed", "error", err)
+		logger.Error("resolve local secret failed", "error", err)
 		return err
 	}
 	cfg.Auth.JWTSecret = secret
 
+	if cfg.Kinde.Issuer == "" || cfg.Kinde.Audience == "" {
+		logger.Error("Kinde authentication is not configured", "missing", "KINDE_ISSUER / KINDE_API_AUDIENCE")
+		return errors.New("KINDE_ISSUER and KINDE_API_AUDIENCE are required")
+	}
+
 	// ExHentai sessions are per user, stored encrypted in user_setting.
 	userCookies := usercookie.New(db.Client, cfg.Auth.JWTSecret)
-	authSvc := auth.New(db.Client, cfg.Auth)
-	createdAdmin, err := authSvc.EnsureAdmin(context.Background())
+
+	// Discovery + JWKS fetch happens once here; the verifier then caches keys
+	// and refreshes them only when Kinde rotates to an unknown kid.
+	verifierCtx, cancelVerifier := context.WithTimeout(context.Background(), 20*time.Second)
+	verifier, err := auth.NewVerifier(verifierCtx, cfg.Kinde.Issuer, cfg.Kinde.Audience)
+	cancelVerifier()
 	if err != nil {
-		logger.Error("auth initialization failed", "error", err)
+		logger.Error("Kinde verifier initialization failed", "error", err)
 		return err
 	}
-	if createdAdmin {
-		logger.Info("administrator account initialized", "username", cfg.Auth.AdminUsername)
-	} else if initialized, err := authSvc.IsInitialized(context.Background()); err != nil {
-		logger.Error("check initialization failed", "error", err)
-		return err
-	} else if !initialized {
-		logger.Info("no administrator yet; create the first admin account through the web setup page")
-	}
-	logger.Info("JWT auth enabled", "issuer", cfg.Auth.JWTIssuer, "expires_in", cfg.Auth.ExpiresInSeconds())
+	authSvc := auth.New(db.Client, cfg.Auth, verifier, cfg.Kinde.AdminEmails, cfg.Kinde.AdminSubjects)
+	logger.Info("Kinde authentication enabled",
+		"issuer", verifier.Issuer(),
+		"audience", verifier.Audience(),
+	)
 	if secretGenerated {
-		logger.Info("generated and persisted a new JWT secret (JWT_SECRET was not set)")
+		logger.Info("generated and persisted a new local secret (JWT_SECRET was not set)")
 	}
 
 	keySvc := synckey.New(db.Client)
@@ -342,7 +347,7 @@ func run() error {
 	r.Use(securityHeadersMiddleware())
 	r.Use(csrfGuard(corsOrigins))
 	// Default-deny for /api/*: only publicAPIs and the sync-key peer routes
-	// pass without a valid user JWT.
+	// pass without a verified Kinde access token.
 	r.Use(authSvc.Middleware())
 	r.Use(adminOnlyMiddleware())
 

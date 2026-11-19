@@ -11,10 +11,10 @@ func setTestEnv(t *testing.T) {
 	// settings must not leak into unrelated tests.
 	for _, key := range []string{
 		"JWT_SECRET",
-		"JWT_ISSUER",
-		"JWT_EXPIRES_IN",
-		"ADMIN_USERNAME",
-		"ADMIN_PASSWORD",
+		"KINDE_ISSUER",
+		"KINDE_API_AUDIENCE",
+		"KINDE_ADMIN_EMAILS",
+		"KINDE_ADMIN_SUBJECTS",
 		"MANGA_READER_AUTH_COOKIE_SECURE",
 		"MANGA_READER_METRICS_ENABLED",
 		"MANGA_READER_METRICS_TOKEN",
@@ -59,11 +59,11 @@ func TestLoad_EmptyJWTSecretIsAllowed(t *testing.T) {
 func TestLoad_AuthConfig(t *testing.T) {
 	setTestEnv(t)
 	t.Setenv("JWT_SECRET", "0123456789abcdef0123456789abcdef")
-	t.Setenv("JWT_ISSUER", "test-issuer")
-	t.Setenv("JWT_EXPIRES_IN", "2h")
-	t.Setenv("ADMIN_USERNAME", "root")
-	t.Setenv("ADMIN_PASSWORD", "correct horse battery staple")
 	t.Setenv("MANGA_READER_AUTH_COOKIE_SECURE", "true")
+	t.Setenv("KINDE_ISSUER", "https://tenant.kinde.com/")
+	t.Setenv("KINDE_API_AUDIENCE", "https://api.manga.example.com")
+	t.Setenv("KINDE_ADMIN_EMAILS", "Admin@Example.com, ops@example.com")
+	t.Setenv("KINDE_ADMIN_SUBJECTS", "kp_boss")
 
 	cfg, err := Load()
 	if err != nil {
@@ -72,14 +72,17 @@ func TestLoad_AuthConfig(t *testing.T) {
 	if cfg.Auth.JWTSecret != "0123456789abcdef0123456789abcdef" {
 		t.Fatalf("JWTSecret = %q", cfg.Auth.JWTSecret)
 	}
-	if cfg.Auth.JWTIssuer != "test-issuer" {
-		t.Fatalf("issuer = %q", cfg.Auth.JWTIssuer)
+	if cfg.Kinde.Issuer != "https://tenant.kinde.com" {
+		t.Fatalf("Kinde issuer = %q", cfg.Kinde.Issuer)
 	}
-	if cfg.Auth.ExpiresInSeconds() != 7200 {
-		t.Fatalf("expires = %d, want 7200", cfg.Auth.ExpiresInSeconds())
+	if cfg.Kinde.Audience != "https://api.manga.example.com" {
+		t.Fatalf("Kinde audience = %q", cfg.Kinde.Audience)
 	}
-	if cfg.Auth.AdminUsername != "root" {
-		t.Fatalf("admin username = %q", cfg.Auth.AdminUsername)
+	if len(cfg.Kinde.AdminEmails) != 2 || cfg.Kinde.AdminEmails[0] != "admin@example.com" {
+		t.Fatalf("admin emails = %v", cfg.Kinde.AdminEmails)
+	}
+	if len(cfg.Kinde.AdminSubjects) != 1 || cfg.Kinde.AdminSubjects[0] != "kp_boss" {
+		t.Fatalf("admin subjects = %v", cfg.Kinde.AdminSubjects)
 	}
 	if cfg.Auth.CookieSecureAuto || !cfg.Auth.CookieSecure {
 		t.Fatalf("cookie secure mode = %+v, want explicit true", cfg.Auth)
@@ -94,12 +97,14 @@ func TestLoad_AuthRejectsWeakSecret(t *testing.T) {
 	}
 }
 
-func TestLoad_AdminPasswordWithoutSecretStillStarts(t *testing.T) {
+func TestLoad_KindeDefaultsToEmpty(t *testing.T) {
 	setTestEnv(t)
-	t.Setenv("ADMIN_PASSWORD", "correct horse battery staple")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Kinde.Issuer != "" || cfg.Kinde.Audience != "" {
+		t.Fatalf("Kinde config = %+v, want empty (validated at startup)", cfg.Kinde)
 	}
 	if cfg.Auth.JWTSecret != "" {
 		t.Fatal("JWTSecret = non-empty, want empty when JWT_SECRET is unset")

@@ -7,12 +7,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"manga-reader/internal/ident"
 
 	"manga-reader/internal/auth"
+	"manga-reader/internal/authtest"
 	"manga-reader/internal/config"
 	"manga-reader/internal/database"
 	"manga-reader/internal/ent"
@@ -28,6 +28,7 @@ type muFixture struct {
 	userB  *ent.User
 	admin  *ent.User
 	cookie *usercookie.Service
+	issuer *authtest.Issuer
 }
 
 func newMUFixture(t *testing.T) *muFixture {
@@ -35,13 +36,15 @@ func newMUFixture(t *testing.T) *muFixture {
 	gin.SetMode(gin.TestMode)
 	db := newTestDB(t)
 	ctx := t.Context()
-	hash, err := auth.HashPassword("password123")
+	issuer := authtest.NewIssuer(t, "https://api.manga.example.com")
+	verifier, err := auth.NewVerifier(ctx, issuer.URL, "https://api.manga.example.com")
 	if err != nil {
-		t.Fatalf("hash password: %v", err)
+		t.Fatalf("new verifier: %v", err)
 	}
 	create := func(name, role string) *ent.User {
 		u, err := db.User.Create().
-			SetUsername(name).SetPasswordHash(hash).
+			SetUserID("kp_" + name).
+			SetUsername(name).
 			SetRole(role).SetStatus(config.StatusActive).Save(ctx)
 		if err != nil {
 			t.Fatalf("create user %s: %v", name, err)
@@ -53,12 +56,7 @@ func newMUFixture(t *testing.T) *muFixture {
 	admin := create("admin-a", config.RoleAdmin)
 
 	secret := strings.Repeat("m", 32)
-	authSvc := auth.New(db, config.AuthConfig{
-		JWTSecret:     secret,
-		JWTIssuer:     "mu-test",
-		JWTExpiresIn:  time.Hour,
-		AdminUsername: "ignored",
-	})
+	authSvc := auth.New(db, config.AuthConfig{JWTSecret: secret}, verifier, nil, nil)
 	cookies := usercookie.New(db, secret)
 	server := New(Config{DB: &database.DB{Client: db}, UserCookies: cookies})
 	r := gin.New()
@@ -67,7 +65,7 @@ func newMUFixture(t *testing.T) *muFixture {
 	server.RegisterRoutes(r)
 	t.Cleanup(server.StopPrefill)
 
-	return &muFixture{db: db, router: r, userA: userA, userB: userB, admin: admin, cookie: cookies}
+	return &muFixture{db: db, router: r, userA: userA, userB: userB, admin: admin, cookie: cookies, issuer: issuer}
 }
 
 func (f *muFixture) do(t *testing.T, method, path string, body any, token string) *httptest.ResponseRecorder {
@@ -96,19 +94,11 @@ func (f *muFixture) do(t *testing.T, method, path string, body any, token string
 
 func (f *muFixture) login(t *testing.T, username string) string {
 	t.Helper()
-	w := f.do(t, http.MethodPost, "/api/auth/login", map[string]string{
-		"username": username, "password": "password123",
-	}, "")
-	if w.Code != http.StatusOK {
-		t.Fatalf("login %s = %d %s", username, w.Code, w.Body.String())
+	u, err := f.db.User.Query().Where(user.UsernameEQ(username)).Only(t.Context())
+	if err != nil {
+		t.Fatalf("find user %s: %v", username, err)
 	}
-	var res struct {
-		AccessToken string `json:"access_token"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
-		t.Fatalf("decode login: %v", err)
-	}
-	return res.AccessToken
+	return f.issuer.Sign(t, authtest.Claims{Subject: u.UserID})
 }
 
 func TestMultiUserBusinessDataIsolation(t *testing.T) {
@@ -347,14 +337,11 @@ func TestMultiUserAdminIsolation(t *testing.T) {
 		t.Fatalf("admin list = %+v, want 3 users", body.Users)
 	}
 
-	// Admin-created accounts default to the ordinary user role.
+	// Accounts are provisioned by Kinde on first login; there is no
+	// admin-created password account anymore.
 	if got := f.do(t, http.MethodPost, "/api/admin/users", map[string]string{
 		"username": "new-user", "password": "new-password-1",
-	}, adminToken); got.Code != http.StatusCreated {
-		t.Fatalf("create user = %d %s", got.Code, got.Body.String())
-	}
-	created, err := f.db.User.Query().Where(user.UsernameEQ("new-user")).Only(t.Context())
-	if err != nil || created.Role != config.RoleUser {
-		t.Fatalf("created user = %+v err %v", created, err)
+	}, adminToken); got.Code != http.StatusNotFound {
+		t.Fatalf("create user = %d, want 404", got.Code)
 	}
 }

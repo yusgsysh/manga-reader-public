@@ -208,8 +208,12 @@ var (
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID, SchemaType: map[string]string{"postgres": "bytea", "sqlite3": "blob"}},
+		{Name: "user_id", Type: field.TypeString, Unique: true, Nullable: true},
 		{Name: "username", Type: field.TypeString, Unique: true},
-		{Name: "password_hash", Type: field.TypeString},
+		{Name: "password_hash", Type: field.TypeString, Nullable: true},
+		{Name: "email", Type: field.TypeString, Nullable: true},
+		{Name: "name", Type: field.TypeString, Nullable: true},
+		{Name: "avatar_url", Type: field.TypeString, Nullable: true},
 		{Name: "role", Type: field.TypeString, Default: "user"},
 		{Name: "status", Type: field.TypeString, Default: "active"},
 		{Name: "token_version", Type: field.TypeInt, Default: 0},
@@ -225,12 +229,12 @@ var (
 			{
 				Name:    "user_role",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[3]},
+				Columns: []*schema.Column{UsersColumns[7]},
 			},
 			{
 				Name:    "user_status",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[4]},
+				Columns: []*schema.Column{UsersColumns[8]},
 			},
 		},
 	}

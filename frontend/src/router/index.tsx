@@ -15,7 +15,6 @@ import {
   RecentlyReadPage,
   SearchPage,
   SettingsPage,
-  SetupPage,
   SubscriptionsPage,
 } from "./pages";
 
@@ -25,14 +24,6 @@ export const router = createBrowserRouter([
     element: (
       <LazyPage>
         <LoginPage />
-      </LazyPage>
-    ),
-  },
-  {
-    path: "/setup",
-    element: (
-      <LazyPage>
-        <SetupPage />
       </LazyPage>
     ),
   },
