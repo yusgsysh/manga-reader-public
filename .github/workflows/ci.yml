@@ -1,9 +1,10 @@
 name: CI
 
 on:
+  # Branch pushes run tests + a validation image build. Only main publishes.
   push:
     branches:
-      - main
+      - "**"
 
   pull_request:
     branches:
@@ -107,18 +108,24 @@ jobs:
 
       - name: Build
         run: bun run build
+        env:
+          VITE_KINDE_DOMAIN: ${{ vars.VITE_KINDE_DOMAIN }}
+          VITE_KINDE_CLIENT_ID: ${{ vars.VITE_KINDE_CLIENT_ID }}
+          VITE_KINDE_REDIRECT_URI: ${{ vars.VITE_KINDE_REDIRECT_URI }}
+          VITE_KINDE_LOGOUT_URI: ${{ vars.VITE_KINDE_LOGOUT_URI }}
+          VITE_KINDE_AUDIENCE: ${{ vars.VITE_KINDE_AUDIENCE }}
 
   # ------------------------------------------------------------
-  # Image build on pull requests.
+  # Image build on pull requests and non-main branch pushes.
   #
   # Runs in parallel with the test jobs on purpose: the image is only
   # validation here (nothing is pushed), so waiting for the tests would just
   # add their runtime to the critical path. Same cache scope as the publish
-  # job, which means PR builds warm main's layers and vice versa.
+  # job, which means PR/branch builds warm main's layers and vice versa.
   # ------------------------------------------------------------
   docker-validate:
-    name: Build Docker Image (PR)
-    if: github.event_name == 'pull_request'
+    name: Build Docker Image (PR / branch)
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/main')
 
     runs-on: ubuntu-latest
 
@@ -161,7 +168,9 @@ jobs:
   # ------------------------------------------------------------
   docker-publish:
     name: Build and Push Docker Image
-    if: github.event_name != 'pull_request'
+    # Never publish from a feature branch: push-triggered validation above
+    # covers those builds without moving `latest`.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
 
     needs:
       - backend-test
