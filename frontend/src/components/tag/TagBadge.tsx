@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Tag } from "../../types/gallery";
-import { useTagTranslation } from "../../hooks/useTagTranslation";
-import { useTagPreferences, TAG_ACTION_CHIP_CLASS } from "../../hooks/useTagPreferences";
+import { useTagTranslation } from "../../hooks/tag/useTagTranslation";
+import { useTagPreferences, TAG_ACTION_CHIP_CLASS } from "../../hooks/tag/useTagPreferences";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { Popover, Tooltip, cn } from "@cloudflare/kumo";
 import { Chip } from "../ui";

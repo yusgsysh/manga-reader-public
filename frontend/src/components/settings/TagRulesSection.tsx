@@ -7,14 +7,14 @@ import {
   useSyncTagPreferences,
   TAG_ACTION_CHIP_CLASS,
   type TagAction,
-} from "../../hooks/useTagPreferences";
+} from "../../hooks/tag/useTagPreferences";
 import type {
   SyncTagSettingsOptions,
   TagSyncConflict,
   TagSyncResult,
   TagSyncSide,
 } from "../../api/tagSettings";
-import { useTagTranslation } from "../../hooks/useTagTranslation";
+import { useTagTranslation } from "../../hooks/tag/useTagTranslation";
 import { Section, useToast } from "../ui";
 
 type TagSuggestion = { namespace: string; tag: string; translation: string };

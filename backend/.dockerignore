@@ -2,7 +2,7 @@
 .gitignore
 data/
 manga-reader
-tools/fetchhtml/fetchhtml
+cmd/fetchhtml/fetchhtml
 EHentai-go/*
 *.db
 *.db-wal

@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"manga-reader/internal/ident"
+
+	"github.com/gin-gonic/gin"
 
 	"manga-reader/internal/auth"
 	"manga-reader/internal/config"

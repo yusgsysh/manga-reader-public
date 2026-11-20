@@ -1,5 +1,5 @@
 import { useSearchParams } from "react-router";
-import { useSearch } from "../hooks/useSearch";
+import { useSearch } from "../hooks/gallery/useSearch";
 import { GalleryGrid } from "../components/gallery/GalleryGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { ErrorState } from "../components/common/ErrorState";

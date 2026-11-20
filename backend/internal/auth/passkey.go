@@ -24,9 +24,9 @@ import (
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/passkey"
 	"manga-reader/internal/ent/user"
+	"manga-reader/internal/httpx"
 	"manga-reader/internal/ident"
 	"manga-reader/internal/requestid"
-	"manga-reader/internal/web"
 )
 
 const (
@@ -84,7 +84,7 @@ type passkeyJSON struct {
 func (s *Service) handlePasskeyList(c *gin.Context) {
 	principal, ok := PrincipalFrom(c)
 	if !ok {
-		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		httpx.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	rows, err := s.db.Passkey.Query().
@@ -92,14 +92,14 @@ func (s *Service) handlePasskeyList(c *gin.Context) {
 		Order(ent.Asc(passkey.FieldCreatedAt)).
 		All(c.Request.Context())
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "list passkeys failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "list passkeys failed"})
 		return
 	}
 	out := make([]passkeyJSON, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, passkeyResponse(row))
 	}
-	web.JSON(c, http.StatusOK, gin.H{"passkeys": out})
+	httpx.JSON(c, http.StatusOK, gin.H{"passkeys": out})
 }
 
 func passkeyResponse(row *ent.Passkey) passkeyJSON {
@@ -128,25 +128,25 @@ func passkeyResponse(row *ent.Passkey) passkeyJSON {
 func (s *Service) handlePasskeyRename(c *gin.Context) {
 	principal, ok := PrincipalFrom(c)
 	if !ok {
-		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		httpx.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	id, err := ident.Parse(c.Param("id"))
 	if err != nil || id.IsNil() {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid passkey id"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid passkey id"})
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4<<10)
 	var body struct {
 		Name string `json:"name"`
 	}
-	if err := web.BindJSON(c, &body); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	if err := httpx.BindJSON(c, &body); err != nil {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	name := truncateRunes(strings.TrimSpace(body.Name), 64)
 	if name == "" {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "name is required"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "name is required"})
 		return
 	}
 	n, err := s.db.Passkey.Update().
@@ -154,43 +154,43 @@ func (s *Service) handlePasskeyRename(c *gin.Context) {
 		SetName(name).
 		Save(c.Request.Context())
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "rename passkey failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "rename passkey failed"})
 		return
 	}
 	if n == 0 {
-		web.JSON(c, http.StatusNotFound, gin.H{"error": "passkey not found"})
+		httpx.JSON(c, http.StatusNotFound, gin.H{"error": "passkey not found"})
 		return
 	}
 	row, err := s.db.Passkey.Query().
 		Where(passkey.IDEQ(id), passkey.UserIDEQ(principal.ID)).
 		Only(c.Request.Context())
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read passkey failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read passkey failed"})
 		return
 	}
-	web.JSON(c, http.StatusOK, gin.H{"passkey": passkeyResponse(row)})
+	httpx.JSON(c, http.StatusOK, gin.H{"passkey": passkeyResponse(row)})
 }
 
 func (s *Service) handlePasskeyDelete(c *gin.Context) {
 	principal, ok := PrincipalFrom(c)
 	if !ok {
-		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		httpx.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	id, err := ident.Parse(c.Param("id"))
 	if err != nil || id.IsNil() {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid passkey id"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid passkey id"})
 		return
 	}
 	n, err := s.db.Passkey.Delete().
 		Where(passkey.IDEQ(id), passkey.UserIDEQ(principal.ID)).
 		Exec(c.Request.Context())
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete passkey failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete passkey failed"})
 		return
 	}
 	if n == 0 {
-		web.JSON(c, http.StatusNotFound, gin.H{"error": "passkey not found"})
+		httpx.JSON(c, http.StatusNotFound, gin.H{"error": "passkey not found"})
 		return
 	}
 	slog.Info("passkey deleted",
@@ -198,28 +198,28 @@ func (s *Service) handlePasskeyDelete(c *gin.Context) {
 		"actor_user_id", principal.ID,
 		"passkey_id", id,
 	)
-	web.JSON(c, http.StatusOK, gin.H{"success": true})
+	httpx.JSON(c, http.StatusOK, gin.H{"success": true})
 }
 
 func (s *Service) handlePasskeyRegisterBegin(c *gin.Context) {
 	principal, ok := PrincipalFrom(c)
 	if !ok {
-		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		httpx.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	if !s.allowLogin(c.ClientIP()) {
 		c.Header("Retry-After", "60")
-		web.JSON(c, http.StatusTooManyRequests, gin.H{"error": "too many requests"})
+		httpx.JSON(c, http.StatusTooManyRequests, gin.H{"error": "too many requests"})
 		return
 	}
 	wa, origin, err := s.newWebAuthn(c)
 	if err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	u, credentialRows, err := s.loadPasskeyUser(c.Request.Context(), principal.ID)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "load passkeys failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "load passkeys failed"})
 		return
 	}
 	exclusions := make([]protocol.CredentialDescriptor, 0, len(credentialRows))
@@ -239,7 +239,7 @@ func (s *Service) handlePasskeyRegisterBegin(c *gin.Context) {
 			"user_id", principal.ID,
 			"error", err,
 		)
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "passkey registration is not available"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "passkey registration is not available"})
 		return
 	}
 	if err := s.storePasskeyCeremony(c, &passkeyCeremony{
@@ -247,31 +247,31 @@ func (s *Service) handlePasskeyRegisterBegin(c *gin.Context) {
 		session: session,
 		userID:  principal.ID,
 	}); err != nil {
-		web.JSON(c, http.StatusTooManyRequests, gin.H{"error": err.Error()})
+		httpx.JSON(c, http.StatusTooManyRequests, gin.H{"error": err.Error()})
 		return
 	}
-	web.JSON(c, http.StatusOK, creation)
+	httpx.JSON(c, http.StatusOK, creation)
 }
 
 func (s *Service) handlePasskeyRegisterFinish(c *gin.Context) {
 	principal, ok := PrincipalFrom(c)
 	if !ok {
-		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		httpx.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	ceremony, ok := s.takePasskeyCeremony(c)
 	if !ok || ceremony.userID != principal.ID {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "passkey ceremony expired, please try again"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "passkey ceremony expired, please try again"})
 		return
 	}
 
 	u, _, err := s.loadPasskeyUser(c.Request.Context(), principal.ID)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "load passkeys failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "load passkeys failed"})
 		return
 	}
 	if len(u.credentials) >= maxPasskeysPerUser {
-		web.JSON(c, http.StatusConflict, gin.H{"error": fmt.Sprintf("at most %d passkeys are allowed", maxPasskeysPerUser)})
+		httpx.JSON(c, http.StatusConflict, gin.H{"error": fmt.Sprintf("at most %d passkeys are allowed", maxPasskeysPerUser)})
 		return
 	}
 
@@ -283,7 +283,7 @@ func (s *Service) handlePasskeyRegisterFinish(c *gin.Context) {
 			"user_id", principal.ID,
 			"error", err,
 		)
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "passkey registration failed"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "passkey registration failed"})
 		return
 	}
 
@@ -293,7 +293,7 @@ func (s *Service) handlePasskeyRegisterFinish(c *gin.Context) {
 	}
 	encoded, err := json.Marshal(credential)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "store passkey failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "store passkey failed"})
 		return
 	}
 
@@ -316,10 +316,10 @@ func (s *Service) handlePasskeyRegisterFinish(c *gin.Context) {
 		Save(c.Request.Context())
 	if err != nil {
 		if ent.IsConstraintError(err) {
-			web.JSON(c, http.StatusConflict, gin.H{"error": "this passkey is already registered"})
+			httpx.JSON(c, http.StatusConflict, gin.H{"error": "this passkey is already registered"})
 			return
 		}
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "store passkey failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "store passkey failed"})
 		return
 	}
 
@@ -328,18 +328,18 @@ func (s *Service) handlePasskeyRegisterFinish(c *gin.Context) {
 		"actor_user_id", principal.ID,
 		"passkey_id", row.ID,
 	)
-	web.JSON(c, http.StatusCreated, gin.H{"passkey": passkeyResponse(row)})
+	httpx.JSON(c, http.StatusCreated, gin.H{"passkey": passkeyResponse(row)})
 }
 
 func (s *Service) handlePasskeyLoginBegin(c *gin.Context) {
 	if !s.allowLogin(c.ClientIP()) {
 		c.Header("Retry-After", "60")
-		web.JSON(c, http.StatusTooManyRequests, gin.H{"error": "too many login attempts"})
+		httpx.JSON(c, http.StatusTooManyRequests, gin.H{"error": "too many login attempts"})
 		return
 	}
 	wa, origin, err := s.newWebAuthn(c)
 	if err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	assertion, session, err := wa.BeginDiscoverableLogin(
@@ -351,28 +351,28 @@ func (s *Service) handlePasskeyLoginBegin(c *gin.Context) {
 			"request_id", requestid.From(c),
 			"error", err,
 		)
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "passkey login is not available"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "passkey login is not available"})
 		return
 	}
 	if err := s.storePasskeyCeremony(c, &passkeyCeremony{
 		wa:      wa,
 		session: session,
 	}); err != nil {
-		web.JSON(c, http.StatusTooManyRequests, gin.H{"error": err.Error()})
+		httpx.JSON(c, http.StatusTooManyRequests, gin.H{"error": err.Error()})
 		return
 	}
-	web.JSON(c, http.StatusOK, assertion)
+	httpx.JSON(c, http.StatusOK, assertion)
 }
 
 func (s *Service) handlePasskeyLoginFinish(c *gin.Context) {
 	if !s.allowLogin(c.ClientIP()) {
 		c.Header("Retry-After", "60")
-		web.JSON(c, http.StatusTooManyRequests, gin.H{"error": "too many login attempts"})
+		httpx.JSON(c, http.StatusTooManyRequests, gin.H{"error": "too many login attempts"})
 		return
 	}
 	ceremony, ok := s.takePasskeyCeremony(c)
 	if !ok {
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "passkey login failed"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "passkey login failed"})
 		return
 	}
 
@@ -414,22 +414,22 @@ func (s *Service) handlePasskeyLoginFinish(c *gin.Context) {
 			"request_id", requestid.From(c),
 			"error", err,
 		)
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "passkey login failed"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "passkey login failed"})
 		return
 	}
 	if matched == nil {
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "passkey login failed"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "passkey login failed"})
 		return
 	}
 
 	account, err := s.db.User.Get(ctx, matched.UserID)
 	if err != nil || account.Status != config.StatusActive {
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "passkey login failed"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "passkey login failed"})
 		return
 	}
 	encoded, err := json.Marshal(credential)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
 		return
 	}
 	if err := s.db.Passkey.UpdateOneID(matched.ID).
@@ -459,7 +459,7 @@ func (s *Service) handlePasskeyLoginFinish(c *gin.Context) {
 
 	token, expires, err := s.tokens.issue(account.ID, account.Username, account.Role, account.TokenVersion)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
 		return
 	}
 	s.setCookie(c, token, expires)
@@ -469,7 +469,7 @@ func (s *Service) handlePasskeyLoginFinish(c *gin.Context) {
 		"result", "success",
 		"method", "passkey",
 	)
-	web.JSON(c, http.StatusOK, s.sessionResponse(token, account))
+	httpx.JSON(c, http.StatusOK, s.sessionResponse(token, account))
 }
 
 // loadPasskeyUser loads one account and its credential records. A record that

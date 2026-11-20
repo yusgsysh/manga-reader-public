@@ -1,10 +1,10 @@
 import { useMemo } from "react";
 import type { Tag } from "../../types/gallery";
-import { useTagTranslation } from "../../hooks/useTagTranslation";
+import { useTagTranslation } from "../../hooks/tag/useTagTranslation";
 import {
   useTagPreferences,
   sortTagsByPreference,
-} from "../../hooks/useTagPreferences";
+} from "../../hooks/tag/useTagPreferences";
 import { TagBadge } from "./TagBadge";
 
 interface TagGroupsProps {

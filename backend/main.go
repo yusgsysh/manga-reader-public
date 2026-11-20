@@ -18,6 +18,7 @@ import (
 	"manga-reader/internal/config"
 	"manga-reader/internal/database"
 	"manga-reader/internal/handler"
+	"manga-reader/internal/httpx"
 	"manga-reader/internal/imagecache"
 	"manga-reader/internal/metrics"
 	"manga-reader/internal/requestid"
@@ -104,11 +105,11 @@ func csrfGuard(extra map[string]struct{}) gin.HandlerFunc {
 		}
 		if origin := c.GetHeader("Origin"); origin != "" {
 			if !originAllowed(origin, c.Request.Host, extra) {
-				web.AbortWithStatusJSON(c, http.StatusForbidden, gin.H{"error": "cross-origin request rejected"})
+				httpx.AbortWithStatusJSON(c, http.StatusForbidden, gin.H{"error": "cross-origin request rejected"})
 				return
 			}
 		} else if site := c.GetHeader("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
-			web.AbortWithStatusJSON(c, http.StatusForbidden, gin.H{"error": "cross-site request rejected"})
+			httpx.AbortWithStatusJSON(c, http.StatusForbidden, gin.H{"error": "cross-site request rejected"})
 			return
 		}
 		c.Next()
@@ -132,7 +133,7 @@ func adminOnlyMiddleware() gin.HandlerFunc {
 		}
 		principal, ok := auth.PrincipalFrom(c)
 		if !ok || principal.Role != config.RoleAdmin {
-			web.AbortWithStatusJSON(c, http.StatusForbidden, gin.H{"error": "administrator required"})
+			httpx.AbortWithStatusJSON(c, http.StatusForbidden, gin.H{"error": "administrator required"})
 			return
 		}
 		c.Next()
@@ -347,23 +348,23 @@ func run() error {
 	r.Use(adminOnlyMiddleware())
 
 	r.GET("/healthz", func(c *gin.Context) {
-		web.JSON(c, http.StatusOK, gin.H{"status": "ok"})
+		httpx.JSON(c, http.StatusOK, gin.H{"status": "ok"})
 	})
 
 	// Readiness is deliberately separate from liveness: it only says whether
 	// the datastore is reachable and never exposes DSNs, paths or secrets.
 	r.GET("/readyz", func(c *gin.Context) {
 		if db.Conn == nil {
-			web.JSON(c, http.StatusServiceUnavailable, gin.H{"status": "unavailable"})
+			httpx.JSON(c, http.StatusServiceUnavailable, gin.H{"status": "unavailable"})
 			return
 		}
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()
 		if err := db.Conn.PingContext(ctx); err != nil {
-			web.JSON(c, http.StatusServiceUnavailable, gin.H{"status": "unavailable"})
+			httpx.JSON(c, http.StatusServiceUnavailable, gin.H{"status": "unavailable"})
 			return
 		}
-		web.JSON(c, http.StatusOK, gin.H{"status": "ready"})
+		httpx.JSON(c, http.StatusOK, gin.H{"status": "ready"})
 	})
 
 	// Prometheus exposition accepts the operator-wide metrics token; with no

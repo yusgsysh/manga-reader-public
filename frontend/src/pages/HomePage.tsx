@@ -1,6 +1,6 @@
 import { useSearchParams } from "react-router";
 import { useMemo } from "react";
-import { useGalleries } from "../hooks/useGalleryList";
+import { useGalleries } from "../hooks/gallery/useGalleryList";
 import { GalleryGrid } from "../components/gallery/GalleryGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";

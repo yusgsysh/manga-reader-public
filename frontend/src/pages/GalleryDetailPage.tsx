@@ -17,11 +17,11 @@ import {
   useBookshelfStatus,
   useBookshelfToggle,
   useGalleryDetail,
-} from "../hooks/useGalleryDetail";
+} from "../hooks/gallery/useGalleryDetail";
 import { useBackNavigation } from "../hooks/useBackNavigation";
 import { fetchGalleryPagesWithFallback } from "../api/gallery";
-import { useReadingProgress } from "../hooks/useReaderData";
-import { useStartPrefillJob } from "../hooks/usePrefillJobs";
+import { useReadingProgress } from "../hooks/reader/useReaderData";
+import { useStartPrefillJob } from "../hooks/prefill/usePrefillJobs";
 import { ErrorState } from "../components/common/ErrorState";
 import { PageThumbnailGrid } from "../components/gallery/PageThumbnailGrid";
 import { TagGroups } from "../components/tag/TagGroups";

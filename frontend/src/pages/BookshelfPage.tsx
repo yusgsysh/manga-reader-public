@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { cn } from "@cloudflare/kumo";
-import { useBookshelf } from "../hooks/useBookshelf";
+import { useBookshelf } from "../hooks/gallery/useBookshelf";
 import { BookshelfGrid } from "../components/gallery/BookshelfGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";

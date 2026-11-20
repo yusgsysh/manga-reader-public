@@ -42,7 +42,13 @@ frontend/
     │   ├── gallery/    # 分类、标签、列表 URL 状态、高级搜索参数
     │   ├── reader/     # 阅读页模型、阅读偏好、进度保存
     │   └── prefill/    # 下载任务状态与进度展示规则
-    ├── hooks/          # 可复用 React Hooks（数据获取、浏览器交互、页面状态）
+    ├── hooks/          # 可复用 React Hooks
+    │   ├── gallery/    # 列表 / 详情 / 搜索 / 书架 / 最近阅读的数据 Hook
+    │   ├── reader/     # 阅读器数据、进度同步、阅读偏好
+    │   ├── tag/        # 标签偏好与翻译
+    │   ├── prefill/    # 下载任务轮询
+    │   ├── sync/       # 同步事件（SSE）
+    │   └── useBackNavigation.ts 等  # 与业务无关的浏览器/页面 Hook
     ├── lib/            # 与具体业务无关的通用工具（时间、主题色、图片、WebAuthn …）
     ├── pages/          # 路由页面（只做页面编排）
     ├── router/         # 路由表
@@ -405,7 +411,7 @@ react-query 的 `staleTime` 仅用于客户端节流，统一集中在 `src/lib/
 
 Gallery 详情页也提供页面缩略图网格（`PageThumbnailGrid`，每页 20 张、`SimplePagination` 翻页），点击某页跳转到 `/reader/:id/:token?page=N`；阅读器把 `?page`（0-indexed）作为初始页，离开时把进度保存为该页。
 
-相关实现：`src/hooks/useInfiniteScroll.ts`、`src/components/common/InfiniteScrollTrigger.tsx`、`src/components/common/JumpSeekPanel.tsx` / `JumpSeekMenu.tsx`、`src/domain/gallery/jumpSeek.ts`、`src/lib/thumbnails.ts`，以及 `src/hooks/useGalleryList.ts`、`useSearch.ts`、`useBookshelf.ts`、`useRecentlyRead.ts`（均为 `useInfiniteQuery`）。
+相关实现：`src/hooks/useInfiniteScroll.ts`、`src/components/common/InfiniteScrollTrigger.tsx`、`src/components/common/JumpSeekPanel.tsx` / `JumpSeekMenu.tsx`、`src/domain/gallery/jumpSeek.ts`、`src/lib/thumbnails.ts`，以及 `src/hooks/gallery/useGalleryList.ts`、`useSearch.ts`、`useBookshelf.ts`、`useRecentlyRead.ts`（均为 `useInfiniteQuery`）。
 
 ## 路由
 

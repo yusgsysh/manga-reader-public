@@ -4,7 +4,7 @@ import { Button, Dialog } from "@cloudflare/kumo";
 import {
   useRecentlyRead,
   useCleanupReadingProgress,
-} from "../hooks/useRecentlyRead";
+} from "../hooks/gallery/useRecentlyRead";
 import { BookshelfGrid } from "../components/gallery/BookshelfGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";

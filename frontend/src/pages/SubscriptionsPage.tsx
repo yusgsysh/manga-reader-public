@@ -1,6 +1,6 @@
 import { useSearchParams } from "react-router";
 import { useMemo } from "react";
-import { useWatched } from "../hooks/useGalleryList";
+import { useWatched } from "../hooks/gallery/useGalleryList";
 import { GalleryGrid } from "../components/gallery/GalleryGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";

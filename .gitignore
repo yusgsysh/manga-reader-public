@@ -16,6 +16,7 @@ frontend/wailsjs/runtime/runtime.js
 backend/desktop
 backend/cmd/*
 !backend/cmd/reset-admin
+!backend/cmd/fetchhtml
 manga-reader-desktop.apk
 build/android/gen/main_android.gen.go
 frontend/frontend

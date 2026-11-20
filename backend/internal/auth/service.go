@@ -19,8 +19,8 @@ import (
 	"manga-reader/internal/config"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/user"
+	"manga-reader/internal/httpx"
 	"manga-reader/internal/requestid"
-	"manga-reader/internal/web"
 )
 
 const (
@@ -216,7 +216,7 @@ func (s *Service) Middleware() gin.HandlerFunc {
 		principal, err := s.authenticate(c)
 		if err != nil {
 			s.clearCookie(c)
-			web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			httpx.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
 		c.Set(principalKey, principal)
@@ -349,7 +349,7 @@ func (s *Service) sessionResponse(token string, u *ent.User) gin.H {
 func (s *Service) handleStatus(c *gin.Context) {
 	initialized, err := s.IsInitialized(c.Request.Context())
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "failed to read auth status"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "failed to read auth status"})
 		return
 	}
 
@@ -361,7 +361,7 @@ func (s *Service) handleStatus(c *gin.Context) {
 		user = userJSON(principal.ID, principal.Username, principal.Role)
 	}
 
-	web.JSON(c, http.StatusOK, gin.H{
+	httpx.JSON(c, http.StatusOK, gin.H{
 		"initialized": initialized,
 		"user":        user,
 	})
@@ -373,7 +373,7 @@ func (s *Service) handleStatus(c *gin.Context) {
 func (s *Service) handleRegister(c *gin.Context) {
 	if !s.allowLogin(c.ClientIP()) {
 		c.Header("Retry-After", "60")
-		web.JSON(c, http.StatusTooManyRequests, gin.H{"error": "too many requests"})
+		httpx.JSON(c, http.StatusTooManyRequests, gin.H{"error": "too many requests"})
 		return
 	}
 
@@ -382,13 +382,13 @@ func (s *Service) handleRegister(c *gin.Context) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if err := web.BindJSON(c, &body); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	if err := httpx.BindJSON(c, &body); err != nil {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	body.Username = strings.TrimSpace(body.Username)
 	if body.Username == "" || len(body.Password) < 8 {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "username and a password of at least 8 characters are required"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "username and a password of at least 8 characters are required"})
 		return
 	}
 
@@ -396,7 +396,7 @@ func (s *Service) handleRegister(c *gin.Context) {
 	// extend the critical section.
 	hash, err := HashPassword(body.Password)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "password hashing failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "password hashing failed"})
 		return
 	}
 
@@ -406,11 +406,11 @@ func (s *Service) handleRegister(c *gin.Context) {
 
 	initialized, err := s.IsInitialized(ctx)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "failed to read auth status"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "failed to read auth status"})
 		return
 	}
 	if initialized {
-		web.JSON(c, http.StatusConflict, gin.H{"error": "already initialized"})
+		httpx.JSON(c, http.StatusConflict, gin.H{"error": "already initialized"})
 		return
 	}
 
@@ -422,16 +422,16 @@ func (s *Service) handleRegister(c *gin.Context) {
 		Save(ctx)
 	if err != nil {
 		if ent.IsConstraintError(err) {
-			web.JSON(c, http.StatusConflict, gin.H{"error": "username already exists"})
+			httpx.JSON(c, http.StatusConflict, gin.H{"error": "username already exists"})
 			return
 		}
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create administrator failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "create administrator failed"})
 		return
 	}
 
 	token, expires, err := s.tokens.issue(u.ID, u.Username, u.Role, u.TokenVersion)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "registration failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "registration failed"})
 		return
 	}
 	s.setCookie(c, token, expires)
@@ -439,13 +439,13 @@ func (s *Service) handleRegister(c *gin.Context) {
 		"request_id", requestid.From(c),
 		"username", u.Username,
 	)
-	web.JSON(c, http.StatusOK, s.sessionResponse(token, u))
+	httpx.JSON(c, http.StatusOK, s.sessionResponse(token, u))
 }
 
 func (s *Service) handleLogin(c *gin.Context) {
 	if !s.allowLogin(c.ClientIP()) {
 		c.Header("Retry-After", "60")
-		web.JSON(c, http.StatusTooManyRequests, gin.H{"error": "too many login attempts"})
+		httpx.JSON(c, http.StatusTooManyRequests, gin.H{"error": "too many login attempts"})
 		return
 	}
 
@@ -454,8 +454,8 @@ func (s *Service) handleLogin(c *gin.Context) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if err := web.BindJSON(c, &body); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	if err := httpx.BindJSON(c, &body); err != nil {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	body.Username = strings.TrimSpace(body.Username)
@@ -469,7 +469,7 @@ func (s *Service) handleLogin(c *gin.Context) {
 	}()
 	if body.Username == "" || body.Password == "" {
 		// Same message as a wrong password: do not reveal which field failed.
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
 		return
 	}
 
@@ -482,17 +482,17 @@ func (s *Service) handleLogin(c *gin.Context) {
 		Only(ctx)
 	if err != nil {
 		if !ent.IsNotFound(err) {
-			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
+			httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
 			return
 		}
 		// Hash the supplied password anyway so a missing username and a wrong
 		// password cost roughly the same Argon2id work.
 		_, _ = HashPassword(body.Password)
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
 		return
 	}
 	if !VerifyPassword(u.PasswordHash, body.Password) {
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
 		return
 	}
 
@@ -502,11 +502,11 @@ func (s *Service) handleLogin(c *gin.Context) {
 	if u.TotpEnabled {
 		mfaToken, _, err := s.mfaTokens.issue(u.ID, u.Username, u.Role, u.TokenVersion)
 		if err != nil {
-			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
+			httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
 			return
 		}
 		loginResult = "mfa_required"
-		web.JSON(c, http.StatusOK, gin.H{
+		httpx.JSON(c, http.StatusOK, gin.H{
 			"mfa_required": true,
 			"mfa_token":    mfaToken,
 			"expires_in":   int(mfaTokenTTL / time.Second),
@@ -517,18 +517,18 @@ func (s *Service) handleLogin(c *gin.Context) {
 
 	token, expires, err := s.tokens.issue(u.ID, u.Username, u.Role, u.TokenVersion)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
 		return
 	}
 	s.setCookie(c, token, expires)
 	loginResult = "success"
-	web.JSON(c, http.StatusOK, s.sessionResponse(token, u))
+	httpx.JSON(c, http.StatusOK, s.sessionResponse(token, u))
 }
 
 func (s *Service) handleLogout(c *gin.Context) {
 	principal, ok := PrincipalFrom(c)
 	if !ok {
-		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		httpx.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	// Bump token_version so this and every other outstanding token for the
@@ -538,11 +538,11 @@ func (s *Service) handleLogout(c *gin.Context) {
 		Where(user.ID(principal.ID)).
 		AddTokenVersion(1).
 		Exec(c.Request.Context()); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "logout failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "logout failed"})
 		return
 	}
 	s.clearCookie(c)
-	web.JSON(c, http.StatusOK, gin.H{"success": true})
+	httpx.JSON(c, http.StatusOK, gin.H{"success": true})
 }
 
 func (s *Service) setCookie(c *gin.Context, token string, expires time.Time) {

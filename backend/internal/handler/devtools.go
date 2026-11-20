@@ -3,8 +3,9 @@ package handler
 import (
 	"net/http"
 
+	"manga-reader/internal/httpx"
+
 	"github.com/gin-gonic/gin"
-	"manga-reader/internal/web"
 )
 
 // upstreamRoutes are the routes that reach ExHentai. The simulated-outage
@@ -39,7 +40,7 @@ func (s *Server) upstreamSimulationMiddleware() gin.HandlerFunc {
 			return
 		}
 		if isUpstreamRoute(c.FullPath()) {
-			web.AbortWithStatusJSON(c, http.StatusBadGateway, gin.H{"error": "simulated upstream outage"})
+			httpx.AbortWithStatusJSON(c, http.StatusBadGateway, gin.H{"error": "simulated upstream outage"})
 			return
 		}
 		c.Next()
@@ -48,19 +49,19 @@ func (s *Server) upstreamSimulationMiddleware() gin.HandlerFunc {
 
 // handleDevUpstreamDownGet reports the current simulated-outage state.
 func (s *Server) handleDevUpstreamDownGet(c *gin.Context) {
-	web.JSON(c, http.StatusOK, gin.H{"down": s.simulateUpstreamDown.Load()})
+	httpx.JSON(c, http.StatusOK, gin.H{"down": s.simulateUpstreamDown.Load()})
 }
 
 // handleDevUpstreamDownPut toggles the simulated-outage state at runtime.
 func (s *Server) handleDevUpstreamDownPut(c *gin.Context) {
-	limitRequestBody(c, 64<<10)
+	httpx.LimitRequestBody(c, 64<<10)
 	var body struct {
 		Down bool `json:"down"`
 	}
-	if err := web.BindJSON(c, &body); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": `expected {"down": bool}`})
+	if err := httpx.BindJSON(c, &body); err != nil {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": `expected {"down": bool}`})
 		return
 	}
 	s.simulateUpstreamDown.Store(body.Down)
-	web.JSON(c, http.StatusOK, gin.H{"down": body.Down})
+	httpx.JSON(c, http.StatusOK, gin.H{"down": body.Down})
 }

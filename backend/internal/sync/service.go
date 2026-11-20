@@ -19,11 +19,11 @@ import (
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/syncchange"
 	"manga-reader/internal/ent/usersynckey"
+	"manga-reader/internal/httpx"
 	"manga-reader/internal/ident"
 	"manga-reader/internal/metrics"
 	"manga-reader/internal/requestid"
 	"manga-reader/internal/synckey"
-	"manga-reader/internal/web"
 )
 
 const (
@@ -135,18 +135,18 @@ func (s *Service) handlePush(c *gin.Context) {
 	// stolen token cannot stream an unbounded payload into memory.
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<20)
 	var req PushRequest
-	if err := web.BindJSON(c, &req); err != nil {
+	if err := httpx.BindJSON(c, &req); err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			web.JSON(c, http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+			httpx.JSON(c, http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
 			return
 		}
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	ctx := c.Request.Context()
 	identity, ok := synckey.From(c)
 	if !ok {
-		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "sync identity missing"})
+		httpx.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "sync identity missing"})
 		return
 	}
 	// A user sync key scopes the whole exchange to its account: incoming
@@ -156,7 +156,7 @@ func (s *Service) handlePush(c *gin.Context) {
 	applied, skipped, err := ApplyChanges(ctx, s.client, req.Changes, owner)
 	if err != nil {
 		slog.Error("apply sync changes failed", "error", err)
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "apply changes failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "apply changes failed"})
 		return
 	}
 	if applied > 0 {
@@ -177,7 +177,7 @@ func (s *Service) handlePush(c *gin.Context) {
 	}
 	if err != nil {
 		slog.Error("collect sync changes failed", "error", err)
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "collect changes failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "collect changes failed"})
 		return
 	}
 
@@ -202,7 +202,7 @@ func (s *Service) handlePush(c *gin.Context) {
 		"sync_request_id", req.RequestID,
 		"result", "ok",
 	)
-	web.JSON(c, http.StatusOK, PushResponse{
+	httpx.JSON(c, http.StatusOK, PushResponse{
 		Cursor:  cursor,
 		Changes: changes,
 		Applied: applied,
@@ -315,7 +315,7 @@ func (s *Service) configOwnerName(ctx context.Context, cfg ClientConfig) string 
 func (s *Service) handleConfigGet(c *gin.Context) {
 	cfg, err := s.LoadClientConfig(c.Request.Context())
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync config failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync config failed"})
 		return
 	}
 	resp := configResponse{
@@ -326,20 +326,20 @@ func (s *Service) handleConfigGet(c *gin.Context) {
 	if cfg.Token != "" {
 		resp.Token = Mask
 	}
-	web.JSON(c, http.StatusOK, resp)
+	httpx.JSON(c, http.StatusOK, resp)
 }
 
 func (s *Service) handleConfigPut(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
 	var in ConfigUpdate
-	if err := web.BindJSON(c, &in); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	if err := httpx.BindJSON(c, &in); err != nil {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	if in.ServerURL != nil {
 		u := *in.ServerURL
 		if u != "" && !hasHTTPScheme(u) {
-			web.JSON(c, http.StatusBadRequest, gin.H{"error": "server_url must start with http:// or https://"})
+			httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "server_url must start with http:// or https://"})
 			return
 		}
 	}
@@ -351,7 +351,7 @@ func (s *Service) handleConfigPut(c *gin.Context) {
 	}
 	cfg, err := s.SaveClientConfig(c.Request.Context(), in)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "save sync config failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "save sync config failed"})
 		return
 	}
 	resp := configResponse{
@@ -362,7 +362,7 @@ func (s *Service) handleConfigPut(c *gin.Context) {
 	if cfg.Token != "" {
 		resp.Token = Mask
 	}
-	web.JSON(c, http.StatusOK, resp)
+	httpx.JSON(c, http.StatusOK, resp)
 }
 
 func hasHTTPScheme(u string) bool {
@@ -393,20 +393,20 @@ func (s *Service) handleResync(c *gin.Context) {
 	ctx := c.Request.Context()
 	cfg, err := s.LoadClientConfig(ctx)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync config failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync config failed"})
 		return
 	}
 	if !cfg.Active() {
-		web.JSON(c, http.StatusConflict, gin.H{"error": "sync is not configured"})
+		httpx.JSON(c, http.StatusConflict, gin.H{"error": "sync is not configured"})
 		return
 	}
 	if err := s.RequestFullResync(ctx); err != nil {
 		slog.Error("sync: full resync failed", "error", err)
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "reset sync state failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "reset sync state failed"})
 		return
 	}
 	slog.Info("sync: full resync requested", "request_id", requestid.From(c))
-	web.JSON(c, http.StatusOK, gin.H{"ok": true})
+	httpx.JSON(c, http.StatusOK, gin.H{"ok": true})
 }
 
 type userSyncKeyJSON struct {
@@ -439,7 +439,7 @@ func currentUserID(c *gin.Context) (ident.UUID, bool) {
 
 func (s *Service) requireHost(c *gin.Context) bool {
 	if !s.hostEnabled {
-		web.JSON(c, http.StatusConflict, gin.H{"error": "sync host is not enabled"})
+		httpx.JSON(c, http.StatusConflict, gin.H{"error": "sync host is not enabled"})
 		return false
 	}
 	return true
@@ -452,7 +452,7 @@ func (s *Service) handleUserKeyList(c *gin.Context) {
 	}
 	uid, ok := currentUserID(c)
 	if !ok {
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	rows, err := s.client.UserSyncKey.Query().
@@ -460,14 +460,14 @@ func (s *Service) handleUserKeyList(c *gin.Context) {
 		Order(ent.Desc(usersynckey.FieldCreatedAt)).
 		All(c.Request.Context())
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "list sync keys failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "list sync keys failed"})
 		return
 	}
 	out := make([]userSyncKeyJSON, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, userSyncKeyResponse(row))
 	}
-	web.JSON(c, http.StatusOK, gin.H{"keys": out})
+	httpx.JSON(c, http.StatusOK, gin.H{"keys": out})
 }
 
 // handleUserKeyCreate mints a key bound to the current account. The body may
@@ -479,7 +479,7 @@ func (s *Service) handleUserKeyCreate(c *gin.Context) {
 	}
 	uid, ok := currentUserID(c)
 	if !ok {
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
@@ -488,24 +488,24 @@ func (s *Service) handleUserKeyCreate(c *gin.Context) {
 		ExpiresInDays *int    `json:"expires_in_days"`
 		ExpiresAt     *string `json:"expires_at"`
 	}
-	if err := web.BindJSON(c, &body); err != nil && !errors.Is(err, io.EOF) {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	if err := httpx.BindJSON(c, &body); err != nil && !errors.Is(err, io.EOF) {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	name := strings.TrimSpace(body.Name)
 	if len([]rune(name)) > maxSyncKeyName {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "name is too long"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "name is too long"})
 		return
 	}
 	expires, err := syncKeyExpiry(time.Now().UTC(), body.ExpiresInDays, body.ExpiresAt)
 	if err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	material, err := synckey.GenerateKey()
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "generate sync key failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "generate sync key failed"})
 		return
 	}
 	create := s.client.UserSyncKey.Create().
@@ -519,12 +519,12 @@ func (s *Service) handleUserKeyCreate(c *gin.Context) {
 	}
 	row, err := create.Save(c.Request.Context())
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create sync key failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "create sync key failed"})
 		return
 	}
 	slog.Info("security audit", "action", "sync_key.create",
 		"request_id", requestid.From(c), "actor_user_id", uid, "key_id", row.ID, "result", "ok")
-	web.JSON(c, http.StatusCreated, gin.H{
+	httpx.JSON(c, http.StatusCreated, gin.H{
 		"key":     material.Plaintext,
 		"api_key": userSyncKeyResponse(row),
 	})
@@ -568,12 +568,12 @@ func (s *Service) handleUserKeyRotate(c *gin.Context) {
 	}
 	uid, ok := currentUserID(c)
 	if !ok {
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	keyID, err := ident.Parse(c.Param("id"))
 	if err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid key id"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid key id"})
 		return
 	}
 	ctx := c.Request.Context()
@@ -582,21 +582,21 @@ func (s *Service) handleUserKeyRotate(c *gin.Context) {
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			web.JSON(c, http.StatusNotFound, gin.H{"error": "sync key not found"})
+			httpx.JSON(c, http.StatusNotFound, gin.H{"error": "sync key not found"})
 			return
 		}
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync key failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync key failed"})
 		return
 	}
 	material, err := synckey.GenerateKey()
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "generate sync key failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "generate sync key failed"})
 		return
 	}
 
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "rotate sync key failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "rotate sync key failed"})
 		return
 	}
 	create := tx.UserSyncKey.Create().
@@ -611,24 +611,24 @@ func (s *Service) handleUserKeyRotate(c *gin.Context) {
 	created, err := create.Save(ctx)
 	if err != nil {
 		_ = tx.Rollback()
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "rotate sync key failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "rotate sync key failed"})
 		return
 	}
 	if _, err := tx.UserSyncKey.Delete().
 		Where(usersynckey.ID(keyID), usersynckey.UserIDEQ(uid)).
 		Exec(ctx); err != nil {
 		_ = tx.Rollback()
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "rotate sync key failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "rotate sync key failed"})
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "rotate sync key failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "rotate sync key failed"})
 		return
 	}
 	slog.Info("security audit", "action", "sync_key.rotate",
 		"request_id", requestid.From(c), "actor_user_id", uid,
 		"old_key_id", keyID, "new_key_id", created.ID, "result", "ok")
-	web.JSON(c, http.StatusOK, gin.H{
+	httpx.JSON(c, http.StatusOK, gin.H{
 		"key":     material.Plaintext,
 		"api_key": userSyncKeyResponse(created),
 	})
@@ -642,40 +642,40 @@ func (s *Service) handleUserKeyDelete(c *gin.Context) {
 	}
 	uid, ok := currentUserID(c)
 	if !ok {
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	keyID, err := ident.Parse(c.Param("id"))
 	if err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid key id"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid key id"})
 		return
 	}
 	deleted, err := s.client.UserSyncKey.Delete().
 		Where(usersynckey.ID(keyID), usersynckey.UserIDEQ(uid)).
 		Exec(c.Request.Context())
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete sync key failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete sync key failed"})
 		return
 	}
 	if deleted == 0 {
-		web.JSON(c, http.StatusNotFound, gin.H{"error": "sync key not found"})
+		httpx.JSON(c, http.StatusNotFound, gin.H{"error": "sync key not found"})
 		return
 	}
 	slog.Info("security audit", "action", "sync_key.delete",
 		"request_id", requestid.From(c), "actor_user_id", uid, "key_id", keyID, "result", "ok")
-	web.JSON(c, http.StatusOK, gin.H{"deleted": true})
+	httpx.JSON(c, http.StatusOK, gin.H{"deleted": true})
 }
 
 func (s *Service) handleStatus(c *gin.Context) {
 	ctx := c.Request.Context()
 	cfg, err := s.LoadClientConfig(ctx)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync status failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync status failed"})
 		return
 	}
 	st, err := s.LoadEngineState(ctx)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync status failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read sync status failed"})
 		return
 	}
 	pending := 0
@@ -689,11 +689,11 @@ func (s *Service) handleStatus(c *gin.Context) {
 		}
 		pending, err = query.Count(ctx)
 		if err != nil {
-			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "count pending changes failed"})
+			httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "count pending changes failed"})
 			return
 		}
 	}
-	web.JSON(c, http.StatusOK, statusResponse{
+	httpx.JSON(c, http.StatusOK, statusResponse{
 		Enabled:      cfg.Enabled,
 		Configured:   cfg.Active(),
 		ServerURL:    cfg.ServerURL,

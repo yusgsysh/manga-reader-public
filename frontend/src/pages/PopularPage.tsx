@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { usePopular } from "../hooks/useGalleryList";
+import { usePopular } from "../hooks/gallery/useGalleryList";
 import { GalleryGrid } from "../components/gallery/GalleryGrid";
 import { GalleryGridSkeleton } from "../components/gallery/GallerySkeleton";
 import { InfiniteScrollTrigger } from "../components/common/InfiniteScrollTrigger";

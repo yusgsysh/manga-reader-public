@@ -4,12 +4,12 @@ import { thumbnailUrl } from "../../lib/image";
 import { parseTagString } from "../../domain/gallery/tag";
 import { languageCodeFromTags } from "../../lib/language";
 import { formatPosted } from "../../lib/time";
-import { useTagTranslation } from "../../hooks/useTagTranslation";
+import { useTagTranslation } from "../../hooks/tag/useTagTranslation";
 import {
   useTagPreferences,
   TAG_ACTION_CHIP_CLASS,
   sortTagsByPreference,
-} from "../../hooks/useTagPreferences";
+} from "../../hooks/tag/useTagPreferences";
 import { Star, Tag as TagIcon } from "@phosphor-icons/react";
 import { createPortal } from "react-dom";
 import { memo, useState, useRef, useEffect, useMemo } from "react";

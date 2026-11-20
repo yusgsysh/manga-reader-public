@@ -26,9 +26,9 @@ import (
 	"manga-reader/internal/config"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/user"
+	"manga-reader/internal/httpx"
 	"manga-reader/internal/ident"
 	"manga-reader/internal/requestid"
-	"manga-reader/internal/web"
 )
 
 const (
@@ -180,31 +180,31 @@ func totpStatus(u *ent.User) totpStatusJSON {
 func (s *Service) handleTOTPStatus(c *gin.Context) {
 	principal, ok := PrincipalFrom(c)
 	if !ok {
-		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		httpx.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	u, err := s.db.User.Get(c.Request.Context(), principal.ID)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read totp status failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read totp status failed"})
 		return
 	}
-	web.JSON(c, http.StatusOK, totpStatus(u))
+	httpx.JSON(c, http.StatusOK, totpStatus(u))
 }
 
 func (s *Service) handleTOTPSetup(c *gin.Context) {
 	principal, ok := PrincipalFrom(c)
 	if !ok {
-		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		httpx.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	ctx := c.Request.Context()
 	u, err := s.db.User.Get(ctx, principal.ID)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read user failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read user failed"})
 		return
 	}
 	if u.TotpEnabled {
-		web.JSON(c, http.StatusConflict, gin.H{"error": "two-factor authentication is already enabled"})
+		httpx.JSON(c, http.StatusConflict, gin.H{"error": "two-factor authentication is already enabled"})
 		return
 	}
 	key, err := totp.Generate(totp.GenerateOpts{
@@ -215,12 +215,12 @@ func (s *Service) handleTOTPSetup(c *gin.Context) {
 		Algorithm:   otp.AlgorithmSHA1,
 	})
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "generate totp secret failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "generate totp secret failed"})
 		return
 	}
 	sealed, err := s.sealTOTPSecret(key.Secret())
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "store totp secret failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "store totp secret failed"})
 		return
 	}
 	if err := s.db.User.UpdateOneID(u.ID).
@@ -229,7 +229,7 @@ func (s *Service) handleTOTPSetup(c *gin.Context) {
 		ClearTotpConfirmedAt().
 		SetRecoveryCodeHashes([]string{}).
 		Exec(ctx); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "store totp secret failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "store totp secret failed"})
 		return
 	}
 
@@ -242,7 +242,7 @@ func (s *Service) handleTOTPSetup(c *gin.Context) {
 			qrURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
 		}
 	}
-	web.JSON(c, http.StatusOK, gin.H{
+	httpx.JSON(c, http.StatusOK, gin.H{
 		"secret":       key.Secret(),
 		"otpauth_url":  key.URL(),
 		"qr_data_url":  qrURL,
@@ -254,45 +254,45 @@ func (s *Service) handleTOTPSetup(c *gin.Context) {
 func (s *Service) handleTOTPEnable(c *gin.Context) {
 	principal, ok := PrincipalFrom(c)
 	if !ok {
-		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		httpx.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 8<<10)
 	var body struct {
 		Code string `json:"code"`
 	}
-	if err := web.BindJSON(c, &body); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	if err := httpx.BindJSON(c, &body); err != nil {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	ctx := c.Request.Context()
 	u, err := s.db.User.Get(ctx, principal.ID)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read user failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read user failed"})
 		return
 	}
 	if u.TotpEnabled {
-		web.JSON(c, http.StatusConflict, gin.H{"error": "two-factor authentication is already enabled"})
+		httpx.JSON(c, http.StatusConflict, gin.H{"error": "two-factor authentication is already enabled"})
 		return
 	}
 	if u.TotpSecretCiphertext == "" {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "start totp setup first"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "start totp setup first"})
 		return
 	}
 	secret, err := s.openTOTPSecret(u.TotpSecretCiphertext)
 	if err != nil {
 		slog.Error("open totp secret failed", "request_id", requestid.From(c), "user_id", u.ID, "error", err)
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read totp secret failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read totp secret failed"})
 		return
 	}
 	if !validTOTPCode(secret, body.Code) {
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid verification code"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid verification code"})
 		return
 	}
 
 	plain, hashes, err := s.newRecoveryCodes()
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "generate recovery codes failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "generate recovery codes failed"})
 		return
 	}
 	now := time.Now()
@@ -301,11 +301,11 @@ func (s *Service) handleTOTPEnable(c *gin.Context) {
 		SetTotpConfirmedAt(now).
 		SetRecoveryCodeHashes(hashes).
 		Exec(ctx); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "enable totp failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "enable totp failed"})
 		return
 	}
 	slog.Info("totp enabled", "request_id", requestid.From(c), "actor_user_id", u.ID)
-	web.JSON(c, http.StatusOK, gin.H{
+	httpx.JSON(c, http.StatusOK, gin.H{
 		"enabled":        true,
 		"confirmed_at":   now.UTC().Format(time.RFC3339),
 		"recovery_codes": plain,
@@ -315,7 +315,7 @@ func (s *Service) handleTOTPEnable(c *gin.Context) {
 func (s *Service) handleTOTPDisable(c *gin.Context) {
 	principal, ok := PrincipalFrom(c)
 	if !ok {
-		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		httpx.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 8<<10)
@@ -323,18 +323,18 @@ func (s *Service) handleTOTPDisable(c *gin.Context) {
 		Password string `json:"password"`
 		Code     string `json:"code"`
 	}
-	if err := web.BindJSON(c, &body); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	if err := httpx.BindJSON(c, &body); err != nil {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	ctx := c.Request.Context()
 	u, err := s.db.User.Get(ctx, principal.ID)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read user failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read user failed"})
 		return
 	}
 	if !VerifyPassword(u.PasswordHash, body.Password) {
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid password"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid password"})
 		return
 	}
 	// Disabling is a security downgrade, so an enabled second factor must be
@@ -343,13 +343,13 @@ func (s *Service) handleTOTPDisable(c *gin.Context) {
 	if u.TotpEnabled {
 		secret, err := s.openTOTPSecret(u.TotpSecretCiphertext)
 		if err != nil {
-			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read totp secret failed"})
+			httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read totp secret failed"})
 			return
 		}
 		if !validTOTPCode(secret, body.Code) {
 			used, err := s.consumeRecoveryCode(ctx, u.ID, body.Code)
 			if err != nil || !used {
-				web.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid password or verification code"})
+				httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid password or verification code"})
 				return
 			}
 		}
@@ -360,17 +360,17 @@ func (s *Service) handleTOTPDisable(c *gin.Context) {
 		ClearTotpConfirmedAt().
 		SetRecoveryCodeHashes([]string{}).
 		Exec(ctx); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "disable totp failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "disable totp failed"})
 		return
 	}
 	slog.Info("totp disabled", "request_id", requestid.From(c), "actor_user_id", u.ID)
-	web.JSON(c, http.StatusOK, gin.H{"enabled": false})
+	httpx.JSON(c, http.StatusOK, gin.H{"enabled": false})
 }
 
 func (s *Service) handleTOTPRegenerateRecoveryCodes(c *gin.Context) {
 	principal, ok := PrincipalFrom(c)
 	if !ok {
-		web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		httpx.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 8<<10)
@@ -378,52 +378,52 @@ func (s *Service) handleTOTPRegenerateRecoveryCodes(c *gin.Context) {
 		Password string `json:"password"`
 		Code     string `json:"code"`
 	}
-	if err := web.BindJSON(c, &body); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	if err := httpx.BindJSON(c, &body); err != nil {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	ctx := c.Request.Context()
 	u, err := s.db.User.Get(ctx, principal.ID)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read user failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read user failed"})
 		return
 	}
 	if !u.TotpEnabled || u.TotpSecretCiphertext == "" {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "two-factor authentication is not enabled"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "two-factor authentication is not enabled"})
 		return
 	}
 	if !VerifyPassword(u.PasswordHash, body.Password) {
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid password"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid password"})
 		return
 	}
 	secret, err := s.openTOTPSecret(u.TotpSecretCiphertext)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read totp secret failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read totp secret failed"})
 		return
 	}
 	if !validTOTPCode(secret, body.Code) {
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid verification code"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid verification code"})
 		return
 	}
 	plain, hashes, err := s.newRecoveryCodes()
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "generate recovery codes failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "generate recovery codes failed"})
 		return
 	}
 	if err := s.db.User.UpdateOneID(u.ID).
 		SetRecoveryCodeHashes(hashes).
 		Exec(ctx); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "save recovery codes failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "save recovery codes failed"})
 		return
 	}
 	slog.Info("totp recovery codes regenerated", "request_id", requestid.From(c), "actor_user_id", u.ID)
-	web.JSON(c, http.StatusOK, gin.H{"recovery_codes": plain})
+	httpx.JSON(c, http.StatusOK, gin.H{"recovery_codes": plain})
 }
 
 func (s *Service) handleTOTPVerify(c *gin.Context) {
 	if !s.allowTOTP(c.ClientIP()) {
 		c.Header("Retry-After", "30")
-		web.JSON(c, http.StatusTooManyRequests, gin.H{"error": "too many verification attempts"})
+		httpx.JSON(c, http.StatusTooManyRequests, gin.H{"error": "too many verification attempts"})
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 8<<10)
@@ -431,18 +431,18 @@ func (s *Service) handleTOTPVerify(c *gin.Context) {
 		MFAToken string `json:"mfa_token"`
 		Code     string `json:"code"`
 	}
-	if err := web.BindJSON(c, &body); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	if err := httpx.BindJSON(c, &body); err != nil {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	claims, err := s.mfaTokens.parse(strings.TrimSpace(body.MFAToken))
 	if err != nil {
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid or expired verification token"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid or expired verification token"})
 		return
 	}
 	uid, err := ident.Parse(claims.Subject)
 	if err != nil || uid.IsNil() {
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid or expired verification token"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid or expired verification token"})
 		return
 	}
 	ctx := c.Request.Context()
@@ -450,13 +450,13 @@ func (s *Service) handleTOTPVerify(c *gin.Context) {
 		Where(user.IDEQ(uid), user.StatusEQ(config.StatusActive)).
 		Only(ctx)
 	if err != nil || u.TokenVersion != claims.TokenVersion || !u.TotpEnabled || u.TotpSecretCiphertext == "" {
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid or expired verification token"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid or expired verification token"})
 		return
 	}
 	secret, err := s.openTOTPSecret(u.TotpSecretCiphertext)
 	if err != nil {
 		slog.Error("open totp secret failed", "request_id", requestid.From(c), "user_id", u.ID, "error", err)
-		web.JSON(c, http.StatusUnauthorized, gin.H{"error": "verification failed"})
+		httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "verification failed"})
 		return
 	}
 
@@ -467,11 +467,11 @@ func (s *Service) handleTOTPVerify(c *gin.Context) {
 		used, err := s.consumeRecoveryCode(ctx, u.ID, body.Code)
 		if err != nil {
 			slog.Error("consume recovery code failed", "request_id", requestid.From(c), "user_id", u.ID, "error", err)
-			web.JSON(c, http.StatusUnauthorized, gin.H{"error": "verification failed"})
+			httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "verification failed"})
 			return
 		}
 		if !used {
-			web.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid verification code"})
+			httpx.JSON(c, http.StatusUnauthorized, gin.H{"error": "invalid verification code"})
 			return
 		}
 		method = "recovery_code"
@@ -479,7 +479,7 @@ func (s *Service) handleTOTPVerify(c *gin.Context) {
 
 	token, expires, err := s.tokens.issue(u.ID, u.Username, u.Role, u.TokenVersion)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
 		return
 	}
 	s.setCookie(c, token, expires)
@@ -489,7 +489,7 @@ func (s *Service) handleTOTPVerify(c *gin.Context) {
 		"result", "success",
 		"method", method,
 	)
-	web.JSON(c, http.StatusOK, s.sessionResponse(token, u))
+	httpx.JSON(c, http.StatusOK, s.sessionResponse(token, u))
 }
 
 // consumeRecoveryCode atomically verifies and removes one unused code. The

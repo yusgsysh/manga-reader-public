@@ -33,7 +33,7 @@ import {
   type ExhentaiSite,
 } from "../api/settings";
 import { useTheme, type ThemeMode } from "../context/theme";
-import { useTagTranslation } from "../hooks/useTagTranslation";
+import { useTagTranslation } from "../hooks/tag/useTagTranslation";
 import { SETTINGS_STALE_TIME } from "../lib/cacheConfig";
 import { ACCENT_PRESETS, DEFAULT_ACCENT, isPresetAccent } from "../lib/accent";
 import { formatDateTime } from "../lib/time";

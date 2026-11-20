@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Input, cn } from "@cloudflare/kumo";
 import { X } from "@phosphor-icons/react";
-import { useTagTranslation } from "../../hooks/useTagTranslation";
+import { useTagTranslation } from "../../hooks/tag/useTagTranslation";
 import {
   useTagPreferences,
   TAG_ACTION_CHIP_CLASS,
-} from "../../hooks/useTagPreferences";
+} from "../../hooks/tag/useTagPreferences";
 import { Section } from "../ui";
 import { FilterChip } from "./FilterChip";
 

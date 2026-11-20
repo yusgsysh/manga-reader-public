@@ -12,17 +12,18 @@ import (
 	"strconv"
 	"time"
 
+	"manga-reader/internal/ident"
+
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sync/singleflight"
-	"manga-reader/internal/ident"
 
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/gallerycache"
+	"manga-reader/internal/httpx"
 	"manga-reader/internal/imagecache"
 	"manga-reader/internal/membudget"
 	"manga-reader/internal/metrics"
 	"manga-reader/internal/ttl"
-	"manga-reader/internal/web"
 )
 
 const (
@@ -118,12 +119,12 @@ func (s *Server) writeCachedStream(c *gin.Context, key string, metricKind string
 func (s *Server) handleThumbnail(c *gin.Context) {
 	rawURL := c.Query("url")
 	if rawURL == "" {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "missing url parameter"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "missing url parameter"})
 		return
 	}
 
 	if err := exhentai.ValidateThumbnailURL(rawURL); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -144,14 +145,14 @@ func (s *Server) handleThumbnail(c *gin.Context) {
 			c.AbortWithStatus(http.StatusServiceUnavailable)
 			return
 		}
-		web.JSON(c, http.StatusGatewayTimeout, gin.H{"error": fmt.Sprintf("memory budget wait canceled: %v", leaseErr)})
+		httpx.JSON(c, http.StatusGatewayTimeout, gin.H{"error": fmt.Sprintf("memory budget wait canceled: %v", leaseErr)})
 		return
 	}
 	defer lease.Release()
 
 	data, contentType, err := fetchThumbnail(ctx, client, rawURL)
 	if err != nil {
-		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download thumbnail failed: %v", err)})
+		httpx.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download thumbnail failed: %v", err)})
 		return
 	}
 	if rerr := lease.Resize(ctx, int64(len(data))); rerr != nil {
@@ -165,12 +166,12 @@ func (s *Server) handleThumbnail(c *gin.Context) {
 func (s *Server) handleCachedThumbnail(c *gin.Context) {
 	rawURL := c.Query("url")
 	if rawURL == "" {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "missing url parameter"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "missing url parameter"})
 		return
 	}
 
 	if err := exhentai.ValidateThumbnailURL(rawURL); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -194,11 +195,11 @@ func (s *Server) handleCachedThumbnail(c *gin.Context) {
 	result, err := s.loadOrFetchThumbnail(ctx, uid, key, rawURL)
 	if err != nil {
 		if imagecache.IsNotFound(err) {
-			web.JSON(c, http.StatusNotFound, gin.H{"error": "thumbnail not found"})
+			httpx.JSON(c, http.StatusNotFound, gin.H{"error": "thumbnail not found"})
 			return
 		}
 		slog.Error("cached-thumbnail error", "key", key[:16], "error", err)
-		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download thumbnail failed: %v", err)})
+		httpx.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download thumbnail failed: %v", err)})
 		return
 	}
 	defer result.release()
@@ -210,12 +211,12 @@ func (s *Server) handleCachedThumbnail(c *gin.Context) {
 func (s *Server) handleCachedImage(c *gin.Context) {
 	rawURL := c.Query("url")
 	if rawURL == "" {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "missing url parameter"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "missing url parameter"})
 		return
 	}
 
 	if err := exhentai.ValidatePageURL(rawURL); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -239,11 +240,11 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 	result, err := s.loadOrFetchImage(ctx, uid, key, rawURL)
 	if err != nil {
 		if imagecache.IsNotFound(err) {
-			web.JSON(c, http.StatusNotFound, gin.H{"error": "image not found"})
+			httpx.JSON(c, http.StatusNotFound, gin.H{"error": "image not found"})
 			return
 		}
 		slog.Error("cached-image error", "key", key[:16], "error", err)
-		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
+		httpx.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
 		return
 	}
 	defer result.release()
@@ -427,4 +428,51 @@ func (s *Server) triggerPageRefresh(ctx context.Context, userID ident.UUID, page
 	}
 	slog.Info("cached page URL failed; refreshing gallery cache", "id", galleryID, "error", fetchErr)
 	go s.refreshPages(ctx, userID, galleryID, row.Token)
+}
+func (s *Server) handlePageImage(c *gin.Context) {
+	pageURL := c.Query("url")
+	if pageURL == "" {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "missing url parameter"})
+		return
+	}
+	// Same allowlist as the cached-page endpoint: without it this handler
+	// would fetch and return arbitrary caller-chosen URLs (SSRF) at the app
+	// origin with no CSP in front.
+	if err := exhentai.ValidatePageURL(pageURL); err != nil {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	defer cancel()
+	client, _, ok := s.upstreamClientForRequest(c)
+	if !ok {
+		return
+	}
+
+	// Stream the image instead of buffering it: failures are detected while
+	// establishing the stream (page scrape, status, probe), so every error
+	// that can still produce a JSON response happens before headers are
+	// written. A mid-body upstream failure truncates the response instead.
+	stream, err := exhentai.FetchPageImageStream(ctx, client, pageURL)
+	if err != nil || stream == nil {
+		httpx.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("download image failed: %v", err)})
+		return
+	}
+	defer stream.Body.Close()
+
+	if stream.ContentType != "" {
+		c.Header("Content-Type", stream.ContentType)
+	}
+	// ProxyImageStream already rejects an upstream Content-Length above the
+	// cap; clamp again defensively and never let a bogus length lift it.
+	limit := int64(exhentai.MaxImageBytes)
+	if stream.Size > 0 && stream.Size <= limit {
+		c.Header("Content-Length", strconv.FormatInt(stream.Size, 10))
+		limit = stream.Size
+	}
+	c.Status(http.StatusOK)
+	if _, err := io.Copy(c.Writer, io.LimitReader(stream.Body, limit)); err != nil {
+		slog.Error("page image stream failed", "url", pageURL, "error", err)
+	}
 }

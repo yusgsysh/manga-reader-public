@@ -12,15 +12,16 @@ import (
 	"manga-reader/internal/ent/bookshelf"
 	"manga-reader/internal/ent/readingprogress"
 
+	"manga-reader/internal/ident"
+
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sync/singleflight"
-	"manga-reader/internal/ident"
 
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/gallerycache"
+	"manga-reader/internal/httpx"
 	"manga-reader/internal/model"
 	synclib "manga-reader/internal/sync"
-	"manga-reader/internal/web"
 )
 
 // galleryPrefetchGroup coalesces concurrent background prefetches for the same
@@ -86,7 +87,7 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 		page = 0
 	}
 	if page > maxDBPage {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "page too large"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "page too large"})
 		return
 	}
 
@@ -102,7 +103,7 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 		Where(bookshelf.UserIDEQ(uid)).
 		Count(ctx)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("count bookshelf failed: %v", err)})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("count bookshelf failed: %v", err)})
 		return
 	}
 
@@ -119,7 +120,7 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 		Limit(pageSize).
 		All(ctx)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list bookshelf failed: %v", err)})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list bookshelf failed: %v", err)})
 		return
 	}
 
@@ -136,7 +137,7 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 			Where(readingprogress.UserIDEQ(uid), readingprogress.GalleryIDIn(ids...)).
 			All(ctx)
 		if err != nil {
-			web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list reading progress failed: %v", err)})
+			httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("list reading progress failed: %v", err)})
 			return
 		}
 		for _, p := range progressRows {
@@ -153,7 +154,7 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 	}
 	metaByRef, err := gallerycache.GetMany(ctx, s.DB.Client, refs)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load gallery cache failed: %v", err)})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("load gallery cache failed: %v", err)})
 		return
 	}
 
@@ -192,7 +193,7 @@ func (s *Server) handleBookshelfList(c *gin.Context) {
 		results = append(results, item)
 	}
 
-	web.JSON(c, http.StatusOK, model.BookshelfListResponse{
+	httpx.JSON(c, http.StatusOK, model.BookshelfListResponse{
 		Page:       page,
 		PageSize:   len(results),
 		Total:      total,
@@ -205,13 +206,13 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery id"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery id"})
 		return
 	}
 
 	token := c.Param("token")
 	if token == "" {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery token"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery token"})
 		return
 	}
 
@@ -229,11 +230,11 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 		).
 		Exist(ctx)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("check bookshelf failed: %v", err)})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("check bookshelf failed: %v", err)})
 		return
 	}
 	if exists {
-		web.JSON(c, http.StatusOK, model.BookshelfMutationResponse{Success: true, InBookshelf: true})
+		httpx.JSON(c, http.StatusOK, model.BookshelfMutationResponse{Success: true, InBookshelf: true})
 		return
 	}
 
@@ -242,7 +243,7 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 	// stored in the bookshelf table itself.
 	gallery, offline, err := s.galleryForBookshelf(ctx, uid, id, token)
 	if err != nil {
-		web.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
+		httpx.JSON(c, http.StatusBadGateway, gin.H{"error": fmt.Sprintf("exhentai api failed: %v", err)})
 		return
 	}
 
@@ -252,7 +253,7 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 		SetToken(token).
 		Save(ctx)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("add bookshelf failed: %v", err)})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("add bookshelf failed: %v", err)})
 		return
 	}
 
@@ -265,7 +266,7 @@ func (s *Server) handleBookshelfAdd(c *gin.Context) {
 	// Warm the offline cache in the background (metadata + pages).
 	go s.prefetchGallery(uid, id, token, gallery)
 
-	web.JSON(c, http.StatusOK, model.BookshelfMutationResponse{
+	httpx.JSON(c, http.StatusOK, model.BookshelfMutationResponse{
 		Success:     true,
 		InBookshelf: true,
 		Offline:     offline,
@@ -305,13 +306,13 @@ func (s *Server) handleBookshelfRemove(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery id"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery id"})
 		return
 	}
 
 	token := c.Param("token")
 	if token == "" {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery token"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery token"})
 		return
 	}
 
@@ -328,7 +329,7 @@ func (s *Server) handleBookshelfRemove(c *gin.Context) {
 		).
 		Exec(ctx)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("remove bookshelf failed: %v", err)})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("remove bookshelf failed: %v", err)})
 		return
 	}
 
@@ -342,20 +343,20 @@ func (s *Server) handleBookshelfRemove(c *gin.Context) {
 
 	s.cleanupGalleryCache(ctx)
 
-	web.JSON(c, http.StatusOK, model.BookshelfMutationResponse{Success: true, InBookshelf: false})
+	httpx.JSON(c, http.StatusOK, model.BookshelfMutationResponse{Success: true, InBookshelf: false})
 }
 
 func (s *Server) handleBookshelfStatus(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery id"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery id"})
 		return
 	}
 
 	token := c.Param("token")
 	if token == "" {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery token"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid gallery token"})
 		return
 	}
 
@@ -374,15 +375,15 @@ func (s *Server) handleBookshelfStatus(c *gin.Context) {
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			web.JSON(c, http.StatusOK, model.BookshelfStatus{InBookshelf: false})
+			httpx.JSON(c, http.StatusOK, model.BookshelfStatus{InBookshelf: false})
 			return
 		}
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("check bookshelf failed: %v", err)})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("check bookshelf failed: %v", err)})
 		return
 	}
 
 	createdAt := b.CreatedAt
-	web.JSON(c, http.StatusOK, model.BookshelfStatus{
+	httpx.JSON(c, http.StatusOK, model.BookshelfStatus{
 		InBookshelf: true,
 		CreatedAt:   &createdAt,
 	})

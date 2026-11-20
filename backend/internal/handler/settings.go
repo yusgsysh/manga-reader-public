@@ -9,8 +9,8 @@ import (
 
 	"manga-reader/internal/config"
 	"manga-reader/internal/exhentai"
+	"manga-reader/internal/httpx"
 	"manga-reader/internal/usercookie"
-	"manga-reader/internal/web"
 )
 
 // cookieBody accepts either a browser-style cookie header in "cookie" or the
@@ -55,7 +55,7 @@ func (b cookieBody) hasCookieInput() bool {
 
 func (s *Server) requireCookieService(c *gin.Context) *usercookie.Service {
 	if s.UserCookies == nil {
-		web.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "user settings are not configured"})
+		httpx.JSON(c, http.StatusServiceUnavailable, gin.H{"error": "user settings are not configured"})
 		return nil
 	}
 	return s.UserCookies
@@ -72,10 +72,10 @@ func (s *Server) handleCookieGet(c *gin.Context) {
 	}
 	summary, err := svc.Summary(c.Request.Context(), uid)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
 		return
 	}
-	web.JSON(c, http.StatusOK, summary)
+	httpx.JSON(c, http.StatusOK, summary)
 }
 
 func (s *Server) handleCookiePut(c *gin.Context) {
@@ -87,10 +87,10 @@ func (s *Server) handleCookiePut(c *gin.Context) {
 	if svc == nil {
 		return
 	}
-	limitRequestBody(c, 32<<10)
+	httpx.LimitRequestBody(c, 32<<10)
 	var body cookieBody
-	if err := web.BindJSON(c, &body); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	if err := httpx.BindJSON(c, &body); err != nil {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	cfg := body.config()
@@ -101,7 +101,7 @@ func (s *Server) handleCookiePut(c *gin.Context) {
 		if body.hasCookieInput() {
 			current, err := svc.Config(c.Request.Context(), uid)
 			if err != nil {
-				web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
+				httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
 				return
 			}
 			cfg = current.MergedWith(cfg)
@@ -119,38 +119,38 @@ func (s *Server) handleCookiePut(c *gin.Context) {
 			if !body.hasCookieInput() && strings.TrimSpace(body.Site) != "" {
 				site, err := usercookie.NormalizeSite(body.Site)
 				if err != nil {
-					web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
+					httpx.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
 				current, err := svc.Summary(c.Request.Context(), uid)
 				if err != nil {
-					web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
+					httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
 					return
 				}
 				if current.Configured || site == usercookie.SiteEHentai {
 					if _, err := svc.SaveSite(c.Request.Context(), uid, site); err != nil {
-						web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
+						httpx.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 						return
 					}
 					updated, err := svc.Summary(c.Request.Context(), uid)
 					if err != nil {
-						web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
+						httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
 						return
 					}
-					web.JSON(c, http.StatusOK, updated)
+					httpx.JSON(c, http.StatusOK, updated)
 					return
 				}
 			}
-			web.JSON(c, http.StatusBadRequest, gin.H{"error": "ipb_member_id and ipb_pass_hash are required"})
+			httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "ipb_member_id and ipb_pass_hash are required"})
 			return
 		}
 	}
 	summary, err := svc.SaveCookie(c.Request.Context(), uid, cfg, body.Site)
 	if err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	web.JSON(c, http.StatusOK, summary)
+	httpx.JSON(c, http.StatusOK, summary)
 }
 
 func (s *Server) handleCookieDelete(c *gin.Context) {
@@ -163,15 +163,15 @@ func (s *Server) handleCookieDelete(c *gin.Context) {
 		return
 	}
 	if err := svc.ClearCookie(c.Request.Context(), uid); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "clear cookie failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "clear cookie failed"})
 		return
 	}
 	summary, err := svc.Summary(c.Request.Context(), uid)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
 		return
 	}
-	web.JSON(c, http.StatusOK, summary)
+	httpx.JSON(c, http.StatusOK, summary)
 }
 
 func (s *Server) handleCookieVerify(c *gin.Context) {
@@ -186,10 +186,10 @@ func (s *Server) handleCookieVerify(c *gin.Context) {
 	client, err := svc.Client(c.Request.Context(), uid)
 	if err != nil {
 		if errors.Is(err, usercookie.ErrNotConfigured) {
-			web.JSON(c, http.StatusPreconditionFailed, gin.H{"error": "exhentai cookie is not configured"})
+			httpx.JSON(c, http.StatusPreconditionFailed, gin.H{"error": "exhentai cookie is not configured"})
 			return
 		}
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "load exhentai session failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "load exhentai session failed"})
 		return
 	}
 	status := usercookie.StatusValid
@@ -197,13 +197,13 @@ func (s *Server) handleCookieVerify(c *gin.Context) {
 		status = usercookie.StatusInvalid
 	}
 	if err := svc.SetStatus(c.Request.Context(), uid, status); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "record cookie status failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "record cookie status failed"})
 		return
 	}
 	summary, err := svc.Summary(c.Request.Context(), uid)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read cookie settings failed"})
 		return
 	}
-	web.JSON(c, http.StatusOK, summary)
+	httpx.JSON(c, http.StatusOK, summary)
 }

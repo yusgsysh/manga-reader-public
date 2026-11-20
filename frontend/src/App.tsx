@@ -11,7 +11,7 @@ import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { AuthProvider } from "./context/AuthContext";
 import { useAuth } from "./context/auth";
 import { NavigationProvider } from "./context/NavigationContext";
-import { useSyncEvents } from "./hooks/useSyncEvents";
+import { useSyncEvents } from "./hooks/sync/useSyncEvents";
 import { GLOBAL_STALE_TIME } from "./lib/cacheConfig";
 import { scheduleIdle } from "./lib/idle";
 import { MotionProvider } from "./lib/motion";

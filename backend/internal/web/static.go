@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"manga-reader/internal/httpx"
 	"manga-reader/internal/metrics"
 )
 
@@ -32,7 +33,7 @@ func Register(r *gin.Engine, fsys fs.FS) {
 	r.NoRoute(func(c *gin.Context) {
 		p := c.Request.URL.Path
 		if isAPIPath(p) || (c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead) {
-			JSON(c, http.StatusNotFound, gin.H{"error": "not found"})
+			httpx.JSON(c, http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
 

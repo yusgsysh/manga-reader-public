@@ -14,8 +14,8 @@ import {
   type MangaViewerHandle,
   type ViewerSettings,
 } from "@yui540/comimi-react";
-import { useGallery, useGalleryPages, useReadingProgress } from "../hooks/useReaderData";
-import { useReadingProgressSync } from "../hooks/useReadingProgressSync";
+import { useGallery, useGalleryPages, useReadingProgress } from "../hooks/reader/useReaderData";
+import { useReadingProgressSync } from "../hooks/reader/useReadingProgressSync";
 import { useTheme } from "../context/theme";
 import { useBackNavigation } from "../hooks/useBackNavigation";
 import {

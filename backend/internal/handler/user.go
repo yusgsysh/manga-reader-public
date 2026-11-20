@@ -5,14 +5,15 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"manga-reader/internal/ident"
+
+	"github.com/gin-gonic/gin"
 
 	"manga-reader/internal/auth"
 	"manga-reader/internal/config"
 	"manga-reader/internal/exhentai"
+	"manga-reader/internal/httpx"
 	"manga-reader/internal/usercookie"
-	"manga-reader/internal/web"
 )
 
 // requireUser returns the trusted user ID for the request. It is always taken
@@ -28,7 +29,7 @@ func (s *Server) requireUser(c *gin.Context) (ident.UUID, bool) {
 		// a real request without a principal is rejected.
 		return ident.Nil(), true
 	}
-	web.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "authentication required"})
+	httpx.AbortWithStatusJSON(c, http.StatusUnauthorized, gin.H{"error": "authentication required"})
 	return ident.Nil(), false
 }
 
@@ -36,7 +37,7 @@ func (s *Server) requireUser(c *gin.Context) (ident.UUID, bool) {
 func (s *Server) requireAdmin(c *gin.Context) bool {
 	principal, ok := auth.PrincipalFrom(c)
 	if !ok || principal.Role != config.RoleAdmin {
-		web.AbortWithStatusJSON(c, http.StatusForbidden, gin.H{"error": "administrator required"})
+		httpx.AbortWithStatusJSON(c, http.StatusForbidden, gin.H{"error": "administrator required"})
 		return false
 	}
 	return true
@@ -65,10 +66,10 @@ func (s *Server) upstreamClientForRequest(c *gin.Context) (*http.Client, ident.U
 	client, err := s.upstreamClient(c.Request.Context(), uid)
 	if err != nil {
 		if errors.Is(err, usercookie.ErrNotConfigured) {
-			web.JSON(c, http.StatusPreconditionFailed, gin.H{"error": "exhentai cookie is not configured; add it in settings"})
+			httpx.JSON(c, http.StatusPreconditionFailed, gin.H{"error": "exhentai cookie is not configured; add it in settings"})
 			return nil, ident.Nil(), false
 		}
-		web.JSON(c, http.StatusBadGateway, gin.H{"error": "exhentai session unavailable"})
+		httpx.JSON(c, http.StatusBadGateway, gin.H{"error": "exhentai session unavailable"})
 		return nil, ident.Nil(), false
 	}
 	return client, uid, true

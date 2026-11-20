@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"manga-reader/internal/ident"
+
+	"github.com/gin-gonic/gin"
 
 	"manga-reader/internal/auth"
 	"manga-reader/internal/config"
@@ -20,8 +21,8 @@ import (
 	"manga-reader/internal/ent/tagsyncbaseline"
 	"manga-reader/internal/ent/user"
 	"manga-reader/internal/ent/usersetting"
+	"manga-reader/internal/httpx"
 	"manga-reader/internal/requestid"
-	"manga-reader/internal/web"
 )
 
 const timeLayout = "2006-01-02T15:04:05Z07:00"
@@ -78,14 +79,14 @@ func (s *Server) handleAdminUserList(c *gin.Context) {
 		Order(ent.Asc(user.FieldID)).
 		All(c.Request.Context())
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "list users failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "list users failed"})
 		return
 	}
 	out := make([]userJSON, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, userResponse(row))
 	}
-	web.JSON(c, http.StatusOK, gin.H{"users": out})
+	httpx.JSON(c, http.StatusOK, gin.H{"users": out})
 }
 
 func (s *Server) handleAdminUserGet(c *gin.Context) {
@@ -99,52 +100,52 @@ func (s *Server) handleAdminUserGet(c *gin.Context) {
 	u, err := s.DB.Client.User.Get(c.Request.Context(), id)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			web.JSON(c, http.StatusNotFound, gin.H{"error": "user not found"})
+			httpx.JSON(c, http.StatusNotFound, gin.H{"error": "user not found"})
 			return
 		}
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "read user failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "read user failed"})
 		return
 	}
-	web.JSON(c, http.StatusOK, userResponse(u))
+	httpx.JSON(c, http.StatusOK, userResponse(u))
 }
 
 func (s *Server) handleAdminUserCreate(c *gin.Context) {
 	if !s.requireAdmin(c) {
 		return
 	}
-	limitRequestBody(c, 64<<10)
+	httpx.LimitRequestBody(c, 64<<10)
 	var body struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
 		Role     string `json:"role"`
 		Status   string `json:"status"`
 	}
-	if err := web.BindJSON(c, &body); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	if err := httpx.BindJSON(c, &body); err != nil {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	body.Username = strings.TrimSpace(body.Username)
 	if body.Username == "" || len(body.Password) < 8 {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "username and a password of at least 8 characters are required"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "username and a password of at least 8 characters are required"})
 		return
 	}
 	if body.Role == "" {
 		body.Role = config.RoleUser
 	}
 	if !validRole(body.Role) {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "role must be admin or user"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "role must be admin or user"})
 		return
 	}
 	if body.Status == "" {
 		body.Status = config.StatusActive
 	}
 	if !validUserStatus(body.Status) {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "status must be active or disabled"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "status must be active or disabled"})
 		return
 	}
 	hash, err := auth.HashPassword(body.Password)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "password hashing failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "password hashing failed"})
 		return
 	}
 	created, err := s.DB.Client.User.Create().
@@ -155,14 +156,14 @@ func (s *Server) handleAdminUserCreate(c *gin.Context) {
 		Save(c.Request.Context())
 	if err != nil {
 		if ent.IsConstraintError(err) {
-			web.JSON(c, http.StatusConflict, gin.H{"error": "username already exists"})
+			httpx.JSON(c, http.StatusConflict, gin.H{"error": "username already exists"})
 			return
 		}
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "create user failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "create user failed"})
 		return
 	}
 	audit(c, "user.create", "target_user_id", created.ID, "role", created.Role)
-	web.JSON(c, http.StatusCreated, userResponse(created))
+	httpx.JSON(c, http.StatusCreated, userResponse(created))
 }
 
 func (s *Server) handleAdminUserUpdate(c *gin.Context) {
@@ -173,20 +174,20 @@ func (s *Server) handleAdminUserUpdate(c *gin.Context) {
 	if !ok {
 		return
 	}
-	limitRequestBody(c, 64<<10)
+	httpx.LimitRequestBody(c, 64<<10)
 	var body struct {
 		Username *string `json:"username"`
 		Password *string `json:"password"`
 		Role     *string `json:"role"`
 		Status   *string `json:"status"`
 	}
-	if err := web.BindJSON(c, &body); err != nil {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	if err := httpx.BindJSON(c, &body); err != nil {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	existing, err := s.DB.Client.User.Get(c.Request.Context(), uid)
 	if err != nil {
-		web.JSON(c, http.StatusNotFound, gin.H{"error": "user not found"})
+		httpx.JSON(c, http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
 
@@ -195,19 +196,19 @@ func (s *Server) handleAdminUserUpdate(c *gin.Context) {
 	if body.Username != nil {
 		name := strings.TrimSpace(*body.Username)
 		if name == "" {
-			web.JSON(c, http.StatusBadRequest, gin.H{"error": "username must not be empty"})
+			httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "username must not be empty"})
 			return
 		}
 		update.SetUsername(name)
 	}
 	if body.Password != nil {
 		if len(*body.Password) < 8 {
-			web.JSON(c, http.StatusBadRequest, gin.H{"error": "password must be at least 8 characters"})
+			httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "password must be at least 8 characters"})
 			return
 		}
 		hash, err := auth.HashPassword(*body.Password)
 		if err != nil {
-			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "password hashing failed"})
+			httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "password hashing failed"})
 			return
 		}
 		update.SetPasswordHash(hash)
@@ -215,12 +216,12 @@ func (s *Server) handleAdminUserUpdate(c *gin.Context) {
 	}
 	if body.Role != nil {
 		if !validRole(*body.Role) {
-			web.JSON(c, http.StatusBadRequest, gin.H{"error": "role must be admin or user"})
+			httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "role must be admin or user"})
 			return
 		}
 		if existing.Role == config.RoleAdmin && *body.Role != config.RoleAdmin {
 			if !s.otherAdminExists(c, existing.ID) {
-				web.JSON(c, http.StatusConflict, gin.H{"error": "the last administrator cannot be demoted"})
+				httpx.JSON(c, http.StatusConflict, gin.H{"error": "the last administrator cannot be demoted"})
 				return
 			}
 		}
@@ -229,11 +230,11 @@ func (s *Server) handleAdminUserUpdate(c *gin.Context) {
 	}
 	if body.Status != nil {
 		if !validUserStatus(*body.Status) {
-			web.JSON(c, http.StatusBadRequest, gin.H{"error": "status must be active or disabled"})
+			httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "status must be active or disabled"})
 			return
 		}
 		if existing.Role == config.RoleAdmin && *body.Status == config.StatusDisabled && !s.otherAdminExists(c, existing.ID) {
-			web.JSON(c, http.StatusConflict, gin.H{"error": "the last administrator cannot be disabled"})
+			httpx.JSON(c, http.StatusConflict, gin.H{"error": "the last administrator cannot be disabled"})
 			return
 		}
 		update.SetStatus(*body.Status)
@@ -247,14 +248,14 @@ func (s *Server) handleAdminUserUpdate(c *gin.Context) {
 	updated, err := update.Save(c.Request.Context())
 	if err != nil {
 		if ent.IsConstraintError(err) {
-			web.JSON(c, http.StatusConflict, gin.H{"error": "username already exists"})
+			httpx.JSON(c, http.StatusConflict, gin.H{"error": "username already exists"})
 			return
 		}
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "update user failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "update user failed"})
 		return
 	}
 	audit(c, "user.update", "target_user_id", updated.ID, "role", updated.Role, "status", updated.Status)
-	web.JSON(c, http.StatusOK, userResponse(updated))
+	httpx.JSON(c, http.StatusOK, userResponse(updated))
 }
 
 func (s *Server) handleAdminUserStatus(c *gin.Context) {
@@ -265,21 +266,21 @@ func (s *Server) handleAdminUserStatus(c *gin.Context) {
 	if !ok {
 		return
 	}
-	limitRequestBody(c, 8<<10)
+	httpx.LimitRequestBody(c, 8<<10)
 	var body struct {
 		Status string `json:"status"`
 	}
-	if err := web.BindJSON(c, &body); err != nil || !validUserStatus(body.Status) {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "status must be active or disabled"})
+	if err := httpx.BindJSON(c, &body); err != nil || !validUserStatus(body.Status) {
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "status must be active or disabled"})
 		return
 	}
 	existing, err := s.DB.Client.User.Get(c.Request.Context(), uid)
 	if err != nil {
-		web.JSON(c, http.StatusNotFound, gin.H{"error": "user not found"})
+		httpx.JSON(c, http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
 	if existing.Role == config.RoleAdmin && body.Status == config.StatusDisabled && !s.otherAdminExists(c, existing.ID) {
-		web.JSON(c, http.StatusConflict, gin.H{"error": "the last administrator cannot be disabled"})
+		httpx.JSON(c, http.StatusConflict, gin.H{"error": "the last administrator cannot be disabled"})
 		return
 	}
 	update := s.DB.Client.User.UpdateOneID(existing.ID).SetStatus(body.Status)
@@ -288,11 +289,11 @@ func (s *Server) handleAdminUserStatus(c *gin.Context) {
 	}
 	updated, err := update.Save(c.Request.Context())
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "update user status failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "update user status failed"})
 		return
 	}
 	audit(c, "user.status", "target_user_id", updated.ID, "role", updated.Role, "status", updated.Status)
-	web.JSON(c, http.StatusOK, userResponse(updated))
+	httpx.JSON(c, http.StatusOK, userResponse(updated))
 }
 
 func (s *Server) handleAdminUserDelete(c *gin.Context) {
@@ -305,71 +306,71 @@ func (s *Server) handleAdminUserDelete(c *gin.Context) {
 	}
 	principal, _ := auth.PrincipalFrom(c)
 	if principal.ID == uid {
-		web.JSON(c, http.StatusConflict, gin.H{"error": "you cannot delete your own account"})
+		httpx.JSON(c, http.StatusConflict, gin.H{"error": "you cannot delete your own account"})
 		return
 	}
 	existing, err := s.DB.Client.User.Get(c.Request.Context(), uid)
 	if err != nil {
-		web.JSON(c, http.StatusNotFound, gin.H{"error": "user not found"})
+		httpx.JSON(c, http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
 	if existing.Role == config.RoleAdmin && !s.otherAdminExists(c, existing.ID) {
-		web.JSON(c, http.StatusConflict, gin.H{"error": "the last administrator cannot be deleted"})
+		httpx.JSON(c, http.StatusConflict, gin.H{"error": "the last administrator cannot be deleted"})
 		return
 	}
 
 	ctx := c.Request.Context()
 	tx, err := s.DB.Client.Tx(ctx)
 	if err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user failed"})
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	userID := uid
 	if _, err := tx.Bookshelf.Delete().Where(bookshelf.UserIDEQ(userID)).Exec(ctx); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
 		return
 	}
 	if _, err := tx.ReadingProgress.Delete().Where(readingprogress.UserIDEQ(userID)).Exec(ctx); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
 		return
 	}
 	if _, err := tx.Passkey.Delete().Where(passkey.UserIDEQ(userID)).Exec(ctx); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
 		return
 	}
 	if _, err := tx.PrefillJob.Delete().Where(prefilljob.UserIDEQ(userID)).Exec(ctx); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
 		return
 	}
 	if _, err := tx.TagPreference.Delete().Where(tagpreference.UserIDEQ(userID)).Exec(ctx); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
 		return
 	}
 	if _, err := tx.TagSyncBaseline.Delete().Where(tagsyncbaseline.UserIDEQ(userID)).Exec(ctx); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
 		return
 	}
 	if _, err := tx.SyncChange.Delete().Where(syncchange.UserIDEQ(userID)).Exec(ctx); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user data failed"})
 		return
 	}
 	if _, err := tx.UserSetting.Delete().Where(usersetting.IDEQ(uid)).Exec(ctx); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user settings failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user settings failed"})
 		return
 	}
 	if err := tx.User.DeleteOneID(uid).Exec(ctx); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user failed"})
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user failed"})
+		httpx.JSON(c, http.StatusInternalServerError, gin.H{"error": "delete user failed"})
 		return
 	}
 	audit(c, "user.delete", "target_user_id", uid)
 	s.cleanupGalleryCache(ctx)
-	web.JSON(c, http.StatusOK, gin.H{"deleted": true})
+	httpx.JSON(c, http.StatusOK, gin.H{"deleted": true})
 }
 
 func (s *Server) otherAdminExists(c *gin.Context, exceptID ident.UUID) bool {
@@ -386,7 +387,7 @@ func (s *Server) otherAdminExists(c *gin.Context, exceptID ident.UUID) bool {
 func adminID(c *gin.Context) (ident.UUID, bool) {
 	id, err := ident.Parse(c.Param("id"))
 	if err != nil || id == ident.Nil() {
-		web.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid id"})
+		httpx.JSON(c, http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return ident.Nil(), false
 	}
 	return id, true
