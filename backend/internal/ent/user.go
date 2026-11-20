@@ -3,6 +3,7 @@
 package ent
 
 import (
+	json "encoding/json/v2"
 	"fmt"
 	"manga-reader/internal/ent/user"
 	"manga-reader/internal/ident"
@@ -28,6 +29,14 @@ type User struct {
 	Status string `json:"status,omitempty"`
 	// TokenVersion holds the value of the "token_version" field.
 	TokenVersion int `json:"token_version,omitempty"`
+	// TotpSecretCiphertext holds the value of the "totp_secret_ciphertext" field.
+	TotpSecretCiphertext string `json:"-"`
+	// TotpEnabled holds the value of the "totp_enabled" field.
+	TotpEnabled bool `json:"totp_enabled,omitempty"`
+	// TotpConfirmedAt holds the value of the "totp_confirmed_at" field.
+	TotpConfirmedAt *time.Time `json:"totp_confirmed_at,omitempty"`
+	// RecoveryCodeHashes holds the value of the "recovery_code_hashes" field.
+	RecoveryCodeHashes []string `json:"-"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -40,13 +49,17 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case user.FieldRecoveryCodeHashes:
+			values[i] = new([]byte)
 		case user.FieldID:
 			values[i] = new(ident.UUID)
+		case user.FieldTotpEnabled:
+			values[i] = new(sql.NullBool)
 		case user.FieldTokenVersion:
 			values[i] = new(sql.NullInt64)
-		case user.FieldUsername, user.FieldPasswordHash, user.FieldRole, user.FieldStatus:
+		case user.FieldUsername, user.FieldPasswordHash, user.FieldRole, user.FieldStatus, user.FieldTotpSecretCiphertext:
 			values[i] = new(sql.NullString)
-		case user.FieldCreatedAt, user.FieldUpdatedAt:
+		case user.FieldTotpConfirmedAt, user.FieldCreatedAt, user.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -98,6 +111,33 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field token_version", values[i])
 			} else if value.Valid {
 				_m.TokenVersion = int(value.Int64)
+			}
+		case user.FieldTotpSecretCiphertext:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field totp_secret_ciphertext", values[i])
+			} else if value.Valid {
+				_m.TotpSecretCiphertext = value.String
+			}
+		case user.FieldTotpEnabled:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field totp_enabled", values[i])
+			} else if value.Valid {
+				_m.TotpEnabled = value.Bool
+			}
+		case user.FieldTotpConfirmedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field totp_confirmed_at", values[i])
+			} else if value.Valid {
+				_m.TotpConfirmedAt = new(time.Time)
+				*_m.TotpConfirmedAt = value.Time
+			}
+		case user.FieldRecoveryCodeHashes:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field recovery_code_hashes", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.RecoveryCodeHashes); err != nil {
+					return fmt.Errorf("unmarshal field recovery_code_hashes: %w", err)
+				}
 			}
 		case user.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -160,6 +200,18 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("token_version=")
 	builder.WriteString(fmt.Sprintf("%v", _m.TokenVersion))
+	builder.WriteString(", ")
+	builder.WriteString("totp_secret_ciphertext=<sensitive>")
+	builder.WriteString(", ")
+	builder.WriteString("totp_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TotpEnabled))
+	builder.WriteString(", ")
+	if v := _m.TotpConfirmedAt; v != nil {
+		builder.WriteString("totp_confirmed_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("recovery_code_hashes=<sensitive>")
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

@@ -19,6 +19,7 @@ func setTestEnv(t *testing.T) {
 		"MANGA_READER_WEBAUTHN_RP_ID",
 		"MANGA_READER_WEBAUTHN_RP_NAME",
 		"MANGA_READER_WEBAUTHN_RP_ORIGINS",
+		"MANGA_READER_TOTP_ISSUER",
 		"MANGA_READER_METRICS_ENABLED",
 		"MANGA_READER_METRICS_TOKEN",
 		"MANGA_READER_SYNC_ENABLED",
@@ -67,6 +68,7 @@ func TestLoad_AuthConfig(t *testing.T) {
 	t.Setenv("ADMIN_USERNAME", "root")
 	t.Setenv("ADMIN_PASSWORD", "correct horse battery staple")
 	t.Setenv("MANGA_READER_AUTH_COOKIE_SECURE", "true")
+	t.Setenv("MANGA_READER_TOTP_ISSUER", "Test Issuer")
 
 	cfg, err := Load()
 	if err != nil {
@@ -86,6 +88,9 @@ func TestLoad_AuthConfig(t *testing.T) {
 	}
 	if cfg.Auth.CookieSecureAuto || !cfg.Auth.CookieSecure {
 		t.Fatalf("cookie secure mode = %+v, want explicit true", cfg.Auth)
+	}
+	if cfg.Auth.TOTPIssuer != "Test Issuer" {
+		t.Fatalf("totp issuer = %q", cfg.Auth.TOTPIssuer)
 	}
 }
 

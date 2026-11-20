@@ -80,6 +80,21 @@ func TokenVersion(v int) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldTokenVersion, v))
 }
 
+// TotpSecretCiphertext applies equality check predicate on the "totp_secret_ciphertext" field. It's identical to TotpSecretCiphertextEQ.
+func TotpSecretCiphertext(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTotpSecretCiphertext, v))
+}
+
+// TotpEnabled applies equality check predicate on the "totp_enabled" field. It's identical to TotpEnabledEQ.
+func TotpEnabled(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTotpEnabled, v))
+}
+
+// TotpConfirmedAt applies equality check predicate on the "totp_confirmed_at" field. It's identical to TotpConfirmedAtEQ.
+func TotpConfirmedAt(v time.Time) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTotpConfirmedAt, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldCreatedAt, v))
@@ -388,6 +403,141 @@ func TokenVersionLT(v int) predicate.User {
 // TokenVersionLTE applies the LTE predicate on the "token_version" field.
 func TokenVersionLTE(v int) predicate.User {
 	return predicate.User(sql.FieldLTE(FieldTokenVersion, v))
+}
+
+// TotpSecretCiphertextEQ applies the EQ predicate on the "totp_secret_ciphertext" field.
+func TotpSecretCiphertextEQ(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTotpSecretCiphertext, v))
+}
+
+// TotpSecretCiphertextNEQ applies the NEQ predicate on the "totp_secret_ciphertext" field.
+func TotpSecretCiphertextNEQ(v string) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldTotpSecretCiphertext, v))
+}
+
+// TotpSecretCiphertextIn applies the In predicate on the "totp_secret_ciphertext" field.
+func TotpSecretCiphertextIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldIn(FieldTotpSecretCiphertext, vs...))
+}
+
+// TotpSecretCiphertextNotIn applies the NotIn predicate on the "totp_secret_ciphertext" field.
+func TotpSecretCiphertextNotIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldTotpSecretCiphertext, vs...))
+}
+
+// TotpSecretCiphertextGT applies the GT predicate on the "totp_secret_ciphertext" field.
+func TotpSecretCiphertextGT(v string) predicate.User {
+	return predicate.User(sql.FieldGT(FieldTotpSecretCiphertext, v))
+}
+
+// TotpSecretCiphertextGTE applies the GTE predicate on the "totp_secret_ciphertext" field.
+func TotpSecretCiphertextGTE(v string) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldTotpSecretCiphertext, v))
+}
+
+// TotpSecretCiphertextLT applies the LT predicate on the "totp_secret_ciphertext" field.
+func TotpSecretCiphertextLT(v string) predicate.User {
+	return predicate.User(sql.FieldLT(FieldTotpSecretCiphertext, v))
+}
+
+// TotpSecretCiphertextLTE applies the LTE predicate on the "totp_secret_ciphertext" field.
+func TotpSecretCiphertextLTE(v string) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldTotpSecretCiphertext, v))
+}
+
+// TotpSecretCiphertextContains applies the Contains predicate on the "totp_secret_ciphertext" field.
+func TotpSecretCiphertextContains(v string) predicate.User {
+	return predicate.User(sql.FieldContains(FieldTotpSecretCiphertext, v))
+}
+
+// TotpSecretCiphertextHasPrefix applies the HasPrefix predicate on the "totp_secret_ciphertext" field.
+func TotpSecretCiphertextHasPrefix(v string) predicate.User {
+	return predicate.User(sql.FieldHasPrefix(FieldTotpSecretCiphertext, v))
+}
+
+// TotpSecretCiphertextHasSuffix applies the HasSuffix predicate on the "totp_secret_ciphertext" field.
+func TotpSecretCiphertextHasSuffix(v string) predicate.User {
+	return predicate.User(sql.FieldHasSuffix(FieldTotpSecretCiphertext, v))
+}
+
+// TotpSecretCiphertextEqualFold applies the EqualFold predicate on the "totp_secret_ciphertext" field.
+func TotpSecretCiphertextEqualFold(v string) predicate.User {
+	return predicate.User(sql.FieldEqualFold(FieldTotpSecretCiphertext, v))
+}
+
+// TotpSecretCiphertextContainsFold applies the ContainsFold predicate on the "totp_secret_ciphertext" field.
+func TotpSecretCiphertextContainsFold(v string) predicate.User {
+	return predicate.User(sql.FieldContainsFold(FieldTotpSecretCiphertext, v))
+}
+
+// TotpEnabledEQ applies the EQ predicate on the "totp_enabled" field.
+func TotpEnabledEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTotpEnabled, v))
+}
+
+// TotpEnabledNEQ applies the NEQ predicate on the "totp_enabled" field.
+func TotpEnabledNEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldTotpEnabled, v))
+}
+
+// TotpConfirmedAtEQ applies the EQ predicate on the "totp_confirmed_at" field.
+func TotpConfirmedAtEQ(v time.Time) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTotpConfirmedAt, v))
+}
+
+// TotpConfirmedAtNEQ applies the NEQ predicate on the "totp_confirmed_at" field.
+func TotpConfirmedAtNEQ(v time.Time) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldTotpConfirmedAt, v))
+}
+
+// TotpConfirmedAtIn applies the In predicate on the "totp_confirmed_at" field.
+func TotpConfirmedAtIn(vs ...time.Time) predicate.User {
+	return predicate.User(sql.FieldIn(FieldTotpConfirmedAt, vs...))
+}
+
+// TotpConfirmedAtNotIn applies the NotIn predicate on the "totp_confirmed_at" field.
+func TotpConfirmedAtNotIn(vs ...time.Time) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldTotpConfirmedAt, vs...))
+}
+
+// TotpConfirmedAtGT applies the GT predicate on the "totp_confirmed_at" field.
+func TotpConfirmedAtGT(v time.Time) predicate.User {
+	return predicate.User(sql.FieldGT(FieldTotpConfirmedAt, v))
+}
+
+// TotpConfirmedAtGTE applies the GTE predicate on the "totp_confirmed_at" field.
+func TotpConfirmedAtGTE(v time.Time) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldTotpConfirmedAt, v))
+}
+
+// TotpConfirmedAtLT applies the LT predicate on the "totp_confirmed_at" field.
+func TotpConfirmedAtLT(v time.Time) predicate.User {
+	return predicate.User(sql.FieldLT(FieldTotpConfirmedAt, v))
+}
+
+// TotpConfirmedAtLTE applies the LTE predicate on the "totp_confirmed_at" field.
+func TotpConfirmedAtLTE(v time.Time) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldTotpConfirmedAt, v))
+}
+
+// TotpConfirmedAtIsNil applies the IsNil predicate on the "totp_confirmed_at" field.
+func TotpConfirmedAtIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldTotpConfirmedAt))
+}
+
+// TotpConfirmedAtNotNil applies the NotNil predicate on the "totp_confirmed_at" field.
+func TotpConfirmedAtNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldTotpConfirmedAt))
+}
+
+// RecoveryCodeHashesIsNil applies the IsNil predicate on the "recovery_code_hashes" field.
+func RecoveryCodeHashesIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldRecoveryCodeHashes))
+}
+
+// RecoveryCodeHashesNotNil applies the NotNil predicate on the "recovery_code_hashes" field.
+func RecoveryCodeHashesNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldRecoveryCodeHashes))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

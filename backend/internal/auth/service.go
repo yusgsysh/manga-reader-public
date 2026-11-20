@@ -67,6 +67,17 @@ type Service struct {
 	// the challenge, so a browser cannot tamper with or replay it.
 	passkeyMu         sync.Mutex
 	passkeyCeremonies map[string]*passkeyCeremony
+
+	// mfaTokens signs the short-lived step-up token issued after a correct
+	// password when TOTP is enabled. It uses a distinct issuer, so it can
+	// never be mistaken for an access token.
+	mfaTokens *tokenManager
+	// totpKey seals TOTP secrets at rest (AES-256-GCM).
+	totpKey []byte
+	// totpMu serializes recovery-code consumption so a one-time code cannot be
+	// redeemed twice by two concurrent requests.
+	totpMu      sync.Mutex
+	totpClients map[string]*loginBucket
 }
 
 type loginBucket struct {
@@ -80,11 +91,17 @@ func New(db *ent.Client, cfg config.AuthConfig) *Service {
 	if cfg.WebAuthn.RPDisplayName == "" {
 		cfg.WebAuthn.RPDisplayName = "Manga Reader"
 	}
+	if cfg.TOTPIssuer == "" {
+		cfg.TOTPIssuer = "Manga Reader"
+	}
 	return &Service{
 		db:                db,
 		cfg:               cfg,
 		tokens:            newTokenManager(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTExpiresIn),
+		mfaTokens:         newTokenManager(cfg.JWTSecret, cfg.JWTIssuer+"/mfa", mfaTokenTTL),
+		totpKey:           deriveTOTPKey(cfg.JWTSecret),
 		loginClients:      make(map[string]*loginBucket),
+		totpClients:       make(map[string]*loginBucket),
 		passkeyCeremonies: make(map[string]*passkeyCeremony),
 	}
 }
@@ -164,6 +181,10 @@ var publicAPIs = map[string]struct{}{
 	// passkey management stay behind the normal JWT middleware.
 	"/api/auth/passkey/login/begin":  {},
 	"/api/auth/passkey/login/finish": {},
+
+	// TOTP verification is the second step of password login: the caller has
+	// only the short-lived mfa_token, not a session yet.
+	"/api/auth/totp/verify": {},
 
 	// Peer sync is authenticated by sync-key middleware in the sync service.
 	"/api/sync/push":   {},
@@ -281,6 +302,15 @@ func (s *Service) RegisterRoutes(r gin.IRouter) {
 	r.POST("/api/auth/passkeys/register/finish", noStore, s.handlePasskeyRegisterFinish)
 	r.PATCH("/api/auth/passkeys/:id", noStore, s.handlePasskeyRename)
 	r.DELETE("/api/auth/passkeys/:id", noStore, s.handlePasskeyDelete)
+
+	// TOTP two-factor authentication. /verify is public (step two of login);
+	// the rest manage the signed-in user's own configuration.
+	r.POST("/api/auth/totp/verify", noStore, s.handleTOTPVerify)
+	r.GET("/api/auth/totp", noStore, s.handleTOTPStatus)
+	r.POST("/api/auth/totp/setup", noStore, s.handleTOTPSetup)
+	r.POST("/api/auth/totp/enable", noStore, s.handleTOTPEnable)
+	r.POST("/api/auth/totp/disable", noStore, s.handleTOTPDisable)
+	r.POST("/api/auth/totp/recovery-codes", noStore, s.handleTOTPRegenerateRecoveryCodes)
 }
 
 func noStore(c *gin.Context) {
@@ -466,6 +496,25 @@ func (s *Service) handleLogin(c *gin.Context) {
 		return
 	}
 
+	// Password alone is not a complete login while TOTP is enabled. Return a
+	// short-lived step-up token and let the SPA ask for the code; no auth
+	// cookie or access token is issued here.
+	if u.TotpEnabled {
+		mfaToken, _, err := s.mfaTokens.issue(u.ID, u.Username, u.Role, u.TokenVersion)
+		if err != nil {
+			web.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
+			return
+		}
+		loginResult = "mfa_required"
+		web.JSON(c, http.StatusOK, gin.H{
+			"mfa_required": true,
+			"mfa_token":    mfaToken,
+			"expires_in":   int(mfaTokenTTL / time.Second),
+			"method":       "totp",
+		})
+		return
+	}
+
 	token, expires, err := s.tokens.issue(u.ID, u.Username, u.Role, u.TokenVersion)
 	if err != nil {
 		web.JSON(c, http.StatusInternalServerError, gin.H{"error": "login failed"})
@@ -536,6 +585,19 @@ func (s *Service) cookieSecure(c *gin.Context) bool {
 }
 
 func (s *Service) allowLogin(key string) bool {
+	return s.allow(key, loginRate, loginBurst)
+}
+
+// allowTOTP is deliberately much stricter than allowLogin: a six-digit code
+// has only a million values, so unlimited attempts inside the short MFA token
+// lifetime would make brute force feasible.
+func (s *Service) allowTOTP(key string) bool {
+	return s.allow("totp:"+key, totpRate, totpBurst)
+}
+
+// allow implements a per-key token bucket. The map is shared by password,
+// passkey and TOTP attempts; the key prefix keeps their budgets independent.
+func (s *Service) allow(key string, rate, burst float64) bool {
 	now := time.Now()
 	s.loginMu.Lock()
 	defer s.loginMu.Unlock()
@@ -549,13 +611,13 @@ func (s *Service) allowLogin(key string) bool {
 	}
 	bucket := s.loginClients[key]
 	if bucket == nil {
-		bucket = &loginBucket{tokens: loginBurst, last: now}
+		bucket = &loginBucket{tokens: burst, last: now}
 		s.loginClients[key] = bucket
 	}
 	if elapsed := now.Sub(bucket.last).Seconds(); elapsed > 0 {
-		bucket.tokens += elapsed * loginRate
-		if bucket.tokens > loginBurst {
-			bucket.tokens = loginBurst
+		bucket.tokens += elapsed * rate
+		if bucket.tokens > burst {
+			bucket.tokens = burst
 		}
 	}
 	bucket.last = now

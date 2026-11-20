@@ -12,6 +12,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 )
 
@@ -102,6 +103,72 @@ func (_u *UserUpdate) SetNillableTokenVersion(v *int) *UserUpdate {
 // AddTokenVersion adds value to the "token_version" field.
 func (_u *UserUpdate) AddTokenVersion(v int) *UserUpdate {
 	_u.mutation.AddTokenVersion(v)
+	return _u
+}
+
+// SetTotpSecretCiphertext sets the "totp_secret_ciphertext" field.
+func (_u *UserUpdate) SetTotpSecretCiphertext(v string) *UserUpdate {
+	_u.mutation.SetTotpSecretCiphertext(v)
+	return _u
+}
+
+// SetNillableTotpSecretCiphertext sets the "totp_secret_ciphertext" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableTotpSecretCiphertext(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetTotpSecretCiphertext(*v)
+	}
+	return _u
+}
+
+// SetTotpEnabled sets the "totp_enabled" field.
+func (_u *UserUpdate) SetTotpEnabled(v bool) *UserUpdate {
+	_u.mutation.SetTotpEnabled(v)
+	return _u
+}
+
+// SetNillableTotpEnabled sets the "totp_enabled" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableTotpEnabled(v *bool) *UserUpdate {
+	if v != nil {
+		_u.SetTotpEnabled(*v)
+	}
+	return _u
+}
+
+// SetTotpConfirmedAt sets the "totp_confirmed_at" field.
+func (_u *UserUpdate) SetTotpConfirmedAt(v time.Time) *UserUpdate {
+	_u.mutation.SetTotpConfirmedAt(v)
+	return _u
+}
+
+// SetNillableTotpConfirmedAt sets the "totp_confirmed_at" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableTotpConfirmedAt(v *time.Time) *UserUpdate {
+	if v != nil {
+		_u.SetTotpConfirmedAt(*v)
+	}
+	return _u
+}
+
+// ClearTotpConfirmedAt clears the value of the "totp_confirmed_at" field.
+func (_u *UserUpdate) ClearTotpConfirmedAt() *UserUpdate {
+	_u.mutation.ClearTotpConfirmedAt()
+	return _u
+}
+
+// SetRecoveryCodeHashes sets the "recovery_code_hashes" field.
+func (_u *UserUpdate) SetRecoveryCodeHashes(v []string) *UserUpdate {
+	_u.mutation.SetRecoveryCodeHashes(v)
+	return _u
+}
+
+// AppendRecoveryCodeHashes appends value to the "recovery_code_hashes" field.
+func (_u *UserUpdate) AppendRecoveryCodeHashes(v []string) *UserUpdate {
+	_u.mutation.AppendRecoveryCodeHashes(v)
+	return _u
+}
+
+// ClearRecoveryCodeHashes clears the value of the "recovery_code_hashes" field.
+func (_u *UserUpdate) ClearRecoveryCodeHashes() *UserUpdate {
+	_u.mutation.ClearRecoveryCodeHashes()
 	return _u
 }
 
@@ -196,6 +263,29 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedTokenVersion(); ok {
 		_spec.AddField(user.FieldTokenVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.TotpSecretCiphertext(); ok {
+		_spec.SetField(user.FieldTotpSecretCiphertext, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.TotpEnabled(); ok {
+		_spec.SetField(user.FieldTotpEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.TotpConfirmedAt(); ok {
+		_spec.SetField(user.FieldTotpConfirmedAt, field.TypeTime, value)
+	}
+	if _u.mutation.TotpConfirmedAtCleared() {
+		_spec.ClearField(user.FieldTotpConfirmedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RecoveryCodeHashes(); ok {
+		_spec.SetField(user.FieldRecoveryCodeHashes, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedRecoveryCodeHashes(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, user.FieldRecoveryCodeHashes, value)
+		})
+	}
+	if _u.mutation.RecoveryCodeHashesCleared() {
+		_spec.ClearField(user.FieldRecoveryCodeHashes, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)
@@ -294,6 +384,72 @@ func (_u *UserUpdateOne) SetNillableTokenVersion(v *int) *UserUpdateOne {
 // AddTokenVersion adds value to the "token_version" field.
 func (_u *UserUpdateOne) AddTokenVersion(v int) *UserUpdateOne {
 	_u.mutation.AddTokenVersion(v)
+	return _u
+}
+
+// SetTotpSecretCiphertext sets the "totp_secret_ciphertext" field.
+func (_u *UserUpdateOne) SetTotpSecretCiphertext(v string) *UserUpdateOne {
+	_u.mutation.SetTotpSecretCiphertext(v)
+	return _u
+}
+
+// SetNillableTotpSecretCiphertext sets the "totp_secret_ciphertext" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableTotpSecretCiphertext(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetTotpSecretCiphertext(*v)
+	}
+	return _u
+}
+
+// SetTotpEnabled sets the "totp_enabled" field.
+func (_u *UserUpdateOne) SetTotpEnabled(v bool) *UserUpdateOne {
+	_u.mutation.SetTotpEnabled(v)
+	return _u
+}
+
+// SetNillableTotpEnabled sets the "totp_enabled" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableTotpEnabled(v *bool) *UserUpdateOne {
+	if v != nil {
+		_u.SetTotpEnabled(*v)
+	}
+	return _u
+}
+
+// SetTotpConfirmedAt sets the "totp_confirmed_at" field.
+func (_u *UserUpdateOne) SetTotpConfirmedAt(v time.Time) *UserUpdateOne {
+	_u.mutation.SetTotpConfirmedAt(v)
+	return _u
+}
+
+// SetNillableTotpConfirmedAt sets the "totp_confirmed_at" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableTotpConfirmedAt(v *time.Time) *UserUpdateOne {
+	if v != nil {
+		_u.SetTotpConfirmedAt(*v)
+	}
+	return _u
+}
+
+// ClearTotpConfirmedAt clears the value of the "totp_confirmed_at" field.
+func (_u *UserUpdateOne) ClearTotpConfirmedAt() *UserUpdateOne {
+	_u.mutation.ClearTotpConfirmedAt()
+	return _u
+}
+
+// SetRecoveryCodeHashes sets the "recovery_code_hashes" field.
+func (_u *UserUpdateOne) SetRecoveryCodeHashes(v []string) *UserUpdateOne {
+	_u.mutation.SetRecoveryCodeHashes(v)
+	return _u
+}
+
+// AppendRecoveryCodeHashes appends value to the "recovery_code_hashes" field.
+func (_u *UserUpdateOne) AppendRecoveryCodeHashes(v []string) *UserUpdateOne {
+	_u.mutation.AppendRecoveryCodeHashes(v)
+	return _u
+}
+
+// ClearRecoveryCodeHashes clears the value of the "recovery_code_hashes" field.
+func (_u *UserUpdateOne) ClearRecoveryCodeHashes() *UserUpdateOne {
+	_u.mutation.ClearRecoveryCodeHashes()
 	return _u
 }
 
@@ -418,6 +574,29 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.AddedTokenVersion(); ok {
 		_spec.AddField(user.FieldTokenVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.TotpSecretCiphertext(); ok {
+		_spec.SetField(user.FieldTotpSecretCiphertext, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.TotpEnabled(); ok {
+		_spec.SetField(user.FieldTotpEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.TotpConfirmedAt(); ok {
+		_spec.SetField(user.FieldTotpConfirmedAt, field.TypeTime, value)
+	}
+	if _u.mutation.TotpConfirmedAtCleared() {
+		_spec.ClearField(user.FieldTotpConfirmedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RecoveryCodeHashes(); ok {
+		_spec.SetField(user.FieldRecoveryCodeHashes, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedRecoveryCodeHashes(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, user.FieldRecoveryCodeHashes, value)
+		})
+	}
+	if _u.mutation.RecoveryCodeHashesCleared() {
+		_spec.ClearField(user.FieldRecoveryCodeHashes, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)

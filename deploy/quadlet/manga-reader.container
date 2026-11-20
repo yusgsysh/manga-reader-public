@@ -49,6 +49,8 @@ Environment=MANGA_READER_DB_PATH=/app/data/manga-reader.db
 # 通行密钥（WebAuthn）需要 HTTPS 或 localhost；反代改写 Host 时显式设置 RP：
 #Environment=MANGA_READER_WEBAUTHN_RP_ID=manga.example.com
 #Environment=MANGA_READER_WEBAUTHN_RP_ORIGINS=https://manga.example.com
+# TOTP 两步验证发行方（显示在身份验证器中）
+#Environment=MANGA_READER_TOTP_ISSUER=Manga Reader
 
 # Metrics 独立 Token（未设置时 /metrics 仅回环访问）
 #Environment=MANGA_READER_METRICS_ENABLED=true

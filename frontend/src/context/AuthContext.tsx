@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useState,
   type ReactNode,
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,6 +12,7 @@ import {
   loginWithPasskey as loginWithPasskeyRequest,
   register as registerRequest,
   logout as logoutRequest,
+  verifyTOTP as verifyTOTPRequest,
   type AuthSession,
 } from "../api/auth";
 import { setAccessToken, setUnauthorizedHandler } from "../api/client";
@@ -18,6 +20,10 @@ import { AUTH_QUERY_KEY, AuthContext, type AuthContextValue } from "./auth";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
+  // Password step-up state: present only between a correct password and a
+  // successful TOTP/recovery-code verification. Kept in memory (never
+  // localStorage) and cleared on logout/cancel.
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
 
   const sessionQuery = useQuery({
     queryKey: AUTH_QUERY_KEY,
@@ -38,6 +44,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username: string;
       password: string;
     }) => loginRequest(username, password),
+    onSuccess: (result) => {
+      if (result.mfaRequired) {
+        setMfaToken(result.mfaToken);
+        return;
+      }
+      setMfaToken(null);
+      queryClient.setQueryData<AuthSession>(AUTH_QUERY_KEY, {
+        initialized: true,
+        user: result.user,
+      });
+    },
+  });
+
+  const passkeyLoginMutation = useMutation({
+    mutationFn: loginWithPasskeyRequest,
     onSuccess: (identity) => {
       queryClient.setQueryData<AuthSession>(AUTH_QUERY_KEY, {
         initialized: true,
@@ -46,9 +67,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  const passkeyLoginMutation = useMutation({
-    mutationFn: loginWithPasskeyRequest,
+  const verifyTotpMutation = useMutation({
+    mutationFn: (code: string) => verifyTOTPRequest(mfaToken ?? "", code),
     onSuccess: (identity) => {
+      setMfaToken(null);
       queryClient.setQueryData<AuthSession>(AUTH_QUERY_KEY, {
         initialized: true,
         user: identity.user,
@@ -75,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logoutMutation = useMutation({
     mutationFn: logoutRequest,
     onSettled: () => {
+      setMfaToken(null);
       setAccessToken(null);
       // Drop all cached user data so a different session cannot see the
       // previous account's bookshelf/progress after logging back in.
@@ -103,10 +126,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (username: string, password: string) => {
-      await loginMutation.mutateAsync({ username, password });
+      const result = await loginMutation.mutateAsync({ username, password });
+      return { mfaRequired: result.mfaRequired };
     },
     [loginMutation],
   );
+
+  const verifyTOTP = useCallback(
+    async (code: string) => {
+      await verifyTotpMutation.mutateAsync(code);
+    },
+    [verifyTotpMutation],
+  );
+
+  const cancelMfa = useCallback(() => setMfaToken(null), []);
 
   const register = useCallback(
     async (username: string, password: string) => {
@@ -139,8 +172,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoggingInWithPasskey: passkeyLoginMutation.isPending,
       isLoggingOut: logoutMutation.isPending,
       isRegistering: registerMutation.isPending,
+      isMfaPending: mfaToken !== null,
+      isVerifyingTOTP: verifyTotpMutation.isPending,
       login,
       loginWithPasskey,
+      verifyTOTP,
+      cancelMfa,
       register,
       logout,
       refresh: sessionQuery.refetch,
@@ -154,8 +191,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     passkeyLoginMutation.isPending,
     logoutMutation.isPending,
     registerMutation.isPending,
+    mfaToken,
+    verifyTotpMutation.isPending,
     login,
     loginWithPasskey,
+    verifyTOTP,
+    cancelMfa,
     register,
     logout,
   ]);

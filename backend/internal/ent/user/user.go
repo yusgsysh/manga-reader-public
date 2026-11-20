@@ -24,6 +24,14 @@ const (
 	FieldStatus = "status"
 	// FieldTokenVersion holds the string denoting the token_version field in the database.
 	FieldTokenVersion = "token_version"
+	// FieldTotpSecretCiphertext holds the string denoting the totp_secret_ciphertext field in the database.
+	FieldTotpSecretCiphertext = "totp_secret_ciphertext"
+	// FieldTotpEnabled holds the string denoting the totp_enabled field in the database.
+	FieldTotpEnabled = "totp_enabled"
+	// FieldTotpConfirmedAt holds the string denoting the totp_confirmed_at field in the database.
+	FieldTotpConfirmedAt = "totp_confirmed_at"
+	// FieldRecoveryCodeHashes holds the string denoting the recovery_code_hashes field in the database.
+	FieldRecoveryCodeHashes = "recovery_code_hashes"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -40,6 +48,10 @@ var Columns = []string{
 	FieldRole,
 	FieldStatus,
 	FieldTokenVersion,
+	FieldTotpSecretCiphertext,
+	FieldTotpEnabled,
+	FieldTotpConfirmedAt,
+	FieldRecoveryCodeHashes,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -65,6 +77,10 @@ var (
 	DefaultStatus string
 	// DefaultTokenVersion holds the default value on creation for the "token_version" field.
 	DefaultTokenVersion int
+	// DefaultTotpSecretCiphertext holds the default value on creation for the "totp_secret_ciphertext" field.
+	DefaultTotpSecretCiphertext string
+	// DefaultTotpEnabled holds the default value on creation for the "totp_enabled" field.
+	DefaultTotpEnabled bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -106,6 +122,21 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByTokenVersion orders the results by the token_version field.
 func ByTokenVersion(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTokenVersion, opts...).ToFunc()
+}
+
+// ByTotpSecretCiphertext orders the results by the totp_secret_ciphertext field.
+func ByTotpSecretCiphertext(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTotpSecretCiphertext, opts...).ToFunc()
+}
+
+// ByTotpEnabled orders the results by the totp_enabled field.
+func ByTotpEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTotpEnabled, opts...).ToFunc()
+}
+
+// ByTotpConfirmedAt orders the results by the totp_confirmed_at field.
+func ByTotpConfirmedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTotpConfirmedAt, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

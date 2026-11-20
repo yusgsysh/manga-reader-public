@@ -247,6 +247,10 @@ var (
 		{Name: "role", Type: field.TypeString, Default: "user"},
 		{Name: "status", Type: field.TypeString, Default: "active"},
 		{Name: "token_version", Type: field.TypeInt, Default: 0},
+		{Name: "totp_secret_ciphertext", Type: field.TypeString, Default: ""},
+		{Name: "totp_enabled", Type: field.TypeBool, Default: false},
+		{Name: "totp_confirmed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "recovery_code_hashes", Type: field.TypeJSON, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}

@@ -22,11 +22,42 @@ export interface AuthSession extends Omit<AuthStatus, "user"> {
   user: AuthUser | null;
 }
 
-interface LoginResponse {
+interface LoginSuccessResponse {
   access_token: string;
   token_type: string;
   expires_in: number;
   user: UserPayload;
+}
+
+interface MFAChallengeResponse {
+  mfa_required: true;
+  mfa_token: string;
+  expires_in: number;
+  method: "totp";
+}
+
+export type LoginResult =
+  | { mfaRequired: false; user: AuthUser }
+  | { mfaRequired: true; mfaToken: string };
+
+export interface TotpStatus {
+  enabled: boolean;
+  confirmed_at: string | null;
+  recovery_codes_remaining: number;
+}
+
+export interface TotpSetup {
+  secret: string;
+  otpauth_url: string;
+  qr_data_url: string;
+  issuer: string;
+  account_name: string;
+}
+
+export interface TotpEnableResult {
+  enabled: boolean;
+  confirmed_at: string;
+  recovery_codes: string[];
 }
 
 /** Identity shape returned by /api/auth/status, login and register. */
@@ -70,16 +101,36 @@ export async function fetchAuthSession(): Promise<AuthSession> {
 export async function login(
   username: string,
   password: string,
-): Promise<AuthIdentity> {
-  const result = await apiPostJson<LoginResponse>("/api/auth/login", {
-    username,
-    password,
-  });
+): Promise<LoginResult> {
+  const result = await apiPostJson<LoginSuccessResponse | MFAChallengeResponse>(
+    "/api/auth/login",
+    { username, password },
+  );
+  if ("mfa_required" in result) {
+    return { mfaRequired: true, mfaToken: result.mfa_token };
+  }
   // Also keep the token in memory so same-tab API calls can send an
   // Authorization header. Persistence is the HttpOnly cookie's job.
   setAccessToken(result.access_token);
   // The identity rides along with the token, so there is no follow-up /me
   // request that could fail and leave a half-applied login.
+  return { mfaRequired: false, user: toAuthUser(result.user) };
+}
+
+/**
+ * Completes a password login that returned an MFA challenge. The step-up token
+ * is short-lived and only accepted by this endpoint; recovery codes are sent in
+ * the same field as a six-digit TOTP code.
+ */
+export async function verifyTOTP(
+  mfaToken: string,
+  code: string,
+): Promise<AuthIdentity> {
+  const result = await apiPostJson<LoginSuccessResponse>(
+    "/api/auth/totp/verify",
+    { mfa_token: mfaToken, code },
+  );
+  setAccessToken(result.access_token);
   return { user: toAuthUser(result.user) };
 }
 
@@ -103,7 +154,7 @@ export async function register(
   username: string,
   password: string,
 ): Promise<AuthIdentity> {
-  const result = await apiPostJson<LoginResponse>("/api/auth/register", {
+  const result = await apiPostJson<LoginSuccessResponse>("/api/auth/register", {
     username,
     password,
   });

@@ -47,6 +47,7 @@ import { UserManagementSection } from "../components/settings/UserManagementSect
 import { ApiKeySection } from "../components/settings/ApiKeySection";
 import { PasskeySection } from "../components/settings/PasskeySection";
 import { SettingsSidebar } from "../components/settings/SettingsSidebar";
+import { TotpSection } from "../components/settings/TotpSection";
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
   { mode: "light", label: "浅色", icon: Sun },
@@ -857,6 +858,13 @@ const SECTION_DEFS: SectionDef[] = [
     group: "general",
     show: "always",
     element: <PasskeySection />,
+  },
+  {
+    id: "totp",
+    label: "两步验证",
+    group: "general",
+    show: "always",
+    element: <TotpSection />,
   },
   {
     id: "tag-rules",

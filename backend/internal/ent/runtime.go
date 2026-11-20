@@ -385,12 +385,20 @@ func init() {
 	userDescTokenVersion := userFields[5].Descriptor()
 	// user.DefaultTokenVersion holds the default value on creation for the token_version field.
 	user.DefaultTokenVersion = userDescTokenVersion.Default.(int)
+	// userDescTotpSecretCiphertext is the schema descriptor for totp_secret_ciphertext field.
+	userDescTotpSecretCiphertext := userFields[6].Descriptor()
+	// user.DefaultTotpSecretCiphertext holds the default value on creation for the totp_secret_ciphertext field.
+	user.DefaultTotpSecretCiphertext = userDescTotpSecretCiphertext.Default.(string)
+	// userDescTotpEnabled is the schema descriptor for totp_enabled field.
+	userDescTotpEnabled := userFields[7].Descriptor()
+	// user.DefaultTotpEnabled holds the default value on creation for the totp_enabled field.
+	user.DefaultTotpEnabled = userDescTotpEnabled.Default.(bool)
 	// userDescCreatedAt is the schema descriptor for created_at field.
-	userDescCreatedAt := userFields[6].Descriptor()
+	userDescCreatedAt := userFields[10].Descriptor()
 	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
 	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() time.Time)
 	// userDescUpdatedAt is the schema descriptor for updated_at field.
-	userDescUpdatedAt := userFields[7].Descriptor()
+	userDescUpdatedAt := userFields[11].Descriptor()
 	// user.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

@@ -7943,21 +7943,26 @@ func (m *TagSyncBaselineMutation) ResetEdge(name string) error {
 // UserMutation represents an operation that mutates the User nodes in the graph.
 type UserMutation struct {
 	config
-	op               Op
-	typ              string
-	id               *ident.UUID
-	username         *string
-	password_hash    *string
-	role             *string
-	status           *string
-	token_version    *int
-	addtoken_version *int
-	created_at       *time.Time
-	updated_at       *time.Time
-	clearedFields    map[string]struct{}
-	done             bool
-	oldValue         func(context.Context) (*User, error)
-	predicates       []predicate.User
+	op                         Op
+	typ                        string
+	id                         *ident.UUID
+	username                   *string
+	password_hash              *string
+	role                       *string
+	status                     *string
+	token_version              *int
+	addtoken_version           *int
+	totp_secret_ciphertext     *string
+	totp_enabled               *bool
+	totp_confirmed_at          *time.Time
+	recovery_code_hashes       *[]string
+	appendrecovery_code_hashes []string
+	created_at                 *time.Time
+	updated_at                 *time.Time
+	clearedFields              map[string]struct{}
+	done                       bool
+	oldValue                   func(context.Context) (*User, error)
+	predicates                 []predicate.User
 }
 
 var _ ent.Mutation = (*UserMutation)(nil)
@@ -8264,6 +8269,192 @@ func (m *UserMutation) ResetTokenVersion() {
 	m.addtoken_version = nil
 }
 
+// SetTotpSecretCiphertext sets the "totp_secret_ciphertext" field.
+func (m *UserMutation) SetTotpSecretCiphertext(s string) {
+	m.totp_secret_ciphertext = &s
+}
+
+// TotpSecretCiphertext returns the value of the "totp_secret_ciphertext" field in the mutation.
+func (m *UserMutation) TotpSecretCiphertext() (r string, exists bool) {
+	v := m.totp_secret_ciphertext
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTotpSecretCiphertext returns the old "totp_secret_ciphertext" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldTotpSecretCiphertext(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTotpSecretCiphertext is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTotpSecretCiphertext requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTotpSecretCiphertext: %w", err)
+	}
+	return oldValue.TotpSecretCiphertext, nil
+}
+
+// ResetTotpSecretCiphertext resets all changes to the "totp_secret_ciphertext" field.
+func (m *UserMutation) ResetTotpSecretCiphertext() {
+	m.totp_secret_ciphertext = nil
+}
+
+// SetTotpEnabled sets the "totp_enabled" field.
+func (m *UserMutation) SetTotpEnabled(b bool) {
+	m.totp_enabled = &b
+}
+
+// TotpEnabled returns the value of the "totp_enabled" field in the mutation.
+func (m *UserMutation) TotpEnabled() (r bool, exists bool) {
+	v := m.totp_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTotpEnabled returns the old "totp_enabled" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldTotpEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTotpEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTotpEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTotpEnabled: %w", err)
+	}
+	return oldValue.TotpEnabled, nil
+}
+
+// ResetTotpEnabled resets all changes to the "totp_enabled" field.
+func (m *UserMutation) ResetTotpEnabled() {
+	m.totp_enabled = nil
+}
+
+// SetTotpConfirmedAt sets the "totp_confirmed_at" field.
+func (m *UserMutation) SetTotpConfirmedAt(t time.Time) {
+	m.totp_confirmed_at = &t
+}
+
+// TotpConfirmedAt returns the value of the "totp_confirmed_at" field in the mutation.
+func (m *UserMutation) TotpConfirmedAt() (r time.Time, exists bool) {
+	v := m.totp_confirmed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTotpConfirmedAt returns the old "totp_confirmed_at" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldTotpConfirmedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTotpConfirmedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTotpConfirmedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTotpConfirmedAt: %w", err)
+	}
+	return oldValue.TotpConfirmedAt, nil
+}
+
+// ClearTotpConfirmedAt clears the value of the "totp_confirmed_at" field.
+func (m *UserMutation) ClearTotpConfirmedAt() {
+	m.totp_confirmed_at = nil
+	m.clearedFields[user.FieldTotpConfirmedAt] = struct{}{}
+}
+
+// TotpConfirmedAtCleared returns if the "totp_confirmed_at" field was cleared in this mutation.
+func (m *UserMutation) TotpConfirmedAtCleared() bool {
+	_, ok := m.clearedFields[user.FieldTotpConfirmedAt]
+	return ok
+}
+
+// ResetTotpConfirmedAt resets all changes to the "totp_confirmed_at" field.
+func (m *UserMutation) ResetTotpConfirmedAt() {
+	m.totp_confirmed_at = nil
+	delete(m.clearedFields, user.FieldTotpConfirmedAt)
+}
+
+// SetRecoveryCodeHashes sets the "recovery_code_hashes" field.
+func (m *UserMutation) SetRecoveryCodeHashes(s []string) {
+	m.recovery_code_hashes = &s
+	m.appendrecovery_code_hashes = nil
+}
+
+// RecoveryCodeHashes returns the value of the "recovery_code_hashes" field in the mutation.
+func (m *UserMutation) RecoveryCodeHashes() (r []string, exists bool) {
+	v := m.recovery_code_hashes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRecoveryCodeHashes returns the old "recovery_code_hashes" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldRecoveryCodeHashes(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRecoveryCodeHashes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRecoveryCodeHashes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRecoveryCodeHashes: %w", err)
+	}
+	return oldValue.RecoveryCodeHashes, nil
+}
+
+// AppendRecoveryCodeHashes adds s to the "recovery_code_hashes" field.
+func (m *UserMutation) AppendRecoveryCodeHashes(s []string) {
+	m.appendrecovery_code_hashes = append(m.appendrecovery_code_hashes, s...)
+}
+
+// AppendedRecoveryCodeHashes returns the list of values that were appended to the "recovery_code_hashes" field in this mutation.
+func (m *UserMutation) AppendedRecoveryCodeHashes() ([]string, bool) {
+	if len(m.appendrecovery_code_hashes) == 0 {
+		return nil, false
+	}
+	return m.appendrecovery_code_hashes, true
+}
+
+// ClearRecoveryCodeHashes clears the value of the "recovery_code_hashes" field.
+func (m *UserMutation) ClearRecoveryCodeHashes() {
+	m.recovery_code_hashes = nil
+	m.appendrecovery_code_hashes = nil
+	m.clearedFields[user.FieldRecoveryCodeHashes] = struct{}{}
+}
+
+// RecoveryCodeHashesCleared returns if the "recovery_code_hashes" field was cleared in this mutation.
+func (m *UserMutation) RecoveryCodeHashesCleared() bool {
+	_, ok := m.clearedFields[user.FieldRecoveryCodeHashes]
+	return ok
+}
+
+// ResetRecoveryCodeHashes resets all changes to the "recovery_code_hashes" field.
+func (m *UserMutation) ResetRecoveryCodeHashes() {
+	m.recovery_code_hashes = nil
+	m.appendrecovery_code_hashes = nil
+	delete(m.clearedFields, user.FieldRecoveryCodeHashes)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *UserMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -8370,7 +8561,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 7)
+	fields := make([]string, 0, 11)
 	if m.username != nil {
 		fields = append(fields, user.FieldUsername)
 	}
@@ -8385,6 +8576,18 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.token_version != nil {
 		fields = append(fields, user.FieldTokenVersion)
+	}
+	if m.totp_secret_ciphertext != nil {
+		fields = append(fields, user.FieldTotpSecretCiphertext)
+	}
+	if m.totp_enabled != nil {
+		fields = append(fields, user.FieldTotpEnabled)
+	}
+	if m.totp_confirmed_at != nil {
+		fields = append(fields, user.FieldTotpConfirmedAt)
+	}
+	if m.recovery_code_hashes != nil {
+		fields = append(fields, user.FieldRecoveryCodeHashes)
 	}
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
@@ -8410,6 +8613,14 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Status()
 	case user.FieldTokenVersion:
 		return m.TokenVersion()
+	case user.FieldTotpSecretCiphertext:
+		return m.TotpSecretCiphertext()
+	case user.FieldTotpEnabled:
+		return m.TotpEnabled()
+	case user.FieldTotpConfirmedAt:
+		return m.TotpConfirmedAt()
+	case user.FieldRecoveryCodeHashes:
+		return m.RecoveryCodeHashes()
 	case user.FieldCreatedAt:
 		return m.CreatedAt()
 	case user.FieldUpdatedAt:
@@ -8433,6 +8644,14 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldStatus(ctx)
 	case user.FieldTokenVersion:
 		return m.OldTokenVersion(ctx)
+	case user.FieldTotpSecretCiphertext:
+		return m.OldTotpSecretCiphertext(ctx)
+	case user.FieldTotpEnabled:
+		return m.OldTotpEnabled(ctx)
+	case user.FieldTotpConfirmedAt:
+		return m.OldTotpConfirmedAt(ctx)
+	case user.FieldRecoveryCodeHashes:
+		return m.OldRecoveryCodeHashes(ctx)
 	case user.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case user.FieldUpdatedAt:
@@ -8480,6 +8699,34 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetTokenVersion(v)
+		return nil
+	case user.FieldTotpSecretCiphertext:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTotpSecretCiphertext(v)
+		return nil
+	case user.FieldTotpEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTotpEnabled(v)
+		return nil
+	case user.FieldTotpConfirmedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTotpConfirmedAt(v)
+		return nil
+	case user.FieldRecoveryCodeHashes:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRecoveryCodeHashes(v)
 		return nil
 	case user.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -8539,7 +8786,14 @@ func (m *UserMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *UserMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(user.FieldTotpConfirmedAt) {
+		fields = append(fields, user.FieldTotpConfirmedAt)
+	}
+	if m.FieldCleared(user.FieldRecoveryCodeHashes) {
+		fields = append(fields, user.FieldRecoveryCodeHashes)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -8552,6 +8806,14 @@ func (m *UserMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *UserMutation) ClearField(name string) error {
+	switch name {
+	case user.FieldTotpConfirmedAt:
+		m.ClearTotpConfirmedAt()
+		return nil
+	case user.FieldRecoveryCodeHashes:
+		m.ClearRecoveryCodeHashes()
+		return nil
+	}
 	return fmt.Errorf("unknown User nullable field %s", name)
 }
 
@@ -8573,6 +8835,18 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldTokenVersion:
 		m.ResetTokenVersion()
+		return nil
+	case user.FieldTotpSecretCiphertext:
+		m.ResetTotpSecretCiphertext()
+		return nil
+	case user.FieldTotpEnabled:
+		m.ResetTotpEnabled()
+		return nil
+	case user.FieldTotpConfirmedAt:
+		m.ResetTotpConfirmedAt()
+		return nil
+	case user.FieldRecoveryCodeHashes:
+		m.ResetRecoveryCodeHashes()
 		return nil
 	case user.FieldCreatedAt:
 		m.ResetCreatedAt()

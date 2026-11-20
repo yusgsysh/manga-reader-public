@@ -30,8 +30,12 @@ function authValue(overrides: Partial<AuthContextValue> = {}): AuthContextValue 
     isLoggingInWithPasskey: false,
     isLoggingOut: false,
     isRegistering: false,
-    login: vi.fn(),
+    isMfaPending: false,
+    isVerifyingTOTP: false,
+    login: vi.fn(async () => ({ mfaRequired: false })),
     loginWithPasskey: vi.fn(),
+    verifyTOTP: vi.fn(),
+    cancelMfa: vi.fn(),
     register: vi.fn(),
     logout: vi.fn(),
     refresh: vi.fn(),
@@ -167,7 +171,7 @@ describe("LoginPage", () => {
   });
 
   it("trims credentials, logs in, and returns to the original page", async () => {
-    const login = vi.fn().mockResolvedValue(undefined);
+    const login = vi.fn().mockResolvedValue({ mfaRequired: false });
     renderLogin(authValue({ login }), {
       pathname: "/login",
       state: { from: "/bookshelf" },
@@ -182,7 +186,7 @@ describe("LoginPage", () => {
   });
 
   it("does not redirect to an external return path", async () => {
-    const login = vi.fn().mockResolvedValue(undefined);
+    const login = vi.fn().mockResolvedValue({ mfaRequired: false });
     renderLogin(authValue({ login }), {
       pathname: "/login",
       state: { from: "//evil.example/steal" },
@@ -209,6 +213,21 @@ describe("LoginPage", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "登录" }));
     expect(screen.getByRole("alert").textContent).toContain("尝试次数过多");
+  });
+
+  it("asks for a TOTP code and verifies it", async () => {
+    const verifyTOTP = vi.fn().mockResolvedValue(undefined);
+    renderLogin(authValue({ isMfaPending: true, verifyTOTP }));
+
+    expect(screen.getByText("两步验证")).toBeTruthy();
+    await userEvent.type(
+      screen.getByLabelText("验证码或恢复码"),
+      "123456",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "验证并登录" }));
+
+    expect(verifyTOTP).toHaveBeenCalledWith("123456");
+    expect(await screen.findByText("home-marker")).toBeTruthy();
   });
 
   it("skips the form when the user is already logged in", () => {

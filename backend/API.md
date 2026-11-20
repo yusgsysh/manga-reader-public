@@ -111,9 +111,9 @@ Multi-user mode is always on. `JWT_SECRET` is optional: when unset the API gener
 
 ### Public vs protected
 
-Public (no user JWT): `/api/auth/login`, `/api/auth/register` (first-admin setup only), `/api/auth/status`, `/api/auth/passkey/login/begin`, `/api/auth/passkey/login/finish`. Peer sync endpoints `/api/sync/push` and `/api/sync/events` require a user sync key instead (separate middleware).
+Public (no user JWT): `/api/auth/login`, `/api/auth/register` (first-admin setup only), `/api/auth/status`, `/api/auth/passkey/login/begin`, `/api/auth/passkey/login/finish`, `/api/auth/totp/verify`. Peer sync endpoints `/api/sync/push` and `/api/sync/events` require a user sync key instead (separate middleware).
 
-Every other `/api/*` route requires a valid user JWT: search, galleries, image proxies (the browser sends the same-origin HttpOnly cookie), `/api/auth/logout`, `/api/auth/passkeys*`, `/api/bookshelf*`, `/api/progress*`, `/api/recently-read`, `/api/reading-progress/cleanup`, `/api/tag-settings*`, `/api/prefill*`, `/api/settings*`, `/api/sync/config`, `/api/sync/status`, `/api/dev/*`, `/api/admin/*`. The middleware is default-deny.
+Every other `/api/*` route requires a valid user JWT: search, galleries, image proxies (the browser sends the same-origin HttpOnly cookie), `/api/auth/logout`, `/api/auth/passkeys*`, `/api/auth/totp`, `/api/auth/totp/setup`, `/api/auth/totp/enable`, `/api/auth/totp/disable`, `/api/auth/totp/recovery-codes`, `/api/bookshelf*`, `/api/progress*`, `/api/recently-read`, `/api/reading-progress/cleanup`, `/api/tag-settings*`, `/api/prefill*`, `/api/settings*`, `/api/sync/config`, `/api/sync/status`, `/api/dev/*`, `/api/admin/*`. The middleware is default-deny.
 
 ### User isolation
 
@@ -147,6 +147,14 @@ Success `200`:
 ```
 
 Failure `401` uses one message for unknown user and wrong password: `{"error":"invalid username or password"}`. Excessive attempts return `429`.
+
+If the account has TOTP enabled, a correct password instead returns `200` with a short-lived step-up token and **no** session:
+
+```json
+{ "mfa_required": true, "mfa_token": "<JWT>", "expires_in": 300, "method": "totp" }
+```
+
+Complete the login with `POST /api/auth/totp/verify` (see 0.6). The `mfa_token` uses a distinct issuer, so it is rejected by every protected route.
 
 ### 0.2 Register first administrator (public)
 
@@ -214,7 +222,28 @@ Ceremonies are two requests. The begin call stores the challenge server-side and
 
 Relying-party defaults follow the request `Origin` (RP ID = its hostname). Behind a reverse proxy that rewrites `Host`, pin them with `MANGA_READER_WEBAUTHN_RP_ID` and `MANGA_READER_WEBAUTHN_RP_ORIGINS`. Each account may hold at most 20 passkeys.
 
-### 0.6 ExHentai Cookie and site preference
+### 0.6 TOTP two-factor authentication
+
+An optional second factor for password login. Passkey login is unaffected: a WebAuthn credential is already a phishing-resistant multi-factor authenticator.
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/auth/totp` | JWT | `{enabled, confirmed_at, recovery_codes_remaining}` |
+| POST | `/api/auth/totp/setup` | JWT | Generate a pending secret; returns `secret`, `otpauth_url`, `qr_data_url` |
+| POST | `/api/auth/totp/enable` | JWT | `{"code":"123456"}`; returns the 10 recovery codes **once** |
+| POST | `/api/auth/totp/disable` | JWT | `{"password":"…","code":"123456"}`; code may be a recovery code |
+| POST | `/api/auth/totp/recovery-codes` | JWT | `{"password":"…","code":"123456"}`; rotates all recovery codes |
+| POST | `/api/auth/totp/verify` | public | `{"mfa_token":"…","code":"123456"}` → normal session |
+
+Details:
+
+- The TOTP secret is AES-256-GCM encrypted with a key derived from `JWT_SECRET`; plaintext is returned only by `setup`.
+- Verification accepts the current 30-second step plus one step of clock skew. Recovery codes are 16 base32 characters grouped as `XXXX-XXXX-XXXX-XXXX`, stored only as HMAC-SHA256 hashes, and removed on first use.
+- A six-digit code has a million possibilities, so `/verify` has its own strict per-IP rate limit (`429`).
+- `disable` and `recovery-codes` require both the password and a valid TOTP/recovery code. Losing every authenticator and recovery code cannot be recovered through a public endpoint; run `reset-admin` on the server: it resets the password and clears TOTP/recovery codes by default.
+- `MANGA_READER_TOTP_ISSUER` sets the issuer label shown by the authenticator app. Changing `JWT_SECRET` invalidates existing TOTP enrollments (they must be re-bound).
+
+### 0.7 ExHentai Cookie and site preference
 
 All routes are scoped to the JWT user.
 
@@ -252,7 +281,7 @@ Cookie responses contain only a non-secret summary:
 - The per-user `site` picks the browsing host: `e-hentai` (default) scrapes e-hentai.org, `exhentai` scrapes exhentai.org (search, listings, gallery pages, torrents; gallery ids/tokens are valid on both). The session cookie jar authenticates both hosts; with no cookie stored, e-hentai browsing is anonymous and exhentai endpoints answer `412` (precondition failed). Tag synchronisation always uses exhentai — the `s.exhentai.org` mutation API has no e-hentai equivalent.
 - `status` is `unset`, `unverified`, `valid` or `invalid`; `verify` performs one authenticated upstream request.
 
-### 0.7 User administration (admin)
+### 0.8 User administration (admin)
 
 | Method | Path | Body |
 |--------|------|------|
@@ -267,7 +296,7 @@ Cookie responses contain only a non-secret summary:
 - The last active administrator cannot be demoted, disabled or deleted; an administrator cannot delete their own account.
 - Deleting a user removes their private rows (bookshelf, progress, prefill jobs, tag preferences/baseline, outbox, settings) in one transaction.
 
-### 0.8 System-level endpoints
+### 0.9 System-level endpoints
 
 - `/api/sync/config` and `/api/sync/status` are instance-wide: administrator JWT required.
 - `/api/dev/*` is administrator-only (and only registered when `MANGA_READER_DEV_TOOLS=true`).

@@ -4,7 +4,8 @@
 // It exists for the one case the HTTP API cannot solve: nobody can log in, so
 // there is no platform administrator able to use the normal user-management
 // endpoints. The command never creates users and never prints the password or
-// its hash.
+// its hash. It also clears the account's TOTP secret and recovery codes, so a
+// lost authenticator cannot keep the operator locked out after the reset.
 package main
 
 import (
@@ -62,7 +63,7 @@ func run() error {
 	if err := resetPassword(context.Background(), db.Client, *username, password); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "password reset for user %q\n", *username)
+	fmt.Fprintf(os.Stderr, "password reset and TOTP cleared for user %q\n", *username)
 	return nil
 }
 
@@ -115,11 +116,18 @@ func resetPassword(ctx context.Context, client *ent.Client, username, password s
 	if err != nil {
 		return err
 	}
-	if _, err := client.User.UpdateOneID(u.ID).
+	// This command exists for lockout recovery, so clearing TOTP is part of the
+	// reset: a forgotten authenticator must never keep an administrator out of
+	// their own instance after a password reset.
+	update := client.User.UpdateOneID(u.ID).
 		SetPasswordHash(hash).
 		SetStatus(config.StatusActive).
 		AddTokenVersion(1).
-		Save(ctx); err != nil {
+		SetTotpSecretCiphertext("").
+		SetTotpEnabled(false).
+		ClearTotpConfirmedAt().
+		SetRecoveryCodeHashes([]string{})
+	if _, err := update.Save(ctx); err != nil {
 		return fmt.Errorf("update password: %w", err)
 	}
 	return nil

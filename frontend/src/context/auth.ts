@@ -15,8 +15,16 @@ export interface AuthContextValue {
   isLoggingInWithPasskey: boolean;
   isLoggingOut: boolean;
   isRegistering: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  /** Password accepted, waiting for a TOTP or recovery code. */
+  isMfaPending: boolean;
+  isVerifyingTOTP: boolean;
+  login: (
+    username: string,
+    password: string,
+  ) => Promise<{ mfaRequired: boolean }>;
   loginWithPasskey: () => Promise<void>;
+  verifyTOTP: (code: string) => Promise<void>;
+  cancelMfa: () => void;
   register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<unknown>;

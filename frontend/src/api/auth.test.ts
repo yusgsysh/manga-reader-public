@@ -4,6 +4,7 @@ import {
   login,
   register,
   logout,
+  verifyTOTP,
 } from "./auth";
 import {
   apiGet,
@@ -107,6 +108,7 @@ describe("authenticated requests", () => {
     });
 
     await expect(login("admin", "password123")).resolves.toEqual({
+      mfaRequired: false,
       user: adminUser,
     });
 
@@ -122,6 +124,54 @@ describe("authenticated requests", () => {
     const bookshelf = calls.find((call) => call.url.endsWith("/api/bookshelf"));
     const headers = new Headers(bookshelf?.init?.headers);
     expect(headers.get("Authorization")).toBe("Bearer signed.jwt.token");
+  });
+
+  it("returns an MFA challenge without setting a token, then verifies it", async () => {
+    const calls = mockFetch((url) => {
+      if (url.endsWith("/api/auth/login")) {
+        return json({
+          mfa_required: true,
+          mfa_token: "step.up",
+          expires_in: 300,
+          method: "totp",
+        });
+      }
+      if (url.endsWith("/api/auth/totp/verify")) {
+        return json({
+          access_token: "signed.jwt.token",
+          token_type: "Bearer",
+          expires_in: 3600,
+          user: adminUser,
+        });
+      }
+      return json({ ok: true });
+    });
+
+    await expect(login("admin", "password123")).resolves.toEqual({
+      mfaRequired: true,
+      mfaToken: "step.up",
+    });
+    // The password step must not attach a bearer token to later calls.
+    await apiGet("/api/bookshelf");
+    const bookshelf = calls.find((call) => call.url.endsWith("/api/bookshelf"));
+    expect(new Headers(bookshelf?.init?.headers).get("Authorization")).toBeNull();
+
+    await expect(verifyTOTP("step.up", "123456")).resolves.toEqual({
+      user: adminUser,
+    });
+    const verifyCall = calls.find((call) =>
+      call.url.endsWith("/api/auth/totp/verify"),
+    );
+    expect(JSON.parse(String(verifyCall?.init?.body))).toEqual({
+      mfa_token: "step.up",
+      code: "123456",
+    });
+
+    await apiGet("/api/bookshelf");
+    const after = calls.filter((call) => call.url.endsWith("/api/bookshelf")).at(-1);
+    expect(new Headers(after?.init?.headers).get("Authorization")).toBe(
+      "Bearer signed.jwt.token",
+    );
   });
 
   it("registers the first administrator and attaches the Bearer token", async () => {

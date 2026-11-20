@@ -71,3 +71,30 @@ func TestResetPasswordErrors(t *testing.T) {
 		t.Fatalf("missing user err = %v", err)
 	}
 }
+
+func TestResetPasswordClearsTOTP(t *testing.T) {
+	client := newTestClient(t)
+	hash, err := auth.HashPassword("old-password")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	userRow, err := client.User.Create().
+		SetUsername("admin").SetPasswordHash(hash).
+		SetRole(config.RoleAdmin).SetStatus(config.StatusActive).
+		SetTotpSecretCiphertext("sealed").SetTotpEnabled(true).
+		SetRecoveryCodeHashes([]string{"hash"}).Save(t.Context())
+	if err != nil {
+		t.Fatalf("user: %v", err)
+	}
+
+	if err := resetPassword(t.Context(), client, "admin", "new-password-123"); err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+	updated, err := client.User.Get(t.Context(), userRow.ID)
+	if err != nil {
+		t.Fatalf("load user: %v", err)
+	}
+	if updated.TotpEnabled || updated.TotpSecretCiphertext != "" || len(updated.RecoveryCodeHashes) != 0 {
+		t.Fatalf("totp fields not cleared: %+v", updated)
+	}
+}

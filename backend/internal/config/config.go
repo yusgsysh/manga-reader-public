@@ -60,6 +60,9 @@ type AuthConfig struct {
 
 	// WebAuthn configures passkey registration and login.
 	WebAuthn WebAuthnConfig
+	// TOTPIssuer is the issuer label shown by authenticator apps when a user
+	// scans the setup QR code.
+	TOTPIssuer string
 }
 
 // WebAuthnConfig configures the passkey relying party. RPID and RPOrigins are
@@ -390,6 +393,7 @@ func loadAuth() (AuthConfig, error) {
 		AdminUsername: username,
 		AdminPassword: adminPassword,
 		WebAuthn:      webAuthn,
+		TOTPIssuer:    strings.TrimSpace(getEnv("MANGA_READER_TOTP_ISSUER", "Manga Reader")),
 	}
 	switch secureMode {
 	case "", "auto":

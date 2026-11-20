@@ -20,6 +20,9 @@ import (
 // previously issued tokens are rejected by the middleware without keeping a
 // list of revoked token IDs.
 //
+// A user may also enable TOTP two-factor authentication. Its secret is stored
+// encrypted (Sensitive) and recovery codes are kept only as HMAC hashes.
+//
 // Every private row (bookshelf, reading progress, prefill jobs, tag rules,
 // sync outbox, personal settings and ExHentai cookie) carries this user's ID
 // and is only ever queried with it in the predicate.
@@ -54,6 +57,23 @@ func (User) Fields() []ent.Field {
 			Default("active"),
 		field.Int("token_version").
 			Default(0),
+		// TOTP is an optional second factor for password login. The secret is
+		// AES-256-GCM sealed with a key derived from JWT_SECRET and never
+		// serialised; only the user's authenticator app holds the plaintext.
+		field.String("totp_secret_ciphertext").
+			Default("").
+			Sensitive(),
+		field.Bool("totp_enabled").
+			Default(false),
+		field.Time("totp_confirmed_at").
+			Optional().
+			Nillable(),
+		// recovery_code_hashes holds one-way HMAC-SHA256 hashes of unused
+		// one-time recovery codes. Plaintext codes are returned only once, at
+		// enable/regenerate time, and are removed as they are used.
+		field.JSON("recovery_code_hashes", []string{}).
+			Optional().
+			Sensitive(),
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable(),
