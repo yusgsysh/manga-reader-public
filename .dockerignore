@@ -12,7 +12,7 @@ deploy
 # Docs, local env template and compose file are not part of the image
 **/*.md
 docker-compose.yml
-Manga Reader API
+api-collection
 
 # Frontend build artifacts — the frontend stage starts clean
 frontend/node_modules

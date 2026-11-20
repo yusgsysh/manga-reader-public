@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ThemeContext, type ResolvedTheme } from "../hooks/useTheme";
+import { ThemeContext, type ResolvedTheme, type ThemeMode } from "./theme";
 import {
   ACCENT_STORAGE_KEY,
   accentContrast,
@@ -14,9 +14,7 @@ import {
   mixHex,
   normalizeAccent,
   resolveAccent,
-} from "./accent";
-
-export type ThemeMode = "light" | "dark" | "system";
+} from "../lib/accent";
 
 const STORAGE_KEY = "manga-reader-theme";
 

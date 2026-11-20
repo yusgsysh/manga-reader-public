@@ -19,10 +19,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"manga-reader/internal/cache"
 	"manga-reader/internal/database"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ident"
+	"manga-reader/internal/imagecache"
 )
 
 // ==================== Test Infrastructure ====================
@@ -321,7 +321,7 @@ func TestPrefillStart_CompletesSerially(t *testing.T) {
 
 	// Every image must have been written to the cache.
 	for _, name := range []string{"s1", "s2", "s3"} {
-		key := cache.CacheKey("https://exhentai.org/s/" + name)
+		key := imagecache.CacheKey("https://exhentai.org/s/" + name)
 		if _, err := imgCache.Head(t.Context(), key); err != nil {
 			t.Errorf("cache missing for %s: %v", name, err)
 		}
@@ -844,10 +844,10 @@ func TestPrefillZip(t *testing.T) {
 	// First two pages come from the cache, the third is fetched on the fly.
 	jpegData := []byte("jpeg-bytes")
 	pngData := []byte("png-bytes")
-	if err := imgCache.Put(t.Context(), cache.CacheKey(urls[0]), jpegData, "image/jpeg", ""); err != nil {
+	if err := imgCache.Put(t.Context(), imagecache.CacheKey(urls[0]), jpegData, "image/jpeg", ""); err != nil {
 		t.Fatalf("put cache 1: %v", err)
 	}
-	if err := imgCache.Put(t.Context(), cache.CacheKey(urls[1]), pngData, "image/png", ""); err != nil {
+	if err := imgCache.Put(t.Context(), imagecache.CacheKey(urls[1]), pngData, "image/png", ""); err != nil {
 		t.Fatalf("put cache 2: %v", err)
 	}
 

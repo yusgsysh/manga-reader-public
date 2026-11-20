@@ -1,4 +1,4 @@
-import type { PrefillJob, PrefillStatus } from "../types/prefill";
+import type { PrefillJob, PrefillStatus } from "../../types/prefill";
 
 const ACTIVE_STATUSES: readonly PrefillStatus[] = ["queued", "running"];
 const TERMINAL_STATUSES: readonly PrefillStatus[] = [

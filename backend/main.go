@@ -15,10 +15,10 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"manga-reader/internal/auth"
-	"manga-reader/internal/cache"
 	"manga-reader/internal/config"
 	"manga-reader/internal/database"
 	"manga-reader/internal/handler"
+	"manga-reader/internal/imagecache"
 	"manga-reader/internal/metrics"
 	"manga-reader/internal/requestid"
 	"manga-reader/internal/storage"
@@ -269,7 +269,7 @@ func run() error {
 	}
 
 	if cfg.ImageCache.Enabled {
-		minioCache, err := cache.NewMinIOCache(&cache.MinIOConfig{
+		minioCache, err := imagecache.NewMinIOCache(&imagecache.MinIOConfig{
 			Endpoint:  cfg.ImageCache.Endpoint,
 			AccessKey: cfg.ImageCache.AccessKey,
 			SecretKey: cfg.ImageCache.SecretKey,

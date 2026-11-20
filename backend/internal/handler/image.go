@@ -16,9 +16,9 @@ import (
 	"golang.org/x/sync/singleflight"
 	"manga-reader/internal/ident"
 
-	"manga-reader/internal/cache"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/gallerycache"
+	"manga-reader/internal/imagecache"
 	"manga-reader/internal/membudget"
 	"manga-reader/internal/metrics"
 	"manga-reader/internal/ttl"
@@ -193,7 +193,7 @@ func (s *Server) handleCachedThumbnail(c *gin.Context) {
 
 	result, err := s.loadOrFetchThumbnail(ctx, uid, key, rawURL)
 	if err != nil {
-		if cache.IsNotFound(err) {
+		if imagecache.IsNotFound(err) {
 			web.JSON(c, http.StatusNotFound, gin.H{"error": "thumbnail not found"})
 			return
 		}
@@ -224,7 +224,7 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 	if !ok {
 		return
 	}
-	key := cache.CacheKey(rawURL)
+	key := imagecache.CacheKey(rawURL)
 
 	if s.Cache == nil {
 		// MinIO is optional: fall back to the live proxy instead of failing.
@@ -238,7 +238,7 @@ func (s *Server) handleCachedImage(c *gin.Context) {
 
 	result, err := s.loadOrFetchImage(ctx, uid, key, rawURL)
 	if err != nil {
-		if cache.IsNotFound(err) {
+		if imagecache.IsNotFound(err) {
 			web.JSON(c, http.StatusNotFound, gin.H{"error": "image not found"})
 			return
 		}
@@ -294,7 +294,7 @@ func (s *Server) loadOrFetchImage(ctx context.Context, userID ident.UUID, key st
 			}
 			return &imageResult{data: data, contentType: contentType, cacheHit: true, stored: true, lease: lease}, nil
 		}
-		if !cache.IsNotFound(getErr) {
+		if !imagecache.IsNotFound(getErr) {
 			lease.Release()
 			return nil, getErr
 		}
@@ -366,7 +366,7 @@ func (s *Server) loadOrFetchThumbnail(ctx context.Context, userID ident.UUID, ke
 			}
 			return &imageResult{data: data, contentType: contentType, cacheHit: true, stored: true, lease: lease}, nil
 		}
-		if !cache.IsNotFound(getErr) {
+		if !imagecache.IsNotFound(getErr) {
 			lease.Release()
 			return nil, getErr
 		}

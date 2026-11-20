@@ -15,7 +15,7 @@ import { useSyncEvents } from "./hooks/useSyncEvents";
 import { GLOBAL_STALE_TIME } from "./lib/cacheConfig";
 import { scheduleIdle } from "./lib/idle";
 import { MotionProvider } from "./lib/motion";
-import { ThemeProvider } from "./lib/theme";
+import { ThemeProvider } from "./context/ThemeContext";
 import { tagTranslationService } from "./services/tagTranslation";
 import { router } from "./router";
 

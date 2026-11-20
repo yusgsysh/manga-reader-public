@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseTagString } from "../lib/tag";
+import { parseTagString } from "./tag";
 
 describe("parseTagString", () => {
   it("parses namespace:name", () => {

@@ -8,7 +8,7 @@ import {
 } from "../api/prefill";
 import { ApiRequestError } from "../api/client";
 import { PREFILL_STALE_TIME } from "../lib/cacheConfig";
-import { hasActivePrefillJob } from "../lib/prefill";
+import { hasActivePrefillJob } from "../domain/prefill/prefill";
 import { useToast } from "../components/ui";
 import type { PrefillStartRequest } from "../types/prefill";
 

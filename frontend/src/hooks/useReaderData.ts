@@ -8,7 +8,7 @@ import {
   fetchGalleryPagesCached,
 } from "../api/gallery";
 import { fetchReadingProgress, updateReadingProgress } from "../api/progress";
-import { trackProgressSave } from "../lib/progressSave";
+import { trackProgressSave } from "../domain/reader/progressSave";
 import {
   GALLERY_STALE_TIME,
   PAGES_STALE_TIME,

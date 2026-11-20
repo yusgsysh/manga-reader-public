@@ -16,9 +16,9 @@ import (
 	"golang.org/x/sync/singleflight"
 	"manga-reader/internal/ident"
 
-	"manga-reader/internal/cache"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/gallerycache"
+	"manga-reader/internal/imagecache"
 	"manga-reader/internal/imageproc"
 	"manga-reader/internal/membudget"
 	"manga-reader/internal/metrics"
@@ -590,7 +590,7 @@ func (s *Server) loadOrCropThumbnail(ctx context.Context, userID ident.UUID, cli
 			if data, _, getErr := s.Cache.Get(fetchCtx, cropKey); getErr == nil {
 				metrics.ObserveImageCache("page_crop", "hit")
 				return data, nil
-			} else if !cache.IsNotFound(getErr) {
+			} else if !imagecache.IsNotFound(getErr) {
 				// Unreadable crop: recompute rather than fail the request;
 				// the store below overwrites whatever is there.
 				slog.Warn("crop cache read failed; recomputing", "key", cropKey[:16], "error", getErr)
@@ -642,7 +642,7 @@ func (s *Server) loadOrFetchSprite(ctx context.Context, userID ident.UUID, clien
 			if data, _, getErr := s.Cache.Get(fetchCtx, key); getErr == nil {
 				metrics.ObserveImageCache("sprite", "hit")
 				return data, nil
-			} else if !cache.IsNotFound(getErr) {
+			} else if !imagecache.IsNotFound(getErr) {
 				return nil, getErr
 			} else {
 				metrics.ObserveImageCache("sprite", "miss")

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useNavigationContext } from "./useNavigationContext";
+import { useNavigationContext } from "../context/navigation";
 
 export function useLastListRoute(route: string) {
   const { setLastListRoute } = useNavigationContext();

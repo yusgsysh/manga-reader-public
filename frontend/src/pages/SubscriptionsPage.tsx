@@ -14,7 +14,7 @@ import {
   parseNavOptions,
   withListFilters,
   withNavOptions,
-} from "../lib/listingParams";
+} from "../domain/gallery/listingParams";
 import type { GalleryListFilters, ListingNavOptions } from "../types/gallery";
 import { useLastListRoute } from "../hooks/useLastListRoute";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";

@@ -7,7 +7,7 @@ import {
   prefillProgressText,
   prefillStatusLabel,
 } from "./prefill";
-import type { PrefillJob } from "../types/prefill";
+import type { PrefillJob } from "../../types/prefill";
 
 function makeJob(overrides: Partial<PrefillJob> = {}): PrefillJob {
   return {

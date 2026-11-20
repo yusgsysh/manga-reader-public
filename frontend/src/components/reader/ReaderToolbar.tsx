@@ -19,7 +19,7 @@ import {
 } from "@phosphor-icons/react";
 import { cn } from "@cloudflare/kumo";
 import type { ViewerSettings } from "@yui540/comimi-react";
-import type { ReaderSettings } from "../../lib/readerSettings";
+import type { ReaderSettings } from "../../domain/reader/readerSettings";
 import { useReaderPreferences } from "../../hooks/useReaderPreferences";
 import { IconButton } from "../ui";
 import { ReaderPageList, ReaderShortcuts } from "./ReaderToolbarPanels";

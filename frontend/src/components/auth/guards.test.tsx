@@ -8,7 +8,7 @@ import {
   Routes,
   useLocation,
 } from "react-router";
-import { ThemeProvider } from "../../lib/theme";
+import { ThemeProvider } from "../../context/ThemeContext";
 import {
   AuthContext,
   type AuthContextValue,

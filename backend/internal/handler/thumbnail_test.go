@@ -18,8 +18,8 @@ import (
 
 	"github.com/minio/minio-go/v7"
 
-	"manga-reader/internal/cache"
 	"manga-reader/internal/exhentai"
+	"manga-reader/internal/imagecache"
 )
 
 const testThumbURL = "https://s.exhentai.org/w/00/999/15582-3owak8q3.webp"
@@ -34,8 +34,8 @@ func TestThumbnailCacheKey(t *testing.T) {
 		t.Errorf("key should start with %q, got %q", thumbnailCachePrefix, key)
 	}
 	hexPart := strings.TrimPrefix(key, thumbnailCachePrefix)
-	if len(hexPart) != cache.CacheKeyLength {
-		t.Errorf("hex part length = %d, want %d", len(hexPart), cache.CacheKeyLength)
+	if len(hexPart) != imagecache.CacheKeyLength {
+		t.Errorf("hex part length = %d, want %d", len(hexPart), imagecache.CacheKeyLength)
 	}
 	if _, err := hex.DecodeString(hexPart); err != nil {
 		t.Errorf("hex part should be valid hex: %v", err)

@@ -20,7 +20,7 @@ import {
   prefillProgressPercent,
   prefillProgressText,
   prefillStatusLabel,
-} from "../lib/prefill";
+} from "../domain/prefill/prefill";
 import { formatRelativeTime } from "../lib/time";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorBanner } from "../components/common/ErrorBanner";

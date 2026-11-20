@@ -1,7 +1,7 @@
 import type { GalleryCategory } from "../../types/gallery";
 import { Link } from "react-router";
 import { thumbnailUrl } from "../../lib/image";
-import { parseTagString } from "../../lib/tag";
+import { parseTagString } from "../../domain/gallery/tag";
 import { languageCodeFromTags } from "../../lib/language";
 import { formatPosted } from "../../lib/time";
 import { useTagTranslation } from "../../hooks/useTagTranslation";

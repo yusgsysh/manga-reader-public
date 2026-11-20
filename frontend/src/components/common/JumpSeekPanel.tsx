@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button, DatePicker, Popover } from "@cloudflare/kumo";
 import { CalendarBlank, X } from "@phosphor-icons/react";
-import { parseJumpSeekInput } from "../../lib/jumpSeek";
+import { parseJumpSeekInput } from "../../domain/gallery/jumpSeek";
 import type { ListingNav, ListingNavOptions } from "../../types/gallery";
 
 const QUICK_JUMPS = [

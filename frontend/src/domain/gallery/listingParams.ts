@@ -2,11 +2,11 @@ import {
   parseAdvancedParams,
   pickAdvancedOptions,
   serializeAdvancedParams,
-} from "../components/search/advancedSearch";
+} from "./advancedSearch";
 import type {
   GalleryListFilters,
   ListingNavOptions,
-} from "../types/gallery";
+} from "../../types/gallery";
 
 // URL keys that make up a listing's filter state. Kept in sync with
 // advancedToParams in api/gallery.ts so a pasted URL reproduces the request.

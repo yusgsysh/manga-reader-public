@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { NavigationContext } from "./NavigationContextValue";
+import { NavigationContext } from "./navigation";
 
 export function NavigationProvider({ children }: { children: ReactNode }) {
   const [lastListRoute, setLastListRoute] = useState("/");

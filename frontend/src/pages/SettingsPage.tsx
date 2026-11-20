@@ -32,12 +32,11 @@ import {
   type CookieSummary,
   type ExhentaiSite,
 } from "../api/settings";
-import { useTheme } from "../hooks/useTheme";
+import { useTheme, type ThemeMode } from "../context/theme";
 import { useTagTranslation } from "../hooks/useTagTranslation";
 import { SETTINGS_STALE_TIME } from "../lib/cacheConfig";
 import { ACCENT_PRESETS, DEFAULT_ACCENT, isPresetAccent } from "../lib/accent";
 import { formatDateTime } from "../lib/time";
-import type { ThemeMode } from "../lib/theme";
 import { PageHeader, Section, useToast } from "../components/ui";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAuth } from "../context/auth";

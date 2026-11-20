@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { updateReadingProgress } from "../api/progress";
-import { calculateProgress, clampPageIndex } from "../lib/reader";
-import { trackProgressSave } from "../lib/progressSave";
+import { calculateProgress, clampPageIndex } from "../domain/reader/reader";
+import { trackProgressSave } from "../domain/reader/progressSave";
 import type { ReadingProgress } from "../types/reader";
 import {
   applyReadingProgressToCaches,

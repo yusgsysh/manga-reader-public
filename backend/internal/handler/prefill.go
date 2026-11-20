@@ -16,12 +16,12 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"manga-reader/internal/archive"
-	"manga-reader/internal/cache"
 	"manga-reader/internal/ent"
 	"manga-reader/internal/ent/predicate"
 	"manga-reader/internal/ent/prefilljob"
 	"manga-reader/internal/exhentai"
 	"manga-reader/internal/ident"
+	"manga-reader/internal/imagecache"
 	"manga-reader/internal/metrics"
 	"manga-reader/internal/model"
 	"manga-reader/internal/storage"
@@ -331,7 +331,7 @@ func (m *prefillManager) processPages(s *Server, ctx context.Context, run *prefi
 		if ctx.Err() != nil {
 			return prefillStatusCancelled
 		}
-		key := cache.CacheKey(pageURL)
+		key := imagecache.CacheKey(pageURL)
 
 		pageCtx, pageCancel := context.WithTimeout(ctx, prefillPageTimeout)
 		res, err := s.loadOrFetchImage(pageCtx, userID, key, pageURL)
@@ -1071,7 +1071,7 @@ func prefillArchiveKey(userID, jobID ident.UUID, title string) string {
 // fetches straight from upstream. Bytes are never decoded or re-encoded.
 func (s *Server) fetchPage(ctx context.Context, userID ident.UUID, pageURL string) (data []byte, contentType string, err error) {
 	if s.Cache != nil {
-		key := cache.CacheKey(pageURL)
+		key := imagecache.CacheKey(pageURL)
 		res, ferr := s.loadOrFetchImage(ctx, userID, key, pageURL)
 		if ferr != nil {
 			return nil, "", ferr

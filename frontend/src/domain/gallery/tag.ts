@@ -1,4 +1,4 @@
-import type { Tag } from "../types/gallery";
+import type { Tag } from "../../types/gallery";
 
 export function parseTagString(raw: string): Tag {
   const idx = raw.indexOf(":");

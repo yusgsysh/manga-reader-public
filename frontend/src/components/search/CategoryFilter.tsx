@@ -1,6 +1,6 @@
 import { cn } from "@cloudflare/kumo";
-import { categoryPillStyle } from "../../lib/categories";
-import { CATEGORIES } from "./advancedSearch";
+import { categoryPillStyle } from "../../domain/gallery/categories";
+import { CATEGORIES } from "../../domain/gallery/advancedSearch";
 
 interface CategoryFilterProps {
   included: string[];

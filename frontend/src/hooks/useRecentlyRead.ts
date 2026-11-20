@@ -3,7 +3,7 @@ import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-q
 import { fetchRecentlyRead } from "../api/recentlyRead";
 import { cleanupReadingProgress } from "../api/progress";
 import { RECENTLY_READ_STALE_TIME } from "../lib/cacheConfig";
-import { whenProgressSavesSettled } from "../lib/progressSave";
+import { whenProgressSavesSettled } from "../domain/reader/progressSave";
 
 export function useRecentlyRead() {
   const listQuery = useInfiniteQuery({

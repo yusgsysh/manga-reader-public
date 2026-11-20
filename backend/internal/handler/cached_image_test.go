@@ -15,8 +15,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"manga-reader/internal/cache"
 	"manga-reader/internal/exhentai"
+	"manga-reader/internal/imagecache"
 	"manga-reader/internal/membudget"
 )
 
@@ -152,15 +152,15 @@ type mockCacheEntry struct {
 func TestMinIOConfig_IsValid(t *testing.T) {
 	tests := []struct {
 		name   string
-		config cache.MinIOConfig
+		config imagecache.MinIOConfig
 		valid  bool
 	}{
-		{"complete", cache.MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", SecretKey: "secret", Bucket: "bucket"}, true},
-		{"missing endpoint", cache.MinIOConfig{AccessKey: "key", SecretKey: "secret", Bucket: "bucket"}, false},
-		{"missing access key", cache.MinIOConfig{Endpoint: "minio:9000", SecretKey: "secret", Bucket: "bucket"}, false},
-		{"missing secret key", cache.MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", Bucket: "bucket"}, false},
-		{"missing bucket", cache.MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", SecretKey: "secret"}, false},
-		{"all empty", cache.MinIOConfig{}, false},
+		{"complete", imagecache.MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", SecretKey: "secret", Bucket: "bucket"}, true},
+		{"missing endpoint", imagecache.MinIOConfig{AccessKey: "key", SecretKey: "secret", Bucket: "bucket"}, false},
+		{"missing access key", imagecache.MinIOConfig{Endpoint: "minio:9000", SecretKey: "secret", Bucket: "bucket"}, false},
+		{"missing secret key", imagecache.MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", Bucket: "bucket"}, false},
+		{"missing bucket", imagecache.MinIOConfig{Endpoint: "minio:9000", AccessKey: "key", SecretKey: "secret"}, false},
+		{"all empty", imagecache.MinIOConfig{}, false},
 	}
 
 	for _, tt := range tests {
@@ -208,7 +208,7 @@ func TestCachedImage_HitStreamsWithoutBuffering(t *testing.T) {
 	imgData := mockImageBytes()
 
 	store := newMockImageCache()
-	if err := store.Put(context.Background(), cache.CacheKey(pageURL), imgData, "image/webp", ""); err != nil {
+	if err := store.Put(context.Background(), imagecache.CacheKey(pageURL), imgData, "image/webp", ""); err != nil {
 		t.Fatalf("seed cache: %v", err)
 	}
 
@@ -281,7 +281,7 @@ func TestCachedImage_MissFallsBackToBufferedFetch(t *testing.T) {
 		t.Errorf("buffered Gets = %d, want 1 (miss path)", got)
 	}
 	// The fetched image must now be in the store for the next hit to stream.
-	if _, _, _, err := store.GetStream(context.Background(), cache.CacheKey(pageURL)); err != nil {
+	if _, _, _, err := store.GetStream(context.Background(), imagecache.CacheKey(pageURL)); err != nil {
 		t.Errorf("fetched image not stored: %v", err)
 	}
 }

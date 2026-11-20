@@ -10,7 +10,7 @@ import {
   isNavActive,
   type NavItem,
 } from "./nav";
-import { useNavigationContext } from "../../hooks/useNavigationContext";
+import { useNavigationContext } from "../../context/navigation";
 import { useAuth } from "../../context/auth";
 
 interface MobileDrawerProps {

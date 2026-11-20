@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ReaderToolbar } from "./ReaderToolbar";
-import type { ReaderSettings } from "../../lib/readerSettings";
+import type { ReaderSettings } from "../../domain/reader/readerSettings";
 
 const SETTINGS: ReaderSettings = {
   readingDirection: "rtl",

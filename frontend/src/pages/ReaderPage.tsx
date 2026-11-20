@@ -16,7 +16,7 @@ import {
 } from "@yui540/comimi-react";
 import { useGallery, useGalleryPages, useReadingProgress } from "../hooks/useReaderData";
 import { useReadingProgressSync } from "../hooks/useReadingProgressSync";
-import { useTheme } from "../hooks/useTheme";
+import { useTheme } from "../context/theme";
 import { useBackNavigation } from "../hooks/useBackNavigation";
 import {
   clampPageIndex,
@@ -24,19 +24,19 @@ import {
   PageUrlStore,
   parsePageParam,
   slotPageSrcResolver,
-} from "../lib/reader";
+} from "../domain/reader/reader";
 import {
   DEFAULT_READER_SETTINGS,
   mergeReaderSettings,
   pickReaderSettings,
   sameReaderSettings,
   type ReaderSettings,
-} from "../lib/readerSettings";
+} from "../domain/reader/readerSettings";
 import { ErrorState } from "../components/common/ErrorState";
 import { LoadingScreen } from "../components/common/LoadingScreen";
 import { ReaderToolbar } from "../components/reader/ReaderToolbar";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { getReaderPreferences } from "../lib/readerPrefs";
+import { getReaderPreferences } from "../domain/reader/readerPrefs";
 import {
   exitElementFullscreen,
   FULLSCREEN_CHANGE_EVENTS,

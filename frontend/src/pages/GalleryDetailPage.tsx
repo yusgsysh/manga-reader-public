@@ -24,7 +24,7 @@ import { useReadingProgress } from "../hooks/useReaderData";
 import { useStartPrefillJob } from "../hooks/usePrefillJobs";
 import { ErrorState } from "../components/common/ErrorState";
 import { PageThumbnailGrid } from "../components/gallery/PageThumbnailGrid";
-import { TagGroups } from "../components/tag";
+import { TagGroups } from "../components/tag/TagGroups";
 import { thumbnailUrl } from "../lib/image";
 import { DOWNLOAD_PAGES_STALE_TIME } from "../lib/cacheConfig";
 import { formatPosted } from "../lib/time";
@@ -32,7 +32,7 @@ import { Chip, Section, useToast } from "../components/ui";
 import { CategoryChip } from "../components/gallery/CategoryChip";
 import { GalleryTorrentsDialog } from "../components/gallery/GalleryTorrentsDialog";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { requestReaderFullscreenIfEnabled } from "../lib/readerPrefs";
+import { requestReaderFullscreenIfEnabled } from "../domain/reader/readerPrefs";
 
 function DetailSkeleton() {
   return (

@@ -5,12 +5,12 @@ import { IconButton, Section } from "../ui";
 import { AdvancedFilterFields } from "./AdvancedFilterFields";
 import { TagFilterInput } from "./TagFilterInput";
 import { CategoryFilter } from "./CategoryFilter";
-import { countActiveFilters, pickAdvancedOptions } from "./advancedSearch";
+import { countActiveFilters, pickAdvancedOptions } from "../../domain/gallery/advancedSearch";
 import {
   ALL_CATEGORY_VALUES,
   normalizeIncludedCategories,
   toggleIncludedCategory,
-} from "../../lib/categories";
+} from "../../domain/gallery/categories";
 import type {
   AdvancedSearchOptions,
   GalleryListFilters,

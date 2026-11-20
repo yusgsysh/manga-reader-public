@@ -32,7 +32,7 @@
 manga-reader/
 ├── backend/            # Go Backend（见 backend/API.md）
 ├── frontend/           # React 前端（见 frontend/README.md）
-├── Manga Reader API/   # 接口集合（OpenCollection 请求定义，同 backend/API.md）
+├── api-collection/     # 接口集合（OpenCollection 请求定义，同 backend/API.md）
 ├── Dockerfile          # 单镜像：前端构建 + 嵌入后端二进制
 ├── .forgejo/           # CI：镜像构建 / 前端测试 / 部署（自托管 runner）
 ├── .github/            # CI：测试 + GHCR 单镜像
@@ -47,8 +47,11 @@ manga-reader/
 ```text
 backend/
 ├── main.go                       # 应用入口
+├── cmd/reset-admin/              # 管理员账号恢复 CLI
+├── docs/                         # 问题分析与实现记录（非 API 文档）
+├── tools/fetchhtml/              # 上游页面抓取调试工具
 ├── internal/
-│   ├── cache/                    # MinIO 对象存储缓存
+│   ├── auth/                     # JWT 登录、通行密钥（WebAuthn）、TOTP
 │   ├── config/                   # 环境变量配置
 │   ├── database/                 # 数据库初始化 (Ent Client)
 │   ├── ent/                      # Ent ORM 定义与生成代码
@@ -58,18 +61,23 @@ backend/
 │   │   ├── prefilljob/           # PrefillJob 字段常量与查询辅助
 │   │   ├── gallerycache/         # GalleryCache 字段常量与查询辅助
 │   │   └── migrate/              # 数据库迁移逻辑
-│   ├── auth/                     # JWT 登录与通行密钥（WebAuthn / HS256 / Gin 中间件）
+│   ├── ident/                    # 16 字节 UUID 主键 / 归属类型
+│   ├── model/                    # 共享数据结构（API 响应与持久化 JSON）
+│   ├── exhentai/                 # ExHentai API / 页面抓取（含 10 秒请求去重）
 │   ├── usercookie/               # 每用户 ExHentai Cookie 加密存储与客户端池
 │   ├── synckey/                  # 用户级同步 Key 认证
-│   ├── exhentai/                 # ExHentai API / 页面抓取（含 10 秒请求去重）
-│   ├── gallerycache/             # gallery_cache 读写
-│   ├── handler/                  # HTTP 处理器 (Gin)
+│   ├── gallerycache/             # gallery_cache 表读写
+│   ├── imagecache/               # MinIO 图片对象缓存（页面 / 缩略图 / 精灵图）
+│   ├── storage/                  # 通用 S3 对象存储接口（ZIP 归档）
+│   ├── archive/                  # ZIP 归档构建
 │   ├── imageproc/                # 图片裁剪（精灵图页面缩略图）
+│   ├── membudget/                # 内存预算 / 并发闸门
 │   ├── metrics/                  # Prometheus 指标（私有 registry，挂在 /metrics）
-│   ├── model/                    # API 响应模型
+│   ├── requestid/                # 请求关联 ID 中间件
+│   ├── handler/                  # HTTP 处理器与路由 (Gin)
 │   ├── sync/                     # 数据同步（outbox / SSE / 推送引擎，见 backend/API.md 28）
 │   ├── ttl/                      # HTTP Cache-Control / listing cursor 常量
-│   └── web/                      # 内嵌前端（//go:embed dist，SPA 回退与缓存策略）
+│   └── web/                      # 内嵌前端（//go:embed dist）与 JSON 响应辅助
 └── API.md                        # API 文档
 ```
 

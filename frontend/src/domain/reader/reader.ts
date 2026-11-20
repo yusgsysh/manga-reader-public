@@ -1,5 +1,5 @@
 import type { ImagePage, ReactManga } from "@yui540/comimi-react";
-import { pageImageUrl, pageThumbnailUrl } from "./image";
+import { pageImageUrl, pageThumbnailUrl } from "../../lib/image";
 
 export function getReaderImageURL(pageURL: string): string {
   return pageImageUrl(pageURL);

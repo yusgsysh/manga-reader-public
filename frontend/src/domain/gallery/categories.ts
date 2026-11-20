@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { GalleryCategory } from "../types/gallery";
+import type { GalleryCategory } from "../../types/gallery";
 
 // Category colors are copied from the ExHentai/E-Hentai stylesheet
 // (https://e-hentai.org/z/0381/g.css): `.ct1`–`.cta`. The two sites share the

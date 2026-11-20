@@ -1,5 +1,5 @@
 import type { AdvancedSearchOptions } from "../../types/gallery";
-import { ALL_CATEGORY_VALUES, CATEGORY_META } from "../../lib/categories";
+import { ALL_CATEGORY_VALUES, CATEGORY_META } from "./categories";
 
 export const CATEGORIES = ALL_CATEGORY_VALUES.map((value) => ({
   value,

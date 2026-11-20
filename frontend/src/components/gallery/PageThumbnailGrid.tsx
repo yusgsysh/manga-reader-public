@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { pageThumbnailUrl } from "../../lib/image";
 import { loadThumbnails, THUMBNAIL_CONCURRENCY } from "../../lib/thumbnails";
-import { requestReaderFullscreenIfEnabled } from "../../lib/readerPrefs";
+import { requestReaderFullscreenIfEnabled } from "../../domain/reader/readerPrefs";
 import { SimplePagination } from "../common/SimplePagination";
 
 const PER_PAGE = 20;

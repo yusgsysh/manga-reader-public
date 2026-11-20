@@ -1,5 +1,5 @@
 import { cn } from "@cloudflare/kumo";
-import { categoryLabel, categoryPillStyle } from "../../lib/categories";
+import { categoryLabel, categoryPillStyle } from "../../domain/gallery/categories";
 
 interface CategoryChipProps {
   category?: string;

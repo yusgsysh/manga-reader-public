@@ -23,6 +23,35 @@ ExHentai Web 漫画客户端的前端。
 - Cloudflare Kumo
 - oxlint / vitest / Playwright
 
+## 目录结构
+
+```text
+frontend/
+├── e2e/                # Playwright 端到端脚本与 mock 服务
+├── patches/            # comimi / comimi-react 本地补丁
+├── public/             # 静态资源（favicon、内置标签翻译库）
+├── scripts/            # 维护脚本（标签库更新）
+└── src/
+    ├── api/            # 后端接口客户端（按资源分模块，只负责请求与响应类型）
+    ├── components/     # UI 组件，按业务域分组
+    │   ├── ui/         # 无业务含义的基础展示组件（Chip / Skeleton / Toast …）
+    │   ├── common/     # 跨页面复用的应用级组件（错误态 / 加载 / JumpSeek …）
+    │   └── auth/ gallery/ layout/ reader/ search/ settings/ tag/
+    ├── context/        # React Context 与 Provider（auth / navigation / theme）
+    ├── domain/         # 纯业务规则，不依赖 React 组件、不发请求
+    │   ├── gallery/    # 分类、标签、列表 URL 状态、高级搜索参数
+    │   ├── reader/     # 阅读页模型、阅读偏好、进度保存
+    │   └── prefill/    # 下载任务状态与进度展示规则
+    ├── hooks/          # 可复用 React Hooks（数据获取、浏览器交互、页面状态）
+    ├── lib/            # 与具体业务无关的通用工具（时间、主题色、图片、WebAuthn …）
+    ├── pages/          # 路由页面（只做页面编排）
+    ├── router/         # 路由表
+    ├── services/       # 有状态、非 React 的服务（标签翻译数据库）
+    └── types/          # 跨模块共享类型
+```
+
+依赖方向：`pages` / `components` / `hooks` → `domain` → `lib`。`domain` 不依赖 `components` 或 `hooks`；`lib` 不承载业务规则。
+
 ## 开发
 
 ```bash
@@ -376,7 +405,7 @@ react-query 的 `staleTime` 仅用于客户端节流，统一集中在 `src/lib/
 
 Gallery 详情页也提供页面缩略图网格（`PageThumbnailGrid`，每页 20 张、`SimplePagination` 翻页），点击某页跳转到 `/reader/:id/:token?page=N`；阅读器把 `?page`（0-indexed）作为初始页，离开时把进度保存为该页。
 
-相关实现：`src/hooks/useInfiniteScroll.ts`、`src/components/common/InfiniteScrollTrigger.tsx`、`src/components/common/JumpSeekPanel.tsx` / `JumpSeekMenu.tsx`、`src/lib/jumpSeek.ts`、`src/lib/thumbnails.ts`，以及 `src/hooks/useGalleryList.ts`、`useSearch.ts`、`useBookshelf.ts`、`useRecentlyRead.ts`（均为 `useInfiniteQuery`）。
+相关实现：`src/hooks/useInfiniteScroll.ts`、`src/components/common/InfiniteScrollTrigger.tsx`、`src/components/common/JumpSeekPanel.tsx` / `JumpSeekMenu.tsx`、`src/domain/gallery/jumpSeek.ts`、`src/lib/thumbnails.ts`，以及 `src/hooks/useGalleryList.ts`、`useSearch.ts`、`useBookshelf.ts`、`useRecentlyRead.ts`（均为 `useInfiniteQuery`）。
 
 ## 路由
 

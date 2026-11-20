@@ -22,7 +22,7 @@ type ImageCache interface {
 	Get(ctx context.Context, key string) (data []byte, contentType string, err error)
 	// GetStream opens an object for reading without buffering it, so cache
 	// hits can be proxied to the client at constant memory. A missing key
-	// must satisfy cache.IsNotFound.
+	// must satisfy imagecache.IsNotFound.
 	GetStream(ctx context.Context, key string) (rc io.ReadCloser, contentType string, size int64, err error)
 	Put(ctx context.Context, key string, data []byte, contentType string, cacheControl string) error
 	PutWithMeta(ctx context.Context, key string, data []byte, contentType string, meta map[string]string, cacheControl string) error

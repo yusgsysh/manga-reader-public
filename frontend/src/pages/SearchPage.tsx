@@ -23,13 +23,13 @@ import {
   isActiveValue,
   countActiveFilters,
   serializeAdvancedParams,
-} from "../components/search/advancedSearch";
+} from "../domain/gallery/advancedSearch";
 import { FilterChip } from "../components/search/FilterChip";
 import {
   ALL_CATEGORY_VALUES,
   normalizeIncludedCategories,
   toggleIncludedCategory,
-} from "../lib/categories";
+} from "../domain/gallery/categories";
 import type {
   AdvancedSearchOptions,
   ListingNavOptions,

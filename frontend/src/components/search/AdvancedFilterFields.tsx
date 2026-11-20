@@ -1,6 +1,6 @@
 import { Input, Checkbox, Select, cn } from "@cloudflare/kumo";
 import { Section } from "../ui";
-import { MIN_RATING_OPTIONS, normalizePageBound } from "./advancedSearch";
+import { MIN_RATING_OPTIONS, normalizePageBound } from "../../domain/gallery/advancedSearch";
 import type { AdvancedSearchOptions } from "../../types/gallery";
 
 type AdvancedKey = keyof AdvancedSearchOptions;
